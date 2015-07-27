@@ -1,0 +1,209 @@
+APRS TO-CALL VERSION NUMBERS                            18 Dec 2013
+-------------------------------------------------------------------
+                                                             WB4APR
+18 Dec 13 added APZWKR for GM1WKR NetSked application
+22 Oct 13 added APFIxx for APRS.FI OH7LZB, Hessu
+23 Aug 13 added APOxxx for OSCAR satellites for AMSAT-LU by LU9DO
+22 Feb 13 added APNWxx SQ3FYK.com & SQ3PLX http://microsat.com.pl/
+            and APMIxx SQ3PLX http://microsat.com.pl/
+29 Jan 13 added APICxx for HA9MCQ Pic IGate
+23 Jan 13 added APWAxx APRSISCE Android version
+18 Jan 13 added APDGxx,APDHxx,APDOxx,APDDxx,APDKxx,APD4xx for Dstar
+13 Jan 13 added APLMxx WA0TQG transceiver controller
+17 Dec 12 added APAMxx Altus Metrum GPS trackers
+03 Dec 12 added APUDRx NW Digital Radio's UDR (APRS/Dstar)
+03 Nov 12 added APHAXn SM2APRS by PY2UEP
+17 Sep 12 added APSCxx aprsc APRS-IS core server (OH7LZB, OH2MQK)
+12 Sep 12 added APSARx for ZL4FOX's SARTRACK
+02 Jul 12 added APDGxx D-Star Gateways by G4KLX
+28 Jun 12 added APDInn DIXPRS - Bela, HA5DI
+27 jun 12 added APMGxx MiniGate - Alex, AB0TJ
+17 Feb 12 added APJYnn KA2DDO yet another APRS system
+20 Jan 12 added APDSXX SP9UOB for dsDigi and ds-tracker
+                       APBPQx  John G8BPQ Digipeater/IGate
+                       APLQRU Charlie - QRU Server
+11 Jan 12 added APYTxx for YagTracker and updated Yaesu APY008/350
+
+In APRS, the AX.25  Destination address is not used for packet 
+routing as is normally done in AX.25.  So APRS uses it for two 
+things.  The initial APxxxx is used as a group identifier to make 
+APRS packets instanantly recognizable on shared channels.  Most 
+applicaitons ignore all non APRS packets.  The remaining 4 xxxx
+bytes of the field are available to indicate the software version 
+number or application.  The following applications have requested 
+a TOCALL number series:
+
+ APn  3rd digit is a number
+      AP1WWX  TAPR T-238+ WX station
+      AP4Rxy  APRS4R software interface
+      APnnnD  Painter Engineering uSmartDigi D-Gate DSTAR Gateway
+      APnnnU  Painter Engineering uSmartDigi Digipeater
+ APA  APAFxx  AFilter.
+      APAGxx  AGATE
+      APAGWx  SV2AGW's AGWtracker
+      APALxx  Alinco DR-620/635 internal TNC digis. "Hachi" ,JF1AJE
+      APAXxx  AFilterX.
+      APAHxx  AHub
+      APAND1  APRSdroid (replaced by APDRxx
+      APAMxx  Altus Metrum GPS trackers
+      APAWxx  AGWPE 
+ APB  APBxxx  Beacons or Rabbit TCPIP micros?
+      APBLxx  BigRedBee BeeLine  
+      APBLO   MOdel Rocketry K7RKT
+      APBPQx  John G8BPQ Digipeater/IGate 
+ APC  APCxxx  Cellular applications
+      APCBBx  for VE7UDP Blackberry Applications
+      APCLEY  EYTraker GPRS/GSM tracker by ZS6EY
+      APCLWX  EYWeather GPRS/GSM WX station by ZS6EY
+      APCLEZ  Telit EZ10 GSM application ZS6CEY
+      APCYxx  Cybiko applications
+ APD  APD4xx  UP4DAR platform
+      APDDxx  DV-RPTR Modem and Control Center Software 
+      APDFxx  Automatic DF units
+      APDGxx  D-Star Gateways by G4KLX ircDDB
+      APDHxx  WinDV (DUTCH*Star DV Node for Windows)
+      APDInn  DIXPRS - Bela, HA5DI
+      APDKxx  KI4LKF g2_ircddb Dstar gateway software
+      APDOxx  ON8JL Standalone DStar Node
+      APDPRS  D-Star originated posits
+      APDRxx  APrsDRoid replaces old APAND1.
+      APDSXX  SP9UOB for dsDigi and ds-tracker
+      APDTxx  APRStouch Tone (DTMF)
+      APDUxx  U2APRS by JA7UDE
+      APDWxx  DireWolf, WB2OSZ
+ APE  APExxx  Telemetry devices
+      APERXQ  Experimental tracker by PE1RXQ
+ APF  APFxxx  Firenet
+      APFGxx  Flood Gage (KP4DJT)
+      APFIxx  for APRS.FI OH7LZB, Hessu
+ APG  APGxxx  Gates, etc
+      APGOxx  for AA3NJ PDA application
+ APH  APHKxx  for LA1BR tracker/digipeater
+      APHAXn  SM2APRS by PY2UEP
+ API  APICQx  for ICQ
+      APICxx  for HA9MCQ Pic IGate
+ APJ  APJAxx  JavAPRS
+      APJExx  JeAPRS
+      APJIxx  jAPRSIgate
+      APJSxx  javAPRSSrvr
+      APJYnn  KA2DDO Yet another APRS system
+ APK  APK0xx  Kenwood TH-D7's
+      APK003  Kenwood TH-D72
+      APK1xx  Kenwood D700's
+      APK102  Kenwood D710
+      APKRAM  KRAMstuff.com - Mark. G7LEU
+ APL  APLQRU  Charlie - QRU Server
+      APLMxx  WA0TQG transceiver controller
+ APM  APMxxx  MacAPRS, 
+      APMGxx  MiniGate - Alex, AB0TJ
+      APMIxx  SQ3PLX http://microsat.com.pl/
+ APN  APNxxx  Network nodes, digis, etc
+      APN3xx  Kantronics KPC-3 rom versions
+      APN9xx  Kantronics KPC-9612 Roms
+      APNAxx  WB6ZSU's APRServe
+      APNDxx  DIGI_NED
+      APNK01  Kenwood D700 (APK101) type
+      APNK80  KAM version 8.0
+      APNKMP  KAM+
+      APNMxx  MJF TNC roms
+      APNPxx  Paccom TNC roms
+      APNTxx  SV2AGW's TNT tnc as a digi
+      APNUxx  UIdigi
+      APNXxx  TNC-X  (K6DBG)
+      APNWxx  SQ3FYK.com WX/Digi and SQ3PLX http://microsat.com.pl/
+ APO  APRSpoint
+      APOLUx  for OSCAR satellites for AMSAT-LU by LU9DO
+      APOAxx  OpenAPRS - Greg Carter
+      APOTxx  Open Track
+      APOD1w  Open Track with 1 wire WX
+      APOU2k  Open Track for Ultimeter
+      APOZxx  www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO
+ APP  APPTxx  KetaiTracker by  JF6LZE, Takeki (msg capable)
+ APQ  APQxxx  Earthquake data
+ APR  APR8xx  APRSdos versions 800+
+      APRDxx  APRSdata, APRSdr
+      APRGxx  aprsg igate software, OH2GVE
+      APRHH2  HamHud 2
+      APRKxx  APRStk
+      APRNOW  W5GGW ipad application
+      APRRTx  RPC electronics
+      APRS    Generic, (obsolete. Digis should use APNxxx instead)
+      APRXxx  >40 APRSmax
+      APRXxx  <39 for OH2MQK's RX-igate
+      APRTLM  used in MIM's and Mic-lites, etc
+      APRtfc  APRStraffic
+      APRSTx  APRStt (Touch tone)
+ APS  APRS+SA, etc
+      APSARx  ZL4FOX's SARTRACK
+      APSCxx  aprsc APRS-IS core server (OH7LZB, OH2MQK)
+      APSK63  APRS Messenger -over-PSK63
+      APSK25  APRS Messenger GMSK-250
+ APT  APTIGR  TigerTrack
+      APTTxx  Tiny Track
+      APT2xx  Tiny Track II
+      APT3xx  Tiny Track III
+      APTAxx  K4ATM's tiny track
+      APTWxx  Byons WXTrac
+      APTVxx  for ATV/APRN and SSTV applications
+ APU  APU1xx  UIview 16 bit applications
+      APU2xx  UIview 32 bit apps
+      APU3xx  UIview terminal program
+      APUDRx  NW Digital Radio's UDR (APRS/Dstar)
+ APV  APVxxx  Voice over Internet  applications
+      APVRxx  for IRLP
+      APVLxx  for I-LINK
+      APVExx  for ECHO link
+ APW  APWxxx  WinAPRS, etc
+      APWAxx  APRSISCE Android version
+      APWSxx  DF4IAN's WS2300 WX station
+      APWMxx  APRSISCE KJ4ERJ
+      APWWxx  APRSISCE win32 version
+ APX  APXnnn  Xastir
+      APXRnn  Xrouter
+ APY  APYxxx  Yeasu
+      APY008  Yaesu VX-8 series
+      APY350  Yaesu FTM-350 series
+      APYTxx  for YagTracker
+ APZ  APZxxx  Experimental
+      APZ0xx  Xastir (old versions. See APX)
+      APZMDR  for HaMDR trackers - hessu * hes.iki.fi]
+      APZPAD  Smart Palm 
+      APZTKP  TrackPoint, Nick N0LP (Balloon tracking)
+      APZWIT  MAP27 radio (Mountain Rescue) EI7IG
+      APZWKR  GM1WKR NetSked application
+
+Authors with similar alphabetic requirements are encouraged to share
+their address space with other software.  Work out agreements amongst
+yourselves and keep me informed.
+
+
+REGISTERED ALTNETS:
+-------------------
+
+ALTNETS are uses of the AX-25 tocall to distinguish specialized
+traffic that may be flowing on the APRS-IS, but that are not intended
+to be part of normal APRS distribution to all normal APRS software
+operating in normal (default) modes.  Proper APRS software that
+honors this design are supposed to IGNORE all ALTNETS unless the 
+particular operator has selected an ALTNET to monitor for.    
+
+An example is when testing; an author may want to transmit objects 
+all over his map for on-air testing, but does not want these to
+clutter everyone's maps or databases.  He could use the ALTNET of
+"TEST" and client APRS software that respects the ALTNET concept
+should ignore these packets.
+
+An ALTNET is defined to be ANY AX.25 TOCALL that is NOT one of the
+normal APRS TOCALL's.  The normal TOCALL's that APRS is supposed to
+process are:  ALL, BEACON, CQ, QST, GPSxxx and of course APxxxx.
+
+The following is a list of ALTNETS that may be of interest to other
+users.  This list is by no means complete, since ANY combination of
+characters other than APxxxx are considered an ALTNET.  But this list 
+can give consisntecy to ALTNETS that may be using the global APRS-IS 
+and need some special recognition:
+
+  TEST   - A generic ALTNET for use during testing
+  PSKAPR - PSKmail .  But it is not AX.25 anyway
+
+de WB4APR, Bob

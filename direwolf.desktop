@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Exec=lxterminal -t "Dire Wolf" -e "/usr/local/bin/direwolf"
+Name=Dire Wolf
+Comment=APRS Soundcard TNC
+Icon=/usr/share/direwolf/dw-icon.png
+Path=/home/pi
+#Terminal=true
+Categories=HamRadio
+Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25

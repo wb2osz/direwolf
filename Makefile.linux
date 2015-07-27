@@ -1,0 +1,289 @@
+#
+# Makefile for Linux version of Dire Wolf.
+#
+
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients
+
+CC = gcc
+
+#
+# The DSP filters can be sped up considerably with the SSE 
+# instructions.  The SSE instructions were introduced in 1999 
+# with the Pentium III series.
+# SSE2 instructions, added in 2000, don't seem to offer any advantage.
+#
+# Let's look at impact of various optimization levels.
+#
+# Benchmark results with Ubuntu gcc version 4.6.3, 32 bit platform.
+# Intel(R) Celeron(R) CPU 2.53GHz.  Appears to have only 32 bit instructions.
+#
+#       seconds options, comments
+#       ------  -----------------
+#          123  -O2     
+#          128  -O3	Slower than -O2 ?
+#          123  -Ofast  (should be same as -O3 -ffastmath)
+#          126  -Ofast -march=pentium
+#           88  -Ofast -msse
+#          108  -Ofast -march=pentium -msse
+#           88  -Ofast -march=pentium3   (this implies -msse)
+#           89  -Ofast -march=pentium3 -msse
+#
+#
+# Raspberry Pi, ARM11 (ARMv6 + VFP2)
+# gcc (Debian 4.6.3-14+rpi1) 4.6.3
+# 
+#       seconds options, comments
+#       ------  -----------------
+#         1015  -O2     
+#          948  -O3	
+#          928  -Ofast  
+#          937  -Ofast -fmpu=vfp   (worse, no option for vfp2)
+# 
+# Are we getting any vectorizing?
+#
+
+
+
+# 
+# Release 0.9 added a new feature than can consume a lot of CPU
+# power:  multiple AFSK demodulators running in parallel.
+# These spend a lot of time spinning around in little loops
+# calculating the sums of products for the DSP filters.
+#
+# When gcc is generating code for a 32 bit x86 target, it
+# assumes the ancient i386 processor.  This is good for
+# portability but bad for performance.
+#
+# The code can run considerably faster by taking advantage of
+# the SSE instructions available in the Pentium 3 or later.
+# Here we find out if the gcc compiler is generating code
+# for the i386.  If so, we add the option to assume we will 
+# have at least a Pentium 3 to run on.
+#
+# When generating code for the x86_64 target, it is automatically
+# assumed that the SSE instructions are available.
+#
+# If you are using gcc version 4.6 or later, you might get a 
+# small improvement by using the new "-Ofast" option that is
+# not available in older compilers.  
+# "-O3" is used here for compatibility with older compilers.
+#
+# You might also get some improvement by using "-march=native"
+# to fine tune the application for your particular type of
+# hardware.
+#
+# If you are planning to distribute the binary version to
+# other people (in some ham radio software collection), avoid
+# fine tuning it for your particular computer.  It could
+# cause compatibility issues for those with older computers.
+#
+
+arch := $(shell echo | gcc -E -dM - | grep __i386__)
+
+ifneq ($(arch),)
+CFLAGS := -DUSE_ALSA -O3 -march=pentium3 -pthread
+else
+CFLAGS := -DUSE_ALSA -O3 -pthread
+endif
+
+
+# Uncomment following lines to enable GPS interface.
+# DO NOT USE THIS.  Still needs more work.
+#CFLAGS += -DENABLE_GPS
+#LDLIBS += -lgps
+
+
+# Name of current directory.
+# Used to generate zip file name for distribution.
+
+z=$(notdir ${CURDIR})
+
+
+# Main application.
+
+direwolf : direwolf.o config.o  demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o \
+		fcs_calc.o ax25_pad.o \
+		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
+		gen_tone.o audio.o digipeater.o dedupe.o tq.o xmit.o \
+		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o \
+		utm.a
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread -lrt -lasound $(LDLIBS) -lm
+
+
+# Optimization for slow processors.
+
+demod.o : fsk_fast_filter.h
+
+demod_afsk.o : fsk_fast_filter.h
+
+
+fsk_fast_filter.h : demod_afsk.c
+	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c -lm
+	./gen_fff > fsk_fast_filter.h
+
+
+
+utm.a : LatLong-UTMconversion.o
+	ar -cr $@ $^
+
+LatLong-UTMconversion.o : utm/LatLong-UTMconversion.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+
+# Optional install step. 
+# TODO: Review file locations.
+# TODO: Handle Linux variations correctly.
+# The Raspberry Pi has ~/Desktop but Ubuntu does not.
+# For now, just put reference to it at the end so only last step fails.
+
+install : direwolf decode_aprs tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+	sudo install direwolf /usr/local/bin
+	sudo install decode_aprs /usr/local/bin
+	sudo install text2tt /usr/local/bin
+	sudo install tt2text /usr/local/bin
+	sudo install ll2utm /usr/local/bin
+	sudo install utm2ll /usr/local/bin
+	sudo install aclients /usr/local/bin
+	sudo install -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
+	sudo install -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
+	sudo install -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
+	sudo install -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
+	sudo install -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
+	cp direwolf.conf ~
+	cp dw-start.sh ~
+	sudo install -D --mode=644 CHANGES.txt /usr/local/share/doc/direwolf/CHANGES.txt
+	sudo install -D --mode=644 LICENSE-dire-wolf.txt /usr/local/share/doc/direwolf/LICENSE-dire-wolf.txt
+	sudo install -D --mode=644 LICENSE-other.txt /usr/local/share/doc/direwolf/LICENSE-other.txt
+	sudo install -D --mode=644 User-Guide.pdf /usr/local/share/doc/direwolf/User-Guide.pdf
+	sudo install -D --mode=644 Raspberry-Pi-APRS.pdf /usr/local/share/doc/direwolf/Raspberry-Pi-APRS.pdf
+	sudo install -D --mode=644 APRStt-Implementation-Notes.pdf /usr/local/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	sudo install -D --mode=644 Quick-Start-Guide-Windows.pdf /usr/local/share/doc/direwolf/Quick-Start-Guide-Windows.pdf
+	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
+
+
+# Separate application to decode raw data.
+
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c
+	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^ -lm
+
+
+
+# Convert between text and touch tone representation.
+
+text2tt : tt_text.c
+	$(CC) $(CFLAGS) -DENC_MAIN -o text2tt tt_text.c
+
+tt2text : tt_text.c
+	$(CC) $(CFLAGS) -DDEC_MAIN -o tt2text tt_text.c
+
+
+# Convert between Latitude/Longitude and UTM coordinates.
+
+ll2utm : ll2utm.c utm.a
+	$(CC) $(CFLAGS) -I utm -o $@ $^ -lm
+
+utm2ll : utm2ll.c utm.a
+	$(CC) $(CFLAGS) -I utm -o $@ $^ -lm
+
+
+
+# Test application to generate sound.
+
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c textcolor.c 
+	$(CC) $(CFLAGS) -o $@ $^ -lasound -lm
+
+demod.o : tune.h
+demod_afsk.o : tune.h
+demod_9600.o : tune.h
+
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o fcs_calc.c ax25_pad.c decode_aprs.c symbols.c tune.h textcolor.c
+	$(CC) $(CFLAGS) -o atest $^ -lm
+	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
+
+
+# Unit test for AFSK demodulator
+
+
+atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+	time ./atest ../direwolf-0.2/02_Track_2.wav 
+
+# Unit test for inner digipeater algorithm
+
+
+dtest : digipeater.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c
+	$(CC) $(CFLAGS) -DTEST -o $@ $^
+	./dtest
+
+
+# Unit test for IGate
+
+
+itest : igate.c textcolor.c ax25_pad.c fcs_calc.c 
+	$(CC) $(CFLAGS) -DITEST -o $@ $^
+	./itest
+
+
+# Unit test for UDP reception with AFSK demodulator
+
+udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c
+	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
+	./udptest
+
+
+# Multiple AGWPE network or serial port clients to test TNCs side by side.
+
+aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
+	$(CC) $(CFLAGS) -g -o $@ $^ 
+
+
+SRCS = direwolf.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c multi_modem.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c \
+		server.c kiss.c kissnet.c kiss_frame.c hdlc_send.c fcs_calc.c gen_tone.c audio.c \
+		digipeater.c dedupe.c tq.c xmit.c beacon.c encode_aprs.c latlong.c encode_aprs.c latlong.c
+
+
+depend : $(SRCS)
+	makedepend $(INCLUDES) $^
+
+ 
+clean :
+	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll fsk_fast_filter.h *.o *.a
+	echo " " > tune.h
+
+
+# Package it up for distribution.
+
+dist-src : CHANGES.txt  User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-Pi-APRS.pdf \
+		direwolf.desktop dw-start.sh 
+	rm -f fsk_fast_filter.h
+	echo " " > tune.h
+	rm -f ../$z-src.zip
+	(cd .. ; zip $z-src.zip $z/CHANGES.txt $z/LICENSE* \
+		$z/User-Guide.pdf $z/Quick-Start-Guide-Windows.pdf $z/Raspberry-Pi-APRS.pdf \
+		$z/Makefile* $z/*.c $z/*.h $z/regex/* $z/misc/* $z/utm/* \
+		$z/*.conf $z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
+		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
+		$z/direwolf.desktop $z/dw-start.sh )
+
+
+#User-Guide.pdf : User-Guide.docx
+#	echo "***** User-Guide.pdf is out of date *****"
+
+#Quick-Start-Guide-Windows.pdf : Quick-Start-Guide-Windows.docx
+#	echo "***** Quick-Start-Guide-Windows.pdf is out of date *****" 
+
+#Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
+#	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
+
+
+backup :
+	mkdir /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
+	cp -r . /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
+
+#
+# The following is updated by "make depend"
+#
+# DO NOT DELETE
+

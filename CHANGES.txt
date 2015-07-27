@@ -1,0 +1,167 @@
+----------------
+Revision history
+----------------
+
+
+-----------
+Version 1.0a	May 2014
+-----------
+
+* Bug fix:
+
+Beacons sent directly to IGate server had incorrect source address.
+
+
+
+-----------
+Version 1.0	May 2014
+-----------
+
+* New Features:
+
+Received audio can be obtained with a UDP socket or stdin.
+This can be used to take audio from software defined radios
+such as rtl_fm or gqrx.
+
+9600 baud data rate.
+
+New PBEACON and OBEACON configuration options. Previously
+it was necessary to handcraft beacons. 
+
+Less CPU power required for 300 baud.  This is important
+if you want to run a bunch of decoders at the same time
+to tolerate off-frequency HF SSB signals.
+
+Improved support for UTF-8 character set.
+
+Improved troubleshooting display for APRStt macros.
+
+
+
+-----------
+Version 0.9	November 2013
+-----------
+
+* New Features:
+
+Selection of non-default audio device for Linux ALSA.
+
+Simplified audio device set up for Raspberry Pi.
+
+GPIO lines can be used for PTT on suitable Linux systems.
+
+Improved 1200 baud decoder.
+
+Multiple decoders per channel to tolerate HF SSB signals off frequency.
+
+Command line option "-t 0" to disable text colors.
+
+APRStt macros which allow short numeric only touch tone
+sequences to be processed as much longer predefined sequences.
+
+
+
+* Bugs Fixed:
+
+Now works on 64 bit target.
+
+
+
+* New Restriction for Windows version:
+
+Minimum processor is now Pentium 3 or equivalent or later.
+It's possible to run on something older but you will need
+to rebuild it from source.
+
+
+
+
+-----------
+Version 0.8	August 2013
+-----------
+
+* New Features:
+
+Internet Gateway (IGate) including IPv6 support.
+
+Compatibility with YAAC.
+
+Preemptive digipeating option.
+
+KISS TNC should now work with connected AX.25 protocols
+(e.g. AX25 for Linux), not just APRS.
+
+
+
+-----------
+Version 0.7	March 2013
+-----------
+
+* New Features:
+
+Added APRStt gateway capability.  For details, see:
+
+APRStt-Implementation-Notes.pdf
+
+
+
+
+-----------
+Version 0.6
+-----------
+
+
+* New Features:
+
+Improved performance of AFSK demodulator.
+Now decodes 965 frames from Track 2 of WA8LMF’s TNC Test CD.
+
+KISS protocol now available thru a TCP socket.
+Default port is 8001.
+Change it with KISSPORT option in configuration file.
+
+Ability to salvage frames with bad FCS.
+See section mentioning "bad apple" in the user guide.
+Default of fixing 1 bit works well.  
+Fixing more bits not recommended because there is a high
+probability of occasional corrupted data getting thru.
+
+Added AGW "monitor" format messages.
+Now compatible with APRS-TW for telemetry.
+
+
+* Bugs Fixed:
+
+None.
+
+
+
+* Known Problem:
+
+The Linux (but not Cygwin) version eventually hangs if nothing is
+reading from the KISS pseudo terminal.  Some operating system
+queue fills up, the application write blocks, and decoding stops.
+
+
+* Workaround:
+
+If another application is not using the serial KISS interface,
+run this in another window:
+
+	tail -f /tmp/kisstnc
+
+
+-----------
+Version 0.5
+-----------
+
+
+More error checking and messages for invalid APRS data.
+
+
+-----------
+Version 0.4
+-----------
+
+First general availability.
+

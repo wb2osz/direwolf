@@ -1,0 +1,2 @@
+#define TUNE_MS_FILTER_SIZE 140 
+#define TUNE_PRE_BAUD    1.080 

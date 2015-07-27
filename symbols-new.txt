@@ -1,0 +1,409 @@
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      20 May 2014
+---------------------------------------------------------------------
+
+BACKGROUND:  This file addresses new additions proposals (OVERLAYS) 
+to the APRS symbol set after 1 October 2007.  The master symbol 
+document remains on the www.aprs.org/symbols/symbolsX.txt page.
+
+
+NOTE:  There was confusion with different copies of this file on 
+different web pages and links.  THIS file is now assumed to be the
+CORRECT one.
+
+
+UPDATES/REVISIONS/CORRECTIONS:
+
+20 May 14  Changed Da to DSTAR (2700 of them) from Dutch Ares
+19 May 14  Added Submarine&torpedo to ships and lots of Aircraft
+           search for "(new may 2014)"
+07 Oct 13  Added new overlays to ships such as Jet Ski, Js
+           Added Ham Club symbol as a C overlay on House, C-
+19 Sep 11  Added T and 2 overlays for TX 1 and 2 hop IGates
+           Added overlays to (;) portable, to show event types
+23 Mar 11  Added Radiation Detector (RH)
+20 Apr 10  Byonics requested (BY)
+04 Jan 10  added #A to the table (correcting earlier omission)
+12 Oct 09  Added W0 for Yaesu WIRES nodes
+09 Apr 09  Changed APRStt symbol to overlayed BOX (#A)
+21 Aug 08  Added RFID R=, Stroller B], Radios#Y, & skull&Xbones (XH)
+27 Apr 08  Added some definitions of the numbered circle #0.          
+25 Mar 08  Added these new definitions of overlays:
+
+Original Alternate Symbol codes being modified for new Overlay Use:
+
+\A - (BOX symbol) APRStt(DTMF), RFID users, XO (OLPC) 
+\' - Was Crash Site.  Now expanded to be INCIDENT sites
+\% - is an overlayed Powerplant.  See definitions below
+\H - \H is HAZE but other H overlays are HAZARDs. WH is "H.Waste"
+\Y - Overlays for Radios and other APRS devices
+\k - Overlay Special vehicles.  A = ATV for example
+\u - Overlay Trucks.  "Tu" is a tanker. "Gu" is a gas truck, etc
+\< - Advisories may now have overlays
+\8 - Nodes with overlays. "G8" would be 802.11G
+\[ - \[ is wall cloud, but overlays are humans. S[ is a skier.
+\h - Buildings. \h is a Ham store, "Hh" is Home Depot, etc.
+
+Previous edition was 4 Oct 2007.
+
+In April 2007, a proposal to expand the use of overlay bytes for 
+the extension of the APRS symbol set was added to the draft APRS1.2 
+addendum web page.  The following document addresses that proposal:
+
+www.aprs.org/symbols/symbols-overlays.txt
+
+For details on Upgrading your symbol set, please see the background
+information on Symbols prepared by Stephen Smith, WA8LMF:
+
+www.aprs.org/symbols/symbols-background.txt
+
+CONSISTANCY:  Since the objective of APRS is consistent, reliable 
+communications at the local level, there has been a hesitance to 
+making significant changes to the APRS symbol set.  The Integrity 
+of APRS depends on everyone seeing the same information at the 
+same time.  Frequent changes to the symbol sets can actually
+undermine that integrity and operational utility of APRS and end up
+with worse outcomes due to miss-communications than the lack of any 
+particular symbol might suggest.
+
+OVERLAY HISTORY:  When the overlay symbol set was first defined for 
+the original APRS back in 1995, it had the potential to expand the 
+APRS symbol set from the 94 original primary symbols to a secondary 
+set that could each have as many as 36 diffeernt overlays on each of 
+those secondary symbols up to almost 3500 combinations.  But some 
+authors then could not easily implement these overlays, except by 
+one-by-one exceptions to their code.
+
+For this reason, a compromise was made with those authors and then
+eventually written into the APRS spec to limit overlays to only a 
+small subset of alternate symbols.  Those original overlayable
+alternate symbols were labeled with a "#" and called "numbered"
+symbols.   (UIview requires "No." in the symbols.ini file) 
+
+STATUS OF OVERLAYS 1 OCTOBER 2007:  the APRS symbol set only had a 
+few remaining unused symbol codes that had not yet been defined:
+
+OF THE 94 Primary Symbols.  The following were available:
+   10 symbols (/0 - /9) that mostly look like billiard balls now
+    4 symbols /D, /J, /Q, /z were undefined or TBD
+    2 were reserved
+
+OF THE 94 Alternate  Symbols.  The following were available:
+   3 undefined series \=, \Y, \Z which could do 36 overlays
+   8 series \1 through \8  that can support 36 overlays each
+   3 reserved series.
+
+ADDITIONAL OVERLAY PROPOSAL:  But any of the other 79 alternate 
+symbols could all have multiple (36) overlays if they can make sense 
+with the existing underlying basic symbol that we have been using for 
+that basic alternate symbol.  That is, any new definition of a 
+previously unused overlay character will have undefined results on all 
+prior APRS systems and should be used with caution.  But the symbol 
+set is extensible with these cautions.  (See the Proposal that would 
+expand the APRS symbol set to over 3200 at the bottom of this 
+document.)
+
+
+SYMBOL OVERLAY TABLES:  This document will keep track of all
+definitions of overlays on all ALTERNATE symbols.  Although these 
+overlays were originally intended to just overlay a displayable 
+single character on a basic symbol, there is no prohibition against
+taking the combination of a symbol and specific overlay, and then 
+letting that define a new graphic just for that combination.
+
+The following tables will attempt to keep track of these and
+any other useful generic applications of overlay characters.
+
+AIRCRAFT
+/^ = LARGE Aircraft
+\^ = top-view originally intended to point in direction of flight
+D^ = Drone   (new may 2014)
+E^ = Enemy aircraft (too bad I cant use the original Hostile)
+H^ = Hovercraft    (new may 2014)
+J^ = JET     (new may 2014)
+M^ = Missle   (new may 2014)
+V^ = Vertical takeoff   (new may 2014)
+
+ATM Machine or CURRENCY:  #$ 
+/$ = original primary Phone
+\$ = Bank or ATM (generic)
+U$ = US dollars
+L$ = Brittish Pound
+Y$ = Japanese Yen
+
+POWER PLANT: #%  
+/% = DX cluster  <= the original primary table definition
+C% = Coal
+G% = Geothermal
+H% = Hydroelectric
+N% = Nuclear
+S% = Solar
+T% = Turbine
+W% = Wind
+
+GATEWAYS: #&
+/& = HF Gateway  <= the original primary table definition
+I& = Igate Generic (please use more specific overlay)
+R& = Receive only IGate (do not send msgs back to RF)
+T& = TX igate with path set to 1 hop only)
+2& = TX igate with path set to 2 hops (not generally good idea)
+
+INCIDENT SITES: #'
+\' = Airplane Crash Site  <= the original primary deifinition
+A' = Automobile crash site
+H' = Hazardous incident
+M' = Multi-Vehicle crash site
+P' = Pileup
+T' = Truck wreck
+
+HUMAN SYMBOL: #[
+/[ = Human
+\[ = Wall Cloud (the original definition)
+B[ = Baby on board (stroller, pram etc)
+S[ = Skier      * <= Recommend Special Symbol
+R[ = Runner
+H[ = Hiker
+
+HOUSE: #-
+/- = House
+\- = (was HF)
+5- = 50 Hz mains power
+6- = 60 Hz mains power
+B- = Backup Battery Power
+C- = Club, as in Ham club
+E- = Emergency power
+G- = Geothermal
+H- = Hydro powered
+O- = Operator Present
+S- = Solar Powered
+W- = Wind powered
+
+NUMBERED CIRCLES: #0
+E0 = Echolink Node (E0)
+I0 = IRLP repeater (I0)
+S0 = Staging Area  (S0)
+W0 = WIRES (Yaesu VOIP)
+
+NETWORK NODES: #8
+88 = 802.11 network node (88)
+G8 = 802.11G  (G8)
+
+PORTABLE SYMBOL: #;
+/; = Portable operation (tent)
+\; = Park or Picnic
+F; = Field Day
+I; = Islands on the air
+S; = Summits on the air
+W; = WOTA
+
+ADVISORIES: #<  (new expansion possibilities)
+/< = motorcycle
+\< = Advisory (single gale flag)
+
+CARS: #>
+/> = normal car (side view)
+\> = Top view and symbol POINTS in direction of travel
+E> = Electric 
+H> = Hybrid
+S> = Solar powered
+V> = GM Volt
+
+BOX SYMBOL: #A (and other system inputted symbols)
+/A = Aid station
+\A = numbered box
+9A = Mobile DTMF user
+7A = HT DTMF user
+HA = House DTMF user
+EA = Echolink DTMF report
+IA = IRLP DTMF report
+RA = RFID report
+AA = AllStar DTMF report
+DA = D-Star report
+XA = OLPC Laptop XO
+etc
+
+EYEBALL and VISIBILITY  #E
+/E = Eyeball for special live events
+\E = (existing smoke) the symbol with no overlay
+HE = (H overlay) Haze
+SE = (S overlay) Smoke
+BE = (B overlay) Blowing Snow         was \B
+DE = (D overlay) blowing Dust or sand was \b
+FE = (F overlay) Fog                  was \{
+
+HAZARDS: #H
+/H = hotel
+\H = Haze
+RH = Radiation detector (new mar 2011)
+WH = Hazardous Waste
+XH = Skull&Crossbones
+
+RESTAURANTS: #R 
+\R = Restaurant (generic)
+7R = 7/11
+KR = KFC
+MR = McDonalds
+TR = Taco Bell
+
+RADIOS and APRS DEVICES: #Y
+/Y = Yacht  <= the original primary symbol
+\Y =        <= the original alternate was undefined
+AY = Alinco
+BY = Byonics
+IY = Icom
+KY = Kenwood       * <= Recommend special symbol
+YY = Yaesu/Standard* <= Recommend special symbol
+
+GPS devices: #\
+/\ = Triangle DF primary symbol
+\\ = was undefined alternate symbol
+A\ = Avmap G5      * <= Recommend special symbol
+
+ARRL or DIAMOND: #a
+/a = Ambulance
+Aa = ARES
+Da = DSTAR (had been ARES Dutch)
+Ga = RSGB Radio Society of Great Brittan
+Ra = RACES
+Sa = SATERN Salvation Army
+Wa = WinLink
+
+CIVIL DEFENSE or TRIANGLE: #c
+/c = Incident Command Post
+\c = Civil Defense
+Rc = RACES
+Sc = SATERN mobile canteen
+
+BUILDINGS: #h
+/h = Hospital
+\h = Ham Store       ** <= now used for HAMFESTS
+Hh = Home Dept etc..
+
+SPECIAL VEHICLES: #k
+/k = truck
+\k = SUV
+4k = 4x4
+Ak = ATV (all terrain vehicle)
+
+SHIPS: #s
+/s = Power boat (ship) side view
+\s = Overlay Boat (Top view)
+Cs = receive as Canoe but still transmit canoe as /C
+Js = Jet Ski
+Ks = Kayak
+Hs = Hovercraft (new may 2014)
+Ts = Torpedo   (new may 2014)
+Us = sUbmarine U-boat   (new may 2014)
+
+TRUCKS: #u
+/u = Truck (18 wheeler)
+\u = truck with overlay
+Gu = Gas
+Tu = Tanker
+Cu = Chlorine Tanker
+Hu = Hazardous
+
+
+Anyone can use any overlay on any of the overlayable symbols for any
+special purpose.  We are not trying to document all possible such
+overlays.  The purpose of this document is to help keep a list of 
+more common such definitions that have more universal use and for
+which multiple definitions would lead to confusion.
+
+Future APRS code writers should be aware of where we are going:
+
+********************************************************************
+PROPOSAL TO ASSIGN MANY MORE BLOCKS OF SYMBOL SETS        April 2007
+--------------------------------------------------------------------
+www.aprs.org/symbols/symbols-overlays.txt
+
+In the initiative to upgrade APRS symbols, we are wasting some
+very valuable OVERLAYABLE symbol subgroups with a few nailed
+down legacy weather symbols.  We are proposing to consolidate
+some of these Weather symbols to open up much more space.  Since
+this is the first time we have considered actually CHANGING some
+symbol definitions, this can cause problems out there for some
+users of some legacy systems.
+
+That is why I am posting this plan to the APRS community.  If we
+do this, XASTIR and UIVIEW will be able to download new symbol
+definitions.  But some legacy clients that do not operate from
+external symbol files will show the wrong symbols for these. If
+users of those systems forsee some serious problems with the
+re-arrangement of these symbols, let us know the specific impact
+and your ideas for a workaround.. 
+
+The symbols that would be impacted are as follows:
+
+First, consolidate all of the visibility symbols into the old
+SMOKE symbol and change its meaning to "VISIBILITY", and then
+differentiate them with the overlay characters.  
+
+"\E"  (existing smoke) the symbol with no overlay
+"HE"  (an H overlay) will mean Haze
+"SE"  (an S overlay) will mean Smoke
+"BE"  (a  B overlay) will mean Blowing Snow         was \B
+"DE"  (a  D overlay) will mean blowing Dust or sand was \b
+"FE"  (an F overlay) will mean Fog                  was \{
+
+Another category is to expand the RAIN symbol to make it kinda
+like lots of angled dots coming from the sky, but with an open
+center so that we can use overlays for a number of common
+PRECIPITATIONS.  The consolidations would be:
+
+"\`" (existing Rain) would be the symbol with no overlay
+"R`" (an R overlay) would mean Rain
+"F`" (an F overlay) would mean Freezing Rain  was \F
+"H`" (an H overlay) would mean Hail           was\:
+"D`" (an D overlay) would mean Drizzle        was \D
+"E`" (an E overlay) would mean slEEt          was \e
+"S`" (an S overlay) would mean Snow           was \*
+Etc. and other particulates coming from the sky
+
+Next, I propose expanding the existing RAIN SHOWER "\I" symbol
+to look like some kind of cloud symbol with specks in it that
+can be overlayed. (It needs to look different from the next
+CLOUD symbol). It can then consolidate these symbols:
+
+"RI" (an R overlay) would mean Rain Shower
+"SI" (an S overlay) would mean Snow shower    was \G
+"LI" (an L overlay) would mean Lightening     was \J
+Etc. and other things related to clouds
+
+Next, I propose expanding the existing CLOUD symbol to allow
+definition of any number of different types of cloud.  This
+needs to also look like a cloud but a different shape and allow
+for overlays  (Maybe this cloud is clear):
+
+"\(" is the existing cloud symbol (would have no overlay)
+"P(" with P overlay would mean partly cloudy        was \p
+"W(" with W overlay would be a wall cloud           was \[
+"F(" would be Funnel cloud, but the original "\f" will also be
+retained for now
+
+All of these initiative will free up a lot of overlayable symbol 
+GROUPS each of which can suport up to 36 different overlays in 
+each group for the future:
+
+#H for 36 new Hazards (was only Hail)
+#[ for 36 new human symbols (was only Wall Cloud)
+#\ for 36 new GPS or navigation equipment
+#B TBD. \B was only blowing snow         now is BE
+#b TBD. \b was only blowing dust/sand    now is DE
+#{ TBD. \{ was only fog                  now is FE
+#* TBD. \* was snow only                 now is S`
+#: TBD. \: was hail only                 now is H`
+#D TBD. \D was drizzle only              now is D`
+#F TBD. \F was freezing rain only        now is F`
+#e TBD. \e was sleet only                now is E`
+#G TBD. \G was only Snow shower          now is SI
+#J TBD. \J was only Lightening           now is LI
+#p TBD. \p was only partly cloudy        now is P(
+
+Of course future code can fully draw each of these overlays as
+distinct special symbols in any way they want. 
+
+I especially want to hear from Dale Hugley who
+is a resource for weather, and Stephen Smith who will have to
+draw them for Uiview. And others with a stake in this...
+
+Bob Bruninga, WB4APR

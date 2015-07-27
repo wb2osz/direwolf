@@ -1,0 +1,326 @@
+#
+# Makefile for native Windows version of Dire Wolf.
+#
+#
+# This is built in the Cygwin environment but with the 
+# compiler from http://www.mingw.org/ so there is no
+# dependency on extra DLLs.
+#
+# The MinGW/bin directory must be in the PATH for the 
+# compiler.  e.g.   export PATH=/cygdrive/c/MinGW/bin:$PATH
+#
+# Failure to have the path set correctly will result in the
+# obscure message:     Makefile.win:... recipe for target ... failed. 
+#
+# Type "which gcc" to make sure you are getting the right one!
+#
+
+
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients
+
+
+# People say we need -mthreads option for threads to work properly.
+# They also say it creates a dependency on mingwm10.dll but I'm not seeing that.
+
+#TODO: put -Ofast back in.
+
+CC = gcc
+#CFLAGS = -g -Wall -Ofast -march=pentium3 -msse -Iregex -mthreads -DUSE_REGEX_STATIC
+CFLAGS = -g -Wall -march=pentium3 -msse -Iregex -mthreads -DUSE_REGEX_STATIC
+AR = ar
+
+
+#
+# Let's see impact of various optimization levels.
+# Benchmark results with MinGW gcc version 4.6.2.
+#
+#	seconds	options, comments
+#	------	-----------------
+#	119.8	-O2	Used for version 0.8
+#	 92.1	-O3
+#	 88.7	-Ofast  (should be same as -O3 -ffastmath)
+#	 87.5	-Ofast -march=pentium
+#	 74.1	-Ofast -msse
+#	 72.2	-Ofast -march=pentium -msse
+#	 62.0	-Ofast -march=pentium3   (this implies -msse)
+#	 61.9	-Ofast -march=pentium3 -msse
+#
+# A minimum of Windows XP is required due to some of the system
+# features being used.  XP requires a Pentium processor or later.
+# The DSP filters can be sped up considerably with the SSE instructions.
+# The SSE instructions were introduced in 1999 with the 
+# Pentium III series.  
+# SSE2 instructions, added in 2000, don't seem to offer any advantage.
+#
+# For version 0.9, a Pentium 3 or equivalent is now the minimum required
+# for the prebuilt Windows distribution.
+# If you insist on using a computer from the previous century,
+# you can compile this yourself with different options.
+#
+
+# Name of zip file for distribution.
+
+z=$(notdir ${CURDIR})
+
+
+
+# Main application.
+
+demod.o : fsk_demod_state.h
+demod_9600.o : fsk_demod_state.h
+demod_afsk.o : fsk_demod_state.h
+
+
+direwolf : direwolf.o config.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o \
+		fcs_calc.o ax25_pad.o \
+		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
+		gen_tone.o audio_win.o digipeater.o dedupe.o tq.o xmit.o \
+		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o \
+		dw-icon.o regex.a misc.a utm.a
+	$(CC) $(CFLAGS) -g -o $@ $^ -lwinmm -lws2_32
+
+dw-icon.o : dw-icon.rc dw-icon.ico
+	windres dw-icon.rc -o $@
+
+
+# Optimization for slow processors.
+
+demod.o : fsk_fast_filter.h
+
+demod_afsk.o : fsk_fast_filter.h
+
+
+fsk_fast_filter.h : demod_afsk.c
+	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c
+	./gen_fff > fsk_fast_filter.h
+
+
+utm.a : LatLong-UTMconversion.o
+	ar -cr $@ $^
+
+LatLong-UTMconversion.o : utm/LatLong-UTMconversion.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+
+#
+# When building for Linux, we use regular expression
+# functions supplied by the gnu C library.
+# For the native WIN32 version, we need to use our own copy.
+# These were copied from http://gnuwin32.sourceforge.net/packages/regex.htm
+#
+
+regex.a : regex.o
+	ar -cr $@ $^	
+ 
+regex.o : regex/regex.c
+	$(CC) $(CFLAGS) -Dbool=int -Dtrue=1 -Dfalse=0 -c -o $@ $^
+
+
+# There are also a couple other functions in the misc
+# subdirectory that are missing on Windows.
+
+misc.a : strsep.o strtok_r.o strcasestr.o
+	ar -cr $@ $^	
+ 
+strsep.o : misc/strsep.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+strtok_r.o : misc/strtok_r.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+strcasestr.o : misc/strcasestr.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+
+
+# Separate application to decode raw data.
+
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c regex.a misc.a
+	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^
+
+
+# Convert between text and touch tone representation.
+
+text2tt : tt_text.c
+	$(CC) $(CFLAGS) -DENC_MAIN -o text2tt tt_text.c
+
+tt2text : tt_text.c
+	$(CC) $(CFLAGS) -DDEC_MAIN -o tt2text tt_text.c
+
+
+# Convert between Latitude/Longitude and UTM coordinates.
+
+ll2utm : ll2utm.c utm.a
+	$(CC) $(CFLAGS) -I utm -o $@ $^
+
+utm2ll : utm2ll.c utm.a
+	$(CC) $(CFLAGS) -I utm -o $@ $^
+
+
+# Test application to generate sound.
+
+gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o textcolor.o misc.a regex.a
+	$(CC) $(CFLAGS) -o $@ $^
+
+# For tweaking the demodulator.
+
+demod.o : tune.h
+demod_9600.o : tune.h
+demod_afsk.o : tune.h
+
+
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c regex.a misc.a \
+		fsk_demod_agc.h
+	rm -f atest.exe
+	$(CC) $(CFLAGS) -DNOFIX -o atest $^
+	./atest ../direwolf-0.2/02_Track_2.wav | grep "packets decoded in" >atest.out
+
+
+noisy3.wav : gen_packets
+	./gen_packets -B 300 -n 100 -o noisy3.wav
+
+testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c regex.a misc.a \
+		tune.h 
+	rm -f atest.exe
+	$(CC) $(CFLAGS) -o atest $^
+	./atest -B 300 -P D -D 3 noisy3.wav | grep "packets decoded in" >atest.out
+
+
+noisy96.wav : gen_packets
+	./gen_packets -B 9600 -n 100 -o noisy96.wav
+
+testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c regex.a misc.a \
+		tune.h 
+	rm -f atest.exe
+	$(CC) $(CFLAGS) -o atest $^
+	./atest -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
+	#./atest -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+
+
+# Unit test for AFSK demodulator
+
+
+atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a regex.a \
+		fsk_fast_filter.h
+	$(CC) $(CFLAGS) -o $@ $^
+	echo " " > tune.h
+	./atest ..\\direwolf-0.2\\02_Track_2.wav 
+
+atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a regex.a \
+		fsk_fast_filter.h
+	$(CC) $(CFLAGS) -o $@ $^
+	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
+	#./atest9 -B 9600 noise96.wav 
+
+
+# Unit test for inner digipeater algorithm
+
+
+dtest : digipeater.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c misc.a regex.a
+	$(CC) $(CFLAGS) -DTEST -o $@ $^
+	./dtest
+	rm dtest.exe
+
+# Unit test for APRStt.
+
+ttest : aprs_tt.c tt_text.c  misc.a utm.a
+	$(CC) $(CFLAGS) -DTT_MAIN  -o ttest aprs_tt.c tt_text.c  misc.a utm.a
+
+
+# Unit test for IGate
+
+itest : igate.c textcolor.c ax25_pad.c fcs_calc.c misc.a regex.a
+	$(CC) $(CFLAGS) -DITEST -g -o $@ $^ -lwinmm -lws2_32
+
+
+# Unit test for UDP reception with AFSK demodulator
+
+udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c
+	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
+	./udptest
+
+
+# Multiple AGWPE network or serial port clients to test TNCs side by side.
+
+aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
+	$(CC) $(CFLAGS) -g -o $@ $^ -lwinmm -lws2_32
+
+
+SRCS = direwolf.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c \
+		hdlc_rec2.c multi_modem.c redecode.c rdq.c rrbb.c \
+		fcs_calc.c ax25_pad.c decode_aprs.c symbols.c \
+		server.c kiss.c kissnet.c kiss_frame.c hdlc_send.c fcs_calc.c gen_tone.c audio_win.c \
+		digipeater.c dedupe.c tq.c xmit.c beacon.c \
+		encode_aprs.c latlong.c \
+		dtmf.c aprs_tt.c tt_text.c igate.c
+
+
+depend : $(SRCS)
+	makedepend $(INCLUDES) $^
+
+ 
+clean :
+	rm -f *.o *.a *.exe fsk_fast_filter.h noisy96.wav
+	echo " " > tune.h
+
+
+# Package it up for distribution:  Prebuilt Windows & source versions.
+
+
+dist-win : direwolf.exe decode_aprs.exe CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf \
+			Raspberry-Pi-APRS.pdf APRStt-Implementation-Notes.pdf
+	rm -f ../$z-win.zip
+	zip ../$z-win.zip CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf \
+		Raspberry-Pi-APRS.pdf APRStt-Implementation-Notes.pdf LICENSE* *.conf \
+		direwolf.exe decode_aprs.exe tocalls.txt symbols-new.txt symbolsX.txt \
+		text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe aclients.exe
+
+dist-src : CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-Pi-APRS.pdf \
+		APRStt-Implementation-Notes.pdf \
+		direwolf.desktop dw-start.sh \
+		tocalls.txt symbols-new.txt symbolsX.txt
+	rm -f fsk_fast_filter.h
+	echo " " > tune.h
+	rm -f ../$z-src.zip
+	(cd .. ; zip $z-src.zip \
+		$z/CHANGES.txt $z/LICENSE* \
+		$z/User-Guide.pdf $z/Quick-Start-Guide-Windows.pdf \
+		$z/Raspberry-Pi-APRS.pdf $z/APRStt-Implementation-Notes.pdf \
+		$z/Makefile* $z/*.c $z/*.h $z/regex/* $z/misc/* $z/utm/* \
+		$z/*.conf $z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
+		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
+		$z/direwolf.desktop $z/dw-start.sh )
+		
+
+
+User-Guide.pdf : User-Guide.docx
+	echo "***** User-Guide.pdf is out of date *****"
+
+Quick-Start-Guide-Windows.pdf : Quick-Start-Guide-Windows.docx
+	echo "***** Quick-Start-Guide-Windows.pdf is out of date *****" 
+
+Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
+	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
+
+APRStt-Implementation-Notes.pdf : APRStt-Implementation-Notes.docx
+	echo "***** APRStt-Implementation-Notes.pdf is out of date *****"
+
+
+backup :
+	mkdir /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
+	cp -r . /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
+
+#
+# The following is updated by "make depend"
+#
+# DO NOT DELETE
+
+
+

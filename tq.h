@@ -1,0 +1,35 @@
+
+/*------------------------------------------------------------------
+ *
+ * Module:      tq.h
+ *
+ * Purpose:   	Transmit queue - hold packets for transmission until the channel is clear.
+ *		
+ *---------------------------------------------------------------*/
+
+#ifndef TQ_H
+#define TQ_H 1
+
+#include "ax25_pad.h"
+#include "audio.h"
+
+#define TQ_NUM_PRIO 2				/* Number of priorities. */
+
+#define TQ_PRIO_0_HI 0
+#define TQ_PRIO_1_LO 1
+
+
+
+void tq_init (int nchan);
+
+void tq_append (int chan, int prio, packet_t pp);
+
+void tq_wait_while_empty (void);
+
+packet_t tq_remove (int chan, int prio);
+
+int tq_count (int chan, int prio);
+
+#endif
+
+/* end tq.h */
