@@ -1,4 +1,4 @@
-APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      20 May 2014
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      28 Aug 2014
 ---------------------------------------------------------------------
 
 BACKGROUND:  This file addresses new additions proposals (OVERLAYS) 
@@ -13,6 +13,7 @@ CORRECT one.
 
 UPDATES/REVISIONS/CORRECTIONS:
 
+28 Aug 14  Added numerous OpenAPRS symbols see "(new Aug 2014)"
 20 May 14  Changed Da to DSTAR (2700 of them) from Dutch Ares
 19 May 14  Added Submarine&torpedo to ships and lots of Aircraft
            search for "(new may 2014)"
@@ -113,6 +114,11 @@ letting that define a new graphic just for that combination.
 The following tables will attempt to keep track of these and
 any other useful generic applications of overlay characters.
 
+change Flooding #W to include Avalanche, Mudslide/Landslide
+change \' to crash & incident sites
+change \D to DEPOT family
+change overlayed car to generic with (1-9 overlays)
+
 AIRCRAFT
 /^ = LARGE Aircraft
 \^ = top-view originally intended to point in direction of flight
@@ -121,7 +127,9 @@ E^ = Enemy aircraft (too bad I cant use the original Hostile)
 H^ = Hovercraft    (new may 2014)
 J^ = JET     (new may 2014)
 M^ = Missle   (new may 2014)
+P^ = Prop (new Aug 2014)
 V^ = Vertical takeoff   (new may 2014)
+X^ = Experimental (new Aug 2014)
 
 ATM Machine or CURRENCY:  #$ 
 /$ = original primary Phone
@@ -130,12 +138,31 @@ U$ = US dollars
 L$ = Brittish Pound
 Y$ = Japanese Yen
 
+DEPOT
+/D = was originally undefined
+\D = was drizzle (moved to ' ovlyD)
+AD = Airport  (new Aug 2014)
+FD = Ferry Landing (new Aug 2014)
+HD = Heloport (new Aug 2014)
+RD = Rail Depot  (new Aug 2014)
+BD = Bus Depot (new Aug 2014)
+LD = LIght Rail or Subway (new Aug 2014)
+SD = Seaport Depot (new Aug 2014)
+
+EMERGENCY: #!
+/! = Police/Sheriff, etc
+\! = Emergency!
+E! = ELT or EPIRB  (new Aug 2014)
+V! = Volcanic Eruption or Lava  (new Aug 2014)
+
 POWER PLANT: #%  
 /% = DX cluster  <= the original primary table definition
 C% = Coal
+E% = Emergency  (new Aug 2014)
 G% = Geothermal
 H% = Hydroelectric
 N% = Nuclear
+P% = Portable (new Aug 2014)
 S% = Solar
 T% = Turbine
 W% = Wind
@@ -148,7 +175,8 @@ T& = TX igate with path set to 1 hop only)
 2& = TX igate with path set to 2 hops (not generally good idea)
 
 INCIDENT SITES: #'
-\' = Airplane Crash Site  <= the original primary deifinition
+/' = Small Aircraft (original primary symbol)
+\' = Airplane Crash Site  <= the original alternate deifinition
 A' = Automobile crash site
 H' = Hazardous incident
 M' = Multi-Vehicle crash site
@@ -199,9 +227,10 @@ ADVISORIES: #<  (new expansion possibilities)
 /< = motorcycle
 \< = Advisory (single gale flag)
 
-CARS: #>
+CARS: #> (Vehicles)
 /> = normal car (side view)
 \> = Top view and symbol POINTS in direction of travel
+#> = Reserve overlays 1-9 for numbered cars (new Aug 2014)
 E> = Electric 
 H> = Hybrid
 S> = Solar powered
@@ -270,13 +299,18 @@ Wa = WinLink
 CIVIL DEFENSE or TRIANGLE: #c
 /c = Incident Command Post
 \c = Civil Defense
+Dc = Decontamination (new Aug 2014)
 Rc = RACES
 Sc = SATERN mobile canteen
 
 BUILDINGS: #h
 /h = Hospital
 \h = Ham Store       ** <= now used for HAMFESTS
+Fh = HamFest (new Aug 2014)
 Hh = Home Dept etc..
+Mh = Morgue
+Ch = Clinic
+Th = Triage
 
 SPECIAL VEHICLES: #k
 /k = truck
@@ -284,20 +318,36 @@ SPECIAL VEHICLES: #k
 4k = 4x4
 Ak = ATV (all terrain vehicle)
 
-SHIPS: #s
+SHIPS: #s 
 /s = Power boat (ship) side view
 \s = Overlay Boat (Top view)
-Cs = receive as Canoe but still transmit canoe as /C
+6s = Shipwreck ("deep6") (new Aug 2014)
+Bs = Pleasure Boat
+Cs = Cargo
+Ds = Diving
+Es = Emergency or Medical transport
+Fs = Fishing
+Hs = High-speed Craft 
 Js = Jet Ski
-Ks = Kayak
-Hs = Hovercraft (new may 2014)
-Ts = Torpedo   (new may 2014)
-Us = sUbmarine U-boat   (new may 2014)
+Ls = Law enforcement
+Ms = Miltary
+Os = Oil Rig
+Ps = Pilot Boat (new Aug 2014)
+Qs = Torpedo
+Ss = Search and Rescue
+Ts = Tug (new Aug 2014)
+Us = Underwater ops or submarine
+Ws = Wing-in-Ground effect (or Hovercraft)
+Xs = Passenger (paX)(ferry)
+Ys = Sailing (large ship)
+
 
 TRUCKS: #u
 /u = Truck (18 wheeler)
 \u = truck with overlay
+Bu = Buldozer/construction  (new Aug 2014)
 Gu = Gas
+Pu = Plow or SnowPlow (new Aug 2014)
 Tu = Tanker
 Cu = Chlorine Tanker
 Hu = Hazardous

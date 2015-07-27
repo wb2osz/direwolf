@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -42,6 +42,7 @@
 #include <assert.h>
 #include <string.h>
 #include <signal.h>
+#include <ctype.h>
 
 #if __WIN32__
 #else
@@ -49,7 +50,11 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#ifdef __OpenBSD__
+#include <soundcard.h>
+#else
 #include <sys/soundcard.h>
+#endif
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -72,6 +77,7 @@
 #include "server.h"
 #include "kiss.h"
 #include "kissnet.h"
+#include "nmea.h"
 #include "gen_tone.h"
 #include "digipeater.h"
 #include "tq.h"
@@ -86,7 +92,11 @@
 #include "igate.h"
 #include "symbols.h"
 #include "dwgps.h"
+#include "nmea.h"
+#include "log.h"
 
+
+//static int idx_decoded = 0;
 
 #if __WIN32__
 static BOOL cleanup_win (int);
@@ -130,8 +140,10 @@ static void __cpuid(int cpuinfo[4], int infotype){
 
 static 	struct audio_s modem;
 
-static int d_u_opt = 0;			/* "-d u" command line option. */
+static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in hexadecimal. */
+static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
 
+static struct misc_config_s misc_config;
 
 
 int main (int argc, char *argv[])
@@ -145,11 +157,18 @@ int main (int argc, char *argv[])
 	struct digi_config_s digi_config;
 	struct tt_config_s tt_config;
 	struct igate_config_s igate_config;
-	struct misc_config_s misc_config;
 	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0;	/* Command line options. */
+	char l_opt[80];
 	char input_file[80];
 	
-	int t_opt = 1;							/* Text color option. */
+	int t_opt = 1;		/* Text color option. */				
+	int d_k_opt = 0;	/* "-d k" option for serial port KISS.  Can be repeated for more detail. */					
+	int d_n_opt = 0;	/* "-d n" option for Network KISS.  Can be repeated for more detail. */	
+	int d_t_opt = 0;	/* "-d t" option for Tracker.  Can be repeated for more detail. */	
+			
+	
+
+	strcpy(l_opt, "");
 
 
 #if __WIN32__
@@ -195,12 +214,9 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 2\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Development version\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-
-	// Note "a" for fix with beacon sent to IGate Server.
-
-	dw_printf ("Dire Wolf version %d.%da\n", MAJOR_VERSION, MINOR_VERSION);
+	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 1\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "M", __DATE__);
+	dw_printf ("Dire Wolf version %d.%d, December 2014\n", MAJOR_VERSION, MINOR_VERSION);
 
 
 #if __WIN32__
@@ -272,6 +288,7 @@ int main (int argc, char *argv[])
           int this_option_optind = optind ? optind : 1;
           int option_index = 0;
 	  int c;
+	  char *p;
           static struct option long_options[] = {
             {"future1", 1, 0, 0},
             {"future2", 0, 0, 0},
@@ -281,7 +298,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "B:D:c:pxr:b:n:d:t:U",
+          c = getopt_long(argc, argv, "B:D:c:pxr:b:n:d:t:Ul:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -380,12 +397,26 @@ int main (int argc, char *argv[])
 
 	  case 'd':				/* Set debug option. */
 	
-	    switch (optarg[0]) {	
+	    /* New in 1.1.  Can combine multiple such as "-d pkk" */
+
+	    for (p=optarg; *p!='\0'; p++) {
+	     switch (*p) {
+	
 	      case 'a':  server_set_debug(1); break;
-	      case 'k':  kiss_serial_set_debug (1); break;
-	      case 'n':  kiss_net_set_debug (1); break;
+
+	      case 'k':  d_k_opt++; kiss_serial_set_debug (d_k_opt); break;
+	      case 'n':  d_n_opt++; kiss_net_set_debug (d_n_opt); break;
+
 	      case 'u':  d_u_opt = 1; break;
+
+		// separate out gps & waypoints.
+
+	      case 't':  d_t_opt++; beacon_tracker_set_debug (d_t_opt); break;
+
+	      case 'w':	 nmea_set_debug (1); break;		// not documented yet.
+	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      default: break;
+	     }
 	    }
 	    break;
 	      
@@ -403,6 +434,10 @@ int main (int argc, char *argv[])
 	    exit (0);
 	    break;
 
+          case 'l':				/* -l for log file directory name */
+
+	    strncpy (l_opt, optarg, sizeof(l_opt)-1);
+            break;
 
           default:
 
@@ -471,6 +506,10 @@ int main (int argc, char *argv[])
 	    modem.decimate[0] = D_opt;
 	}
 
+	if (strlen(l_opt) > 0) {
+	  strncpy (misc_config.logdir, l_opt, sizeof(misc_config.logdir)-1);
+	}
+
 	misc_config.enable_kiss_pt = enable_pseudo_terminal;
 
 	if (strlen(input_file) > 0) {
@@ -521,7 +560,7 @@ int main (int argc, char *argv[])
  * Initialize the transmit queue.
  */
 
-	xmit_init (&modem);
+	xmit_init (&modem, d_p_opt);
 
 /*
  * If -x option specified, transmit alternating tones for transmitter
@@ -565,6 +604,11 @@ int main (int argc, char *argv[])
  */
 	kiss_init (&misc_config);
 
+/*
+ * Open port for communication with GPS.
+ */
+	nmea_init (&misc_config);
+
 /* 
  * Create thread for trying to salvage frames with bad FCS.
  */
@@ -575,6 +619,8 @@ int main (int argc, char *argv[])
  */
 	beacon_init (&misc_config, &digi_config);
 
+
+	log_init(misc_config.logdir);	
 
 /*
  * Get sound samples and decode them.
@@ -662,7 +708,8 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= -1 && subchan < MAX_SUBCHANS);
-	     
+	assert (pp != NULL);	// 1.1J+
+     
 	  
 	ax25_format_addrs (pp, stemp);
 
@@ -687,6 +734,8 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("\n");
+          //idx_decoded++;				
+          //dw_printf ("DECODED[%d] " , idx_decoded);
 
 	  if (h != -1 && h != AX25_SOURCE) {
 	    dw_printf ("Digipeater ");
@@ -720,6 +769,8 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 	  }
 	}
 
+
+
 // Display non-APRS packets in a different color.
 
 // Display subchannel only when multiple modems configured for channel.
@@ -746,10 +797,17 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 	}
 
 	dw_printf ("%s", stemp);			/* stations followed by : */
-	ax25_safe_print ((char *)pinfo, info_len, 0);
+
+	// for APRS we generally want to display non-ASCII to see UTF-8.
+	// for other, probably want to restrict to ASCII only because we are
+	// more likely to have compressed data than UTF-8 text.
+
+	// TODO: Might want to use d_u_opt for transmitted frames too.
+
+	ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
 	dw_printf ("\n");
 
-// Display in pure ASCII if non-ASCII characters and "-d u" option specified.
+// Also display in pure ASCII if non-ASCII characters and "-d u" option specified.
 
 	if (d_u_opt) {
 
@@ -767,11 +825,43 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 	  }
 	}
 
+/* Optional hex dump of packet. */
+
+	if (d_p_opt) {
+
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("------\n");
+	  ax25_hex_dump (pp);
+	  dw_printf ("------\n");
+	}
+
+
 /* Decode the contents of APRS frames and display in human-readable form. */
 
 	if (ax25_is_aprs(pp)) {
-	  decode_aprs (pp);
+
+	  decode_aprs_t A;
+
+	  decode_aprs (&A, pp);
+
+	  //Print it all out in human readable format.
+
+	  decode_aprs_print (&A);
+
+	  // Send to log file.
+
+	  log_write (chan, &A, pp, alevel, retries);
+
+	  // Convert to NMEA waypoint sentence.
+
+ 	  if (A.g_lat != G_UNKNOWN && A.g_lon != G_UNKNOWN) {
+	    nmea_send_waypoint (strlen(A.g_name) > 0 ? A.g_name : A.g_src, 
+		A.g_lat, A.g_lon, A.g_symbol_table, A.g_symbol_code, 
+		DW_FEET_TO_METERS(A.g_altitude), A.g_course, DW_MPH_TO_KNOTS(A.g_speed), 
+		A.g_comment);
+	  }
 	}
+
 
 /* Send to another application if connected. */
 
@@ -791,6 +881,11 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 	  igate_send_rec_packet (chan, pp);
 	}
 
+/* Send out a regenerated copy. Applies to all types, not just APRS. */
+
+	digi_regen (chan, pp);
+
+
 /* Note that packet can be modified in place so this is the last thing we should do with it. */
 /* Again, use only those with correct CRC. */
 /* We don't want to spread corrupted data! */
@@ -799,6 +894,7 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 	if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
 	  digipeater (chan, pp);
 	}
+
 
 	ax25_delete (pp);
 	
@@ -814,6 +910,7 @@ static BOOL cleanup_win (int ctrltype)
 	if (ctrltype == CTRL_C_EVENT || ctrltype == CTRL_CLOSE_EVENT) {
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("\nQRT\n");
+	  log_term ();
 	  ptt_term ();
 	  dwgps_term ();
 	  SLEEP_SEC(1);
@@ -829,8 +926,10 @@ static void cleanup_linux (int x)
 {
 	text_color_set(DW_COLOR_INFO);
 	dw_printf ("\nQRT\n");
+	log_term ();
 	ptt_term ();
 	dwgps_term ();
+	SLEEP_SEC(1);
 	exit(0);
 }
 
@@ -848,6 +947,7 @@ static void usage (char **argv)
 	dw_printf ("Usage: direwolf [options]\n");
 	dw_printf ("Options:\n");
 	dw_printf ("    -c fname       Configuration file name.\n");
+	dw_printf ("    -l logdir      Directory name for log files.  Use . for current.\n");
 
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
@@ -857,11 +957,13 @@ static void usage (char **argv)
 	dw_printf ("                     If > 2400, K9NG/G3RUH style encoding is used.\n");
 	dw_printf ("                     Otherwise, AFSK tones are set to 1200 & 2200.\n");
 
-	dw_printf ("    -d             Debug communication with client application, one of\n");
-	dw_printf ("       a             a = AGWPE network protocol.\n");
-	dw_printf ("       k             k = KISS serial port.\n");
-	dw_printf ("       n             n = KISS network.\n");
+	dw_printf ("    -d             Debug options:\n");
+	dw_printf ("       a             a = AGWPE network protocol client.\n");
+	dw_printf ("       k             k = KISS serial port client.\n");
+	dw_printf ("       n             n = KISS network client.\n");
 	dw_printf ("       u             u = Display non-ASCII text in hexadecimal.\n");
+	dw_printf ("       p             p = dump Packets in hexadecimal.\n");
+	dw_printf ("       t             t = gps Tracker.\n");
 
 	dw_printf ("    -t n           Text colors.  1=normal, 0=disabled.\n");
 

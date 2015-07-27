@@ -4,6 +4,7 @@
 #ifndef APRS_TT_H
 #define APRS_TT_H 1
 
+
 /*
  * For holding location format specifications from config file.
  * Same thing is also useful for macro definitions.
@@ -52,7 +53,7 @@ struct ttloc_s {
 };
 
 /* 
- * Configuratin options for APRStt.
+ * Configuration options for APRStt.
  */
 
 #define TT_MAX_XMITS 10
@@ -77,6 +78,8 @@ struct tt_config_s {
 	int corral_ambiguity;
 };
 
+
+
 	
 void aprs_tt_init (struct tt_config_s *p_config);
 
@@ -94,6 +97,10 @@ void aprs_tt_button (int chan, char button);
 #define TT_ERROR_INVALID_LOC	8	/* Invalid location. */
 #define TT_ERROR_NO_CALL	9	/* No call or object name included. */
 
+
+#define APRSTT_LOC_DESC_LEN 32		/* Need at least 26 */
+
+void aprs_tt_dao_to_desc (char *dao, char *str);
 
 #endif
 

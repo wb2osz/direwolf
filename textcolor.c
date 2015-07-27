@@ -118,7 +118,33 @@ static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
 static const char clear_eos[]	= "\e[0J";
 
 
-#else 	/* Linux */
+#elif __arm__ 	/* Linux on Raspberry Pi or similar */
+
+
+/* We need "blink" (5) rather than the */
+/* expected bright/bold (1) to get bright white background. */
+/* Makes no sense but I stumbled across that somewhere. */
+
+static const char background_white[] = "\e[5;47m";
+
+/* Whenever a dark color is used, the */
+/* background is reset and needs to be set again. */
+
+static const char black[]	= "\e[0;30m" "\e[5;47m";
+static const char red[] 	= "\e[1;31m";
+static const char green[] 	= "\e[1;32m";
+static const char yellow[] 	= "\e[1;33m";
+static const char blue[] 	= "\e[1;34m";
+static const char magenta[] 	= "\e[1;35m";
+static const char cyan[] 	= "\e[1;36m";
+static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
+
+/* Clear from cursor to end of screen. */
+
+static const char clear_eos[]	= "\e[0J";
+
+
+#else 	/* Other Linux */
 
 static const char background_white[] = "\e[47;1m";
 

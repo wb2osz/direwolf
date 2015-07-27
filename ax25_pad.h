@@ -49,7 +49,8 @@
  * #define AX25_MAX_PACKET_LEN ( AX25_MAX_ADDRS * 7 + 2 + AX25_MAX_INFO_LEN)
  */
 
-/* the more general case. */
+/* The more general case. */
+/* An AX.25 frame can have a control byte and no protocol. */
 
 #define AX25_MIN_PACKET_LEN ( 2 * 7 + 1 )
 
@@ -77,20 +78,17 @@ struct packet_s {
 
 	struct packet_s *nextp;	/* Pointer to next in queue. */
 
-	int num_addr;		/* Number of elements used in two below. */
-				/* Range of 0 .. AX25_MAX_ADDRS. */	
+	int num_addr;		/* Number of addresses in frame. */
+				/* Range of AX25_MIN_ADDRS .. AX25_MAX_ADDRS for AX.25. */	
+				/* It will be 0 if it doesn't look like AX.25. */
+				/* -1 is used temporarily at allocation to mean */
+				/* not determined yet. */
 
-	char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
-				/* Contains the address without the ssid. */
-				/* Why is it larger than 7? */
-				/* Messages from an IGate server can have longer */
-				/* addresses after qAC.  Up to 9 observed so far. */
 
-				/* usual human readable form.  e.g.  WB20SZ-15 */
-
-	unsigned char ssid_etc[AX25_MAX_ADDRS];		/*  SSID octet from each address. */
 
 				/* 
+ 				 * The 7th octet of each address contains:
+			         *
 				 * Bits:   H  R  R  SSID  0
 				 *
 				 *   H 		for digipeaters set to 0 intially.
@@ -118,13 +116,12 @@ struct packet_s {
 #define SSID_LAST_MASK	0x01
 
 
-	int the_rest_len;	/* Frame length minus the address part. */
+	int frame_len;		/* Frame length without CRC. */
 
-	unsigned char the_rest[2 + 3 + AX25_MAX_INFO_LEN + 1];
-				/* The rest after removing the addresses. */
-				/* Includes control, protocol ID, Information, */
-				/* and throw in one more for a character */
-				/* string nul terminator. */
+
+	unsigned char frame_data[AX25_MAX_PACKET_LEN+1];
+				/* Raw frame contents, without the CRC. */
+				
 
 	int magic2;		/* Will get stomped on if above overflows. */
 };
@@ -158,7 +155,8 @@ typedef struct packet_s *packet_t;
 
 static inline int ax25_get_control_offset (packet_t this_p) 
 {
-	return (0);
+	//return (0);
+	return (this_p->num_addr*7);
 }
 
 static inline int ax25_get_num_control (packet_t this_p)
@@ -174,7 +172,7 @@ static inline int ax25_get_num_control (packet_t this_p)
 
 static inline int ax25_get_pid_offset (packet_t this_p) 
 {
-	return (ax25_get_num_control(this_p));
+	return (ax25_get_control_offset (this_p) + ax25_get_num_control(this_p));
 }
 
 static int ax25_get_num_pid (packet_t this_p)
@@ -182,12 +180,12 @@ static int ax25_get_num_pid (packet_t this_p)
 	int c;
 	int pid;
 
-	c = this_p->the_rest[ax25_get_control_offset(this_p)];
+	c = this_p->frame_data[ax25_get_control_offset(this_p)];
 
 	if ( (c & 0x01) == 0 ||				/* I   xxxx xxx0 */
 	     c == 0x03 || c == 0x13) {			/* UI  000x 0011 */
 
-	  pid = this_p->the_rest[ax25_get_pid_offset(this_p)];
+	  pid = this_p->frame_data[ax25_get_pid_offset(this_p)];
 	  if (pid == 0xff) {
 	    return (2);			/* pid 1111 1111 means another follows. */
 	  }
@@ -210,17 +208,20 @@ static int ax25_get_num_pid (packet_t this_p)
 
 static inline int ax25_get_info_offset (packet_t this_p) 
 {
-	return (ax25_get_num_control(this_p) + ax25_get_num_pid(this_p));
+	return (ax25_get_control_offset (this_p) + ax25_get_num_control(this_p) + ax25_get_num_pid(this_p));
 }
 
 static int ax25_get_num_info (packet_t this_p)
 {
 	int len;
+	
+	/* assuming AX.25 frame. */
 
-	len = this_p->the_rest_len - ax25_get_num_control(this_p) - ax25_get_num_pid(this_p);
+	len = this_p->frame_len - this_p->num_addr * 7 - ax25_get_num_control(this_p) - ax25_get_num_pid(this_p);
 	if (len < 0) {
 	  len = 0;		/* print error? */
 	}
+
 	return (len);
 }
 
@@ -277,6 +278,8 @@ extern packet_t ax25_get_nextp (packet_t this_p);
 extern void ax25_format_addrs (packet_t pp, char *);
 
 extern int ax25_pack (packet_t pp, unsigned char result[AX25_MAX_PACKET_LEN]);
+
+extern void ax25_hex_dump (packet_t this_p);
 
 extern int ax25_is_aprs (packet_t pp);
 

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -443,9 +443,12 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *
  * Purpose:     Construct info part for position report format.
  *
- * Inputs:      compressed - Send in compressed form?
+ * Inputs:      messaging - This determines whether the data type indicator 
+ *			   is set to '!' (false) or '=' (true).
+ *		compressed - Send in compressed form?
  *		lat	- Latitude.
  *		lon	- Longitude.
+ *		alt_ft	- Altitude in feet.
  *		symtab	- Symbol table id or overlay.
  *		symbol	- Symbol id.
  *
@@ -494,7 +497,7 @@ typedef struct aprs_compressed_pos_s {
 } aprs_compressed_pos_t;
 
 
-int encode_position (int compressed, double lat, double lon, 
+int encode_position (int messaging, int compressed, double lat, double lon, int alt_ft, 
 		char symtab, char symbol, 
 		int power, int height, int gain, char *dir,
 		int course, int speed,
@@ -507,7 +510,7 @@ int encode_position (int compressed, double lat, double lon,
 	if (compressed) {
 	  aprs_compressed_pos_t *p = (aprs_compressed_pos_t *)presult;
 
-	  p->dti = '!';
+	  p->dti = messaging ? '=' : '!';
 	  set_comp_position (symtab, symbol, lat, lon, 
 		power, height, gain, 
 		course, speed,
@@ -517,7 +520,7 @@ int encode_position (int compressed, double lat, double lon,
 	else {
 	  aprs_ll_pos_t *p = (aprs_ll_pos_t *)presult;
 
-	  p->dti = '!';
+	  p->dti = messaging ? '=' : '!';
 	  set_norm_position (symtab, symbol, lat, lon, &(p->pos));
 	  result_len = 1 + sizeof (p->pos);
 
@@ -539,6 +542,19 @@ int encode_position (int compressed, double lat, double lon,
 	}
 
 	presult[result_len] = '\0';
+
+/* Altitude.  Can be anywhere in comment. */
+
+	if (alt_ft != G_UNKNOWN) {
+	  char salt[12];
+	  /* Not clear if altitude can be negative. */
+	  /* Be sure it will be converted to 6 digits. */
+	  if (alt_ft < 0) alt_ft = 0;
+	  if (alt_ft > 999999) alt_ft = 999999;
+	  sprintf (salt, "/A=%06d", alt_ft);
+	  strcat (presult, salt);
+	  result_len += strlen(salt);
+	}
 
 /* Finally, comment text. */
 	
@@ -696,17 +712,13 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
  *
  * Description:	Just a smattering, not an organized test.
  *
- * 		$ rm a.exe ; gcc -DEN_MAIN encode_aprs.c latlong.c ; ./a.exe
+ * 		$ rm a.exe ; gcc -DEN_MAIN encode_aprs.c latlong.c textcolor.c ; ./a.exe
  *
  *----------------------------------------------------------------*/
 
 
 #if EN_MAIN
 
-void text_color_set ( enum dw_color_e c )
-{
-        return;
-} 
 
 int main (int argc, char *argv[])
 {
@@ -716,75 +728,86 @@ int main (int argc, char *argv[])
 
 /***********  Position  ***********/
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!4234.61ND07126.47W&") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with PHG. */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with freq. */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		0, 0, 0, NULL, 0, 0, 146.955, 74.4, -0.6, NULL, result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with course/speed, freq, and comment! */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* Course speed, no tone, + offset */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
+/* Course speed, no tone, + offset + altitude */
 
-
+	encode_position (0, 42+34.61/60, -(71+26.47/60), 12345, 'D', '&', 
+		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result);
+	dw_printf ("%s\n", result);
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 /A=012345River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 
 /*********** Compressed position. ***********/
 
-	encode_position (1, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!D8yKC<Hn[&   ") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!D8yKC<Hn[&  !") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 
-/* with PHG. In this case it is converted to precomputed radio range. */
+/* with PHG. In this case it is converted to precomputed radio range.  TODO: check on this.  Is 27.4 correct? */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&PHG7368   TBD ???") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!D8yKC<Hn[&{CG") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
-/* with course/speed, freq, and comment! */
+/* with course/speed, freq, and comment!  TODO:  check on this 55 knots should be 63 MPH.  we get 62. */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
+	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
 		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, "!D8yKC<Hn[&  !146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
+//$ echo 'A>B:!D8yKC<Hn[&NUG146.955MHz T074 -060 River flooding' | decode_aprs
 
+//A>B:!D8yKC<Hn[&NUG146.955MHz T074 -060 River flooding
+//Position, I=Igte IGate R=RX T=1hopTX 2=2hopTX w/overlay D
+//N 42 34.6100, W 071 26.4700, 62 MPH, course 180, 146.955 MHz, -600k, PL 74.4
+// River flooding
+
+// TODO:  test alt; cs+alt
 
 /*********** Object. ***********/
 
-
 	encode_object ("WB1GOF-C", 0, 0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
-		0, 0, 0, NULL, result);
+		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result);
 	dw_printf ("%s\n", result);
-	if (strcmp(result, ";WB1GOF-C *111111z4234.61ND07126.47W&   TBD???") != 0) dw_printf ("ERROR!\n");
+	if (strcmp(result, ";WB1GOF-C *111111z4234.61ND07126.47W&") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
+// TODO: need more tests.
 
 	return(0);
 

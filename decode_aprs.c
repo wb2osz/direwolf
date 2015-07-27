@@ -28,11 +28,8 @@
  *		This is a fairly complete implementation with error messages
  *		pointing out various specication violations. 
  *
- *
- *
  * Assumptions:	ax25_from_frame() has been called to 
  *		separate the header and information.
- *
  *
  *------------------------------------------------------------------*/
 
@@ -58,15 +55,14 @@ char *strsep(char **stringp, const char *delim);
 #include "textcolor.h"
 #include "symbols.h"
 #include "latlong.h"
+//#include "nmea.h"
+#include "decode_aprs.h"
+#include "telemetry.h"
+
 
 #define TRUE 1
 #define FALSE 0
 
-
-#define METERS_TO_FEET(x) ((x) * 3.2808399)
-#define KNOTS_TO_MPH(x) ((x) * 1.15077945)
-#define KM_TO_MILES(x) ((x) * 0.621371192)
-#define MBAR_TO_INHG(x) ((x) * 0.0295333727)
 
 
 /* Position & symbol fields common to several message formats. */
@@ -96,188 +92,109 @@ typedef struct {
 	} compressed_position_t;
 
 
-static void print_decoded (void);
+/* Range of digits for Base 91 representation. */
 
-static void aprs_ll_pos (unsigned char *, int);
-static void aprs_ll_pos_time (unsigned char *, int);
-static void aprs_raw_nmea (unsigned char *, int);
-static void aprs_mic_e (packet_t, unsigned char *, int);
-//static void aprs_compressed_pos (unsigned char *, int);
-static void aprs_message (unsigned char *, int);
-static void aprs_object (unsigned char *, int);
-static void aprs_item (unsigned char *, int);
-static void aprs_station_capabilities (char *, int);
-static void aprs_status_report (char *, int);
-static void aprs_telemetry (char *, int);
-static void aprs_raw_touch_tone (char *, int);
-static void aprs_morse_code (char *, int);
-static void aprs_positionless_weather_report (unsigned char *, int);
-static void weather_data (char *wdata, int wind_prefix);
-static void aprs_ultimeter (char *, int);
-static void third_party_header (char *, int);
+#define B91_MIN '!'
+#define B91_MAX '{'
+#define isdigit91(c) ((c) >= B91_MIN && (c) <= B91_MAX)
 
 
-static void decode_position (position_t *ppos);
-static void decode_compressed_position (compressed_position_t *ppos);
-
+//static void print_decoded (decode_aprs_t *A);
+static void aprs_ll_pos (decode_aprs_t *A, unsigned char *, int);
+static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *, int);
+static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *, int);
+static void aprs_mic_e (decode_aprs_t *A, packet_t, unsigned char *, int);
+//static void aprs_compressed_pos (decode_aprs_t *A, unsigned char *, int);
+static void aprs_message (decode_aprs_t *A, unsigned char *, int);
+static void aprs_object (decode_aprs_t *A, unsigned char *, int);
+static void aprs_item (decode_aprs_t *A, unsigned char *, int);
+static void aprs_station_capabilities (decode_aprs_t *A, char *, int);
+static void aprs_status_report (decode_aprs_t *A, char *, int);
+static void aprs_telemetry (decode_aprs_t *A, char *, int);
+static void aprs_raw_touch_tone (decode_aprs_t *A, char *, int);
+static void aprs_morse_code (decode_aprs_t *A, char *, int);
+static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *, int);
+static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix);
+static void aprs_ultimeter (decode_aprs_t *A, char *, int);
+static void third_party_header (decode_aprs_t *A, char *, int);
+static void decode_position (decode_aprs_t *A, position_t *ppos);
+static void decode_compressed_position (decode_aprs_t *A, compressed_position_t *ppos);
 static double get_latitude_8 (char *p);
 static double get_longitude_9 (char *p);
-
-static double get_latitude_nmea (char *pstr, char *phemi);
-static double get_longitude_nmea (char *pstr, char *phemi);
-
-static time_t get_timestamp (char *p);
-static int get_maidenhead (char *p);
-
-static int data_extension_comment (char *pdext);
-static void decode_tocall (char *dest);
-//static void get_symbol (char dti, char *src, char *dest);
-static void process_comment (char *pstart, int clen);
+static time_t get_timestamp (decode_aprs_t *A, char *p);
+static int get_maidenhead (decode_aprs_t *A, char *p);
+static int data_extension_comment (decode_aprs_t *A, char *pdext);
+static void decode_tocall (decode_aprs_t *A, char *dest);
+//static void get_symbol (decode_aprs_t *A, char dti, char *src, char *dest);
+static void process_comment (decode_aprs_t *A, char *pstart, int clen);
 
 
-/*
- * Information extracted from the message.
- */
-
-/* for unknown values. */
-
-//#define G_UNKNOWN -999999
-
-
-static char g_msg_type[30];		/* Message type. */
-
-static char g_symbol_table;		/* The Symbol Table Identifier character selects one */
-					/* of the two Symbol Tables, or it may be used as */
-					/* single-character (alpha or numeric) overlay, as follows: */
-					
-					/*	/ 	Primary Symbol Table (mostly stations) */
-
-					/* 	\ 	Alternate Symbol Table (mostly Objects) */
-
-					/*	0-9 	Numeric overlay. Symbol from Alternate Symbol */
-					/*		Table (uncompressed lat/long data format) */
-
-					/*	a-j	Numeric overlay. Symbol from Alternate */
-					/*		Symbol Table (compressed lat/long data */
-					/*		format only). i.e. a-j maps to 0-9 */
-
-					/*	A-Z	Alpha overlay. Symbol from Alternate Symbol Table */
-
-
-static char g_symbol_code;		/* Where the Symbol Table Identifier is 0-9 or A-Z (or a-j */
-					/* with compressed position data only), the symbol comes from */
-					/* the Alternate Symbol Table, and is overlaid with the */
-					/* identifier (as a single digit or a capital letter). */
-
-static double g_lat, g_lon;		/* Location, degrees.  Negative for South or West. */
-					/* Set to G_UNKNOWN if missing or error. */
-
-static char g_maidenhead[9];		/* 4 or 6 (or 8?) character maidenhead locator. */
-
-static char g_name[20];			/* Object or item name. */
-
-static float g_speed;			/* Speed in MPH.  */
-
-static float g_course;			/* 0 = North, 90 = East, etc. */
-	
-static int g_power;			/* Transmitter power in watts. */
-
-static int g_height;			/* Antenna height above average terrain, feet. */
-
-static int g_gain;			/* Antenna gain in dB. */
-
-static char g_directivity[10];		/* Direction of max signal strength */
-
-static float g_range;			/* Precomputed radio range in miles. */
-
-static float g_altitude;		/* Feet above median sea level.  */
-
-static char g_mfr[80];			/* Manufacturer or application. */
-
-static char g_mic_e_status[30];		/* MIC-E message. */
-
-static char g_freq[40];			/* Frequency, tone, xmit offset */
-
-static char g_comment[256];		/* Comment. */
 
 /*------------------------------------------------------------------
  *
  * Function:	decode_aprs
  *
- * Purpose:	Optionally print packet then decode it.
+ * Purpose:	Split APRS packet into separate properties that it contains.
  *
- * Inputs:	src	- Source Station.
+ * Inputs:	pp	- APRS packet object.
  *
- *			  The SSID is used as a last resort for the
- *			  displayed symbol if not specified in any other way.
- *
- *		dest	- Destination Station.
- *
- *			  Certain destinations (GPSxxx, SPCxxx, SYMxxx) can
- *			  be used to specify the display symbol.
- *			  For the MIC-E format (used by Kenwood D7, D700), the
- *			  "destination" is really the latitude.
- *
- *		pinfo 	- pointer to information field.
- *		info_len - length of the information field.
- *
- * Outputs:	Variables above:
- *
- *			g_symbol_table, g_symbol_code,
+ * Outputs:	A->	g_symbol_table, g_symbol_code,
  *			g_lat, g_lon, 
  *			g_speed, g_course, g_altitude,
  *			g_comment
- *			... and others...
+ *			... and many others...
  *
- *		Other functions are then called to retrieve the information.
- *
- * Bug:		This is not thread-safe because it uses static data and strtok.
+ * Major Revisions: 1.1	Reorganized so parts are returned in a structure.
+ *			Print function is now called separately.
  *
  *------------------------------------------------------------------*/
 
-void decode_aprs (packet_t pp)
+void decode_aprs (decode_aprs_t *A, packet_t pp)
 {
-	//int naddr;
-	//int err;
-	char src[AX25_MAX_ADDR_LEN], dest[AX25_MAX_ADDR_LEN];
-	//char *p;
-	//int ssid;
+
+	char dest[AX25_MAX_ADDR_LEN];
 	unsigned char *pinfo;
 	int info_len;
 
 
   	info_len = ax25_get_info (pp, &pinfo);
 
-	sprintf (g_msg_type, "Unknown message type %c", *pinfo);
+	memset (A, 0, sizeof (*A));
 
-	g_symbol_table = '/';
-	g_symbol_code = ' ';		/* What should we have for default? */
+	sprintf (A->g_msg_type, "Unknown message type %c", *pinfo);
 
-	g_lat = G_UNKNOWN;
-	g_lon = G_UNKNOWN;
-	strcpy (g_maidenhead, "");
+	A->g_symbol_table = '/';		/* Default to primary table. */
+	A->g_symbol_code = ' ';		/* What should we have for default symbol? */
 
-	strcpy (g_name, "");
-	g_speed = G_UNKNOWN;
-	g_course = G_UNKNOWN;
+	A->g_lat = G_UNKNOWN;
+	A->g_lon = G_UNKNOWN;
+	//strcpy (A->g_maidenhead, "");
 
-	g_power = G_UNKNOWN;
-	g_height = G_UNKNOWN;
-	g_gain = G_UNKNOWN;
-	strcpy (g_directivity, "");
+	//strcpy (A->g_name, "");
+	A->g_speed = G_UNKNOWN;
+	A->g_course = G_UNKNOWN;
 
-	g_range = G_UNKNOWN;
-	g_altitude = G_UNKNOWN;
-	strcpy(g_mfr, "");
-	strcpy(g_mic_e_status, "");
-	strcpy(g_freq, "");
-	strcpy (g_comment, "");
+	A->g_power = G_UNKNOWN;
+	A->g_height = G_UNKNOWN;
+	A->g_gain = G_UNKNOWN;
+	//strcpy (A->g_directivity, "");
+
+	A->g_range = G_UNKNOWN;
+	A->g_altitude = G_UNKNOWN;
+	//strcpy(A->g_mfr, "");
+	//strcpy(A->g_mic_e_status, "");
+	A->g_freq = G_UNKNOWN;
+	A->g_tone = G_UNKNOWN;
+	A->g_dcs = G_UNKNOWN;
+	A->g_offset = G_UNKNOWN;
+	//strcpy (A->g_weather, "");
+	//strcpy (A->g_comment, "");
 
 /*
  * Extract source and destination including the SSID.
  */
 	
-	ax25_get_addr_with_ssid (pp, AX25_SOURCE, src);
+	ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
 
 
@@ -290,11 +207,11 @@ void decode_aprs (packet_t pp)
 
 	      if (strncmp((char*)pinfo, "!!", 2) == 0)
 	      {
-		aprs_ultimeter ((char*)pinfo, info_len);
+		aprs_ultimeter (A, (char*)pinfo, info_len);
 	      }
 	      else
 	      {	     
-	        aprs_ll_pos (pinfo, info_len);
+	        aprs_ll_pos (A, pinfo, info_len);
 	      }
 	      break;
 
@@ -307,75 +224,75 @@ void decode_aprs (packet_t pp)
 		
 	      if (strncmp((char*)pinfo, "$ULTW", 5) == 0)
 	      {
-		aprs_ultimeter ((char*)pinfo, info_len);
+		aprs_ultimeter (A, (char*)pinfo, info_len);
 	      }
 	      else
 	      {
-	        aprs_raw_nmea (pinfo, info_len);
+	        aprs_raw_nmea (A, pinfo, info_len);
 	      }
 	      break;
 
 	    case '\'':		/* Old Mic-E Data (but Current data for TM-D700) */
 	    case '`':		/* Current Mic-E Data (not used in TM-D700) */
 
-	      aprs_mic_e (pp, pinfo, info_len);
+	      aprs_mic_e (A, pp, pinfo, info_len);
 	      break;
 
 	    case ')':		/* Item. */
 
-	      aprs_item (pinfo, info_len);
+	      aprs_item (A, pinfo, info_len);
 	      break;
 		
 	    case '/':		/* Position with timestamp (no APRS messaging) */
 	    case '@':		/* Position with timestamp (with APRS messaging) */
 
-	      aprs_ll_pos_time (pinfo, info_len);
+	      aprs_ll_pos_time (A, pinfo, info_len);
 	      break;
 
 
 	    case ':':		/* Message */
 
-	      aprs_message (pinfo, info_len);
+	      aprs_message (A, pinfo, info_len);
 	      break;
 
 	    case ';':		/* Object */
 
-	      aprs_object (pinfo, info_len);
+	      aprs_object (A, pinfo, info_len);
 	      break;
 
 	    case '<':		/* Station Capabilities */
 
-	      aprs_station_capabilities ((char*)pinfo, info_len);
+	      aprs_station_capabilities (A, (char*)pinfo, info_len);
 	      break;
 
 	    case '>':		/* Status Report */
 
-	      aprs_status_report ((char*)pinfo, info_len);
+	      aprs_status_report (A, (char*)pinfo, info_len);
 	      break;
 
 	    //case '?':		/* Query */
 	      //break;
 		
 	    case 'T':		/* Telemetry */
-	      aprs_telemetry ((char*)pinfo, info_len);
+	      aprs_telemetry (A, (char*)pinfo, info_len);
 	      break;
 
 	    case '_':		/* Positionless Weather Report */
 
-	      aprs_positionless_weather_report (pinfo, info_len);
+	      aprs_positionless_weather_report (A, pinfo, info_len);
 	      break;
 
 	    case '{':		/* user defined data */
 				/* http://www.aprs.org/aprs11/expfmts.txt */
 
 	      if (strncmp((char*)pinfo, "{tt", 3) == 0) {
-	        aprs_raw_touch_tone (pinfo, info_len);
+	        aprs_raw_touch_tone (A, (char*)pinfo, info_len);
 	      }
 	      else if (strncmp((char*)pinfo, "{mc", 3) == 0) {
-	        aprs_morse_code ((char*)pinfo, info_len);
+	        aprs_morse_code (A, (char*)pinfo, info_len);
 	      }
 	      else {
-	        //aprs_user_defined (pinfo, info_len);
+	        //aprs_user_defined (A, pinfo, info_len);
 	      }
 	      break;
 
@@ -384,7 +301,7 @@ void decode_aprs (packet_t pp)
 				/* to an application that might want to interpret them. */
 				/* Might move into user defined data, above. */
 
-	      aprs_raw_touch_tone ((char*)pinfo, info_len);
+	      aprs_raw_touch_tone (A, (char*)pinfo, info_len);
 	      break;
 
 	    case 'm':		/* Morse Code data - NOT PART OF STANDARD */
@@ -393,12 +310,12 @@ void decode_aprs (packet_t pp)
 				/* other uses such as CW ID for station. */
 				/* Might move into user defined data, above. */
 
-	      aprs_morse_code ((char*)pinfo, info_len);
+	      aprs_morse_code (A, (char*)pinfo, info_len);
 	      break;
 
 	    case '}':		/* third party header */
 
-	      third_party_header ((char*)pinfo, info_len);
+	      third_party_header (A, (char*)pinfo, info_len);
 	      break;
 
 
@@ -417,9 +334,9 @@ void decode_aprs (packet_t pp)
  * Look in other locations if not found in information field.
  */
 
-	if (g_symbol_table == ' ' || g_symbol_code == ' ') {
+	if (A->g_symbol_table == ' ' || A->g_symbol_code == ' ') {
 
-	  symbols_from_dest_or_src (*pinfo, src, dest, &g_symbol_table, &g_symbol_code);
+	  symbols_from_dest_or_src (*pinfo, A->g_src, dest, &A->g_symbol_table, &A->g_symbol_code);
 	}
 
 /*
@@ -434,21 +351,17 @@ void decode_aprs (packet_t pp)
 	    break;
 
 	  default:
-	    decode_tocall (dest);
+	    decode_tocall (A, dest);
 	    break;
 	}
 	
-/*
- * Print it all out in human readable format.
- */
-	print_decoded ();
-}
+} /* end decode_aprs */
 
 
-static void print_decoded (void) {
+void decode_aprs_print (decode_aprs_t *A) {
 
 	char stemp[200];
-	char tmp2[2];
+	//char tmp2[2];
 	double absll;
 	char news;
 	int deg;
@@ -467,40 +380,40 @@ static void print_decoded (void) {
  * - mic-e status
  * - power/height/gain, range
  */
-	strcpy (stemp, g_msg_type);
+	strcpy (stemp, A->g_msg_type);
 
-	if (strlen(g_name) > 0) {
+	if (strlen(A->g_name) > 0) {
 	  strcat (stemp, ", \"");
-	  strcat (stemp, g_name);
+	  strcat (stemp, A->g_name);
 	  strcat (stemp, "\"");
 	}
 
-	symbols_get_description (g_symbol_table, g_symbol_code, symbol_description);	
+	symbols_get_description (A->g_symbol_table, A->g_symbol_code, symbol_description);	
 	strcat (stemp, ", ");
 	strcat (stemp, symbol_description);
 
-	if (strlen(g_mfr) > 0) {
+	if (strlen(A->g_mfr) > 0) {
 	  strcat (stemp, ", ");
-	  strcat (stemp, g_mfr);
+	  strcat (stemp, A->g_mfr);
 	}
 
-	if (strlen(g_mic_e_status) > 0) {
+	if (strlen(A->g_mic_e_status) > 0) {
 	  strcat (stemp, ", ");
-	  strcat (stemp, g_mic_e_status);
+	  strcat (stemp, A->g_mic_e_status);
 	}
 
 
-	if (g_power > 0) {
+	if (A->g_power > 0) {
 	  char phg[100];
 
-	  sprintf (phg, ", %d W height=%d %ddBi %s", g_power, g_height, g_gain, g_directivity);
+	  sprintf (phg, ", %d W height=%d %ddBi %s", A->g_power, A->g_height, A->g_gain, A->g_directivity);
 	  strcat (stemp, phg);
 	}
 
-	if (g_range > 0) {
+	if (A->g_range > 0) {
 	  char rng[100];
 
-	  sprintf (rng, ", range=%.1f", g_range);
+	  sprintf (rng, ", range=%.1f", A->g_range);
 	  strcat (stemp, rng);
 	}
 	text_color_set(DW_COLOR_DECODED);
@@ -526,45 +439,45 @@ static void print_decoded (void) {
  * Bug: This does not check for invalid values.
  */
 
-	if (strlen(g_maidenhead) > 0) {
-	  dw_printf("Grid square = %s, ", g_maidenhead);
+	if (strlen(A->g_maidenhead) > 0) {
+	  dw_printf("Grid square = %s, ", A->g_maidenhead);
 
-	  if (g_lat == G_UNKNOWN && g_lon == G_UNKNOWN) {
+	  if (A->g_lat == G_UNKNOWN && A->g_lon == G_UNKNOWN) {
 	
-	    g_lon = (toupper(g_maidenhead[0]) - 'A') * 20 - 180;
-	    g_lat = (toupper(g_maidenhead[1]) - 'A') * 10 - 90;
+	    A->g_lon = (toupper(A->g_maidenhead[0]) - 'A') * 20 - 180;
+	    A->g_lat = (toupper(A->g_maidenhead[1]) - 'A') * 10 - 90;
 
-	    g_lon += (g_maidenhead[2] - '0') * 2;
-	    g_lat += (g_maidenhead[3] - '0');
+	    A->g_lon += (A->g_maidenhead[2] - '0') * 2;
+	    A->g_lat += (A->g_maidenhead[3] - '0');
 
-	    if (strlen(g_maidenhead) >=6) {
-	      g_lon += (toupper(g_maidenhead[4]) - 'A') * 5.0 / 60.0;
-	      g_lat += (toupper(g_maidenhead[5]) - 'A') * 2.5 / 60.0;
+	    if (strlen(A->g_maidenhead) >=6) {
+	      A->g_lon += (toupper(A->g_maidenhead[4]) - 'A') * 5.0 / 60.0;
+	      A->g_lat += (toupper(A->g_maidenhead[5]) - 'A') * 2.5 / 60.0;
 
-	      g_lon += 2.5 / 60.0;	/* Move from corner to center of square */
-	      g_lat += 1.25 / 60.0;
+	      A->g_lon += 2.5 / 60.0;	/* Move from corner to center of square */
+	      A->g_lat += 1.25 / 60.0;
 	    }
 	    else {
-	      g_lon += 1.0;	/* Move from corner to center of square */
-	      g_lat += 0.5;
+	      A->g_lon += 1.0;	/* Move from corner to center of square */
+	      A->g_lat += 0.5;
 	    }
 	  }
 	}
 
 	strcpy (stemp, "");
 
-	if (g_lat != G_UNKNOWN || g_lon != G_UNKNOWN) {
+	if (A->g_lat != G_UNKNOWN || A->g_lon != G_UNKNOWN) {
 
 // Have location but it is posible one part is invalid.
 
-	  if (g_lat != G_UNKNOWN) {
+	  if (A->g_lat != G_UNKNOWN) {
   
-	    if (g_lat >= 0) {
-	      absll = g_lat;
+	    if (A->g_lat >= 0) {
+	      absll = A->g_lat;
 	      news = 'N';
 	    }
 	    else {
-	      absll = - g_lat;
+	      absll = - A->g_lat;
 	      news = 'S';
 	    }
 	    deg = (int) absll;
@@ -575,14 +488,14 @@ static void print_decoded (void) {
 	    strcpy (s_lat, "Invalid Latitude");
 	  }
 
-	  if (g_lon != G_UNKNOWN) {
+	  if (A->g_lon != G_UNKNOWN) {
 
-	    if (g_lon >= 0) {
-	      absll = g_lon;
+	    if (A->g_lon >= 0) {
+	      absll = A->g_lon;
 	      news = 'E';
 	    }
 	    else {
-	      absll = - g_lon;
+	      absll = - A->g_lon;
 	      news = 'W';
 	    }
 	    deg = (int) absll;
@@ -596,35 +509,73 @@ static void print_decoded (void) {
 	  sprintf (stemp, "%s, %s", s_lat, s_lon);
 	}
 
-	if (g_speed != G_UNKNOWN) {
+	if (strlen(A->g_aprstt_loc) > 0) {
+	  if (strlen(stemp) > 0) strcat (stemp, ", ");
+	  strcat (stemp, A->g_aprstt_loc);
+	};
+
+	if (A->g_speed != G_UNKNOWN) {
 	  char spd[20];
 
 	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  sprintf (spd, "%.0f MPH", g_speed);
+	  sprintf (spd, "%.0f MPH", A->g_speed);
 	  strcat (stemp, spd);
 	};
 
-	if (g_course != G_UNKNOWN) {
+	if (A->g_course != G_UNKNOWN) {
 	  char cse[20];
 
 	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  sprintf (cse, "course %.0f", g_course);
+	  sprintf (cse, "course %.0f", A->g_course);
 	  strcat (stemp, cse);
 	};
 
-	if (g_altitude != G_UNKNOWN) {
+	if (A->g_altitude != G_UNKNOWN) {
 	  char alt[20];
 
 	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  sprintf (alt, "alt %.0f ft", g_altitude);
+	  sprintf (alt, "alt %.0f ft", A->g_altitude);
 	  strcat (stemp, alt);
 	};
 
-	if (strlen(g_freq) > 0) {
-	  strcat (stemp, ", ");
-	  strcat (stemp, g_freq);
+	if (A->g_freq != G_UNKNOWN) {
+	  char ftemp[30];
+
+	  sprintf (ftemp, ", %.3f MHz", A->g_freq);
+	  strcat (stemp, ftemp);
 	}
 
+	if (A->g_offset != G_UNKNOWN) {
+	  char ftemp[30];
+
+	  if (A->g_offset % 1000 == 0) {
+	    sprintf (ftemp, ", %+dM", A->g_offset/1000);
+	  }
+	  else {
+	    sprintf (ftemp, ", %+dk", A->g_offset);
+	  }
+	  strcat (stemp, ftemp);
+	}
+
+	if (A->g_tone != G_UNKNOWN) {
+	  if (A->g_tone == 0) {
+	    strcat (stemp, ", no PL");
+	  }
+	  else {
+	    char ftemp[30];
+
+	    sprintf (ftemp, ", PL %.1f", A->g_tone);
+	    strcat (stemp, ftemp);
+	  }
+	}
+
+	if (A->g_dcs != G_UNKNOWN) {
+
+	  char ftemp[30];
+
+	  sprintf (ftemp, ", DCS %03o", A->g_dcs);
+	  strcat (stemp, ftemp);
+	}
 
 	if (strlen (stemp) > 0) {
 	  text_color_set(DW_COLOR_DECODED);
@@ -633,28 +584,52 @@ static void print_decoded (void) {
 
 
 /*
- * Third line has:
- * - comment or weather
+ * Finally, any weather and/or comment.
  *
  * Non-printable characters are changed to safe hexadecimal representations.
  * For example, carriage return is displayed as <0x0d>.
  *
- * Drop annoying trailing CR LF.  Anyone who cares can see it in the raw data.
+ * Drop annoying trailing CR LF.  Anyone who cares can see it in the raw datA->
  */
 
-	n = strlen(g_comment);
-	if (n >= 1 && g_comment[n-1] == '\n') {
-	  g_comment[n-1] = '\0';
+	n = strlen(A->g_weather);
+	if (n >= 1 && A->g_weather[n-1] == '\n') {
+	  A->g_weather[n-1] = '\0';
 	  n--;
 	}
-	if (n >= 1 && g_comment[n-1] == '\r') {
-	  g_comment[n-1] = '\0';
+	if (n >= 1 && A->g_weather[n-1] == '\r') {
+	  A->g_weather[n-1] = '\0';
+	  n--;
+	}
+	if (n > 0) {
+	  //int j;
+
+	  ax25_safe_print (A->g_weather, -1, 0);
+	  dw_printf("\n");
+	}
+
+
+	if (strlen(A->g_telemetry) > 0) {
+	  //int j;
+
+	  ax25_safe_print (A->g_telemetry, -1, 0);
+	  dw_printf("\n");
+	}
+
+
+	n = strlen(A->g_comment);
+	if (n >= 1 && A->g_comment[n-1] == '\n') {
+	  A->g_comment[n-1] = '\0';
+	  n--;
+	}
+	if (n >= 1 && A->g_comment[n-1] == '\r') {
+	  A->g_comment[n-1] = '\0';
 	  n--;
 	}
 	if (n > 0) {
 	  int j;
 
-	  ax25_safe_print (g_comment, -1, 0);
+	  ax25_safe_print (A->g_comment, -1, 0);
 	  dw_printf("\n");
 
 /*
@@ -665,14 +640,14 @@ static void print_decoded (void) {
  * To be part of a valid UTF-8 sequence, it would need to be followed by 10xxxxxx.
  */
 	  for (j=0; j<n; j++) {
-	    if ((unsigned)g_comment[j] == (char)0xb0 &&  (j == 0 || ! (g_comment[j-1] & 0x80))) {
+	    if ((unsigned)A->g_comment[j] == (char)0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Character code 0xb0 is probably an attempt at a degree symbol.\n");
 	      dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");
 	    }	    	
 	  }
 	  for (j=0; j<n; j++) {
-	    if ((unsigned)g_comment[j] == (char)0xf8 && (j == n-1 || (g_comment[j+1] & 0xc0) != 0xc0)) {
+	    if ((unsigned)A->g_comment[j] == (char)0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Character code 0xf8 is probably an attempt at a degree symbol.\n");
 	      dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");	    	
@@ -694,7 +669,7 @@ static void print_decoded (void) {
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_lat, g_lon, g_symbol_table, g_symbol_code, g_speed, g_course, g_altitude.
+ * Outputs:	A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
  *
  * Description:	Type identifier '=' has APRS messaging.
  *		Type identifier '!' does not have APRS messaging.
@@ -713,7 +688,7 @@ static void print_decoded (void) {
  *
  *------------------------------------------------------------------*/
 
-static void aprs_ll_pos (unsigned char *info, int ilen) 
+static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 
 	struct aprs_ll_pos_s {
@@ -729,46 +704,46 @@ static void aprs_ll_pos (unsigned char *info, int ilen)
 	} *q;
 
 
-	strcpy (g_msg_type, "Position");
+	strcpy (A->g_msg_type, "Position");
 
 	p = (struct aprs_ll_pos_s *)info;
 	q = (struct aprs_compressed_pos_s *)info;
 	
 	if (isdigit((unsigned char)(p->pos.lat[0]))) 	/* Human-readable location. */
         {
-	  decode_position (&(p->pos));
+	  decode_position (A, &(p->pos));
 
-	  if (g_symbol_code == '_') {
+	  if (A->g_symbol_code == '_') {
 	    /* Symbol code indidates it is a weather report. */
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strcpy (g_msg_type, "Weather Report");
-	    weather_data (p->comment, TRUE);
+	    strcpy (A->g_msg_type, "Weather Report");
+	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
 	    /* Regular position report. */
 
-	    data_extension_comment (p->comment);
+	    data_extension_comment (A, p->comment);
 	  }
 	}
 	else					/* Compressed location. */
 	{
-	  decode_compressed_position (&(q->cpos));
+	  decode_compressed_position (A, &(q->cpos));
 
-	  if (g_symbol_code == '_') {
+	  if (A->g_symbol_code == '_') {
 	    /* Symbol code indidates it is a weather report. */
 	    /* In this case, the wind direction and speed are in the */
 	    /* compressed data so we don't expect a 7 byte "data */
 	    /* extension" for them. */
 
-	    strcpy (g_msg_type, "Weather Report");
-	    weather_data (q->comment, FALSE);
+	    strcpy (A->g_msg_type, "Weather Report");
+	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
 	    /* Regular position report. */
 
-	    process_comment (q->comment, -1);
+	    process_comment (A, q->comment, -1);
 	  }
 	}
 
@@ -790,7 +765,7 @@ static void aprs_ll_pos (unsigned char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_lat, g_lon, g_symbol_table, g_symbol_code, g_speed, g_course, g_altitude.
+ * Outputs:	A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
  *
  * Description:	Type identifier '@' has APRS messaging.
  *		Type identifier '/' does not have APRS messaging.
@@ -814,7 +789,7 @@ static void aprs_ll_pos (unsigned char *info, int ilen)
 
 
 
-static void aprs_ll_pos_time (unsigned char *info, int ilen) 
+static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 
 	struct aprs_ll_pos_time_s {
@@ -832,7 +807,7 @@ static void aprs_ll_pos_time (unsigned char *info, int ilen)
 	} *q;
 
 
-	strcpy (g_msg_type, "Position with time");
+	strcpy (A->g_msg_type, "Position with time");
 
 	time_t ts = 0;
 
@@ -843,42 +818,42 @@ static void aprs_ll_pos_time (unsigned char *info, int ilen)
 
 	if (isdigit((unsigned char)(p->pos.lat[0]))) 		/* Human-readable location. */
         {
-	  ts = get_timestamp (p->time_stamp);
-	  decode_position (&(p->pos));
+	  ts = get_timestamp (A, p->time_stamp);
+	  decode_position (A, &(p->pos));
 
-	  if (g_symbol_code == '_') {
+	  if (A->g_symbol_code == '_') {
 	    /* Symbol code indidates it is a weather report. */
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strcpy (g_msg_type, "Weather Report");
-	    weather_data (p->comment, TRUE);
+	    strcpy (A->g_msg_type, "Weather Report");
+	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
 	    /* Regular position report. */
 
-	    data_extension_comment (p->comment);
+	    data_extension_comment (A, p->comment);
 	  }
 	}
 	else					/* Compressed location. */
 	{
-	  ts = get_timestamp (p->time_stamp);
+	  ts = get_timestamp (A, p->time_stamp);
 
-	  decode_compressed_position (&(q->cpos));
+	  decode_compressed_position (A, &(q->cpos));
 
-	  if (g_symbol_code == '_') {
+	  if (A->g_symbol_code == '_') {
 	    /* Symbol code indidates it is a weather report. */
 	    /* In this case, the wind direction and speed are in the */
 	    /* compressed data so we don't expect a 7 byte "data */
 	    /* extension" for them. */
 
-	    strcpy (g_msg_type, "Weather Report");
-	    weather_data (q->comment, FALSE);
+	    strcpy (A->g_msg_type, "Weather Report");
+	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
 	    /* Regular position report. */
 
-	    process_comment (q->comment, -1);
+	    process_comment (A, q->comment, -1);
 	  }
 	}
 
@@ -943,14 +918,14 @@ static void nmea_checksum (char *sent)
         *p = '\0';      // Remove the checksum.
 }
 
-static void aprs_raw_nmea (unsigned char *info, int ilen) 
+static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 	char stemp[256];
 	char *ptype;
 	char *next;
 
 
-	strcpy (g_msg_type, "Raw NMEA");
+	strcpy (A->g_msg_type, "Raw NMEA");
 
 	strncpy (stemp, (char *)info, ilen);
 	stemp[ilen] = '\0';
@@ -988,13 +963,13 @@ static void aprs_raw_nmea (unsigned char *info, int ilen)
 	  /* Process time??? */
 
 	  if (plat != NULL && strlen(plat) > 0) {
-	    g_lat = get_latitude_nmea(plat, pns);
+	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
 	  if (plon != NULL && strlen(plon) > 0) {
-	    g_lon = get_longitude_nmea(plon, pew);
+	    A->g_lon = longitude_from_nmea(plon, pew);
 	  }
 	  if (paltitude != NULL && strlen(paltitude) > 0) {
-	    g_altitude = METERS_TO_FEET(atof(paltitude));
+	    A->g_altitude = DW_METERS_TO_FEET(atof(paltitude));
 	  }
 	}
 	else if (strcmp(ptype, "$GPGLL") == 0)
@@ -1012,10 +987,10 @@ static void aprs_raw_nmea (unsigned char *info, int ilen)
 	  pew = strsep(&next, ",");
 
 	  if (plat != NULL && strlen(plat) > 0) {
-	    g_lat = get_latitude_nmea(plat, pns);
+	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
 	  if (plon != NULL && strlen(plon) > 0) {
-	    g_lon = get_longitude_nmea(plon, pew);
+	    A->g_lon = longitude_from_nmea(plon, pew);
 	  }
 
 	}
@@ -1049,16 +1024,16 @@ static void aprs_raw_nmea (unsigned char *info, int ilen)
 	  /* process time ??? date ??? */
 
 	  if (plat != NULL && strlen(plat) > 0) {
-	    g_lat = get_latitude_nmea(plat, pns);
+	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
 	  if (plon != NULL && strlen(plon) > 0) {
-	    g_lon = get_longitude_nmea(plon, pew);
+	    A->g_lon = longitude_from_nmea(plon, pew);
 	  }
 	  if (pknots != NULL && strlen(pknots) > 0) {
-	    g_speed = KNOTS_TO_MPH(atof(pknots));
+	    A->g_speed = DW_KNOTS_TO_MPH(atof(pknots));
 	  }
 	  if (pcourse != NULL && strlen(pcourse) > 0) {
-	    g_course = atof(pcourse);
+	    A->g_course = atof(pcourse);
 	  }
 	}
 	else if (strcmp(ptype, "$GPVTG") == 0)
@@ -1088,10 +1063,10 @@ static void aprs_raw_nmea (unsigned char *info, int ilen)
 	  pmode	 = strsep(&next, ",");	
 
 	  if (pknots != NULL && strlen(pknots) > 0) {
-	    g_speed = KNOTS_TO_MPH(atof(pknots));
+	    A->g_speed = DW_KNOTS_TO_MPH(atof(pknots));
 	  }
 	  if (ptcourse != NULL && strlen(ptcourse) > 0) {
-	    g_course = atof(ptcourse);
+	    A->g_course = atof(ptcourse);
 	  }
 
 	}
@@ -1113,10 +1088,10 @@ static void aprs_raw_nmea (unsigned char *info, int ilen)
 	  pident = strsep(&next, ",");
 
 	  if (plat != NULL && strlen(plat) > 0) {
-	    g_lat = get_latitude_nmea(plat, pns);
+	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
 	  if (plon != NULL && strlen(plon) > 0) {
-	    g_lon = get_longitude_nmea(plon, pew);
+	    A->g_lon = longitude_from_nmea(plon, pew);
 	  }
 
 	  /* do something with identifier? */
@@ -1168,6 +1143,65 @@ static void aprs_raw_nmea (unsigned char *info, int ilen)
  *
  *------------------------------------------------------------------*/
 
+/* a few test cases
+
+# example from http://www.aprs.org/aprs12/mic-e-examples.txt produces 4 errors.
+# TODO:  Analyze all the bits someday and possibly report problem with document.
+
+N0CALL>ABCDEF:'abc123R/text
+
+# Let's use an actual valid location and concentrate on the manufacturers
+# as listed in http://www.aprs.org/aprs12/mic-e-types.txt
+
+N1ZZN-9>T2SP0W:`c_Vm6hk/`"49}Jeff Mobile_%
+
+N1ZZN-9>T2SP0W:`c_Vm6hk/ "49}Originl Mic-E (leading space)
+
+N1ZZN-9>T2SP0W:`c_Vm6hk/>"49}TH-D7A walkie Talkie
+N1ZZN-9>T2SP0W:`c_Vm6hk/>"49}TH-D72 walkie Talkie=
+N1ZZN-9>T2SP0W:`c_Vm6hk/]"49}TM-D700 MObile Radio
+N1ZZN-9>T2SP0W:`c_Vm6hk/]"49}TM-D710 Mobile Radio=
+
+# Note: next line has trailing space character after _
+
+N1ZZN-9>T2SP0W:`c_Vm6hk/`"49}Yaesu VX-8_ 
+N1ZZN-9>T2SP0W:`c_Vm6hk/`"49}Yaesu FTM-350_"
+N1ZZN-9>T2SP0W:`c_Vm6hk/`"49}Yaesu VX-8G_#
+N1ZZN-9>T2SP0W:`c_Vm6hk/`"49}Yaesu FT1D_$
+N1ZZN-9>T2SP0W:`c_Vm6hk/`"49}Yaesu FTM-400DR_%
+
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Byonics TinyTrack3|3
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Byonics TinyTrack4|4
+
+# The next group starts with metacharacter "T" which can be any of space > ] ` '
+# But space is for original Mic-E, # > and ] are for Kenwood, 
+# so ` ' would probably be less ambigous choices but any appear to be valid.
+
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Hamhud\9
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Argent/9
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}HinzTec anyfrog^9
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO*9
+N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}OTHER~9
+
+
+# TODO:  Why is manufacturer unknown?  Should we explicitly say unknown?
+
+[0] VE2VL-9>TU3V0P,VE2PCQ-3,WIDE1,W1UWS-1,UNCAN,WIDE2*:`eB?l")v/"3y}
+MIC-E, VAN, En Route
+
+[0] VE2VL-9>TU3U5Q,VE2PCQ-3,WIDE1,W1UWS-1,N1NCI-3,WIDE2*:`eBgl"$v/"42}73 de Julien, Tinytrak 3
+MIC-E, VAN, En Route
+
+[0] W1ERB-9>T1SW8P,KB1AEV-15,N1NCI-3,WIDE2*:`dI8l!#j/"3m}
+MIC-E, JEEP, In Service
+
+[0] W1ERB-9>T1SW8Q,KB1AEV-15,N1NCI-3,WIDE2*:`dI6l{^j/"4+}IntheJeep..try146.79(PVRA)
+"146.79" in comment looks like a frequency in non-standard format.
+For most systems to recognize it, use exactly this form "146.790MHz" at beginning of comment.
+MIC-E, JEEP, In Service
+
+*/
+
 static int mic_e_digit (char c, int mask, int *std_msg, int *cust_msg)
 {
 
@@ -1210,7 +1244,7 @@ static int mic_e_digit (char c, int mask, int *std_msg, int *cust_msg)
 }
 
 
-static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen) 
+static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int ilen) 
 {
 	struct aprs_mic_e_s {
 	  char dti;			/* ' or ` */
@@ -1230,7 +1264,7 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 	const char *cust_text[8] = {"Emergency", "Custom-6", "Custom-5", "Custom-4", "Custom-3", "Custom-2", "Custom-1", "Custom-0" }; 
 	unsigned char *pfirst, *plast;
 
-	strcpy (g_msg_type, "MIC-E");
+	strcpy (A->g_msg_type, "MIC-E");
 
 	p = (struct aprs_mic_e_s *)info;
 
@@ -1239,7 +1273,7 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
 
-	g_lat = mic_e_digit(dest[0], 4, &std_msg, &cust_msg) * 10 + 
+	A->g_lat = mic_e_digit(dest[0], 4, &std_msg, &cust_msg) * 10 + 
 		mic_e_digit(dest[1], 2, &std_msg, &cust_msg) +
 		(mic_e_digit(dest[2], 1, &std_msg, &cust_msg) * 1000 + 
 		 mic_e_digit(dest[3], 0, &std_msg, &cust_msg) * 100 + 
@@ -1251,7 +1285,7 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 
 	if ((dest[3] >= '0' && dest[3] <= '9') || dest[3] == 'L') {
 	  /* South */
-	  g_lat = ( - g_lat);
+	  A->g_lat = ( - A->g_lat);
 	}
 	else if (dest[3] >= 'P' && dest[3] <= 'Z') 
 	{
@@ -1292,28 +1326,28 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 
 	if (offset && ch >= 118 && ch <= 127) 
 	{
-	    g_lon = ch - 118;			/* 0 - 9 degrees */
+	    A->g_lon = ch - 118;			/* 0 - 9 degrees */
 	}
 	else if ( ! offset && ch >= 38 && ch <= 127)
 	{
-	    g_lon = (ch - 38) + 10;		/* 10 - 99 degrees */
+	    A->g_lon = (ch - 38) + 10;		/* 10 - 99 degrees */
 	}
 	else if (offset && ch >= 108 && ch <= 117)
 	{
-	    g_lon = (ch - 108) + 100;		/* 100 - 109 degrees */
+	    A->g_lon = (ch - 108) + 100;		/* 100 - 109 degrees */
 	}
 	else if (offset && ch >= 38 && ch <= 107)
 	{
-	    g_lon = (ch - 38) + 110;		/* 110 - 179 degrees */
+	    A->g_lon = (ch - 38) + 110;		/* 110 - 179 degrees */
 	}
 	else 
 	{
-	    g_lon = G_UNKNOWN;
+	    A->g_lon = G_UNKNOWN;
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Invalid character 0x%02x for MIC-E Longitude Degrees.\n", ch);
 	}
 
-/* Second character of information field is g_longitude minutes. */
+/* Second character of information field is A->g_longitude minutes. */
 /* These are all printable characters. */
 
 /* 
@@ -1330,20 +1364,20 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
  * or anything else to corrupt the message.
  */
 
-	if (g_lon != G_UNKNOWN) 
+	if (A->g_lon != G_UNKNOWN) 
 	{
 	  ch = p->lon[1];
 
 	  if (ch >= 88 && ch <= 97)
 	  {
-	    g_lon += (ch - 88) / 60.0;	/* 0 - 9 minutes*/
+	    A->g_lon += (ch - 88) / 60.0;	/* 0 - 9 minutes*/
 	  }
 	  else if (ch >= 38 && ch <= 87)
 	  {
-    	    g_lon += ((ch - 38) + 10) / 60.0;	/* 10 - 59 minutes */
+    	    A->g_lon += ((ch - 38) + 10) / 60.0;	/* 10 - 59 minutes */
 	  }
 	  else {
-	    g_lon = G_UNKNOWN;
+	    A->g_lon = G_UNKNOWN;
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Invalid character 0x%02x for MIC-E Longitude Minutes.\n", ch);
 	  }
@@ -1352,16 +1386,16 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 /* There are 100 possible values, from 0 to 99. */
 /* Note that the range includes 4 unprintable control characters and DEL. */
 
-	  if (g_lon != G_UNKNOWN) 
+	  if (A->g_lon != G_UNKNOWN) 
 	  {
 	    ch = p->lon[2];
 
 	    if (ch >= 28 && ch <= 127) 
 	    {
-	      g_lon += ((ch - 28) + 0) / 6000.0;	/* 0 - 99 hundredths of minutes*/
+	      A->g_lon += ((ch - 28) + 0) / 6000.0;	/* 0 - 99 hundredths of minutes*/
 	    }
 	    else {
-	      g_lon = G_UNKNOWN;
+	      A->g_lon = G_UNKNOWN;
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Invalid character 0x%02x for MIC-E Longitude hundredths of Minutes.\n", ch);
 	    }
@@ -1370,14 +1404,23 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 
 /* 6th character of destintation indicates east / west. */
 
+/*
+ * Example of apparently invalid encoding.  6th character missing.
+ *
+ * [0] KB1HOZ-9>TTRW5,KQ1L-2,WIDE1,KQ1L-8,UNCAN,WIDE2*:`aFo"]|k/]"4m}<0x0d>
+ * Invalid character "Invalid MIC-E E/W encoding in 6th character of destination.
+ * MIC-E, truck, Kenwood TM-D700, Off Duty
+ * N 44 27.5000, E 069 42.8300, 76 MPH, course 196, alt 282 ft
+ */
+
 	if ((dest[5] >= '0' && dest[5] <= '9') || dest[5] == 'L') {
 	  /* East */
 	}
 	else if (dest[5] >= 'P' && dest[5] <= 'Z') 
 	{
 	  /* West */
-	  if (g_lon != G_UNKNOWN) {
-	    g_lon = ( - g_lon);
+	  if (A->g_lon != G_UNKNOWN) {
+	    A->g_lon = ( - A->g_lon);
 	  }
 	}
 	else 
@@ -1388,30 +1431,30 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 
 /* Symbol table and codes like everyone else. */
 
-	g_symbol_table = p->sym_table_id;
-	g_symbol_code = p->symbol_code;
+	A->g_symbol_table = p->sym_table_id;
+	A->g_symbol_code = p->symbol_code;
 
-	if (g_symbol_table != '/' && g_symbol_table != '\\' 
-		&& ! isupper(g_symbol_table) && ! isdigit(g_symbol_table))
+	if (A->g_symbol_table != '/' && A->g_symbol_table != '\\' 
+		&& ! isupper(A->g_symbol_table) && ! isdigit(A->g_symbol_table))
 	{
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf("Invalid symbol table code not one of / \\ A-Z 0-9\n");	
-	  g_symbol_table = '/';
+	  A->g_symbol_table = '/';
 	}
 
 /* Message type from two 3-bit codes. */
 
 	if (std_msg == 0 && cust_msg == 0) {
-	  strcpy (g_mic_e_status, "Emergency");
+	  strcpy (A->g_mic_e_status, "Emergency");
 	}
 	else if (std_msg == 0 && cust_msg != 0) {
-	  strcpy (g_mic_e_status, cust_text[cust_msg]);
+	  strcpy (A->g_mic_e_status, cust_text[cust_msg]);
 	}
 	else if (std_msg != 0 && cust_msg == 0) {
-	  strcpy (g_mic_e_status, std_text[std_msg]);
+	  strcpy (A->g_mic_e_status, std_text[std_msg]);
 	}
 	else {
-	  strcpy (g_mic_e_status, "Unknown MIC-E Message Type");
+	  strcpy (A->g_mic_e_status, "Unknown MIC-E Message Type");
 	}
 
 /* Speed and course from next 3 bytes. */
@@ -1419,7 +1462,7 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 	n = ((p->speed_course[0] - 28) * 10) + ((p->speed_course[1] - 28) / 10);
 	if (n >= 800) n -= 800;
 
-	g_speed = KNOTS_TO_MPH(n); 
+	A->g_speed = DW_KNOTS_TO_MPH(n); 
 
 	n = ((p->speed_course[1] - 28) % 10) * 100 + (p->speed_course[2] - 28);
 	if (n >= 400) n -= 400;
@@ -1428,47 +1471,62 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 	/* Convert to 0 - 360 and reserved value for unknown. */
 
 	if (n == 0) 
-	  g_course = G_UNKNOWN;
+	  A->g_course = G_UNKNOWN;
 	else if (n == 360)
-	  g_course = 0;
+	  A->g_course = 0;
 	else
-	  g_course = n;
+	  A->g_course = n;
 
 
 /* Now try to pick out manufacturer and other optional items. */
 /* The telemetry field, in the original spec, is no longer used. */
   
+	strcpy (A->g_mfr, "Unknown manufacturer");
+
 	pfirst = info + sizeof(struct aprs_mic_e_s);
 	plast = info + ilen - 1;
 
 /* Carriage return character at the end is not mentioned in spec. */
 /* Remove if found because it messes up extraction of manufacturer. */
+/* Don't drop trailing space because that is used for Yaesu VX-8. */
+/* As I recall, the IGate function trims trailing spaces.  */
+/* That would be bad for this particular model. Maybe I'm mistaken? */
+
 
 	if (*plast == '\r') plast--;
 
-	if (*pfirst == ' ' || *pfirst == '>' || *pfirst == ']' || *pfirst == '`' || *pfirst == '\'') {
+#define isT(c) ((c) == ' ' || (c) == '>' || (c) == ']' || (c) == '`' || (c) == '\'')
+
+
+	if (isT(*pfirst)) {
 	
-	  if (*pfirst == ' ') { strcpy (g_mfr, "Original MIC-E"); pfirst++; }
+	  if (*pfirst == ' ') { strcpy (A->g_mfr, "Original MIC-E"); pfirst++; }
 
-	  else if (*pfirst == '>' && *plast == '=') { strcpy (g_mfr, "Kenwood TH-D72"); pfirst++; plast--; }
-	  else if (*pfirst == '>') { strcpy (g_mfr, "Kenwood TH-D7A"); pfirst++; }
+	  else if (*pfirst == '>' && *plast == '=') { strcpy (A->g_mfr, "Kenwood TH-D72"); pfirst++; plast--; }
+	  else if (*pfirst == '>') { strcpy (A->g_mfr, "Kenwood TH-D7A"); pfirst++; }
 
-	  else if (*pfirst == ']' && *plast == '=') { strcpy (g_mfr, "Kenwood TM-D710"); pfirst++; plast--; }
-	  else if (*pfirst == ']') { strcpy (g_mfr, "Kenwood TM-D700"); pfirst++; }
+	  else if (*pfirst == ']' && *plast == '=') { strcpy (A->g_mfr, "Kenwood TM-D710"); pfirst++; plast--; }
+	  else if (*pfirst == ']') { strcpy (A->g_mfr, "Kenwood TM-D700"); pfirst++; }
 
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ' ') { strcpy (g_mfr, "Yaesu VX-8"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '"') { strcpy (g_mfr, "Yaesu FTM-350"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strcpy (g_mfr, "Yaesu VX-8G"); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strcpy (g_mfr, "Byonics TinyTrack3"); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strcpy (g_mfr, "Byonics TinyTrack4"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ' ') { strcpy (A->g_mfr, "Yaesu VX-8"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '"') { strcpy (A->g_mfr, "Yaesu FTM-350"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strcpy (A->g_mfr, "Yaesu VX-8G"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '$') { strcpy (A->g_mfr, "Yaesu FT1D"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '%') { strcpy (A->g_mfr, "Yaesu FTM-400DR"); pfirst++; plast-=2; }
 
-	  else if (*(plast-1) == '\\') { strcpy (g_mfr, "Hamhud ?"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '/') { strcpy (g_mfr, "Argent ?"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '^') { strcpy (g_mfr, "HinzTec anyfrog"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '~') { strcpy (g_mfr, "OTHER"); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strcpy (A->g_mfr, "Byonics TinyTrack3"); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strcpy (A->g_mfr, "Byonics TinyTrack4"); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '`') { strcpy (g_mfr, "Mic-Emsg"); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'') { strcpy (g_mfr, "McTrackr"); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '\\') { strcpy (A->g_mfr, "Hamhud ?"); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '/') { strcpy (A->g_mfr, "Argent ?"); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '^') { strcpy (A->g_mfr, "HinzTec anyfrog"); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '*') { strcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO"); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '~') { strcpy (A->g_mfr, "OTHER"); pfirst++; plast-=2; }
+
+	  // Should Original Mic-E and Kenwood be moved down to here?
+
+	  else if (*pfirst == '`') { strcpy (A->g_mfr, "Mic-Emsg"); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'') { strcpy (A->g_mfr, "McTrackr"); pfirst++; plast-=2; }
 	}
 
 /*
@@ -1494,22 +1552,20 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
 
 	if (plast > pfirst && pfirst[3] == '}') {
 
-	  g_altitude = METERS_TO_FEET((pfirst[0]-33)*91*91 + (pfirst[1]-33)*91 + (pfirst[2]-33) - 10000);
+	  A->g_altitude = DW_METERS_TO_FEET((pfirst[0]-33)*91*91 + (pfirst[1]-33)*91 + (pfirst[2]-33) - 10000);
 
-	  if (pfirst[0] < '!' || pfirst[0] > '{' ||
-	      pfirst[1] < '!' || pfirst[1] > '{' ||
-	      pfirst[2] < '!' || pfirst[2] > '{' ) 
+	  if ( ! isdigit91(pfirst[0]) || ! isdigit91(pfirst[1]) || ! isdigit91(pfirst[2])) 
 	  {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.\n");
-	    dw_printf("Bogus altitude of %.0f changed to unknown.\n", g_altitude);
-	    g_altitude = G_UNKNOWN;
+	    dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude);
+	    A->g_altitude = G_UNKNOWN;
 	  }
 	  
 	  pfirst += 4;
 	}
 
-	process_comment ((char*)pfirst, (int)(plast - pfirst) + 1);
+	process_comment (A, (char*)pfirst, (int)(plast - pfirst) + 1);
 
 }
 
@@ -1537,7 +1593,7 @@ static void aprs_mic_e (packet_t pp, unsigned char *info, int ilen)
  *
  *------------------------------------------------------------------*/
 
-static void aprs_message (unsigned char *info, int ilen) 
+static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 
 	struct aprs_message_s {
@@ -1548,14 +1604,55 @@ static void aprs_message (unsigned char *info, int ilen)
 					/* { followed by 1-5 characters for message number */
 	} *p;
 
+	char addressee[AX25_MAX_ADDR_LEN];
+	int i;
+
 
 	p = (struct aprs_message_s *)info;
 
-	sprintf (g_msg_type, "APRS Message for \"%9.9s\"", p->addressee);
+	memset (addressee, 0, sizeof(addressee));
+	strncpy (addressee, p->addressee, sizeof(p->addressee));
 
-	/* No location so don't use  process_comment () */
+	/* Trim trailing spaces. */
+	i = strlen(addressee) - 1;
+	while (i >= 0 && addressee[i] == ' ') {
+	  addressee[i--] = '\0';
+	}
 
-	strcpy (g_comment, p->message);
+/*
+ * Special message formats contain telemetry metadata.
+ * It applies to the addressee, not the sender.
+ * Makes no sense to me that it would not apply to sender instead.
+ * Wouldn't the sender be describing his own data?
+ * 
+ * I also don't understand the reasoning for putting this in a "message."
+ * Telemetry data always starts with "#" after the "T" data type indicator.
+ * Why not use other characters after the "T" for metadata?
+ */
+
+	if (strncmp(p->message,"PARM.",5) == 0) {
+	  sprintf (A->g_msg_type, "Telemetry Parameter Name Message for \"%s\"", addressee);
+	  telemetry_name_message (addressee, p->message+5);
+	}
+	else if (strncmp(p->message,"UNIT.",5) == 0) {
+	  sprintf (A->g_msg_type, "Telemetry Unit/Label Message for \"%s\"", addressee);
+	  telemetry_unit_label_message (addressee, p->message+5);
+	}
+	else if (strncmp(p->message,"EQNS.",5) == 0) {
+	  sprintf (A->g_msg_type, "Telemetry Equation Coefficents Message for \"%s\"", addressee);
+	  telemetry_coefficents_message (addressee, p->message+5);
+	}
+	else if (strncmp(p->message,"BITS.",5) == 0) {
+	  sprintf (A->g_msg_type, "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
+	  telemetry_bit_sense_message (addressee, p->message+5);
+	}
+	else {
+	  sprintf (A->g_msg_type, "APRS Message for \"%s\"", addressee);
+
+	  /* No location so don't use  process_comment () */
+
+	  strcpy (A->g_comment, p->message);
+	}
 
 }
 
@@ -1570,7 +1667,7 @@ static void aprs_message (unsigned char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_object_name, g_lat, g_lon, g_symbol_table, g_symbol_code, g_speed, g_course, g_altitude.
+ * Outputs:	A->g_object_name, A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
  *
  * Description:	Message has a 9 character object name which could be quite different than
  *		the source station.
@@ -1585,7 +1682,7 @@ static void aprs_message (unsigned char *info, int ilen)
  *
  *------------------------------------------------------------------*/
 
-static void aprs_object (unsigned char *info, int ilen) 
+static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 
 	struct aprs_object_s {
@@ -1614,57 +1711,57 @@ static void aprs_object (unsigned char *info, int ilen)
 	p = (struct aprs_object_s *)info;
 	q = (struct aprs_compressed_object_s *)info;
 
-	strncpy (g_name, p->name, 9);
-	g_name[9] = '\0';
-	i = strlen(g_name) - 1;
-	while (i >= 0 && g_name[i] == ' ') {
-	  g_name[i--] = '\0';
+	strncpy (A->g_name, p->name, 9);
+	A->g_name[9] = '\0';
+	i = strlen(A->g_name) - 1;
+	while (i >= 0 && A->g_name[i] == ' ') {
+	  A->g_name[i--] = '\0';
 	}
 
 	if (p->live_killed == '*')
-	  strcpy (g_msg_type, "Object");
+	  strcpy (A->g_msg_type, "Object");
 	else if (p->live_killed == '_')
-	  strcpy (g_msg_type, "Killed Object");
+	  strcpy (A->g_msg_type, "Killed Object");
 	else
-	  strcpy (g_msg_type, "Object - invalid live/killed");
+	  strcpy (A->g_msg_type, "Object - invalid live/killed");
 
-	ts = get_timestamp (p->time_stamp);
+	ts = get_timestamp (A, p->time_stamp);
 
 	if (isdigit((unsigned char)(p->pos.lat[0]))) 	/* Human-readable location. */
         {
-	  decode_position (&(p->pos));
+	  decode_position (A, &(p->pos));
 
-	  if (g_symbol_code == '_') {
+	  if (A->g_symbol_code == '_') {
 	    /* Symbol code indidates it is a weather report. */
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strcpy (g_msg_type, "Weather Report with Object");
-	    weather_data (p->comment, TRUE);
+	    strcpy (A->g_msg_type, "Weather Report with Object");
+	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
 	    /* Regular object. */
 
-	    data_extension_comment (p->comment);
+	    data_extension_comment (A, p->comment);
 	  }
 	}
 	else					/* Compressed location. */
 	{
-	  decode_compressed_position (&(q->cpos));
+	  decode_compressed_position (A, &(q->cpos));
 
-	  if (g_symbol_code == '_') {
+	  if (A->g_symbol_code == '_') {
 	    /* Symbol code indidates it is a weather report. */
 	    /* The spec doesn't explicitly mention the combination */
 	    /* of weather report and object with compressed */
 	    /* position. */
 
-	    strcpy (g_msg_type, "Weather Report with Object");
-	    weather_data (q->comment, FALSE);
+	    strcpy (A->g_msg_type, "Weather Report with Object");
+	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
 	    /* Regular position report. */
 
-	    process_comment (q->comment, -1);
+	    process_comment (A, q->comment, -1);
 	  }
 	}
 
@@ -1680,7 +1777,7 @@ static void aprs_object (unsigned char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_object_name, g_lat, g_lon, g_symbol_table, g_symbol_code, g_speed, g_course, g_altitude.
+ * Outputs:	A->g_object_name, A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
  *
  * Description:	An "item" is very much like an "object" except 
  *
@@ -1692,7 +1789,7 @@ static void aprs_object (unsigned char *info, int ilen)
  *
  *------------------------------------------------------------------*/
 
-static void aprs_item (unsigned char *info, int ilen) 
+static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 
 	struct aprs_item_s {
@@ -1722,34 +1819,34 @@ static void aprs_item (unsigned char *info, int ilen)
 
 	i = 0;
 	while (i < 9 && p->name[i] != '!' && p->name[i] != '_') {
-	  g_name[i] = p->name[i];
+	  A->g_name[i] = p->name[i];
 	  i++;
-	  g_name[i] = '\0';
+	  A->g_name[i] = '\0';
 	}
 
 	if (p->name[i] == '!')
-	  strcpy (g_msg_type, "Item");
+	  strcpy (A->g_msg_type, "Item");
 	else if (p->name[i] == '_')
-	  strcpy (g_msg_type, "Killed Item");
+	  strcpy (A->g_msg_type, "Killed Item");
 	else {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf("Item name too long or not followed by ! or _.\n");
-	  strcpy (g_msg_type, "Object - invalid live/killed");
+	  strcpy (A->g_msg_type, "Object - invalid live/killed");
 	}
 
 	ppos = p->name + i + 1;
  
 	if (isdigit(*ppos)) 		/* Human-readable location. */
         {
-	  decode_position ((position_t*) ppos);
+	  decode_position (A, (position_t*) ppos);
 
-	  data_extension_comment (ppos + sizeof(position_t));
+	  data_extension_comment (A, ppos + sizeof(position_t));
 	}
 	else					/* Compressed location. */
 	{
-	  decode_compressed_position ((compressed_position_t*)ppos);
+	  decode_compressed_position (A, (compressed_position_t*)ppos);
 
-	  process_comment (ppos + sizeof(compressed_position_t), -1);
+	  process_comment (A, ppos + sizeof(compressed_position_t), -1);
 	}
 
 }
@@ -1775,14 +1872,14 @@ static void aprs_item (unsigned char *info, int ilen)
  *
  *------------------------------------------------------------------*/
 
-static void aprs_station_capabilities (char *info, int ilen) 
+static void aprs_station_capabilities (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (g_msg_type, "Station Capabilities");
+	strcpy (A->g_msg_type, "Station Capabilities");
 
 	// 	Is process_comment() applicable?
 
-	strcpy (g_comment, info+1);
+	strcpy (A->g_comment, info+1);
 }
 
 
@@ -1831,7 +1928,7 @@ static void aprs_station_capabilities (char *info, int ilen)
  *	
  *------------------------------------------------------------------*/
 
-static void aprs_status_report (char *info, int ilen) 
+static void aprs_status_report (decode_aprs_t *A, char *info, int ilen) 
 {
 	struct aprs_status_time_s {
 	  char dti;			/* > */
@@ -1863,7 +1960,7 @@ static void aprs_status_report (char *info, int ilen)
 	} *ps;
 
 
-	strcpy (g_msg_type, "Status Report");
+	strcpy (A->g_msg_type, "Status Report");
 
 	pt = (struct aprs_status_time_s *)info;
 	pm4 = (struct aprs_status_m4_s *)info;
@@ -1881,26 +1978,26 @@ static void aprs_status_report (char *info, int ilen)
 	    isdigit(pt->ztime[5]) &&
 	    pt->ztime[6] == 'z') {
 
-	  strcpy (g_comment, pt->comment);
+	  strcpy (A->g_comment, pt->comment);
 	}
 
 /*
  * Do we have format with 6 character Maidenhead locator?
  */
-	else if (get_maidenhead (pm6->mhead6) == 6) {
+	else if (get_maidenhead (A, pm6->mhead6) == 6) {
 
-	  strncpy (g_maidenhead, pm6->mhead6, 6);
-	  g_maidenhead[6] = '\0';
+	  strncpy (A->g_maidenhead, pm6->mhead6, 6);
+	  A->g_maidenhead[6] = '\0';
 
-	  g_symbol_table = pm6->sym_table_id;
-	  g_symbol_code = pm6->symbol_code;
+	  A->g_symbol_table = pm6->sym_table_id;
+	  A->g_symbol_code = pm6->symbol_code;
 
-	  if (g_symbol_table != '/' && g_symbol_table != '\\' 
-		&& ! isupper(g_symbol_table) && ! isdigit(g_symbol_table))
+	  if (A->g_symbol_table != '/' && A->g_symbol_table != '\\' 
+		&& ! isupper(A->g_symbol_table) && ! isdigit(A->g_symbol_table))
 	  {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", g_symbol_table);	
-	    g_symbol_table = '/';
+	    dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", A->g_symbol_table);	
+	    A->g_symbol_table = '/';
 	  }
 
 	  if (pm6->space != ' ' && pm6->space != '\0') {
@@ -1908,26 +2005,26 @@ static void aprs_status_report (char *info, int ilen)
 	    dw_printf("Error: Found '%c' instead of space required after symbol code.\n", pm6->space);	
 	  }
 
-	  strcpy (g_comment, pm6->comment);
+	  strcpy (A->g_comment, pm6->comment);
 	}
 
 /*
  * Do we have format with 4 character Maidenhead locator?
  */
-	else if (get_maidenhead (pm4->mhead4) == 4) {
+	else if (get_maidenhead (A, pm4->mhead4) == 4) {
 
-	  strncpy (g_maidenhead, pm4->mhead4, 4);
-	  g_maidenhead[4] = '\0';
+	  strncpy (A->g_maidenhead, pm4->mhead4, 4);
+	  A->g_maidenhead[4] = '\0';
 
-	  g_symbol_table = pm4->sym_table_id;
-	  g_symbol_code = pm4->symbol_code;
+	  A->g_symbol_table = pm4->sym_table_id;
+	  A->g_symbol_code = pm4->symbol_code;
 
-	  if (g_symbol_table != '/' && g_symbol_table != '\\' 
-		&& ! isupper(g_symbol_table) && ! isdigit(g_symbol_table))
+	  if (A->g_symbol_table != '/' && A->g_symbol_table != '\\' 
+		&& ! isupper(A->g_symbol_table) && ! isdigit(A->g_symbol_table))
 	  {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", g_symbol_table);	
-	    g_symbol_table = '/';
+	    dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", A->g_symbol_table);	
+	    A->g_symbol_table = '/';
 	  }
 
 	  if (pm4->space != ' ' && pm4->space != '\0') {
@@ -1935,14 +2032,14 @@ static void aprs_status_report (char *info, int ilen)
 	    dw_printf("Error: Found '%c' instead of space required after symbol code.\n", pm4->space);	
 	  }
 
-	  strcpy (g_comment, pm4->comment);
+	  strcpy (A->g_comment, pm4->comment);
 	}
 
 /*
  * Whole thing is status text.
  */
 	else {
-	  strcpy (g_comment, ps->comment);
+	  strcpy (A->g_comment, ps->comment);
 	}
 
 
@@ -1950,8 +2047,8 @@ static void aprs_status_report (char *info, int ilen)
  * Last 3 characters can represent beam heading and ERP.
  */
 
-	if (strlen(g_comment) >= 3) {
-	  char *hp = g_comment + strlen(g_comment) - 3;
+	if (strlen(A->g_comment) >= 3) {
+	  char *hp = A->g_comment + strlen(A->g_comment) - 3;
 	
 	  if (*hp == '^') {
 
@@ -1972,7 +2069,7 @@ static void aprs_status_report (char *info, int ilen)
 	    }
 
 	// TODO:  put result somewhere.
-	// could use g_directivity and need new variable for erp.
+	// could use A->g_directivity and need new variable for erp.
 
 	    *hp = '\0';
 	  }
@@ -2000,15 +2097,12 @@ static void aprs_status_report (char *info, int ilen)
  *	
  *------------------------------------------------------------------*/
 
-static void aprs_telemetry (char *info, int ilen) 
+static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (g_msg_type, "Telemetry");
+	strcpy (A->g_msg_type, "Telemetry");
 
-	/* It's pretty much human readable already. */
-	/* Just copy the info field. */
-
-	strcpy (g_comment, info);
+	telemetry_data_original (A->g_src, info, A->g_telemetry, A->g_comment);
 
 
 } /* end aprs_telemetry */
@@ -2018,7 +2112,7 @@ static void aprs_telemetry (char *info, int ilen)
  *
  * Function:	aprs_raw_touch_tone
  *
- * Purpose:	Decode raw touch tone data.
+ * Purpose:	Decode raw touch tone datA->
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
@@ -2030,17 +2124,17 @@ static void aprs_telemetry (char *info, int ilen)
  *		
  *------------------------------------------------------------------*/
 
-static void aprs_raw_touch_tone (char *info, int ilen) 
+static void aprs_raw_touch_tone (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (g_msg_type, "Raw Touch Tone Data");
+	strcpy (A->g_msg_type, "Raw Touch Tone Data");
 
 	/* Just copy the info field without the message type. */
 
 	if (*info == '{') 
-	  strcpy (g_comment, info+3);
+	  strcpy (A->g_comment, info+3);
 	else
-	  strcpy (g_comment, info+1);
+	  strcpy (A->g_comment, info+1);
 
 
 } /* end aprs_raw_touch_tone */
@@ -2061,17 +2155,17 @@ static void aprs_raw_touch_tone (char *info, int ilen)
  *		
  *------------------------------------------------------------------*/
 
-static void aprs_morse_code (char *info, int ilen) 
+static void aprs_morse_code (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (g_msg_type, "Morse Code Data");
+	strcpy (A->g_msg_type, "Morse Code Data");
 
 	/* Just copy the info field without the message type. */
 
 	if (*info == '{') 
-	  strcpy (g_comment, info+3);
+	  strcpy (A->g_comment, info+3);
 	else
-	  strcpy (g_comment, info+1);
+	  strcpy (A->g_comment, info+1);
 
 
 } /* end aprs_morse_code */
@@ -2086,7 +2180,7 @@ static void aprs_morse_code (char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_symbol_table, g_symbol_code.
+ * Outputs:	A->g_symbol_table, A->g_symbol_code.
  *
  * Description:	Type identifier '_' is a weather report without a position.
  *
@@ -2094,7 +2188,7 @@ static void aprs_morse_code (char *info, int ilen)
 
 
 
-static void aprs_positionless_weather_report (unsigned char *info, int ilen) 
+static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
 
 	struct aprs_positionless_weather_s {
@@ -2104,16 +2198,16 @@ static void aprs_positionless_weather_report (unsigned char *info, int ilen)
 	} *p;
 
 
-	strcpy (g_msg_type, "Positionless Weather Report");
+	strcpy (A->g_msg_type, "Positionless Weather Report");
 
 	time_t ts = 0;
 
 
 	p = (struct aprs_positionless_weather_s *)info;
 	
-	// not yet implemented for 8 character format // ts = get_timestamp (p->time_stamp);
+	// not yet implemented for 8 character format // ts = get_timestamp (A, p->time_stamp);
 
-	weather_data (p->comment, FALSE);
+	weather_data (A, p->comment, FALSE);
 }
 
 
@@ -2132,17 +2226,17 @@ static void aprs_positionless_weather_report (unsigned char *info, int ilen)
  *				  forgiving in what is accepted.)
  * TODO: call this context instead and have 3 enumerated values.
  *
- * Global In:	g_course	- Wind info for compressed location.
- *		g_speed
+ * Global In:	A->g_course	- Wind info for compressed location.
+ *		A->g_speed
  *
- * Outputs:	g_comment
+ * Outputs:	A->g_weather
  *
  * Description:	Extract weather details and format into a comment.
  *
  *		For human-readable locations, we expect wind direction
  *		and speed in a format like this:  999/999.
  *		For compressed location, this has already been 
- * 		processed and put in g_course and g_speed.
+ * 		processed and put in A->g_course and A->g_speed.
  *		Otherwise, for positionless weather data, the 
  *		wind is in the form c999s999.
  *
@@ -2205,7 +2299,7 @@ static int getwdata (char **wpp, char ch, int dlen, float *val)
 	return (1); 
 }	
 
-static void weather_data (char *wdata, int wind_prefix) 
+static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix) 
 {
 	int n;
 	float fval;
@@ -2221,21 +2315,21 @@ static void weather_data (char *wdata, int wind_prefix)
 	    // Fine point:  Officially, should be values of 001-360.
 	    // "000" or "..." or "   " means unknown. 
 	    // In practice we see do see "000" here.
-	    g_course = n;
+	    A->g_course = n;
 	  }
 	  if (sscanf (wp+4, "%3d", &n))
 	  {
-	    g_speed = KNOTS_TO_MPH(n);  /* yes, in knots */
+	    A->g_speed = DW_KNOTS_TO_MPH(n);  /* yes, in knots */
 	  }
 	  wp += 7;
 	}
-	else if ( g_speed == G_UNKNOWN) {
+	else if ( A->g_speed == G_UNKNOWN) {
 
-	  if ( ! getwdata (&wp, 'c', 3, &g_course)) {
+	  if ( ! getwdata (&wp, 'c', 3, &A->g_course)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Didn't find wind direction in form c999.\n");
 	  }
-	  if ( ! getwdata (&wp, 's', 3, &g_speed)) {	/* MPH here */
+	  if ( ! getwdata (&wp, 's', 3, &A->g_speed)) {	/* MPH here */
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Didn't find wind speed in form s999.\n");
 	  }
@@ -2244,19 +2338,19 @@ static void weather_data (char *wdata, int wind_prefix)
 // At this point, we should have the wind direction and speed
 // from one of three methods.
 
-	if (g_speed != G_UNKNOWN) {
+	if (A->g_speed != G_UNKNOWN) {
 	  char ctemp[30];
 
-	  sprintf (g_comment, "wind %.1f mph", g_speed);
-	  if (g_course != G_UNKNOWN) {
-	    sprintf (ctemp, ", direction %.0f", g_course);
-	    strcat (g_comment, ctemp);
+	  sprintf (A->g_weather, "wind %.1f mph", A->g_speed);
+	  if (A->g_course != G_UNKNOWN) {
+	    sprintf (ctemp, ", direction %.0f", A->g_course);
+	    strcat (A->g_weather, ctemp);
 	  }
 	}
 
 	/* We don't want this to show up on the location line. */
-	g_speed = G_UNKNOWN;
-	g_course = G_UNKNOWN;
+	A->g_speed = G_UNKNOWN;
+	A->g_course = G_UNKNOWN;
 
 /*
  * After the mandatory wind direction and speed (in 1 of 3 formats), the
@@ -2268,7 +2362,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	  if (fval != G_UNKNOWN) {
 	    char ctemp[30];
 	    sprintf (ctemp, ", gust %.0f", fval);
-	    strcat (g_comment, ctemp);
+	    strcat (A->g_weather, ctemp);
 	  }
 	}
 	else {
@@ -2280,7 +2374,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	  if (fval != G_UNKNOWN) {
 	    char ctemp[30];
 	    sprintf (ctemp, ", temperature %.0f", fval);
-	    strcat (g_comment, ctemp);
+	    strcat (A->g_weather, ctemp);
 	  }
 	}
 	else {
@@ -2301,7 +2395,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", rain %.2f in last hour", fval / 100.);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'p', 3, &fval)) {	
@@ -2311,7 +2405,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", rain %.2f in last 24 hours", fval / 100.);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'P', 3, &fval)) {	
@@ -2321,7 +2415,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", rain %.2f since midnight", fval / 100.);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'h', 2, &fval)) {	
@@ -2332,7 +2426,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	      char ctemp[30];
 	      if (fval == 0) fval = 100;
 	      sprintf (ctemp, ", humidity %.0f", fval);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'b', 5, &fval)) {	
@@ -2342,9 +2436,9 @@ static void weather_data (char *wdata, int wind_prefix)
 
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
-	      fval = MBAR_TO_INHG(fval * 0.1);
+	      fval = DW_MBAR_TO_INHG(fval * 0.1);
 	      sprintf (ctemp, ", barometer %.2f", fval);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'L', 3, &fval)) {	
@@ -2354,7 +2448,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", %.0f watts/m^2", fval);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'l', 3, &fval)) {	
@@ -2364,7 +2458,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", %.0f watts/m^2", fval + 1000);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 's', 3, &fval)) {	
@@ -2377,7 +2471,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", %.1f snow in 24 hours", fval);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 's', 3, &fval)) {	
@@ -2387,7 +2481,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", raw rain counter %.f", fval);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 	  else if (getwdata (&wp, 'X', 3, &fval)) {	
@@ -2401,7 +2495,7 @@ static void weather_data (char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      sprintf (ctemp, ", nuclear Radiation %.f", fval);
-	      strcat (g_comment, ctemp);
+	      strcat (A->g_weather, ctemp);
 	    }
 	  }
 
@@ -2423,22 +2517,22 @@ static void weather_data (char *wdata, int wind_prefix)
  *  / {UIV32N}
  */
 
-	strcat (g_comment, ", \"");
-	strcat (g_comment, wp);
+	strcat (A->g_weather, ", \"");
+	strcat (A->g_weather, wp);
 /*
  * Drop any CR / LF character at the end.
  */
-	n = strlen(g_comment);
-	if (n >= 1 && g_comment[n-1] == '\n') {
-	  g_comment[n-1] = '\0';
+	n = strlen(A->g_weather);
+	if (n >= 1 && A->g_weather[n-1] == '\n') {
+	  A->g_weather[n-1] = '\0';
 	}
 
-	n = strlen(g_comment);
-	if (n >= 1 && g_comment[n-1] == '\r') {
-	  g_comment[n-1] = '\0';
+	n = strlen(A->g_weather);
+	if (n >= 1 && A->g_weather[n-1] == '\r') {
+	  A->g_weather[n-1] = '\0';
 	}
 
-	strcat (g_comment, "\"");
+	strcat (A->g_weather, "\"");
 
 	return;
 }
@@ -2453,7 +2547,7 @@ static void weather_data (char *wdata, int wind_prefix)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_comment
+ * Outputs:	A->g_weather
  *
  * Description:	http://www.peetbros.com/shop/custom.aspx?recid=7 
  *
@@ -2474,7 +2568,7 @@ static void weather_data (char *wdata, int wind_prefix)
  *
  *------------------------------------------------------------------*/
 
-static void aprs_ultimeter (char *info, int ilen) 
+static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen) 
 {
 
 				// Header = $ULTW 
@@ -2500,7 +2594,7 @@ static void aprs_ultimeter (char *info, int ilen)
 
 	int n;
 
-	strcpy (g_msg_type, "Ultimeter");
+	strcpy (A->g_msg_type, "Ultimeter");
 
 	if (*info == '$')
  	{
@@ -2523,13 +2617,13 @@ static void aprs_ultimeter (char *info, int ilen)
 
 	    float windpeak, wdir, otemp, baro, ohumid;
 
-	    windpeak = KM_TO_MILES(h_windpeak * 0.1);
+	    windpeak = DW_KM_TO_MILES(h_windpeak * 0.1);
 	    wdir = (h_wdir & 0xff) * 360. / 256.;
 	    otemp = h_otemp * 0.1;
-	    baro = MBAR_TO_INHG(h_baro * 0.1);
+	    baro = DW_MBAR_TO_INHG(h_baro * 0.1);
 	    ohumid = h_ohumid * 0.1;
 	  
-	    sprintf (g_comment, "wind %.1f mph, direction %.0f, temperature %.1f, barometer %.2f, humidity %.0f",
+	    sprintf (A->g_weather, "wind %.1f mph, direction %.0f, temperature %.1f, barometer %.2f, humidity %.0f",
 			windpeak, wdir, otemp, baro, ohumid);
 	  }
 	}
@@ -2566,11 +2660,11 @@ static void aprs_ultimeter (char *info, int ilen)
 
 	    float windpeak, wdir, otemp;
 
-	    windpeak = KM_TO_MILES(h_windpeak * 0.1);
+	    windpeak = DW_KM_TO_MILES(h_windpeak * 0.1);
 	    wdir = (h_wdir & 0xff) * 360. / 256.;
 	    otemp = h_otemp * 0.1;
 	  
-	    sprintf (g_comment, "wind %.1f mph, direction %.0f, temperature %.1f\n",
+	    sprintf (A->g_weather, "wind %.1f mph, direction %.0f, temperature %.1f\n",
 			windpeak, wdir, otemp);
 	  }
 
@@ -2588,17 +2682,17 @@ static void aprs_ultimeter (char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	g_comment
+ * Outputs:	A->g_comment
  *
  * Description:	
  *
  *------------------------------------------------------------------*/
 
-static void third_party_header (char *info, int ilen) 
+static void third_party_header (decode_aprs_t *A, char *info, int ilen) 
 {
 	int n;
 
-	strcpy (g_msg_type, "Third Party Header");
+	strcpy (A->g_msg_type, "Third Party Header");
 
 	/* more later? */
 
@@ -2614,10 +2708,10 @@ static void third_party_header (char *info, int ilen)
  *
  * Inputs:	ppos 	- Pointer to position & symbol fields.
  *
- * Returns:	g_lat
- *		g_lon
- *		g_symbol_table
- *		g_symbol_code
+ * Returns:	A->g_lat
+ *		A->g_lon
+ *		A->g_symbol_table
+ *		A->g_symbol_code
  *
  * Description:	This provides resolution of about 60 feet.
  *		This can be improved by using !DAO! in the comment.
@@ -2625,14 +2719,14 @@ static void third_party_header (char *info, int ilen)
  *------------------------------------------------------------------*/
 
 
-static void decode_position (position_t *ppos)
+static void decode_position (decode_aprs_t *A, position_t *ppos)
 {
 
-	  g_lat = get_latitude_8 (ppos->lat);
-	  g_lon = get_longitude_9 (ppos->lon);
+	  A->g_lat = get_latitude_8 (ppos->lat);
+	  A->g_lon = get_longitude_9 (ppos->lon);
 
-	  g_symbol_table = ppos->sym_table_id;
-	  g_symbol_code = ppos->symbol_code;
+	  A->g_symbol_table = ppos->sym_table_id;
+	  A->g_symbol_code = ppos->symbol_code;
 }
 
 /*------------------------------------------------------------------
@@ -2643,15 +2737,15 @@ static void decode_position (position_t *ppos)
  *
  * Inputs:	ppos 	- Pointer to compressed position & symbol fields.
  *
- * Returns:	g_lat
- *		g_lon
- *		g_symbol_table
- *		g_symbol_code
+ * Returns:	A->g_lat
+ *		A->g_lon
+ *		A->g_symbol_table
+ *		A->g_symbol_code
  *
  *		One of the following:
- *			g_course & g_speeed
- *			g_altitude
- *			g_range
+ *			A->g_course & A->g_speeed
+ *			A->g_altitude
+ *			A->g_range
  *
  * Description:	The compressed position provides resolution of around ???
  *		This also includes course/speed or altitude.
@@ -2673,68 +2767,62 @@ static void decode_position (position_t *ppos)
  *------------------------------------------------------------------*/
 
 
-static void decode_compressed_position (compressed_position_t *pcpos)
+static void decode_compressed_position (decode_aprs_t *A, compressed_position_t *pcpos)
 {
-	if (pcpos->y[0] >= '!' && pcpos->y[0] <= '{' &&
-	    pcpos->y[1] >= '!' && pcpos->y[1] <= '{' &&
-	    pcpos->y[2] >= '!' && pcpos->y[2] <= '{' &&
-	    pcpos->y[3] >= '!' && pcpos->y[3] <= '{' ) 
+	if (isdigit91(pcpos->y[0]) && isdigit91(pcpos->y[1]) && isdigit91(pcpos->y[2]) && isdigit91(pcpos->y[3]))
 	{
-	  g_lat = 90 - ((pcpos->y[0]-33)*91*91*91 + (pcpos->y[1]-33)*91*91 + (pcpos->y[2]-33)*91 + (pcpos->y[3]-33)) / 380926.0;
+	  A->g_lat = 90 - ((pcpos->y[0]-33)*91*91*91 + (pcpos->y[1]-33)*91*91 + (pcpos->y[2]-33)*91 + (pcpos->y[3]-33)) / 380926.0;
 	}
 	else
  	{
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf("Invalid character in compressed latitude.  Must be in range of '!' to '{'.\n");
-	  g_lat = G_UNKNOWN;
+	  A->g_lat = G_UNKNOWN;
 	}
 	  
-	if (pcpos->x[0] >= '!' && pcpos->x[0] <= '{' &&
-	    pcpos->x[1] >= '!' && pcpos->x[1] <= '{' &&
-	    pcpos->x[2] >= '!' && pcpos->x[2] <= '{' &&
-	    pcpos->x[3] >= '!' && pcpos->x[3] <= '{' ) 
+	if (isdigit91(pcpos->x[0]) && isdigit91(pcpos->x[1]) && isdigit91(pcpos->x[2]) && isdigit91(pcpos->x[3]))
 	{
-	  g_lon = -180 + ((pcpos->x[0]-33)*91*91*91 + (pcpos->x[1]-33)*91*91 + (pcpos->x[2]-33)*91 + (pcpos->x[3]-33)) / 190463.0;
+	  A->g_lon = -180 + ((pcpos->x[0]-33)*91*91*91 + (pcpos->x[1]-33)*91*91 + (pcpos->x[2]-33)*91 + (pcpos->x[3]-33)) / 190463.0;
 	}
 	else 
 	{
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf("Invalid character in compressed longitude.  Must be in range of '!' to '{'.\n");
-	  g_lon = G_UNKNOWN;
+	  A->g_lon = G_UNKNOWN;
 	}
 
 	if (pcpos->sym_table_id == '/' || pcpos->sym_table_id == '\\' || isupper((int)(pcpos->sym_table_id))) {
 	  /* primary or alternate or alternate with upper case overlay. */
-	  g_symbol_table = pcpos->sym_table_id;
+	  A->g_symbol_table = pcpos->sym_table_id;
    	}
 	else if (pcpos->sym_table_id >= 'a' && pcpos->sym_table_id <= 'j') {
 	  /* Lower case a-j are used to represent overlay characters 0-9 */
 	  /* because a digit here would mean normal (non-compressed) location. */
-	  g_symbol_table = pcpos->sym_table_id - 'a' + '0';
+	  A->g_symbol_table = pcpos->sym_table_id - 'a' + '0';
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf("Invalid symbol table id for compressed position.\n");
-	  g_symbol_table = '/';
+	  A->g_symbol_table = '/';
 	}
 
-	g_symbol_code = pcpos->symbol_code;
+	A->g_symbol_code = pcpos->symbol_code;
 
 	if (pcpos->c == ' ') {
 	  ; /* ignore other two bytes */
 	}
 	else if (((pcpos->t - 33) & 0x18) == 0x10) {
-	  g_altitude = pow(1.002, (pcpos->c - 33) * 91 + pcpos->s - 33);
+	  A->g_altitude = pow(1.002, (pcpos->c - 33) * 91 + pcpos->s - 33);
 	}
 	else if (pcpos->c == '{')
 	{
-	  g_range = 2.0 * pow(1.08, pcpos->s - 33);
+	  A->g_range = 2.0 * pow(1.08, pcpos->s - 33);
 	}
 	else if (pcpos->c >= '!' && pcpos->c <= 'z')
 	{
 	  /* For a weather station, this is wind information. */
-	  g_course = (pcpos->c - 33) * 4;
-	  g_speed = KNOTS_TO_MPH(pow(1.08, pcpos->s - 33) - 1.0);
+	  A->g_course = (pcpos->c - 33) * 4;
+	  A->g_speed = DW_KNOTS_TO_MPH(pow(1.08, pcpos->s - 33) - 1.0);
 	}
 
 }
@@ -3074,7 +3162,7 @@ double get_longitude_9 (char *p)
  *------------------------------------------------------------------*/
 
 
-time_t get_timestamp (char *p)
+time_t get_timestamp (decode_aprs_t *A, char *p)
 {
 	struct dhm_s {
 	  char day[2];
@@ -3181,7 +3269,7 @@ time_t get_timestamp (char *p)
  *------------------------------------------------------------------*/
 
 
-int get_maidenhead (char *p)
+int get_maidenhead (decode_aprs_t *A, char *p)
 {
 
 	if (toupper(p[0]) >= 'A' && toupper(p[0]) <= 'R' &&
@@ -3215,126 +3303,12 @@ int get_maidenhead (char *p)
 }
 
 
-/*------------------------------------------------------------------
- *
- * Function:	get_latitude_nmea
- *
- * Purpose:	Convert NMEA latitude encoding to degrees.
- *
- * Inputs:	pstr 	- Pointer to numeric string.
- *		phemi	- Pointer to following field.  Should be N or S.
- *
- * Returns:	Double precision value in degrees.  Negative for South.
- *
- * Description:	Latitude field has
- *			2 digits for degrees
- *			2 digits for minutes
- *			period
- *			Variable number of fractional digits for minutes.
- *			I've seen 2, 3, and 4 fractional digits.
- *
- *
- * Bugs:	Very little validation of data.
- *
- * Errors:	Return constant G_UNKNOWN for any type of error.
- *		Could we use special "NaN" code?
- *
- *------------------------------------------------------------------*/
-
-
-static double get_latitude_nmea (char *pstr, char *phemi)
-{
-
-	double lat;
-
-	if ( ! isdigit((unsigned char)(pstr[0]))) return (G_UNKNOWN);
-
-	if (pstr[4] != '.') return (G_UNKNOWN);
-
-
-	lat = (pstr[0] - '0') * 10 + (pstr[1] - '0') + atof(pstr+2) / 60.0;
-
-	if (lat < 0 || lat > 90) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: Latitude not in range of 0 to 90.\n");	  
-	}
-
-	// Saw this one time:
-	//	$GPRMC,000000,V,0000.0000,0,00000.0000,0,000,000,000000,,*01
-
-	// If location is unknown, I think the hemisphere should be
-	// an empty string.  TODO: Check on this.
-
-	if (*phemi != 'N' && *phemi != 'S' && *phemi != '\0') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: Latitude hemisphere should be N or S.\n");	  
-	}
-
-	if (*phemi == 'S') lat = ( - lat);
-
-	return (lat);
-}
-
-
-
-
-/*------------------------------------------------------------------
- *
- * Function:	get_longitude_nmea
- *
- * Purpose:	Convert NMEA longitude encoding to degrees.
- *
- * Inputs:	pstr 	- Pointer to numeric string.
- *		phemi	- Pointer to following field.  Should be E or W.
- *
- * Returns:	Double precision value in degrees.  Negative for West.
- *
- * Description:	Longitude field has
- *			3 digits for degrees
- *			2 digits for minutes
- *			period
- *			Variable number of fractional digits for minutes
- *
- *
- * Bugs:	Very little validation of data.
- *
- * Errors:	Return constant G_UNKNOWN for any type of error.
- *		Could we use special "NaN" code?
- *
- *------------------------------------------------------------------*/
-
-
-static double get_longitude_nmea (char *pstr, char *phemi)
-{
-	double lon;
-
-	if ( ! isdigit((unsigned char)(pstr[0]))) return (G_UNKNOWN);
-
-	if (pstr[5] != '.') return (G_UNKNOWN);
-
-	lon = (pstr[0] - '0') * 100 + (pstr[1] - '0') * 10 + (pstr[2] - '0') + atof(pstr+3) / 60.0;
-
-	if (lon < 0 || lon > 180) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: Longitude not in range of 0 to 180.\n");	  
-	}
-	
-	if (*phemi != 'E' && *phemi != 'W' && *phemi != '\0') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: Longitude hemisphere should be E or W.\n");	  
-	}
-
-	if (*phemi == 'W') lon = ( - lon);
-
-	return (lon);
-}
-
 
 /*------------------------------------------------------------------
  *
  * Function:	data_extension_comment
  *
- * Purpose:	A fixed length 7-byte field may follow APRS position data.
+ * Purpose:	A fixed length 7-byte field may follow APRS position datA->
  *
  * Inputs:	pdext	- Pointer to optional data extension and comment.
  *
@@ -3342,17 +3316,17 @@ static double get_longitude_nmea (char *pstr, char *phemi)
  *
  * Outputs:	One or more of the following, depending the data found:
  *	
- *			g_course
- *			g_speed
- *			g_power 
- *			g_height 
- *			g_gain 
- *			g_directivity 
- *			g_range
+ *			A->g_course
+ *			A->g_speed
+ *			A->g_power 
+ *			A->g_height 
+ *			A->g_gain 
+ *			A->g_directivity 
+ *			A->g_range
  *
  *		Anything left over will be put in 
  *
- *			g_comment			
+ *			A->g_comment			
  *
  * Description:	
  *
@@ -3362,12 +3336,12 @@ static double get_longitude_nmea (char *pstr, char *phemi)
 
 const char *dir[9] = { "omni", "NE", "E", "SE", "S", "SW", "W", "NW", "N" };
 
-static int data_extension_comment (char *pdext)
+static int data_extension_comment (decode_aprs_t *A, char *pdext)
 {
 	int n;
 
 	if (strlen(pdext) < 7) {
-	  strcpy (g_comment, pdext);
+	  strcpy (A->g_comment, pdext);
 	  return 0;
 	}
 
@@ -3378,7 +3352,7 @@ static int data_extension_comment (char *pdext)
 	 	pdext[4] == 'C')
 	{
 	  /* not decoded at this time */
-	  process_comment (pdext+7, -1);
+	  process_comment (A, pdext+7, -1);
 	  return 1;
 	}
 
@@ -3390,21 +3364,21 @@ static int data_extension_comment (char *pdext)
 	{
 	  if (sscanf (pdext, "%3d", &n))
 	  {
-	    g_course = n;
+	    A->g_course = n;
 	  }
 	  if (sscanf (pdext+4, "%3d", &n))
 	  {
-	    g_speed = KNOTS_TO_MPH(n);
+	    A->g_speed = DW_KNOTS_TO_MPH(n);
 	  }
 
 	  /* Bearing and Number/Range/Quality? */
 
 	  if (pdext[7] == '/' && pdext[11] == '/') 
 	  {
-	    process_comment (pdext + 7 + 8, -1);
+	    process_comment (A, pdext + 7 + 8, -1);
 	  }
 	  else {
-	    process_comment (pdext+7, -1);
+	    process_comment (A, pdext+7, -1);
 	  }
 	  return 1;
 	}
@@ -3413,14 +3387,14 @@ static int data_extension_comment (char *pdext)
 
 	if (strncmp(pdext, "PHG", 3) == 0)
 	{
-	  g_power = (pdext[3] - '0') * (pdext[3] - '0');
-	  g_height = (1 << (pdext[4] - '0')) * 10;
-	  g_gain = pdext[5] - '0';
+	  A->g_power = (pdext[3] - '0') * (pdext[3] - '0');
+	  A->g_height = (1 << (pdext[4] - '0')) * 10;
+	  A->g_gain = pdext[5] - '0';
 	  if (pdext[6] >= '0' && pdext[6] <= '8') {
-	    strcpy (g_directivity, dir[pdext[6]-'0']);
+	    strcpy (A->g_directivity, dir[pdext[6]-'0']);
 	  }
 
-	  process_comment (pdext+7, -1);
+	  process_comment (A, pdext+7, -1);
 	  return 1;
 	}
 
@@ -3430,9 +3404,9 @@ static int data_extension_comment (char *pdext)
 	{
 	  if (sscanf (pdext+3, "%4d", &n))
 	  {
-	    g_range = n;
+	    A->g_range = n;
 	  }
-	  process_comment (pdext+7, -1);
+	  process_comment (A, pdext+7, -1);
 	  return 1;
 	}
 
@@ -3440,18 +3414,18 @@ static int data_extension_comment (char *pdext)
 
 	if (strncmp(pdext, "DFS", 3) == 0)
 	{
-	  //g_strength = pdext[3] - '0';
-	  g_height = (1 << (pdext[4] - '0')) * 10;
-	  g_gain = pdext[5] - '0';
+	  //A->g_strength = pdext[3] - '0';
+	  A->g_height = (1 << (pdext[4] - '0')) * 10;
+	  A->g_gain = pdext[5] - '0';
 	  if (pdext[6] >= '0' && pdext[6] <= '8') {
-	    strcpy (g_directivity, dir[pdext[6]-'0']);
+	    strcpy (A->g_directivity, dir[pdext[6]-'0']);
 	  }
 
-	  process_comment (pdext+7, -1);
+	  process_comment (A, pdext+7, -1);
 	  return 1;
 	}
 
-	process_comment (pdext, -1);
+	process_comment (A, pdext, -1);
 	return 0;
 }
 
@@ -3465,7 +3439,7 @@ static int data_extension_comment (char *pdext)
  * Inputs:	dest	- Destination address.
  *			Don't care if SSID is present or not.
  *
- * Outputs:	g_mfr
+ * Outputs:	A->g_mfr
  *
  * Description:	For maximum flexibility, we will read the
  *		data file at run time rather than compiling it in.
@@ -3497,7 +3471,7 @@ static int tocall_cmp (const struct tocalls_s *x, const struct tocalls_s *y)
 	return (strcmp(x->prefix, y->prefix));
 }
 
-static void decode_tocall (char *dest)
+static void decode_tocall (decode_aprs_t *A, char *dest)
 {
 	FILE *fp;
 	int n;
@@ -3603,7 +3577,7 @@ static void decode_tocall (char *dest)
  * models before getting to the more generic APY.
  */
 
-#if __WIN32__
+#if defined(__WIN32__) || defined(__OpenBSD__) || defined(__FreeBSD__)
 	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), tocall_cmp);
 #else
 	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), (__compar_fn_t)tocall_cmp);
@@ -3622,13 +3596,45 @@ static void decode_tocall (char *dest)
 
 	for (n=0; n<num_tocalls; n++) {
 	  if (strncmp(dest, tocalls[n].prefix, tocalls[n].len) == 0) {
-	    strncpy (g_mfr, tocalls[n].description, sizeof(g_mfr)-1);
-	    g_mfr[sizeof(g_mfr)-1] = '\0';
+	    strncpy (A->g_mfr, tocalls[n].description, sizeof(A->g_mfr)-1);
+	    A->g_mfr[sizeof(A->g_mfr)-1] = '\0';
 	    return;
 	  }
 	}
 
 } /* end decode_tocall */ 
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	substr_se
+ *
+ * Purpose:	Extract substring given start and end+1 offset.
+ *
+ * Inputs:	src		- Source string
+ *
+ *		start		- Start offset.
+ *		
+ *		endp1		- End offset+1 for ease of use with regexec result.
+ *
+ * Outputs:	dest		- Destination for substring.
+ *
+ *------------------------------------------------------------------*/
+
+static void substr_se (char *dest, const char *src, int start, int endp1)
+{
+	int len = endp1 - start;
+
+	if (start < 0 || endp1 < 0 || len <= 0) {
+	  strcpy (dest, "");
+	  return;
+	}
+	memcpy (dest, src + start, len);
+	dest[len] = '\0';
+
+} /* end substr_se */
+	
 
 
 /*------------------------------------------------------------------
@@ -3641,7 +3647,15 @@ static void decode_tocall (char *dest)
  *
  *		clen		- Length of comment or -1 to take it all.
  *
- * Outputs:	g_comment
+ * Outputs:	A->g_telemetry	- Base 91 telemetry |ss1122|
+ *		A->g_altitude	- from /A=123456
+ *		A->g_lat	- Might be adjusted from !DAO!
+ *		A->g_lon	- Might be adjusted from !DAO!
+ *		A->g_aprstt_loc	- Private extension to !DAO!
+ *		A->g_freq
+ *		A->g_tone
+ *		A->g_offset
+ *		A->g_comment	- Anything left over after extracting above.
  *
  * Description:	After processing fixed and possible optional parts
  *		of the message, everything left over is a comment.
@@ -3651,7 +3665,7 @@ static void decode_tocall (char *dest)
  *		There are could be some other pieces of data, with 
  *		particular formats, buried in there.
  *		Pull out those special items and put everything 
- *		else into g_comment.
+ *		else into A->g_comment.
  *
  * References:	http://www.aprs.org/info/freqspec.txt
  *
@@ -3668,19 +3682,59 @@ static void decode_tocall (char *dest)
  *
  *------------------------------------------------------------------*/
 
+/* CTCSS tones in various formats to avoid conversions every time. */
+
+#define NUM_CTCSS 50
+
+static const int i_ctcss[NUM_CTCSS] = {
+         67,  69,  71,  74,  77,  79,  82,  85,  88,  91,
+         94,  97, 100, 103, 107, 110, 114, 118, 123, 127,
+        131, 136, 141, 146, 151, 156, 159, 162, 165, 167,
+        171, 173, 177, 179, 183, 186, 189, 192, 196, 199,
+        203, 206, 210, 218, 225, 229, 233, 241, 250, 254 };
+
+static const float f_ctcss[NUM_CTCSS] = {
+         67.0,  69.3,  71.9,  74.4,  77.0,  79.7,  82.5,  85.4,  88.5,  91.5,
+         94.8,  97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3,
+        131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9,
+        171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
+        203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1 };
+
+static const char * s_ctcss[NUM_CTCSS] = {
+         "67.0",  "69.3",  "71.9",  "74.4",  "77.0",  "79.7",  "82.5",  "85.4",  "88.5",  "91.5",
+         "94.8",  "97.4", "100.0", "103.5", "107.2", "110.9", "114.8", "118.8", "123.0", "127.3",
+        "131.8", "136.5", "141.3", "146.2", "151.4", "156.7", "159.8", "162.2", "165.5", "167.9",
+        "171.3", "173.8", "177.3", "179.9", "183.5", "186.2", "189.9", "192.8", "196.6", "199.5",
+        "203.5", "206.5", "210.7", "218.1", "225.7", "229.1", "233.6", "241.8", "250.3", "254.1" };
+
+
 #define sign(x) (((x)>=0)?1:(-1))
 
-static void process_comment (char *pstart, int clen)
+static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 {
 	static int first_time = 1;
-	static regex_t freq_re;	/* These must be static! */
-	static regex_t dao_re;	/* These must be static! */
-	static regex_t alt_re;	/* These must be static! */
+	static regex_t std_freq_re;	/* Frequency in standard format. */
+	static regex_t std_tone_re;	/* Tone in standard format. */
+	static regex_t std_toff_re;	/* Explicitly no tone. */
+	static regex_t std_dcs_re;	/* Digital codes squelch in standard format. */
+	static regex_t std_offset_re;	/* Xmit freq offset in standard format. */
+	static regex_t std_range_re;	/* Range in standard format. */
+
+	static regex_t dao_re;		/* DAO */
+	static regex_t alt_re;		/* /A= altitude */
+
+	static regex_t bad_freq_re;	/* Likely frequency, not standard format */
+	static regex_t bad_tone_re;	/* Likely tone, not standard format */
+
+	static regex_t base91_tel_re;	/* Base 91 compressed telemetry data. */
+
 	int e;
 	char emsg[100];
-#define MAXMATCH 1
+#define MAXMATCH 4
 	regmatch_t match[MAXMATCH];
 	char temp[256];
+	int keep_going;
+
 
 /*
  * No sense in recompiling the patterns and freeing every time.
@@ -3688,17 +3742,58 @@ static void process_comment (char *pstart, int clen)
 	if (first_time) 
 	{
 /*
- * Present, frequency must be at the at the beginning.
+ * Frequency must be at the at the beginning.
  * Others can be anywhere in the comment.
  */
-		/* incomplete */
-	  e = regcomp (&freq_re, "^[0-9A-O][0-9][0-9]\\.[0-9][0-9][0-9 ]MHz( [TCDtcd][0-9][0-9][0-9]| Toff)?( [+-][0-9][0-9][0-9])?", REG_EXTENDED);
+		
+	  //e = regcomp (&freq_re, "^[0-9A-O][0-9][0-9]\\.[0-9][0-9][0-9 ]MHz( [TCDtcd][0-9][0-9][0-9]| Toff)?( [+-][0-9][0-9][0-9])?", REG_EXTENDED);
+
+	  // Freq optionally preceded by space or /.
+	  // Third fractional digit can be space instead.
+	  // "MHz" should be exactly that capitalization.  
+	  // Print warning later it not.
+
+	  e = regcomp (&std_freq_re, "^[/ ]?([0-9A-O][0-9][0-9]\\.[0-9][0-9][0-9 ])([Mm][Hh][Zz])", REG_EXTENDED);
 	  if (e) {
-	    regerror (e, &freq_re, emsg, sizeof(emsg));
+	    regerror (e, &std_freq_re, emsg, sizeof(emsg));
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
 	  }
 
-	  e = regcomp (&dao_re, "!([A-Z][0-9 ][0-9 ]|[a-z][!-} ][!-} ])!", REG_EXTENDED);
+	  // If no tone, we might gobble up / after any data extension,
+	  // We could also have a space but it's not required.
+	  // I don't understand the difference between T and C so treat the same for now.
+	  // We can also have "off" instead of number to explicitly mean none.
+
+	  e = regcomp (&std_tone_re, "^[/ ]?([TtCc][012][0-9][0-9])", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &std_tone_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
+	  e = regcomp (&std_toff_re, "^[/ ]?[TtCc][Oo][Ff][Ff]", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &std_toff_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
+	  e = regcomp (&std_dcs_re, "^[/ ]?[Dd]([0-7][0-7][0-7])", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &std_dcs_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+	  e = regcomp (&std_offset_re, "^[/ ]?([+-][0-9][0-9][0-9])", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &std_offset_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
+	  e = regcomp (&std_range_re, "^[/ ]?[Rr]([0-9][0-9])([mk])", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &std_range_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
+	  e = regcomp (&dao_re, "!([A-Z][0-9 ][0-9 ]|[a-z][!-{ ][!-{ ]|T[0-9 B][0-9 ])!", REG_EXTENDED);
 	  if (e) {
 	    regerror (e, &dao_re, emsg, sizeof(emsg));
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
@@ -3710,54 +3805,260 @@ static void process_comment (char *pstart, int clen)
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
 	  }
 
+	  e = regcomp (&bad_freq_re, "[0-9][0-9][0-9]\\.[0-9][0-9][0-9]?", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &bad_freq_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
+	  e = regcomp (&bad_tone_re, "(^|[^0-9.])([6789][0-9]\\.[0-9]|[12][0-9][0-9]\\.[0-9]|67|77|100|123)($|[^0-9.])", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &bad_tone_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
+// TODO:  Would like to restrict to even length something like this:  ([!-{][!-{]){2,7}
+
+	  e = regcomp (&base91_tel_re, "\\|([!-{]{4,14})\\|", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &base91_tel_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+
 	  first_time = 0;
 	}
 
 	if (clen >= 0) {
-	  assert (clen < sizeof(g_comment));
-	  memcpy (g_comment, pstart, (size_t)clen);
-	  g_comment[clen] = '\0';
+	  assert (clen < sizeof(A->g_comment));
+	  memcpy (A->g_comment, pstart, (size_t)clen);
+	  A->g_comment[clen] = '\0';
 	}
 	else {
-	  strcpy (g_comment, pstart);
+	  strcpy (A->g_comment, pstart);
 	}
-	//dw_printf("\nInitial comment='%s'\n", g_comment);
+	//dw_printf("\nInitial comment='%s'\n", A->g_comment);
 
 
 /*
- * Frequency.
- * Just pull it out from comment. 
- * No futher interpretation at this time.
+ * Look for frequency in the standard format at start of comment.
+ * If that fails, try to obtain from object name.
  */
 
-	if (regexec (&freq_re, g_comment, MAXMATCH, match, 0) == 0) 
+	if (regexec (&std_freq_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	{
+	  char sftemp[30];
+	  char smtemp[10];
+
+          //dw_printf("matches= %d - %d, %d - %d, %d - %d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo), 
+	  //						    (int)(match[1].rm_so), (int)(match[1].rm_eo),
+	  //						    (int)(match[2].rm_so), (int)(match[2].rm_eo) );
+
+	  substr_se (sftemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
+	  substr_se (smtemp, A->g_comment, match[2].rm_so, match[2].rm_eo);
+	
+	  switch (sftemp[0]) {
+	    case 'A': A->g_freq =  1200 + atof(sftemp+1); break;
+	    case 'B': A->g_freq =  2300 + atof(sftemp+1); break;
+	    case 'C': A->g_freq =  2400 + atof(sftemp+1); break;
+	    case 'D': A->g_freq =  3400 + atof(sftemp+1); break;
+	    case 'E': A->g_freq =  5600 + atof(sftemp+1); break;
+	    case 'F': A->g_freq =  5700 + atof(sftemp+1); break;
+	    case 'G': A->g_freq =  5800 + atof(sftemp+1); break;
+	    case 'H': A->g_freq = 10100 + atof(sftemp+1); break;
+	    case 'I': A->g_freq = 10200 + atof(sftemp+1); break;
+	    case 'J': A->g_freq = 10300 + atof(sftemp+1); break;
+	    case 'K': A->g_freq = 10400 + atof(sftemp+1); break;
+	    case 'L': A->g_freq = 10500 + atof(sftemp+1); break;
+	    case 'M': A->g_freq = 24000 + atof(sftemp+1); break;
+	    case 'N': A->g_freq = 24100 + atof(sftemp+1); break;
+	    case 'O': A->g_freq = 24200 + atof(sftemp+1); break;
+	    default:  A->g_freq =         atof(sftemp);   break;
+	  }
+
+	  if (strncmp(smtemp, "MHz", 3) != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Warning: \"%s\" has non-standard capitalization and might not be recognized by some systems.\n", smtemp);
+	    dw_printf("For best compatibility, it should be exactly like this: \"MHz\"  (upper,upper,lower case)\n");
+	  }
+
+	  strcpy (temp, A->g_comment + match[0].rm_eo);
+	  strcpy (A->g_comment + match[0].rm_so, temp);
+	}
+	else if (strlen(A->g_name) > 0) {
+
+	  // Try to extract sensible number from object/item name.
+
+	  double x = atof (A->g_name);
+
+	  if ((x >= 144 && x <= 148) ||
+	      (x >= 222 && x <= 225) ||
+	      (x >= 420 && x <= 450) ||
+	      (x >= 902 && x <= 928)) { 
+	    A->g_freq = x;
+	  }
+	}
+
+/*
+ * Next, look for tone, DCS code, and range.
+ * Examples always have them in same order but it's not clear
+ * whether any order is allowed after possible frequency.
+ *
+ * TODO: Convert integer tone to original value for display.
+ * TODO: samples in zfreq-test3.txt
+ */
+
+	keep_going = 1;
+	while (keep_going) {
+
+	  if (regexec (&std_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) {
+
+	    char sttemp[10];	/* includes leading letter */
+	    int f;
+	    int i;
+
+	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
+
+	    // Try to convert from integer to proper value.
+
+	    f = atoi(sttemp+1);
+	    for (i = 0; i < NUM_CTCSS; i++) {
+	      if (f == i_ctcss[i]) {
+	        A->g_tone = f_ctcss[i];
+	        break;
+	      }
+	    }
+	    if (A->g_tone == G_UNKNOWN) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Bad CTCSS/PL specification: \"%s\"\n", sttemp);
+	      dw_printf("Integer does not correspond to standard tone.\n");
+	    }
+
+	    strcpy (temp, A->g_comment + match[0].rm_eo);
+	    strcpy (A->g_comment + match[0].rm_so, temp);
+	  }
+	  else if (regexec (&std_toff_re, A->g_comment, MAXMATCH, match, 0) == 0) {
+
+	    printf ("NO tone\n");
+	    A->g_tone = 0;
+
+	    strcpy (temp, A->g_comment + match[0].rm_eo);
+	    strcpy (A->g_comment + match[0].rm_so, temp);
+	  }
+	  else if (regexec (&std_dcs_re, A->g_comment, MAXMATCH, match, 0) == 0) {
+
+	    char sttemp[10];	/* three octal digits */
+	    int f;
+	    int i;
+
+	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
+
+	    A->g_dcs = strtoul (sttemp, NULL, 8);
+
+	    strcpy (temp, A->g_comment + match[0].rm_eo);
+	    strcpy (A->g_comment + match[0].rm_so, temp);
+	  }
+	  else if (regexec (&std_offset_re, A->g_comment, MAXMATCH, match, 0) == 0) {
+
+	    char sttemp[10];	/* includes leading sign */
+	    int f;
+
+	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
+
+	    A->g_offset = 10 * atoi(sttemp);
+
+	    strcpy (temp, A->g_comment + match[0].rm_eo);
+	    strcpy (A->g_comment + match[0].rm_so, temp);
+	  }
+	  else if (regexec (&std_range_re, A->g_comment, MAXMATCH, match, 0) == 0) {
+
+	    char sttemp[10];	/* should be two digits */
+	    char sutemp[10];	/* m for miles or k for km */
+	    int f;
+
+	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
+	    substr_se (sutemp, A->g_comment, match[2].rm_so, match[2].rm_eo);
+
+	    if (strcmp(sutemp, "m") == 0) {
+	      A->g_range = atoi(sttemp);
+	    }
+	    else {
+	      A->g_range = DW_KM_TO_MILES(atoi(sttemp));
+	    }
+
+	    strcpy (temp, A->g_comment + match[0].rm_eo);
+	    strcpy (A->g_comment + match[0].rm_so, temp);
+	  }
+	  else {
+	    keep_going = 0;
+	  }
+	}
+
+/*
+ * Telemetry data, in base 91 compressed format appears as 2 to 7 pairs
+ * of base 91 digits, surrounded by | at start and end.
+ */
+
+
+	if (regexec (&base91_tel_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 
-          //dw_printf("start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
+	  char tdata[30];	/* Should be 4 to 14 characters. */
 
-	  strcpy (temp, g_comment + match[0].rm_eo);
+          //dw_printf("compressed telemetry start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
-	  g_comment[match[0].rm_eo] = '\0';
-          strcpy (g_freq, g_comment + match[0].rm_so);
+	  substr_se (tdata, A->g_comment, match[1].rm_so, match[1].rm_eo);
 
-	  strcpy (g_comment + match[0].rm_so, temp);
+          //dw_printf("compressed telemetry data = \"%s\"\n", tdata);
+
+	  telemetry_data_base91 (A->g_src, tdata, A->g_telemetry);
+
+	  strcpy (temp, A->g_comment + match[0].rm_eo);
+	  strcpy (A->g_comment + match[0].rm_so, temp);
 	}
+
 
 /*
  * Latitude and Longitude in the form DD MM.HH has a resolution of about 60 feet.
- * The !DAO! option allows another digit or [almost two] for greater resolution.
+ * The !DAO! option allows another digit or almost two for greater resolution.
+ *
+ * This would not make sense to use this with a compressed location which
+ * already has much greater resolution.
+ *
+ * It surprized me to see this in a MIC-E message.
+ * MIC-E has resolution of .01 minute so it would make sense to have it as an option.
  */
 
-	if (regexec (&dao_re, g_comment, MAXMATCH, match, 0) == 0) 
+	if (regexec (&dao_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 
-	  int d = g_comment[match[0].rm_so+1];
-	  int a = g_comment[match[0].rm_so+2];
-	  int o = g_comment[match[0].rm_so+3];
+	  int d = A->g_comment[match[0].rm_so+1];
+	  int a = A->g_comment[match[0].rm_so+2];
+	  int o = A->g_comment[match[0].rm_so+3];
 
           //dw_printf("start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
-	  if (isupper(d)) 
+
+/*
+ * Private extension for APRStt
+ */
+
+	  if (d == 'T') {
+
+	    if (a == ' ' && o == ' ') {
+	      sprintf (A->g_aprstt_loc, "APRStt corral location");
+	    }
+	    else if (isdigit(a) && o == ' ') {
+	      sprintf (A->g_aprstt_loc, "APRStt location %c of 10", a);
+	    }
+	    else if (isdigit(a) && isdigit(o)) {
+	      sprintf (A->g_aprstt_loc, "APRStt location %c%c of 100", a, o);
+	    }
+	    else if (a == 'B' && isdigit(o)) {
+	      sprintf (A->g_aprstt_loc, "APRStt location %c%c...", a, o);
+	    }
+
+	  }
+	  else if (isupper(d)) 
 	  {
 /*
  * This adds one extra digit to each.  Dao adds extra digit like:
@@ -3766,10 +4067,10 @@ static void process_comment (char *pstart, int clen)
  *		Lon:	DDD HH.HHo
  */
  	    if (isdigit(a)) {
-	      g_lat += (a - '0') / 60000.0 * sign(g_lat);
+	      A->g_lat += (a - '0') / 60000.0 * sign(A->g_lat);
 	    }
  	    if (isdigit(o)) {
-	      g_lon += (o - '0') / 60000.0 * sign(g_lon);
+	      A->g_lon += (o - '0') / 60000.0 * sign(A->g_lon);
 	    }
 	  }
 	  else if (islower(d)) 
@@ -3780,44 +4081,135 @@ static void process_comment (char *pstart, int clen)
  *		Lat:	 DD MM.HHxx
  *		Lon:	DDD HH.HHxx
  *
- * The original character range '!' to '}' is first converted
+ * The original character range '!' to '{' is first converted
  * to an integer in range of 0 to 90.  It is multiplied by 1.1
  * to stretch the numeric range to be 0 to 99.
  */
- 	    if (a >= '!' && a <= '}') {
-	      g_lat += (a - '!') * 1.1 / 600000.0 * sign(g_lat);
+
+/* 
+ * The spec appears to be wrong.  It says '}' is the maximum value when it should be '{'. 
+ */
+
+
+ 	    if (isdigit91(a)) {
+	      A->g_lat += (a - B91_MIN) * 1.1 / 600000.0 * sign(A->g_lat);
 	    }
- 	    if (o >= '!' && o <= '}') {
-	      g_lon += (o - '!') * 1.1 / 600000.0 * sign(g_lon);
+ 	    if (isdigit91(o)) {
+	      A->g_lon += (o - B91_MIN) * 1.1 / 600000.0 * sign(A->g_lon);
 	    }
 	  }
 
-	  strcpy (temp, g_comment + match[0].rm_eo);
-	  strcpy (g_comment + match[0].rm_so, temp);
+	  strcpy (temp, A->g_comment + match[0].rm_eo);
+	  strcpy (A->g_comment + match[0].rm_so, temp);
 	}
 
 /*
  * Altitude in feet.  /A=123456
  */
 
-	if (regexec (&alt_re, g_comment, MAXMATCH, match, 0) == 0) 
+	if (regexec (&alt_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 
           //dw_printf("start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
-	  strcpy (temp, g_comment + match[0].rm_eo);
+	  strcpy (temp, A->g_comment + match[0].rm_eo);
 
-	  g_comment[match[0].rm_eo] = '\0';
-          g_altitude = atoi(g_comment + match[0].rm_so + 3);
+	  A->g_comment[match[0].rm_eo] = '\0';
+          A->g_altitude = atoi(A->g_comment + match[0].rm_so + 3);
 
-	  strcpy (g_comment + match[0].rm_so, temp);
+	  strcpy (A->g_comment + match[0].rm_so, temp);
 	}
 
-	//dw_printf("Final comment='%s'\n", g_comment);
+	//dw_printf("Final comment='%s'\n", A->g_comment);
+
+/*
+ * Finally look for something that looks like frequency or CTCSS tone
+ * in the remaining comment.  Point this out and suggest the 
+ * standardized format.
+ */
+	if (regexec (&bad_freq_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	{
+	  char bad[30];
+	  char good[30];
+	  double x;
+
+	  substr_se (bad, A->g_comment, match[0].rm_so, match[0].rm_eo);
+	  x = atof(bad);
+
+	  if ((x >= 144 && x <= 148) ||
+	      (x >= 222 && x <= 225) ||
+	      (x >= 420 && x <= 450) ||
+	      (x >= 902 && x <= 928)) { 
+
+	    sprintf (good, "%07.3fMHz", x);
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("\"%s\" in comment looks like a frequency in non-standard format.\n", bad);
+	    dw_printf("For most systems to recognize it, use exactly this form \"%s\" at beginning of comment.\n", good);
+
+	    if (A->g_freq == G_UNKNOWN) {
+	      A->g_freq = x;
+	    }
+	  }
+	}
+
+	if (regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	{
+	  char bad1[30];	/* original 99.9 or 999.9 format or one of 67 77 100 123 */
+	  char bad2[30];	/* 99.9 or 999.9 format.  ".0" appended for special cases. */
+	  char good[30];
+	  int i;
+
+	  substr_se (bad1, A->g_comment, match[2].rm_so, match[2].rm_eo);
+	  strcpy (bad2, bad1);
+	  if (strcmp(bad2, "67") == 0 || strcmp(bad2, "77") == 0 || strcmp(bad2, "100") == 0 || strcmp(bad2, "123") == 0) {
+	    strcat (bad2, ".0");
+	  }
+
+// TODO:  Why wasn't freq/PL recognized here?
+// Should we recognize some cases of single decimal place as frequency?
+
+//DECODED[194] N8VIM audio level = 27   [NONE]
+//[0] N8VIM>BEACON,WIDE2-2:!4240.85N/07133.99W_PHG72604/ Pepperell, MA-> WX. 442.9+ PL100<0x0d>
+//Didn't find wind direction in form c999.
+//Didn't find wind speed in form s999.
+//Didn't find wind gust in form g999.
+//Didn't find temperature in form t999.
+//Weather Report, WEATHER Station (blue)
+//N 42 40.8500, W 071 33.9900
+//, "PHG72604/ Pepperell, MA-> WX. 442.9+ PL100"
+
+
+	  for (i = 0; i < NUM_CTCSS; i++) {
+	    if (strcmp (s_ctcss[i], bad2) == 0) {
+
+              sprintf (good, "T%03d", i_ctcss[i]);
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("\"%s\" in comment looks like it might be a CTCSS tone in non-standard format.\n", bad1);
+	      dw_printf("For most systems to recognize it, use exactly this form \"%s\" at near beginning of comment, after any frequency.\n", good);
+
+	      if (A->g_tone == G_UNKNOWN) {
+	        A->g_tone = atof(bad2);
+	      }
+	      break;
+	    }
+	  }
+	}
+
+	if ((A->g_offset == 6000 || A->g_offset == -6000) && A->g_freq >= 144 && A->g_freq <= 148) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("A transmit offset of 6 MHz on the 2 meter band doesn't seem right.\n");
+	  dw_printf("Each unit is 10 kHz so you should probably be using \"-060\" or \"+060\"\n");
+	}
+
+/*
+ * TODO: samples in zfreq-test4.txt
+ */
 
 }
 
 /* end process_comment */
+
+
 
 
 
@@ -3867,6 +4259,15 @@ static void process_comment (char *pstart, int clen)
  *------------------------------------------------------------------*/
 
 #if TEST
+
+/* Stub for stand-alone decoder. */
+
+void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab, char symbol,
+                 float alt, float course, float speed, char *comment)
+{
+	return;
+}
+
 
 
 int main (int argc, char *argv[]) 
@@ -3930,7 +4331,21 @@ int main (int argc, char *argv[])
 	    pp = ax25_from_text(stuff, 1);
 	    if (pp != NULL) 
             {
-	      decode_aprs (pp);
+	      decode_aprs_t A;
+
+	      // log directory option someday?
+	      decode_aprs (&A, pp);
+
+	      //Print it all out in human readable format.
+
+	      decode_aprs_print (&A);
+
+	      // Send to log file?
+
+	      // if (logdir != NULL && *logdir != '\0') {
+	      //   log_write (&A, pp, logdir);
+	      // }
+
 	      ax25_delete (pp);
 	    }
 	    else 

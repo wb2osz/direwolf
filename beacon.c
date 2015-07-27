@@ -57,6 +57,7 @@
 #include "beacon.h"
 #include "latlong.h"
 #include "dwgps.h"
+#include "log.h"
 
 
 
@@ -82,6 +83,16 @@ static unsigned __stdcall beacon_thread (void *arg);
 #else
 static void * beacon_thread (void *arg);
 #endif
+
+static int g_tracker_debug_level = 0;	// 1 for data from gps.
+					// 2 + Smart Beaconing logic.
+					// 3 + Send transmissions to log file.
+
+
+void beacon_tracker_set_debug (int level)
+{
+	g_tracker_debug_level = level;
+}
 
 
 
@@ -141,7 +152,7 @@ void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
  * table entry should be ignored later on.
  */
 	for (j=0; j<g_misc_config_p->num_beacons; j++) {
-	  int chan = g_misc_config_p->beacon[j].chan;
+	  int chan = g_misc_config_p->beacon[j].sendto_chan;
 
 	  if (chan < 0) chan = 0;	/* For IGate, use channel 0 call. */
 
@@ -177,7 +188,7 @@ void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
 
 	        case BEACON_TRACKER:
 
-#if defined(GPS_ENABLED) || defined(DEBUG_SIM)
+#if defined(ENABLE_GPS) || defined(DEBUG_SIM)
 		  g_using_gps++;
 #else
 	          text_color_set(DW_COLOR_ERROR);
@@ -322,8 +333,6 @@ void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
  *
  *--------------------------------------------------------------------*/
 
-#define KNOTS_TO_MPH 1.150779
-
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
 
 
@@ -360,7 +369,8 @@ static void * beacon_thread (void *arg)
 	float  my_course = 0;		/* degrees */
 	float  my_speed_knots = 0;
 	float  my_speed_mph = 0;
-	float  my_alt = 0;		/* meters */
+	float  my_alt_m = G_UNKNOWN;		/* meters */
+	int    my_alt_ft = G_UNKNOWN;
 
 /*
  * SmartBeaconing state.
@@ -439,15 +449,40 @@ static void * beacon_thread (void *arg)
 	    fprintf (stderr, "Can't read /tmp/cs.\n");
 	  }
 	  fix = 3;
-	  my_speed_mph = KNOTS_TO_MPH * my_speed_knots;
+	  my_speed_mph = DW_KNOTS_TO_MPH(my_speed_knots);
 	  my_lat = 42.99;
 	  my_lon = 71.99;
-	  my_alt = 100;
+	  my_alt_m = 100;
 #else
 	  if (g_using_gps) {
 
-	    fix = dwgps_read (&my_lat, &my_lon, &my_speed_knots, &my_course, &my_alt);
-	    my_speed_mph = KNOTS_TO_MPH * my_speed_knots;
+	    fix = dwgps_read (&my_lat, &my_lon, &my_speed_knots, &my_course, &my_alt_m);
+	    my_speed_mph = DW_KNOTS_TO_MPH(my_speed_knots);
+
+	    if (g_tracker_debug_level >= 1) {
+	      struct tm tm;
+	      char hms[20];
+
+	      localtime_r (&now, &tm);
+	      strftime (hms, sizeof(hms), "%H:%M:%S", &tm);
+	      text_color_set(DW_COLOR_DEBUG);
+	      if (fix == 3) {
+	        dw_printf ("%s  3D, %.6f, %.6f, %.1f mph, %.0f\xc2\xb0, %.1f m\n", hms, my_lat, my_lon, my_speed_mph, my_course, my_alt_m);
+	      }
+	      else if (fix == 2) {
+	        dw_printf ("%s  2D, %.6f, %.6f, %.1f mph, %.0f\xc2\xb0\n", hms, my_lat, my_lon, my_speed_mph, my_course);
+	      }
+	      else {
+	        dw_printf ("%s  No GPS fix\n", hms);
+	      }
+	    }
+
+	    /* Transmit altitude only if 3D fix and user asked for it. */
+
+	    my_alt_ft = G_UNKNOWN;
+	    if (fix >= 3 && my_alt_m != G_UNKNOWN && g_misc_config_p->beacon[j].alt_m != G_UNKNOWN) {
+	      my_alt_ft = DW_METERS_TO_FEET(my_alt_m);
+	    }
 
 	    /* Don't complain here for no fix. */
 	    /* Possibly at the point where about to transmit. */
@@ -460,14 +495,26 @@ static void * beacon_thread (void *arg)
 	  if (g_misc_config_p->sb_configured && g_using_gps && fix >= 2) {
 
 	    if (my_speed_mph > g_misc_config_p->sb_fast_speed) {
-		sb_every = g_misc_config_p->sb_fast_rate;
+	      sb_every = g_misc_config_p->sb_fast_rate;
+	      if (g_tracker_debug_level >= 2) {
+	      	 text_color_set(DW_COLOR_DEBUG);
+		 dw_printf ("my speed %.1f > fast %d mph, interval = %d sec\n", my_speed_mph, g_misc_config_p->sb_fast_speed, sb_every);
+	      } 
 	    }
 	    else if (my_speed_mph < g_misc_config_p->sb_slow_speed) {
 	      sb_every = g_misc_config_p->sb_slow_rate;
+	      if (g_tracker_debug_level >= 2) {
+	      	 text_color_set(DW_COLOR_DEBUG);
+		 dw_printf ("my speed %.1f < slow %d mph, interval = %d sec\n", my_speed_mph, g_misc_config_p->sb_slow_speed, sb_every);
+	      } 
 	    }
 	    else {
 	      /* Can't divide by 0 assuming sb_slow_speed > 0. */
 	      sb_every = ( g_misc_config_p->sb_fast_rate * g_misc_config_p->sb_fast_speed ) / my_speed_mph;
+	      if (g_tracker_debug_level >= 2) {
+	      	 text_color_set(DW_COLOR_DEBUG);
+		 dw_printf ("my speed %.1f mph, interval = %d sec\n", my_speed_mph, sb_every);
+	      } 
 	    }
 
 #if DEBUG_SIM
@@ -493,6 +540,13 @@ static void * beacon_thread (void *arg)
 	      if (heading_change(my_course, sb_prev_course) > turn_threshold &&
 		  now >= sb_prev_time + g_misc_config_p->sb_turn_time) {
 
+	        if (g_tracker_debug_level >= 2) {
+	      	   text_color_set(DW_COLOR_DEBUG);
+		   dw_printf ("heading change (%.0f, %.0f) > threshold %d and %d since last >= turn time %d\n",
+				my_course, sb_prev_course, turn_threshold, 
+				(int)(now - sb_prev_time), g_misc_config_p->sb_turn_time);
+	        } 
+
 		/* Send it now. */
 	        for (j=0; j<g_misc_config_p->num_beacons; j++) {
                   if (g_misc_config_p->beacon[j].btype == BEACON_TRACKER) {
@@ -517,6 +571,7 @@ static void * beacon_thread (void *arg)
 	      char beacon_text[AX25_MAX_PACKET_LEN];
 	      packet_t pp = NULL;
 	      char mycall[AX25_MAX_ADDR_LEN];
+	      int alt_ft;
 
 /*
  * Obtain source call for the beacon.
@@ -524,16 +579,16 @@ static void * beacon_thread (void *arg)
  * When sending to IGate server, use call from first radio channel.
  *
  * Check added in version 1.0a.  Previously used index of -1.
+ *
+ * Version 1.1 - channel should now be 0 for IGate.  
+ * Type of destination is encoded separately.
  */
 	      strcpy (mycall, "NOCALL");
 
-	      if (g_misc_config_p->beacon[j].chan == -1) {
-		strcpy (mycall, g_digi_config_p->mycall[0]);
-	      }
-	      else {
-		strcpy (mycall, g_digi_config_p->mycall[g_misc_config_p->beacon[j].chan]);
-	      }
+	      assert (g_misc_config_p->beacon[j].sendto_chan >= 0);
 
+	      strcpy (mycall, g_digi_config_p->mycall[g_misc_config_p->beacon[j].sendto_chan]);
+	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("MYCALL not set for beacon in config file line %d.\n", g_misc_config_p->beacon[j].lineno);
@@ -542,13 +597,22 @@ static void * beacon_thread (void *arg)
 
 /* 
  * Prepare the monitor format header. 
+ *
+ * 	src > dest [ , via ]
  */
 
 	      strcpy (beacon_text, mycall);
 	      strcat (beacon_text, ">");
-	      sprintf (stemp, "%s%1d%1d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
-	      strcat (beacon_text, stemp);
-	      if (g_misc_config_p->beacon[j].via) {
+
+	      if (g_misc_config_p->beacon[j].dest != NULL) {
+	        strcat (beacon_text, g_misc_config_p->beacon[j].dest);
+	      } 
+	      else {
+	         sprintf (stemp, "%s%1d%1d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
+	         strcat (beacon_text, stemp);
+	      }
+
+	      if (g_misc_config_p->beacon[j].via != NULL) {
 	        strcat (beacon_text, ",");
 	        strcat (beacon_text, g_misc_config_p->beacon[j].via);
 	      }
@@ -561,7 +625,10 @@ static void * beacon_thread (void *arg)
 
 		case BEACON_POSITION:
 
-		  encode_position (g_misc_config_p->beacon[j].compress, g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, 
+		  alt_ft = DW_METERS_TO_FEET(g_misc_config_p->beacon[j].alt_m);
+
+		  encode_position (g_misc_config_p->beacon[j].messaging, 
+			g_misc_config_p->beacon[j].compress, g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, alt_ft,
 			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			0, 0, /* course, speed */	
@@ -594,8 +661,9 @@ static void * beacon_thread (void *arg)
 		    if (coarse == 0) {
 		      coarse = 360;
 		    }
-		    encode_position (g_misc_config_p->beacon[j].compress, 
-			my_lat, my_lon, 
+		    encode_position (g_misc_config_p->beacon[j].messaging, 
+			g_misc_config_p->beacon[j].compress, 
+			my_lat, my_lon, my_alt_ft,
 			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			coarse, (int)roundf(my_speed_knots),	
@@ -617,6 +685,34 @@ static void * beacon_thread (void *arg)
 	            else {
 	              g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].every;
 	            }
+
+		    /* Write to log file for testing. */
+		    /* The idea is to run log2gpx and map the result rather than */
+		    /* actually transmitting and relying on someone else to receive */
+		    /* the signals. */
+
+	            if (g_tracker_debug_level >= 3) {
+		
+		      decode_aprs_t A;
+
+		      memset (&A, 0, sizeof(A));
+	  	      A.g_freq   = G_UNKNOWN;
+	  	      A.g_offset = G_UNKNOWN;
+	  	      A.g_tone   = G_UNKNOWN;
+	  	      A.g_dcs    = G_UNKNOWN;
+
+		      strcpy (A.g_src, mycall);
+		      A.g_symbol_table = g_misc_config_p->beacon[j].symtab;
+		      A.g_symbol_code = g_misc_config_p->beacon[j].symbol;
+		      A.g_lat = my_lat;
+		      A.g_lon = my_lon;
+		      A.g_speed = DW_KNOTS_TO_MPH(my_speed_knots);
+		      A.g_course = coarse;
+		      A.g_altitude = my_alt_ft;
+
+		      /* Fake channel of 999 to distinguish from real data. */
+		      log_write (999, &A, NULL, 0, 0);
+		    }
 	 	  }
 	          else {
 		    g_misc_config_p->beacon[j].next = now + 2;
@@ -650,18 +746,33 @@ static void * beacon_thread (void *arg)
 
               if (pp != NULL) {
 
-		/* Send to IGate server or radio. */
+		/* Send to desired destination. */
 
-	        if (g_misc_config_p->beacon[j].chan == -1) {
+	        switch (g_misc_config_p->beacon[j].sendto_type) {
+
+	          case SENDTO_IGATE:
+
+
 #if 1
-	  	  text_color_set(DW_COLOR_XMIT);
-	  	  dw_printf ("[ig] %s\n", beacon_text);
+	  	    text_color_set(DW_COLOR_XMIT);
+	  	    dw_printf ("[ig] %s\n", beacon_text);
 #endif
-		  igate_send_rec_packet (0, pp);
-		  ax25_delete (pp);
-	 	}
-		else {
-	          tq_append (g_misc_config_p->beacon[j].chan, TQ_PRIO_1_LO, pp);
+		    igate_send_rec_packet (0, pp);
+		    ax25_delete (pp);
+	            break;
+
+		  case SENDTO_XMIT:
+		  default:
+
+	            tq_append (g_misc_config_p->beacon[j].sendto_chan, TQ_PRIO_1_LO, pp);
+		    break;
+
+		  case SENDTO_RECV:
+
+		    // TODO:  Put into receive queue rather than calling directly.
+
+		    app_process_rec_packet (g_misc_config_p->beacon[j].sendto_chan, 0, pp, -1, 0, "");
+	            break; 
 		}
 	      }
 	      else {

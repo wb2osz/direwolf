@@ -59,9 +59,19 @@
  *		multiple modems & HDLC decoders per channel.  The tricky
  *		part is picking the best one when there is more than one
  *		success and discarding the rest.
- *		
+ *
+ * New in version 1.1:
+ *
+ *		Several enhancements provided by Fabrice FAURE:
+ *
+ *		Additional types of attempts to fix a bad CRC.
+ *		Optimized code to reduce execution time.
+ *		Improved detection of duplicate packets from
+ *		different fixup attempts.
+ *		Set limit on number of packets in fix up later queue.
+ *
  *------------------------------------------------------------------*/
-
+//#define DEBUG 1
 #define DIGIPEATER_C
 
 
@@ -97,8 +107,14 @@ static struct {
 	int score;
 
 } candidate[MAX_CHANS][MAX_SUBCHANS];
+#define MAX_STORED_CRC 256
 
-static unsigned int crc_of_last_to_app[MAX_CHANS];
+typedef struct crc_s {
+	struct crc_s* nextp;	/* Next pointer to maintain a queue. */
+	unsigned int crc;
+} *crc_t;
+
+static crc_t crc_queue_of_last_to_app[MAX_CHANS];
 
 #define PROCESS_AFTER_BITS 2
 
@@ -139,12 +155,99 @@ void multi_modem_init (struct audio_s *pmodem)
 
 	for (chan=0; chan<modem.num_channels; chan++) {
 	  process_age[chan] = PROCESS_AFTER_BITS * modem.samples_per_sec / modem.baud[chan];
-	  crc_of_last_to_app[chan] = 0x12345678;
+	  crc_queue_of_last_to_app[chan] = NULL;
 	}
 
 }
 
+//Add a crc to the end of the queue and returns the numbers of CRC stored in the queue
+int crc_queue_append (unsigned int crc, unsigned int chan) {
+	crc_t plast;
+	crc_t plast1;
+	crc_t pnext;
+	crc_t new_crc;
+	
+	unsigned int nb_crc = 1;
+	if (chan>=MAX_CHANS) {
+	  return -1;
+	}
+	new_crc = (crc_t) malloc (10*sizeof(struct crc_s));
+	if (!new_crc)
+	  return -1;
+	new_crc->crc = crc;
+	new_crc->nextp = NULL;
+	if (crc_queue_of_last_to_app[chan] == NULL) {
+	  crc_queue_of_last_to_app[chan] = new_crc;
+	  nb_crc = 1;
+	}
+	else {
+	  nb_crc = 2;
+	  plast = crc_queue_of_last_to_app[chan];
+	  pnext = plast->nextp;
+	  while (pnext != NULL) {
+	    nb_crc++;
+	    plast = pnext;
+	    pnext = pnext->nextp;
+	  }
+	  plast->nextp = new_crc;
+	}
+#if DEBUG 
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf("Out crc_queue_append nb_crc = %d\n", nb_crc);
+#endif
+	return nb_crc;
 
+
+}
+
+//Remove the crc from the top of the queue
+unsigned int crc_queue_remove (unsigned int chan) {
+
+	unsigned int res;
+	crc_t plast;
+	crc_t pnext;
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf("In crc_queue_remove\n");
+#endif
+	crc_t removed_crc;
+	if (chan>=MAX_CHANS) {
+	  return 0;
+	}
+	removed_crc = crc_queue_of_last_to_app[chan];
+	if (removed_crc == NULL) {
+	  return 0;
+	}
+	else {
+
+	  crc_queue_of_last_to_app[chan] = removed_crc->nextp;
+	  res = removed_crc->crc;
+	  free(removed_crc);
+	  
+	}
+	return res;
+
+}
+
+unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) { 
+	crc_t plast;
+	crc_t pnext;
+
+	if (crc_queue_of_last_to_app[chan] == NULL) {
+	  return 0;
+	}
+	else {
+	  plast = crc_queue_of_last_to_app[chan];
+	  do {
+	    pnext = plast->nextp;
+	    if (plast->crc == crc) {
+	      return 1;
+	    }
+	    plast = pnext;
+	  } while (pnext != NULL);
+	}
+	return 0;
+}
 
 /*------------------------------------------------------------------------------
  *
@@ -310,22 +413,28 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
  * Either pass it along or drop if duplicate.
  */
 
-	if (retries == RETRY_TWO_SEP) {
+	if (retries >= RETRY_SWAP_TWO_SEP) {
 	  int mycrc;
 	  char spectrum[MAX_SUBCHANS+1];
+	  int dropped = 0;
 
 	  memset (spectrum, 0, sizeof(spectrum));
 	  memset (spectrum, '_', (size_t)modem.num_subchan[chan]);
 	  spectrum[subchan] = '.';
 
 	  mycrc = ax25_m_m_crc(pp);
+/* Smetimes recovered packet is not the latest one send to the app:
+ * It can be a packet sent to the app before the latest one because of the processing time ...
+ * So we check if the crc of current packet has already been received in the queue of others crc
+ */
+	  dropped = is_crc_in_queue(chan, mycrc);
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("\n%s\n%d.%d: ptr=%p, retry=%d, age=, crc=%04x, score=  \n", 
-		spectrum, chan, subchan, pp, (int)retries, mycrc);
+	  dw_printf ("\n%s\n%d.%d: ptr=%p, retry=%d, age=, crc=%04x, score=  , dropped =%d\n", 
+		spectrum, chan, subchan, pp, (int)retries, mycrc,dropped);
 #endif	   
-	  if (mycrc == crc_of_last_to_app[chan]) {
+	  if (dropped) {
 	     /* Same as last one.  Drop it. */
 	     ax25_delete (pp);
 #if DEBUG
@@ -338,7 +447,8 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
 	  dw_printf ("Send the best one along.\n");
 #endif
 	  app_process_rec_packet (chan, subchan, pp, alevel, retries, spectrum);
-	  crc_of_last_to_app[chan] = mycrc;
+	  if (crc_queue_append(mycrc, chan) > MAX_STORED_CRC)
+	    crc_queue_remove(chan);
 	  return;
 	}
 
@@ -397,7 +507,7 @@ static void pick_best_candidate (int chan)
 	  else if (candidate[chan][subchan].retries == RETRY_NONE) {
 	    spectrum[subchan] = '|';
 	  }
-	  else if (candidate[chan][subchan].retries == RETRY_SINGLE) {
+	  else if (candidate[chan][subchan].retries == RETRY_SWAP_SINGLE) {
 	    spectrum[subchan] = ':';
 	  }
 	  else  {
@@ -406,7 +516,7 @@ static void pick_best_candidate (int chan)
 
 	  /* Begining score depends on effort to get a valid frame CRC. */
 
-	  candidate[chan][subchan].score = 5000 - ((int)candidate[chan][subchan].retries * 1000);
+	  candidate[chan][subchan].score = RETRY_MAX * 1000 - ((int)candidate[chan][subchan].retries * 1000);
 
 	  /* Bump it up slightly if others nearby have the same CRC. */
 	  
@@ -461,8 +571,8 @@ static void pick_best_candidate (int chan)
 		candidate[chan][best_subchan].alevel, 
 		(int)(candidate[chan][best_subchan].retries), 
 		spectrum);
-        crc_of_last_to_app[chan] = candidate[chan][best_subchan].crc;
-
+	if (crc_queue_append(candidate[chan][best_subchan].crc, chan) > MAX_STORED_CRC)
+	    crc_queue_remove(chan);
 	/* Someone else will delete so don't do it below. */
 	candidate[chan][best_subchan].packet_p = NULL;
 

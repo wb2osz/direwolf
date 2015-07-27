@@ -374,18 +374,13 @@ int rrbb_get_bit (rrbb_t b, unsigned int ind)
 #else
 int rrbb_get_bit (rrbb_t b, unsigned int ind)
 {
-	unsigned int di, mi;
-
 	assert (b != NULL);
 	assert (b->magic1 == MAGIC1);
 	assert (b->magic2 == MAGIC2);
 
 	assert (ind < b->len);
 
-	di = ind / SOI;
-	mi = ind % SOI;
-
-	if (b->data[di] & masks[mi]) {
+	if (b->data[ind / SOI] & masks[ind % SOI]) {
 	  return 1;
 	}
 	else {
@@ -393,6 +388,30 @@ int rrbb_get_bit (rrbb_t b, unsigned int ind)
 	}
 }
 #endif
+unsigned int rrbb_get_computed_bit (rrbb_t b, unsigned int ind)
+{
+	return b->computed_data[ind];
+}
+
+int rrbb_compute_bits (rrbb_t b)
+{
+	unsigned int i,val;
+
+	assert (b != NULL);
+	assert (b->magic1 == MAGIC1);
+	assert (b->magic2 == MAGIC2);
+
+	for (i=0;i<b->len;i++) {
+	  if (b->data[i / SOI] & masks[i % SOI]) {
+	    val = 1;
+	  }
+	  else {
+	    val = 0;
+	  }
+	  b->computed_data[i] = val;
+	}
+	return 0;
+}
 
 
 /***********************************************************************************
@@ -569,6 +588,47 @@ int rrbb_get_audio_level (rrbb_t b)
 	assert (b->magic2 == MAGIC2);
 
 	return (b->audio_level);
+}
+
+
+/***********************************************************************************
+ *
+ * Name:	rrbb_set_fix_bits	
+ *
+ * Purpose:	Set fix bits at time the frame was received.
+ *
+ * Inputs:	b	Handle for bit array.
+ *		a	fix_bits.
+ *		
+ ***********************************************************************************/
+
+void rrbb_set_fix_bits (rrbb_t b, int a)
+{
+	assert (b != NULL);
+	assert (b->magic1 == MAGIC1);
+	assert (b->magic2 == MAGIC2);
+
+	b->fix_bits = a;
+}
+
+
+/***********************************************************************************
+ *
+ * Name:	rrbb_get_fix_bits	
+ *
+ * Purpose:	Get fix bits at time the frame was received.
+ *
+ * Inputs:	b	Handle for bit array.
+ *		
+ ***********************************************************************************/
+
+int rrbb_get_fix_bits (rrbb_t b)
+{
+	assert (b != NULL);
+	assert (b->magic1 == MAGIC1);
+	assert (b->magic2 == MAGIC2);
+
+	return (b->fix_bits);
 }
 
 

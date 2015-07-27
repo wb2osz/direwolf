@@ -1,3 +1,4 @@
+This is NOT used for the Linux version.
 For Linux and Cygwin, we use the built-in regular expression library.
 For the Windows version, we need to include our own version.
 

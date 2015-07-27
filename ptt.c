@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011,2013,2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -33,6 +33,8 @@
  *		Otherwise we use the unix version suitable for either Cygwin or Linux.
  *
  * Version 0.9:	Add ability to use GPIO pins on Linux.
+ *
+ * Version 1.1: Add parallel printer port for x86 Linux only.
  *
  * References:	http://www.robbayer.com/files/serial-win.pdf
  *
@@ -86,6 +88,14 @@ typedef int HANDLE;
 
 #endif
 
+#define LPT_IO_ADDR 0x378
+
+
+#if TEST
+#define dw_printf printf
+#endif
+
+
 
 /*-------------------------------------------------------------------
  *
@@ -108,6 +118,7 @@ static ptt_method_t ptt_method[MAX_CHANS];	/* Method for PTT signal. */
 					/* PTT_METHOD_NONE - not configured.  Could be using VOX. */
 					/* PTT_METHOD_SERIAL - serial (com) port. */
 					/* PTT_METHOD_GPIO - general purpose I/O. */
+					/* PTT_METHOD_LPT - Parallel printer port. */
 
 static char ptt_device[MAX_CHANS][20];	/* Name of serial port device.  */
 					/* e.g. COM1 or /dev/ttyS0. */
@@ -117,6 +128,10 @@ static ptt_line_t ptt_line[MAX_CHANS];	/* RTS or DTR when using serial port. */
 static int ptt_gpio[MAX_CHANS];		/* GPIO number.  Only used for Linux. */
 					/* Valid only when ptt_method is PTT_METHOD_GPIO. */
 		
+int ptt_lpt_bit[MAX_CHANS];		/* Bit number for parallel printer port.  */
+					/* Bit 0 = pin 2, ..., bit 7 = pin 9. */
+					/* Valid only when ptt_method is PTT_METHOD_LPT. */
+
 static int ptt_invert[MAX_CHANS];	/* Invert the signal.  */
 					/* Normally higher voltage means transmit. */
 
@@ -157,16 +172,18 @@ void ptt_init (struct audio_s *p_modem)
 	  strcpy (ptt_device[ch], p_modem->ptt_device[ch]);
 	  ptt_line[ch] = p_modem->ptt_line[ch];
 	  ptt_gpio[ch] = p_modem->ptt_gpio[ch];
+	  ptt_lpt_bit[ch] = p_modem->ptt_lpt_bit[ch];
 	  ptt_invert[ch] = p_modem->ptt_invert[ch];
 	  ptt_fd[ch] = INVALID_HANDLE_VALUE;
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
-          dw_printf ("ch=%d, method=%d, device=%s, line=%d, gpio=%d, invert=%d\n",
+          dw_printf ("ch=%d, method=%d, device=%s, line=%d, gpio=%d, lpt_bit=%d, invert=%d\n",
 		ch,
 		ptt_method[ch], 
 		ptt_device[ch],
 		ptt_line[ch],
 		ptt_gpio[ch],
+		ptt_lpt_bit[ch],
 		ptt_invert[ch]);
 #endif
 	}
@@ -205,8 +222,20 @@ void ptt_init (struct audio_s *p_modem)
 	    }
 	    else {
 #if __WIN32__
+	      char bettername[50];
+	      // Bug fix in release 1.1 - Need to munge name for COM10 and up.
+	      // http://support.microsoft.com/kb/115831
 
-	      fd = CreateFile(ptt_device[ch],
+	      strcpy (bettername, ptt_device[ch]);
+	      if (strncasecmp(bettername, "COM", 3) == 0) {
+	        int n;
+	        n = atoi(bettername+3);
+	        if (n >= 10) {
+	          strcpy (bettername, "\\\\.\\");
+	          strcat (bettername, ptt_device[ch]);
+	        }
+	      }
+	      fd = CreateFile(bettername,
 			GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 #else
 
@@ -295,9 +324,10 @@ void ptt_init (struct audio_s *p_modem)
  */
 	  if (geteuid() != 0) {
 	    if ( ! (finfo.st_mode & S_IWOTH)) {
+	      int err;
 
 	      /* Try to change protection. */
-	      system ("sudo chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport");
+	      err = system ("sudo chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport");
 	      
 	      if (stat("/sys/class/gpio/export", &finfo) < 0) {
 	        /* Unexpected because we could do it before. */
@@ -327,6 +357,7 @@ void ptt_init (struct audio_s *p_modem)
 	  if (ptt_method[ch] == PTT_METHOD_GPIO) {
 	    char stemp[80];
 	    struct stat finfo;
+	    int err;
 
 	    fd = open("/sys/class/gpio/export", O_WRONLY);
 	    if (fd < 0) {
@@ -355,9 +386,9 @@ void ptt_init (struct audio_s *p_modem)
  * We only care about "direction" and "value".
  */
 	    sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", ptt_gpio[ch]);
-	    system (stemp);
+	    err = system (stemp);
 	    sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/value", ptt_gpio[ch]);
-	    system (stemp);
+	    err = system (stemp);
 
 	    sprintf (stemp, "/sys/class/gpio/gpio%d/value", ptt_gpio[ch]);
 
@@ -414,12 +445,75 @@ void ptt_init (struct audio_s *p_modem)
 #endif
 
 
+
+/*
+ * Set up parallel printer port.
+ * Hardcoded for single port.
+ * For x86 Linux only.
+ */
+
+#if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
+
+	for (ch=0; ch<ptt_num_channels; ch++) {
+
+	  if (ptt_method[ch] == PTT_METHOD_LPT) {
+
+
+	    /* Can't open the same device more than once so we */
+	    /* need more logic to look for the case of both radio */
+	    /* channels using different pins of the same LPT port. */
+
+	    /* TODO: Needs to be rewritten in a more general manner */
+	    /* if we ever have more than 2 channels. */
+
+	    if (ch == 1 && strcmp(ptt_device[0],ptt_device[1]) == 0) {
+	      fd = ptt_fd[0];
+	    }
+	    else {
+	      fd = open ("/dev/port", O_RDWR | O_NDELAY);
+            }
+
+	    if (fd != INVALID_HANDLE_VALUE) {
+	      ptt_fd[ch] = fd;
+	    }
+	    else {
+
+	      int e = errno;
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("ERROR - Can't open /dev/port for parallel printer port PTT control.\n");
+	      dw_printf ("%s\n", strerror(errno));
+	      dw_printf ("You probably don't have adequate permissions to access I/O ports.\n");
+	      dw_printf ("Either run direwolf as root or change these permissions:\n");
+	      dw_printf ("  sudo chmod go+rw /dev/port\n");
+	      dw_printf ("  sudo setcap cap_sys_rawio=ep `which direwolf`\n");
+
+	      /* Don't try using it later if device open failed. */
+
+	      ptt_method[ch] = PTT_METHOD_NONE;
+	    }
+
+/*
+ * Set initial state of PTT off.
+ * ptt_set will invert output signal if appropriate.
+ */	  
+	    ptt_set (ch, 0);
+
+	  } 	/* if parallel printer port method. */
+
+	}	/* For each channel. */
+
+
+
+#endif /* x86 Linux */
+
+
 /* Why doesn't it transmit?  Probably forgot to specify PTT option. */
 
 	for (ch=0; ch<ptt_num_channels; ch++) {
 	  if(ptt_method[ch] == PTT_METHOD_NONE) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("Note: PTT not configured for channel %d.\n", ch);
+	      dw_printf ("Note: PTT not configured for channel %d. (Ignore this if using VOX.)\n", ch);
 	  }
 	}
 } /* end ptt_init */
@@ -523,6 +617,44 @@ void ptt_set (int chan, int ptt)
 	}
 #endif
 	
+/*
+ * Using parallel printer port?
+ */
+
+#if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
+
+	if (ptt_method[chan] == PTT_METHOD_LPT && 
+		ptt_fd[chan] != INVALID_HANDLE_VALUE) {
+
+	  char lpt_data;
+	  ssize_t n;		
+
+	  lseek (ptt_fd[chan], (off_t)LPT_IO_ADDR, SEEK_SET);
+	  if (read (ptt_fd[chan], &lpt_data, (size_t)1) != 1) {
+	    int e = errno;
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error reading current state of LPT for channel %d PTT\n", chan);
+	    dw_printf ("%s\n", strerror(e));
+	  }
+
+	  if (ptt) {
+	    lpt_data |= ( 1 << ptt_lpt_bit[chan] );
+	  }
+	  else {
+	    lpt_data &= ~ ( 1 << ptt_lpt_bit[chan] );
+	  }
+
+	  lseek (ptt_fd[chan], (off_t)LPT_IO_ADDR, SEEK_SET);
+	  if (write (ptt_fd[chan], &lpt_data, (size_t)1) != 1) {
+	    int e = errno;
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error writing to LPT for channel %d PTT\n", chan);
+	    dw_printf ("%s\n", strerror(e));
+	  }
+	}
+
+#endif /* x86 Linux */
+
 
 } /* end ptt_set */
 
@@ -546,6 +678,9 @@ void ptt_term (void)
 
 	for (n = 0; n < ptt_num_channels; n++) {
 	  ptt_set (n, 0);
+	}
+
+	for (n = 0; n < ptt_num_channels; n++) {
 	  if (ptt_fd[n] != INVALID_HANDLE_VALUE) {
 #if __WIN32__
 	    CloseHandle (ptt_fd[n]);
@@ -571,6 +706,8 @@ void ptt_term (void)
 #if TEST
 
 void text_color_set (dw_color_t c)  {  }
+
+#define dw_printf printf
 
 main ()
 {
@@ -656,8 +793,7 @@ main ()
 
 /* Test GPIO */
 
-#if __WIN32__
-#else
+#if __arm__
 
 	memset (&modem, 0, sizeof(modem));
 	modem.num_channels = 1;
@@ -679,6 +815,35 @@ main ()
 
 	ptt_term ();
 #endif
+
+
+	memset (&modem, 0, sizeof(modem));
+	modem.num_channels = 2;
+	modem.ptt_method[0] = PTT_METHOD_LPT;
+	modem.ptt_lpt_bit[0] = 0;
+	modem.ptt_method[1] = PTT_METHOD_LPT;
+	modem.ptt_lpt_bit[1] = 1;
+
+	dw_printf ("Try LPT bits 0 & 1 a few times...\n");
+
+	ptt_init (&modem);
+
+	for (n=0; n<8; n++) {
+	  ptt_set (0, n & 1);
+	  ptt_set (1, (n>>1) & 1);
+	  SLEEP_SEC(1);
+	}
+
+	ptt_term ();	
+
+/* Parallel printer port. */
+
+#if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
+
+
+
+#endif
+
 
 }
 

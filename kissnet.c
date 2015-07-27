@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011-2013  John Langner, WB2OSZ
+//    Copyright (C) 2011-2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -125,6 +125,7 @@
 
 
 static kiss_frame_t kf;		/* Accumulated KISS frame and state of decoder. */
+				// TODO: multiple instances if multiple KISS network clients!
 
 
 static int client_sock;		/* File descriptor for socket for */
@@ -471,31 +472,28 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 	}
 	else {
 
-	  kiss_len = 0;
-	  kiss_buff[kiss_len++] = FEND;
-	  kiss_buff[kiss_len++] = chan << 4;
 
-	  for (j=0; j<flen; j++) {
+	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
+	 
+	  assert (flen < sizeof(stemp));
 
-	    if (fbuf[j] == FEND) {
-	      kiss_buff[kiss_len++] = FESC;
-	      kiss_buff[kiss_len++] = TFEND;
-	    }
-	    else if (fbuf[j] == FESC) {
-	      kiss_buff[kiss_len++] = FESC;
-	      kiss_buff[kiss_len++] = TFESC;
-	    }
-	    else {
-	      kiss_buff[kiss_len++] = fbuf[j];
-	    }
-	    assert (kiss_len < sizeof (kiss_buff));
+	  stemp[0] = (chan << 4) + 0;
+	  memcpy (stemp+1, fbuf, flen);
+
+	  if (kiss_debug >= 2) {
+	    /* AX.25 frame with the CRC removed. */
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("\n");
+	    dw_printf ("Packet content before adding KISS framing and any escapes:\n");
+	    hex_dump ((char*)fbuf, flen);
 	  }
-	  kiss_buff[kiss_len++] = FEND;
 
-	  /* Bug: This has the escapes but not the surrounding FENDs. */
+	  kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
+
+	  /* This has the escapes and the surrounding FENDs. */
 
 	  if (kiss_debug) {
-	    kiss_debug_print (TO_CLIENT, NULL, kiss_buff+1, kiss_len-2);
+	    kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
 	  }
 	}
 
@@ -658,11 +656,8 @@ static void * kissnet_listen_thread (void *arg)
 
 	while (1) {
 	  ch = kiss_get();
-
-	  if (kiss_frame (&kf, ch, kiss_debug, kissnet_send_rec_packet)) { 
-	    kiss_process_msg (&kf, kiss_debug);
-	  }
-	}  /* while (1) */
+	  kiss_rec_byte (&kf, ch, kiss_debug, kissnet_send_rec_packet);
+	}  
 
 	return (NULL);	/* to suppress compiler warning. */
 

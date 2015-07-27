@@ -459,6 +459,44 @@ static packet_t digipeat_match (packet_t pp, char *mycall_rec, char *mycall_xmit
 
 
 
+/*------------------------------------------------------------------------------
+ *
+ * Name:	digi_regen
+ * 
+ * Purpose:	Send regenerated copy of what we received.
+ *
+ * Inputs:	chan	- Radio channel where it was received.
+ *		
+ * 		pp	- Packet object.
+ *		
+ * Returns:	None.
+ *
+ * Description:	TODO...
+ *		
+ *------------------------------------------------------------------------------*/
+
+void digi_regen (int from_chan, packet_t pp)
+{
+	int to_chan;
+	packet_t result;
+
+	// dw_printf ("digi_regen()\n");
+	
+	assert (from_chan >= 0 && from_chan < my_config.num_chans);
+
+	for (to_chan=0; to_chan<my_config.num_chans; to_chan++) {
+	  if (my_config.regen[from_chan][to_chan]) {
+	    result = ax25_dup (pp); 
+	    if (result != NULL) {
+	      // TODO:  if AX.25 and has been digipeated, put in HI queue?
+	      tq_append (to_chan, TQ_PRIO_1_LO, result);
+	    }
+	  }
+	}
+
+} /* end dig_regen */
+
+
 /*-------------------------------------------------------------------------
  *
  * Name:	main
@@ -509,7 +547,7 @@ static void test (char *in, char *out)
 
 	if (strcmp(in, rec) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Text/internal/text error %s -> %s\n", in, rec);
+	  dw_printf ("Text/internal/text error-1 %s -> %s\n", in, rec);
 	}
 
 /*
@@ -527,7 +565,7 @@ static void test (char *in, char *out)
 
 	if (strcmp(in, rec) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("internal/frame/internal/text error %s -> %s\n", in, rec);
+	  dw_printf ("internal/frame/internal/text error-2 %s -> %s\n", in, rec);
 	}
 
 /*

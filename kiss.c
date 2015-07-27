@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -129,7 +129,11 @@
 #include <termios.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#ifdef __OpenBSD__
+#include <errno.h>
+#else
 #include <sys/errno.h>
+#endif
 #endif
 
 #include <assert.h>
@@ -164,14 +168,16 @@ static kiss_frame_t kf;		/* Accumulated KISS frame and state of decoder. */
 
 static MYFDTYPE pt_master_fd = MYFDERROR;	/* File descriptor for my end. */
 
-static MYFDTYPE pt_slave_fd = MYFDERROR;	/* File descriptor for pseudo terminal */
-						/* for use by application. */
+static char pt_slave_name[32];			/* Pseudo terminal slave name  */
+						/* like /dev/pts/999 */
+
+
 
 /*
  * Symlink to pseudo terminal name which changes.
  */
 
-#define DEV_KISS_TNC "/tmp/kisstnc"
+#define TMP_KISSTNC_SYMLINK "/tmp/kisstnc"
 
 #endif
 
@@ -186,9 +192,14 @@ static MYFDTYPE nullmodem_fd = MYFDERROR;
 #endif
 
 
+// TODO:  define in one place, use everywhere.
+#if __WIN32__
+#define THREAD_F unsigned __stdcall
+#else 
+#define THREAD_F void *
+#endif
 
-
-static void * kiss_listen_thread (void *arg);
+static THREAD_F kiss_listen_thread (void *arg);
 
 
 
@@ -262,7 +273,7 @@ void kiss_init (struct misc_config_s *mc)
 	  pt_master_fd = kiss_open_pt ();
 
 	  if (pt_master_fd != MYFDERROR) {
-	    e = pthread_create (&kiss_pterm_listen_tid, (pthread_attr_t*)NULL, kiss_listen_thread, (void*)(long)pt_master_fd);
+	    e = pthread_create (&kiss_pterm_listen_tid, (pthread_attr_t*)NULL, kiss_listen_thread, NULL);
 	    if (e != 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      perror("Could not create kiss listening thread for Linux pseudo terminal");
@@ -300,14 +311,14 @@ void kiss_init (struct misc_config_s *mc)
 
 	  if (nullmodem_fd != MYFDERROR) {
 #if __WIN32__
-	    kiss_nullmodem_listen_th = _beginthreadex (NULL, 0, kiss_listen_thread, (void*)(long)nullmodem_fd, 0, NULL);
+	    kiss_nullmodem_listen_th = (HANDLE)_beginthreadex (NULL, 0, kiss_listen_thread, NULL, 0, NULL);
 	    if (kiss_nullmodem_listen_th == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Could not create kiss nullmodem thread\n");
 	      return;
 	    }
 #else
-	    e = pthread_create (&kiss_nullmodem_listen_tid, NULL, kiss_listen_thread, (void*)(long)nullmodem_fd);
+	    e = pthread_create (&kiss_nullmodem_listen_tid, NULL, kiss_listen_thread, NULL);
 	    if (e != 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      perror("Could not create kiss listening thread for Windows virtual COM port.");
@@ -341,7 +352,7 @@ void kiss_init (struct misc_config_s *mc)
 static MYFDTYPE kiss_open_pt (void)
 {
 	int fd;
-	char *slave_device;
+	char *pts;
 	struct termios ts;
 	int e;
 	//int flags;
@@ -357,12 +368,13 @@ static MYFDTYPE kiss_open_pt (void)
 	if (fd == MYFDERROR
 	    || grantpt (fd) == MYFDERROR
 	    || unlockpt (fd) == MYFDERROR
-	    || (slave_device = ptsname (fd)) == NULL) {
+	    || (pts = ptsname (fd)) == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Could not create pseudo terminal for KISS TNC.\n");
 	  return (MYFDERROR);
 	}
 
+	strcpy (pt_slave_name, pts);
 
 	e = tcgetattr (fd, &ts);
 	if (e != 0) { 
@@ -416,9 +428,29 @@ static MYFDTYPE kiss_open_pt (void)
 	}
 #endif
 	text_color_set(DW_COLOR_INFO);
-	dw_printf("Virtual KISS TNC is available on %s\n", slave_device);
+	dw_printf("Virtual KISS TNC is available on %s\n", pt_slave_name);
 	dw_printf("WARNING - Dire Wolf will hang eventually if nothing is reading from it.\n");
 	
+
+#if 1
+	// Sample code shows this. Why would we open it here?
+	// On Ubuntu, the slave side disappears after a few
+	// seconds if no one opens it.  Same on Raspian which
+	// is also based on Debian.
+	// Need to revisit this.  
+
+	MYFDTYPE pt_slave_fd;
+
+	pt_slave_fd = open(pt_slave_name, O_RDWR|O_NOCTTY);
+
+	if (pt_slave_fd < 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Can't open %s\n", pt_slave_name);	
+	    perror ("");
+	    return MYFDERROR;
+	}
+#endif
+
 /*
  * The device name is not the same every time.
  * This is inconvenient for the application because it might
@@ -427,31 +459,21 @@ static MYFDTYPE kiss_open_pt (void)
  * does not need to change when the pseudo terminal name changes.
  */
 
-//TODO: remove symlink on exit.
-	unlink (DEV_KISS_TNC);
+	unlink (TMP_KISSTNC_SYMLINK);
 
-	if (symlink (slave_device, DEV_KISS_TNC) == 0) {
-	    dw_printf ("Created symlink %s -> %s\n", DEV_KISS_TNC, slave_device);
+
+// TODO: Is this removed when application exits?
+
+	if (symlink (pt_slave_name, TMP_KISSTNC_SYMLINK) == 0) {
+	    dw_printf ("Created symlink %s -> %s\n", TMP_KISSTNC_SYMLINK, pt_slave_name);
 	}
 	else {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Failed to create symlink %s\n", DEV_KISS_TNC);	
+	    dw_printf ("Failed to create symlink %s\n", TMP_KISSTNC_SYMLINK);	
 	    perror ("");
 	}
 
-#if 1
-	// Sample code shows this. Why would we open it here?
-	// On Ubuntu, the slave side disappears after a few
-	// seconds if no one opens it.
-
-	pt_slave_fd = open(slave_device, O_RDWR|O_NOCTTY);
-
-	if (pt_slave_fd < 0)
-	   return MYFDERROR;
-#endif
 	return (fd);
-
-
 }
 
 #endif
@@ -470,8 +492,8 @@ static MYFDTYPE kiss_open_nullmodem (char *devicename)
 
 	MYFDTYPE fd;
 	DCB dcb;
-	int ok;
-
+	int ok;	
+	char bettername[50];
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -487,8 +509,20 @@ static MYFDTYPE kiss_open_nullmodem (char *devicename)
 
 // Read http://support.microsoft.com/kb/156932 
 
+// Bug fix in release 1.1 - Need to munge name for COM10 and up.
+// http://support.microsoft.com/kb/115831
 
-	fd = CreateFile(devicename, GENERIC_READ | GENERIC_WRITE, 
+	strcpy (bettername, devicename);
+	if (strncasecmp(devicename, "COM", 3) == 0) {
+	  int n;
+	  n = atoi(devicename+3);
+	  if (n >= 10) {
+	    strcpy (bettername, "\\\\.\\");
+	    strcat (bettername, devicename);
+	  }
+	}
+	
+	fd = CreateFile(bettername, GENERIC_READ | GENERIC_WRITE, 
 			0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
 
 	if (fd == MYFDERROR) {
@@ -510,7 +544,8 @@ static MYFDTYPE kiss_open_nullmodem (char *devicename)
 
 	/* http://msdn.microsoft.com/en-us/library/windows/desktop/aa363214(v=vs.85).aspx */
 
-	// dcb.BaudRate ? shouldn't matter 
+	dcb.DCBlength = sizeof(DCB);
+	dcb.BaudRate = CBR_9600;	// shouldn't matter 
 	dcb.fBinary = 1;
 	dcb.fParity = 0;
 	dcb.fOutxCtsFlow = 0;
@@ -609,7 +644,7 @@ static MYFDTYPE kiss_open_nullmodem (char *devicename)
 
 void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 {
-	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
+	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int kiss_len;
 	int j;
 	int err;
@@ -637,31 +672,28 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 	}
 	else {
 
-	  kiss_len = 0;
-	  kiss_buff[kiss_len++] = FEND;
-	  kiss_buff[kiss_len++] = chan << 4;
 
-	  for (j=0; j<flen; j++) {
+	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
+	 
+	  assert (flen < sizeof(stemp));
 
-	    if (fbuf[j] == FEND) {
-	      kiss_buff[kiss_len++] = FESC;
-	      kiss_buff[kiss_len++] = TFEND;
-	    }
-	    else if (fbuf[j] == FESC) {
-	      kiss_buff[kiss_len++] = FESC;
-	      kiss_buff[kiss_len++] = TFESC;
-	    }
-	    else {
-	      kiss_buff[kiss_len++] = fbuf[j];
-	    }
-	    assert (kiss_len < sizeof (kiss_buff));
+	  stemp[0] = (chan << 4) + 0;
+	  memcpy (stemp+1, fbuf, flen);
+
+	  if (kiss_debug >= 2) {
+	    /* AX.25 frame with the CRC removed. */
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("\n");
+	    dw_printf ("Packet content before adding KISS framing and any escapes:\n");
+	    hex_dump ((char*)fbuf, flen);
 	  }
-	  kiss_buff[kiss_len++] = FEND;
 
-	  /* This has the escapes but not the surrounding FENDs. */
+	  kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
+
+	  /* This has KISS framing and escapes for sending to client app. */
 
 	  if (kiss_debug) {
-	    kiss_debug_print (TO_CLIENT, NULL, kiss_buff+1, kiss_len-2);
+	    kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
 	  }
 
 	}
@@ -732,7 +764,7 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 	      //nullmodem_fd = MYFDERROR;
 	    }
 	  }
-	  else if (nwritten != flen) 
+	  else if (nwritten != kiss_len)
 	  {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("\nError sending KISS message to client application thru null modem.  Only %d of %d written.\n\n", (int)nwritten, kiss_len);
@@ -770,22 +802,16 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
  *
  * Purpose:     Wait for messages from an application.
  *
- * Inputs:	arg		- File descriptor for reading.
- *
- * Outputs:	pt_slave_fd	- File descriptor for communicating with client app.
+ * Global In:	nullmodem_fd or pt_master_fd
  *
  * Description:	Process messages from the client application.
  *
  *--------------------------------------------------------------------*/
 
-//TODO: should pass fd by reference so it can be zapped.
-//BUG: If we close it here, that fact doesn't get back 
-// to the main receiving thread.
-
 /* Return one byte (value 0 - 255) or terminate thread on error. */
 
 
-static int kiss_get (MYFDTYPE fd)
+static int kiss_get (/* MYFDTYPE fd*/ void )
 {
 	unsigned char ch;
 
@@ -808,7 +834,7 @@ static int kiss_get (MYFDTYPE fd)
 
   	while (n == 0) {
 
-	  if ( ! ReadFile (fd, &ch, 1, &n, &ov_rd)) 
+	  if ( ! ReadFile (nullmodem_fd, &ch, 1, &n, &ov_rd)) 
 	  {
 	    int err1 = GetLastError();
 
@@ -818,7 +844,7 @@ static int kiss_get (MYFDTYPE fd)
 
 	      if (WaitForSingleObject (ov_rd.hEvent, INFINITE) == WAIT_OBJECT_0) 
 	      {
-	        if ( ! GetOverlappedResult (fd, &ov_rd, &n, 1))
+	        if ( ! GetOverlappedResult (nullmodem_fd, &ov_rd, &n, 1))
 	        {
 	          int err3 = GetLastError();
 
@@ -835,8 +861,8 @@ static int kiss_get (MYFDTYPE fd)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nKISS ReadFile error %d. Closing connection.\n\n", err1);
-	      //CloseHandle (fd);
-	      //fd = MYFDERROR;
+	      CloseHandle (nullmodem_fd);
+	      nullmodem_fd = MYFDERROR;
 	      //pthread_exit (NULL);
 	    }
 	  }
@@ -857,18 +883,32 @@ static int kiss_get (MYFDTYPE fd)
 
 #else		/* Linux/Cygwin version */
 
-	int n;
+	int n = 0;
 
-	n = read(fd, &ch, (size_t)1);
+	while ( n == 0 ) {
 
-	if (n != 1) {
-	  //text_color_set(DW_COLOR_ERROR);
-	  //dw_printf ("\nError receiving kiss message from client application.  Closing connection %d.\n\n", fd);
+	  n = read(pt_master_fd, &ch, (size_t)1);
 
-	  close (fd);
+	  if (n != 1) {
 
-	  fd = MYFDERROR;
-	  pthread_exit (NULL);
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("\nError receiving kiss message from client application.  Closing %s.\n\n", pt_slave_name);
+	    perror ("");
+
+	    /* Message added between 1.1 beta test and final version 1.1 */
+
+	    /* TODO: Determine root cause and find proper solution. */
+
+	    dw_printf ("This is a known problem that sometimes shows up when using with kissattach.\n");
+	    dw_printf ("There are a couple work-arounds described in the Dire Wolf User Guide\n");
+	    dw_printf ("and the Raspberry Pi APRS documents.\n");
+
+	    close (pt_master_fd);
+
+	    pt_master_fd = MYFDERROR;
+	    unlink (TMP_KISSTNC_SYMLINK);
+	    pthread_exit (NULL);
+	  }
 	}
 
 #endif
@@ -897,10 +937,8 @@ static int kiss_get (MYFDTYPE fd)
 
 
 
-static void * kiss_listen_thread (void *arg)
+static THREAD_F kiss_listen_thread (void *arg)
 {
-	MYFDTYPE fd = (MYFDTYPE)(long)arg;
-
 	unsigned char ch;
 			
 #if DEBUG
@@ -910,14 +948,15 @@ static void * kiss_listen_thread (void *arg)
 
 
 	while (1) {
-	  ch = kiss_get(fd);
+	  ch = kiss_get();
+	  kiss_rec_byte (&kf, ch, kiss_debug, kiss_send_rec_packet);
+	}
 
-	  if (kiss_frame (&kf, ch, kiss_debug, kiss_send_rec_packet)) { 
-	    kiss_process_msg (&kf, kiss_debug);
-	  }
-	}	/* while (1) */
-
-	return (NULL);	/* Unreachable but avoids compiler warning. */
+#if __WIN32__
+	return(0);
+#else
+	return;	/* Unreachable but avoids compiler warning. */
+#endif
 }
 
 /* end kiss.c */

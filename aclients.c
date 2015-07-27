@@ -519,7 +519,7 @@ static void * client_thread_net (void *arg)
 #if __WIN32__	      
 	send (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd), 0);
 #else
-	(void)write (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
+	err = write (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
 #endif
 
 
@@ -649,6 +649,8 @@ static void * client_thread_serial (void *arg)
 	DCB dcb;
 	int ok;
 
+	// Bug: Won't work for ports above COM9.
+	// http://support.microsoft.com/kb/115831
 
 	fd = CreateFile(port[my_index], GENERIC_READ | GENERIC_WRITE, 
 			0, NULL, OPEN_EXISTING, 0, NULL);
@@ -671,6 +673,7 @@ static void * client_thread_serial (void *arg)
 
 	/* http://msdn.microsoft.com/en-us/library/windows/desktop/aa363214(v=vs.85).aspx */
 
+	dcb.DCBlength = sizeof(DCB);
 	dcb.BaudRate = 9600;
 	dcb.fBinary = 1;
 	dcb.fParity = 0;

@@ -128,7 +128,7 @@ float window (bp_window_t type, int size, int j)
 void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype)
 {
 	int j;
-	float lp_sum;
+	float G;
 
 
 #if DEBUG1
@@ -165,12 +165,12 @@ void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype
 /*
  * Normalize lowpass for unity gain.
  */
-	lp_sum = 0;
+	G = 0;
         for (j=0; j<filter_size; j++) {
-	  lp_sum += lp_filter[j];
+	  G += lp_filter[j];
 	}
         for (j=0; j<filter_size; j++) {
-	  lp_filter[j] = lp_filter[j] / lp_sum;
+	  lp_filter[j] = lp_filter[j] / G;
 	}
 }
 
@@ -198,7 +198,8 @@ void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype
 void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_window_t wtype)
 {
 	int j;
-	float bp_sum;
+	float w;
+	float G;
 
 
 #if DEBUG1
@@ -235,13 +236,18 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
 
 /*
  * Normalize bandpass for unity gain.
+ * TODO:  This is not right.  
+ * Can't use same technique as for lowpass.
+ * Instead compute gain in middle of passband.
+ * See http://dsp.stackexchange.com/questions/4693/fir-filter-gain
  */
-	bp_sum = 0;
+	w = 2 * M_PI * (f1 + f2) / 2;
+	G = 0;
         for (j=0; j<filter_size; j++) {
-	  bp_sum += bp_filter[j];
+	  G += bp_filter[j];	// TBD
 	}
         for (j=0; j<filter_size; j++) {
-	  bp_filter[j] = bp_filter[j] / bp_sum;
+	  bp_filter[j] = bp_filter[j] / G;
 	}
 }
 

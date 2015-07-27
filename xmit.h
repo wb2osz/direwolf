@@ -6,7 +6,7 @@
 #include "audio.h"	/* for struct audio_s */
 
 
-extern void xmit_init (struct audio_s *p_modem);
+extern void xmit_init (struct audio_s *p_modem, int debug_xmit_packet);
 
 extern void xmit_set_txdelay (int channel, int value);
 

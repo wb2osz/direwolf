@@ -307,20 +307,32 @@ static int new_sym_len = 0;			/* Number of elements used. */
 void symbols_init (void)
 {
 	FILE *fp;
-	struct {
-	  char overlay;
-	  char symbol;
-	  char sp1;
-	  char equal;
-	  char sp2;
-	  char description[150];
-	} stuff;
+
+/*
+ * We only care about lines with this format:
+ *
+ *  Column 1 - overlay character of / \ upper case or digit
+ *  Column 2 - symbol in range of ! thru ~
+ *  Column 3 - space
+ *  Column 4 - equal sign
+ *  Column 5 - space
+ *  Column 6 - Start of description.
+ */
+
+#define COL1_OVERLAY 0
+#define COL2_SYMBOL 1
+#define COL3_SP 2
+#define COL4_EQUAL 3
+#define COL5_SP 4
+#define COL6_DESC 5
+
+	char stuff[200];
 	int j;
 
-#define GOOD_LINE(x) ((x.overlay == '/' || x.overlay == '\\' || isupper(x.overlay) || isdigit(x.overlay)) \
-			&& x.symbol >= '!' && x.symbol <= '~' \
-			&& x.sp1 == ' ' && x.equal == '=' && x.sp2 == ' ')
-
+#define GOOD_LINE(x) (strlen(x) > 6 && \
+			(x[COL1_OVERLAY] == '/' || x[COL1_OVERLAY] == '\\' || isupper(x[COL1_OVERLAY]) || isdigit(x[COL1_OVERLAY])) \
+			&& x[COL2_SYMBOL] >= '!' && x[COL2_SYMBOL] <= '~' \
+			&& x[COL3_SP] == ' ' && x[COL4_EQUAL] == '=' && x[COL5_SP] == ' ' && x[COL6_DESC] != ' ')
 
 	if (new_sym_ptr != NULL) {
 	  return;			/* was called already. */
@@ -350,7 +362,7 @@ void symbols_init (void)
 /*
  * Count number of interesting lines and allocate storage.
  */
-	while (fgets((char*)(&stuff), sizeof(stuff), fp) != NULL) {
+	while (fgets(stuff, sizeof(stuff), fp) != NULL) {
 	  if (GOOD_LINE(stuff)) {
 	    new_sym_size++;
 	  }
@@ -363,15 +375,15 @@ void symbols_init (void)
  */
 	rewind (fp);
 
-	while (fgets((char*)(&stuff), sizeof(stuff), fp) != NULL) {
+	while (fgets(stuff, sizeof(stuff), fp) != NULL) {
 
 	  if (GOOD_LINE(stuff)) {
-	    for (j = strlen(stuff.description) - 1; j>=0 && stuff.description[j] <= ' '; j--) {
-	      stuff.description[j] = '\0';
+	    for (j = strlen(stuff+COL6_DESC) - 1; j>=0 && stuff[COL6_DESC+j] <= ' '; j--) {
+	      stuff[COL6_DESC+j] = '\0';
 	    }
-	    new_sym_ptr[new_sym_len].overlay = stuff.overlay;
-	    new_sym_ptr[new_sym_len].symbol = stuff.symbol;
-	    strncpy(new_sym_ptr[new_sym_len].description, stuff.description, NEW_SYM_DESC_LEN);
+	    new_sym_ptr[new_sym_len].overlay = stuff[COL1_OVERLAY];
+	    new_sym_ptr[new_sym_len].symbol = stuff[COL2_SYMBOL];
+	    strncpy(new_sym_ptr[new_sym_len].description, stuff+COL6_DESC, NEW_SYM_DESC_LEN);
 	    new_sym_len++;
 	  }
 	}

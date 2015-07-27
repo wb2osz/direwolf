@@ -367,6 +367,7 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 	    int alevel = demod_get_audio_level (chan, subchan);
 
 	    rrbb_set_audio_level (H->rrbb, alevel);
+	    rrbb_set_fix_bits (H->rrbb, H->fix_bits);
 	    hdlc_rec2_block (H->rrbb, H->fix_bits);
 	    	/* Now owned by someone else who will free it. */
 	    H->rrbb = rrbb_new (chan, subchan, is_scrambled, descram_state); /* Allocate a new one. */

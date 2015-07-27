@@ -92,12 +92,7 @@ static inline float z (float x, float y)
 __attribute__((hot))
 static inline void push_sample (float val, float *buff, int size)
 {
-	int j;
-
-	// TODO: memmove any faster?  
-	for (j = size - 1; j >= 1; j--) {
-	  buff[j] = buff[j-1];
-	}
+	memmove(buff+1,buff,(size-1)*sizeof(float));
 	buff[0] = val; 
 }
 

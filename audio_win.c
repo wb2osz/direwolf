@@ -744,7 +744,7 @@ int audio_get (void)
 	        this_time = time(NULL);
 	        if (this_time >= last_time + duration) {
 	          text_color_set(DW_COLOR_DEBUG);
-	          dw_printf ("\nPast %d seconds, %d audio samples, %d errors.\n\n", 
+	          dw_printf ("\nPast %d seconds, %d audio samples processed, %d errors.\n\n", 
 			duration, sample_count, error_count);
 	          last_time = this_time;
 	          sample_count = 0;

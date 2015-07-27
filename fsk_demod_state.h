@@ -2,6 +2,9 @@
 
 #ifndef FSK_DEMOD_STATE_H
 
+#include "rpack.h"
+
+
 /*
  * Demodulator state.
  * Different copy is required for each channel & subchannel being processed concurrently.
@@ -165,6 +168,47 @@ struct demodulator_state_s
 	float lev_last_ave;
 	float lev_prev_peak;
 	float lev_prev_ave;
+
+/* 
+ * Special for Rino decoder only.
+ * One for each possible signal polarity.
+ */
+
+#if 1
+
+	struct gr_state_s {
+
+	  signed int data_clock_pll;		// PLL for data clock recovery.
+						// It is incremented by pll_step_per_sample
+						// for each audio sample.
+  
+	  signed int prev_d_c_pll;		// Previous value of above, before
+						// incrementing, to detect overflows.
+
+	  float gr_minus_peak;	// For automatic gain control.
+	  float gr_plus_peak;
+
+	  int gr_sync;		// Is sync pulse present?
+	  int gr_prev_sync;	// Previous state to detect leading edge.
+
+	  int gr_first_sample;	// Index of starting sample index for debugging.
+
+	  int gr_dcd;		// Data carrier detect.  i.e. are we 
+				// currently decoding a message.
+
+	  float gr_early_sum;	// For averaging bit values in two regions.
+	  int gr_early_count;
+	  float gr_late_sum;
+	  int gr_late_count;
+	  float gr_sync_sum;
+	  int gr_sync_count;
+
+	  int gr_bit_count;	// Bit index into message.
+
+	  struct rpack_s rpack;	// Collection of bits.
+
+	} gr_state[2];
+#endif
 
 };
 

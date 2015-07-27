@@ -15,3 +15,18 @@
 *.PDF	 diff=astextplain
 *.rtf	 diff=astextplain
 *.RTF	 diff=astextplain
+
+# My rules to remove any doubt
+
+*.c 		text
+*.cpp		text
+*.h		text
+*.pl		text
+Makefile*	text
+*.txt		text
+*.desktop	text
+*.conf		text
+*.rc		text
+
+*.ico		binary
+*.png		binary

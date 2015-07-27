@@ -1,6 +1,10 @@
-APRS TO-CALL VERSION NUMBERS                            18 Dec 2013
+APRS TO-CALL VERSION NUMBERS                            02 Sep 2014
 -------------------------------------------------------------------
                                                              WB4APR
+
+02 Sep 14 added APSTMx for W7QO's Balloon trackers
+21 Aug 14 added APSMSx for Paul Defrusne's SMS gateway
+11 Aug 14 added APCWP8 for John GM7HHB, WinphoneAPRS
 18 Dec 13 added APZWKR for GM1WKR NetSked application
 22 Oct 13 added APFIxx for APRS.FI OH7LZB, Hessu
 23 Aug 13 added APOxxx for OSCAR satellites for AMSAT-LU by LU9DO
@@ -56,6 +60,7 @@ a TOCALL number series:
       APCLEY  EYTraker GPRS/GSM tracker by ZS6EY
       APCLWX  EYWeather GPRS/GSM WX station by ZS6EY
       APCLEZ  Telit EZ10 GSM application ZS6CEY
+      APCWP8  John GM7HHB, WinphoneAPRS
       APCYxx  Cybiko applications
  APD  APD4xx  UP4DAR platform
       APDDxx  DV-RPTR Modem and Control Center Software 
@@ -133,11 +138,13 @@ a TOCALL number series:
       APRTLM  used in MIM's and Mic-lites, etc
       APRtfc  APRStraffic
       APRSTx  APRStt (Touch tone)
- APS  APRS+SA, etc
+ APS  APSxxx  APRS+SA, etc
       APSARx  ZL4FOX's SARTRACK
       APSCxx  aprsc APRS-IS core server (OH7LZB, OH2MQK)
       APSK63  APRS Messenger -over-PSK63
       APSK25  APRS Messenger GMSK-250
+      APSMSx  Paul Defrusne's SMS gateway
+      APSTMx  for W7QO's Balloon trackers
  APT  APTIGR  TigerTrack
       APTTxx  Tiny Track
       APT2xx  Tiny Track II

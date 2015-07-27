@@ -44,8 +44,9 @@
 
 
 
-static rrbb_t queue_head;			/* Head of linked list for queue. */
-
+static rrbb_t queue_head = NULL;			/* Head of linked list for queue. */
+static int rdq_len = 0;
+#define RDQ_UNDERRUN_THRESHOLD 30 /* A warning will be emitted if there are still this number of packets to decode in the queue and we try to add another one */
 #if __WIN32__
 
 static CRITICAL_SECTION rdq_cs;			/* Critical section for updating queues. */
@@ -204,7 +205,11 @@ void rdq_append (rrbb_t rrbb)
 	  }
 	  rrbb_set_nextp (plast, rrbb);
 	}
-
+        rdq_len++;
+	if (rdq_len > RDQ_UNDERRUN_THRESHOLD) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Too many packets to decode (%d) in the queue, decrease the FIX_BITS value\n", rdq_len);
+	}
 
 #if __WIN32__ 
 	LeaveCriticalSection (&rdq_cs);
@@ -374,7 +379,7 @@ void rdq_wait_while_empty (void)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("rdq_wait_while_empty () returns\n");
+	dw_printf ("rdq_wait_while_empty () returns (%d buffers remaining)\n", rdq_len);
 #endif
 
 }
@@ -418,7 +423,10 @@ rrbb_t rdq_remove (void)
 	  exit (1);
 	}
 #endif
-
+        rdq_len--;
+#if DEBUG
+	dw_printf ("-rdq_len: %d\n", rdq_len);
+#endif
 	if (queue_head == NULL) {
 	  result_p = NULL;
 	}

@@ -4,6 +4,78 @@ Revision history
 
 
 -----------
+Version 1.1  -- December 2014
+-----------
+
+* Changes since beta test version.
+
+It is still highly recommended, but no longer mandatory, that
+beaconing be enabled for digipeating to work.
+
+
+* Known problems.
+
+Sometimes kissattach fails to connect with "direwolf -p".
+The User Guide and Raspberry Pi APRS document have a couple work-arounds.
+
+
+
+-----------
+Version 1.1 -- Beta Test 1 -- November 2014
+-----------
+
+* New Features:
+
+Logging of received packets and utility to convert log file
+into GPX format.
+
+AGW network port formerly allowed only one connection at a 
+time.  It can now accept 3 client applications at the same time.  
+(Same has not yet been done for network KISS port.)
+
+Frequency / offset / tone standard formats are now recognized.
+Non-standard attempts, in the comment, are often detected and
+a message suggests the correct format.
+
+Telemetry is now recognized.  Messages are printed for
+usage that does not adhere to the published standard.
+
+Tracker function transmits location from GPS position.
+New configuration file options: TBEACON and SMARTBEACONING.
+(For Linux only.   Warning - has not been well tested.)
+
+Experimental packet regeneration feature for HF use.
+Will be documented later if proves to be useful...
+
+Several enhancements for trying to fix incorrect CRC.
+- Additional types of attempts to fix a bad CRC.
+- Optimized code to reduce execution time.
+- Improved detection of duplicate packets from different fixup attempts.
+- Set limit on number of packets in fix up later queue.
+
+Beacon positions can be specified in either latitude / longitude
+or UTM coordinates.
+
+
+* Bugs fixed:
+
+For Windows version, maximum serial port was COM9.
+It is now possible to use COM10 and higher.
+
+Fixed issue with KISS protocol decoder state that showed up
+only with "binary" data in packets (e.g.  RMS Express).
+
+An extra 00 byte was being appended to packets from AGW
+network protocol 'K' messages.
+
+Invalid data from an AGW client application could cause an
+application crash.
+
+OSS (audio interface for non-Linux versions of Unix) should 
+be better now.
+
+
+-----------
 Version 1.0a	May 2014
 -----------
 
@@ -35,6 +107,13 @@ to tolerate off-frequency HF SSB signals.
 Improved support for UTF-8 character set.
 
 Improved troubleshooting display for APRStt macros.
+
+In earlier versions, the DTMF decoder was always active because it 
+took a negligible amount of CPU time.  Unfortunately this sometimes 
+resulted in too many false positives from some other types of digital 
+transmissions heard on HF. Starting in version 1.0, the DTMF decoder 
+is enabled only when the APRStt gateway is configured.
+
 
 
 
@@ -107,7 +186,7 @@ APRStt-Implementation-Notes.pdf
 
 
 -----------
-Version 0.6
+Version 0.6	February 2013
 -----------
 
 
@@ -152,7 +231,7 @@ run this in another window:
 
 
 -----------
-Version 0.5
+Version 0.5	March 2012
 -----------
 
 
@@ -160,7 +239,7 @@ More error checking and messages for invalid APRS data.
 
 
 -----------
-Version 0.4
+Version 0.4	September 2011
 -----------
 
 First general availability.

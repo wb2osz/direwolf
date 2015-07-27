@@ -1,5 +1,5 @@
 
-int encode_position (int compressed, double lat, double lon, 
+int encode_position (int messaging, int compressed, double lat, double lon, int alt_ft,
 		char symtab, char symbol, 
 		int power, int height, int gain, char *dir,
 		int course, int speed,

@@ -25,6 +25,9 @@
 
 enum beacon_type_e { BEACON_IGNORE, BEACON_POSITION, BEACON_OBJECT, BEACON_TRACKER, BEACON_CUSTOM };
 
+enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
+
+
 #define MAX_BEACONS 30
 
 struct misc_config_s {
@@ -39,6 +42,11 @@ struct misc_config_s {
 
 	char nullmodem[40];	/* Serial port name for our end of the */
 				/* virtual null modem for native Windows apps. */
+
+	char nmea_port[40];	/* Serial port name for NMEA communication with GPS */
+				/* receiver and/or mapping application. */
+
+	char logdir[80];	/* Directory for saving activity logs. */
 
 	int sb_configured;	/* TRUE if SmartBeaconing is configured. */
 	int sb_fast_speed;	/* MPH */
@@ -58,7 +66,18 @@ struct misc_config_s {
 
 	  int lineno;		/* Line number from config file for later error messages. */
 
-	  int chan;		/* Send to Channel for transmission. -1 for IGate.  */
+	  enum sendto_type_e sendto_type;
+
+				/* SENDTO_XMIT	- Usually beacons go to a radio transmitter. */
+				/*		  chan, below is the channel number. */
+				/* SENDTO_IGATE	- Send to IGate, probably to announce my position */
+				/* 		  rather than relying on someone else to hear */
+				/* 		  me on the radio and report me. */
+				/* SENDTO_RECV	- Pretend this was heard on the specified */
+				/* 		  radio channel.  Mostly for testing. It is a */
+				/* 		  convenient way to send packets to attached apps. */
+
+	  int sendto_chan;	/* Transmit or simulated receive channel for above.  Should be 0 for IGate. */
 
 	  int delay;		/* Seconds to delay before first transmission. */
 
@@ -67,6 +86,9 @@ struct misc_config_s {
 				/* Dynamically adjusted for TBEACON. */
 
 	  time_t next;		/* Unix time to transmit next one. */
+
+	  char *dest;		/* NULL or explicit AX.25 destination to use */
+				/* instead of the software version such as APDW11. */
 
 	  int compress;		/* Use more compact form? */
 
@@ -77,8 +99,12 @@ struct misc_config_s {
 	  char *custom_info;	/* Info part for handcrafted custom beacon. */
 				/* Ignore the rest below if this is set. */
 
+	  int messaging;	/* Set messaging attribute for position report. */
+				/* i.e. Data Type Indicator of '=' rather than '!' */
+
 	  double lat;		/* Latitude and longitude. */
 	  double lon;
+	  float alt_m;		/* Altitude in meters. */
 
 	  char symtab;		/* Symbol table: / or \ or overlay character. */
 	  char symbol;		/* Symbol code. */

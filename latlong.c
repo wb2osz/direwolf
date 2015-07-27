@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013,2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -278,4 +278,244 @@ void longitude_to_comp_str (double dlong, char *clon)
 	clon[1] = x1 + 33;
 	clon[2] = x2 + 33;
 	clon[3] = x3 + 33;
+}
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        latitude_to_nmea
+ *
+ * Purpose:     Convert numeric latitude to strings for NMEA sentence.
+ *
+ * Inputs:      dlat		- Floating point degrees.
+ *
+ * Outputs:	slat		- String in format ddmm.mmmm
+ *		hemi		- Hemisphere or empty string.
+ *
+ * Returns:     None
+ *
+ *----------------------------------------------------------------*/
+
+void latitude_to_nmea (double dlat, char *slat, char *hemi)
+{
+	int ideg;	/* whole number of degrees. */
+	double dmin;	/* Minutes after removing degrees. */
+	char smin[10];	/* Minutes in format mm.mmmm */
+	
+	if (dlat == G_UNKNOWN) {
+	  strcpy (slat, "");
+	  strcpy (hemi, "");
+	  return;
+	}
+
+	if (dlat < -90.) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Latitude is less than -90.  Changing to -90.n");
+	  dlat = -90.;
+	}
+	if (dlat > 90.) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Latitude is greater than 90.  Changing to 90.n");
+	  dlat = 90.;
+	}
+
+	if (dlat < 0) {
+	  dlat = (- dlat);
+	  strcpy (hemi, "S");
+	}
+	else {
+	  strcpy (hemi, "N");
+	}
+
+	ideg = (int)dlat;
+	dmin = (dlat - ideg) * 60.;
+
+	sprintf (smin, "%07.4f", dmin);
+	/* Due to roundoff, 59.99999 could come out as "60.0000" */
+	if (smin[0] == '6') {
+	  smin[0] = '0';
+	  ideg++;
+	}
+
+	sprintf (slat, "%02d%s", ideg, smin);
+
+} /* end latitude_to_str */
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        longitude_to_nmea
+ *
+ * Purpose:     Convert numeric longitude to strings for NMEA sentence.
+ *
+ * Inputs:      dlong		- Floating point degrees.
+ *
+ * Outputs:	slong		- String in format dddmm.mmmm
+ *		hemi		- Hemisphere or empty string.
+ *
+ * Returns:     None
+ *
+ *----------------------------------------------------------------*/
+
+void longitude_to_nmea (double dlong, char *slong, char *hemi)
+{
+	int ideg;	/* whole number of degrees. */
+	double dmin;	/* Minutes after removing degrees. */
+	char smin[10];	/* Minutes in format mm.mmmm */
+	
+	if (dlong == G_UNKNOWN) {
+	  strcpy (slong, "");
+	  strcpy (hemi, "");
+	  return;
+	}
+
+	if (dlong < -180.) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("longitude is less than -180.  Changing to -180.n");
+	  dlong = -180.;
+	}
+	if (dlong > 180.) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("longitude is greater than 180.  Changing to 180.n");
+	  dlong = 180.;
+	}
+
+	if (dlong < 0) {
+	  dlong = (- dlong);
+	  strcpy (hemi, "W");
+	}
+	else {
+	  strcpy (hemi, "E");
+	}
+
+	ideg = (int)dlong;
+	dmin = (dlong - ideg) * 60.;
+
+	sprintf (smin, "%07.4f", dmin);
+	/* Due to roundoff, 59.99999 could come out as "60.0000" */
+	if (smin[0] == '6') {
+	  smin[0] = '0';
+	  ideg++;
+	}
+
+	sprintf (slong, "%03d%s", ideg, smin);
+
+} /* end longitude_to_nmea */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	latitude_from_nmea
+ *
+ * Purpose:	Convert NMEA latitude encoding to degrees.
+ *
+ * Inputs:	pstr 	- Pointer to numeric string.
+ *		phemi	- Pointer to following field.  Should be N or S.
+ *
+ * Returns:	Double precision value in degrees.  Negative for South.
+ *
+ * Description:	Latitude field has
+ *			2 digits for degrees
+ *			2 digits for minutes
+ *			period
+ *			Variable number of fractional digits for minutes.
+ *			I've seen 2, 3, and 4 fractional digits.
+ *
+ *
+ * Bugs:	Very little validation of data.
+ *
+ * Errors:	Return constant G_UNKNOWN for any type of error.
+ *		Could we use special "NaN" code?
+ *
+ *------------------------------------------------------------------*/
+
+
+double latitude_from_nmea (char *pstr, char *phemi)
+{
+
+	double lat;
+
+	if ( ! isdigit((unsigned char)(pstr[0]))) return (G_UNKNOWN);
+
+	if (pstr[4] != '.') return (G_UNKNOWN);
+
+
+	lat = (pstr[0] - '0') * 10 + (pstr[1] - '0') + atof(pstr+2) / 60.0;
+
+	if (lat < 0 || lat > 90) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Error: Latitude not in range of 0 to 90.\n");	  
+	}
+
+	// Saw this one time:
+	//	$GPRMC,000000,V,0000.0000,0,00000.0000,0,000,000,000000,,*01
+
+	// If location is unknown, I think the hemisphere should be
+	// an empty string.  TODO: Check on this.
+	// 'V' means void, so sentence should be discarded rather than
+	// trying to extract any data from it.
+
+	if (*phemi != 'N' && *phemi != 'S' && *phemi != '\0') {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Error: Latitude hemisphere should be N or S.\n");	  
+	}
+
+	if (*phemi == 'S') lat = ( - lat);
+
+	return (lat);
+}
+
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	longitude_from_nmea
+ *
+ * Purpose:	Convert NMEA longitude encoding to degrees.
+ *
+ * Inputs:	pstr 	- Pointer to numeric string.
+ *		phemi	- Pointer to following field.  Should be E or W.
+ *
+ * Returns:	Double precision value in degrees.  Negative for West.
+ *
+ * Description:	Longitude field has
+ *			3 digits for degrees
+ *			2 digits for minutes
+ *			period
+ *			Variable number of fractional digits for minutes
+ *
+ *
+ * Bugs:	Very little validation of data.
+ *
+ * Errors:	Return constant G_UNKNOWN for any type of error.
+ *		Could we use special "NaN" code?
+ *
+ *------------------------------------------------------------------*/
+
+
+double longitude_from_nmea (char *pstr, char *phemi)
+{
+	double lon;
+
+	if ( ! isdigit((unsigned char)(pstr[0]))) return (G_UNKNOWN);
+
+	if (pstr[5] != '.') return (G_UNKNOWN);
+
+	lon = (pstr[0] - '0') * 100 + (pstr[1] - '0') * 10 + (pstr[2] - '0') + atof(pstr+3) / 60.0;
+
+	if (lon < 0 || lon > 180) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Error: Longitude not in range of 0 to 180.\n");	  
+	}
+	
+	if (*phemi != 'E' && *phemi != 'W' && *phemi != '\0') {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Error: Longitude hemisphere should be E or W.\n");	  
+	}
+
+	if (*phemi == 'W') lon = ( - lon);
+
+	return (lon);
 }

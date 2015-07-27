@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011,2013,2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -110,14 +110,21 @@ static int xmit_bits_per_sec[MAX_CHANS];	/* Data transmission rate. */
 					/* this case but could be different with other */
 					/* modulation techniques. */
 
+static int g_debug_xmit_packet;		/* print packet in hexadecimal form for debugging. */
+
+
 
 #define BITS_TO_MS(b,ch) (((b)*1000)/xmit_bits_per_sec[(ch)])
 
 #define MS_TO_BITS(ms,ch) (((ms)*xmit_bits_per_sec[(ch)])/1000)
 
 
-
+#if __WIN32__
+static unsigned __stdcall xmit_thread (void *arg);
+#else
 static void * xmit_thread (void *arg);
+#endif
+
 static int wait_for_clear_channel (int channel, int nowait, int slotttime, int persist);
 
 
@@ -142,7 +149,7 @@ static int wait_for_clear_channel (int channel, int nowait, int slotttime, int p
 
 
 
-void xmit_init (struct audio_s *p_modem)
+void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 {
 	int j;
 #if __WIN32__
@@ -158,6 +165,8 @@ void xmit_init (struct audio_s *p_modem)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("xmit_init ( ... )\n");
 #endif
+
+	g_debug_xmit_packet = debug_xmit_packet;
 
 /*
  * Push to Talk (PTT) control.
@@ -202,7 +211,7 @@ void xmit_init (struct audio_s *p_modem)
 // underrun on the audio output device.
 
 #if __WIN32__
-	xmit_th = _beginthreadex (NULL, 0, xmit_thread, NULL, 0, NULL);
+	xmit_th = (HANDLE)_beginthreadex (NULL, 0, xmit_thread, NULL, 0, NULL);
 	if (xmit_th == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not create xmit thread\n");
@@ -377,7 +386,11 @@ void xmit_set_txtail (int channel, int value)
  *
  *--------------------------------------------------------------------*/
 
+#if __WIN32__
+static unsigned __stdcall xmit_thread (void *arg)
+#else
 static void * xmit_thread (void *arg)
+#endif
 {
 	packet_t pp;
     	unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
@@ -455,14 +468,25 @@ static void * xmit_thread (void *arg)
 	          text_color_set(DW_COLOR_XMIT);
 	          dw_printf ("[%d%c] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L');
 	          dw_printf ("%s", stemp);			/* stations followed by : */
-	          ax25_safe_print ((char *)pinfo, info_len, 0);
+	          ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	          dw_printf ("\n");
 
-		  flen = ax25_pack (pp, fbuf);
-		  assert (flen <= sizeof(fbuf));
+/* Optional hex dump of packet. */
+
+		  if (g_debug_xmit_packet) {
+
+	            text_color_set(DW_COLOR_DEBUG);
+	            dw_printf ("------\n");
+		    ax25_hex_dump (pp);
+    	            dw_printf ("------\n");
+		  }
+
 /*
  * Transmit the frame.
- */		
+ * 1.1J fixed order.
+ */	
+		  flen = ax25_pack (pp, fbuf);
+		  assert (flen >= 1 && flen <= sizeof(fbuf));
 		  num_bits += hdlc_send_frame (c, fbuf, flen);
 		  numframe = 1;
 		  ax25_delete (pp);
@@ -483,14 +507,21 @@ static void * xmit_thread (void *arg)
 	            text_color_set(DW_COLOR_XMIT);
 	            dw_printf ("[%d%c] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L');
 	            dw_printf ("%s", stemp);			/* stations followed by : */
-	            ax25_safe_print ((char *)pinfo, info_len, 0);
+	            ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	            dw_printf ("\n");
 
-		    flen = ax25_pack (pp, fbuf);
-		    assert (flen <= sizeof(fbuf));
+		    if (g_debug_xmit_packet) {
+	              text_color_set(DW_COLOR_DEBUG);
+	              dw_printf ("------\n");
+		      ax25_hex_dump (pp);
+    	              dw_printf ("------\n");
+		    }
+
 /*
  * Transmit the frame.
  */		
+		    flen = ax25_pack (pp, fbuf);
+		    assert (flen >= 1 && flen <= sizeof(fbuf));
 		    num_bits += hdlc_send_frame (c, fbuf, flen);
 		    numframe++;
 		    ax25_delete (pp);
@@ -559,7 +590,7 @@ static void * xmit_thread (void *arg)
 	          dw_printf ("[%d%c] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L');
 
 	          dw_printf ("%s", stemp);			/* stations followed by : */
-	          ax25_safe_print ((char *)pinfo, info_len, 0);
+	          ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	          dw_printf ("\n");
 		  ax25_delete (pp);
 

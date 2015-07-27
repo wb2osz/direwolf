@@ -41,6 +41,8 @@ struct digi_config_s {
 
 	enum preempt_e { PREEMPT_OFF, PREEMPT_DROP, PREEMPT_MARK, PREEMPT_TRACE } preempt[MAX_CHANS][MAX_CHANS];
 
+	int regen[MAX_CHANS][MAX_CHANS];	// Regenerate packet.  
+						// Sort of like digipeating but passed along unchanged.
 };
 
 /*
@@ -55,6 +57,9 @@ extern void digipeater_init (struct digi_config_s *p_digi_config);
  */
 
 extern void digipeater (int from_chan, packet_t pp);
+
+void digi_regen (int from_chan, packet_t pp);
+
 
 #endif 
 

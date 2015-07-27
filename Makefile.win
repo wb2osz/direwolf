@@ -16,7 +16,7 @@
 #
 
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx
 
 
 # People say we need -mthreads option for threads to work properly.
@@ -25,8 +25,8 @@ all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients
 #TODO: put -Ofast back in.
 
 CC = gcc
-#CFLAGS = -g -Wall -Ofast -march=pentium3 -msse -Iregex -mthreads -DUSE_REGEX_STATIC
-CFLAGS = -g -Wall -march=pentium3 -msse -Iregex -mthreads -DUSE_REGEX_STATIC
+#CFLAGS = -g -Wall -Ofast -march=pentium3 -msse -Iregex -Iutm -mthreads -DUSE_REGEX_STATIC
+CFLAGS = -g -Wall -march=pentium3 -msse -Iregex -Iutm -mthreads -DUSE_REGEX_STATIC
 AR = ar
 
 
@@ -77,7 +77,7 @@ direwolf : direwolf.o config.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o audio_win.o digipeater.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o \
 		dw-icon.o regex.a misc.a utm.a
 	$(CC) $(CFLAGS) -g -o $@ $^ -lwinmm -lws2_32
 
@@ -137,7 +137,7 @@ strcasestr.o : misc/strcasestr.c
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c regex.a misc.a
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.o telemetry.o regex.a misc.a utm.a
 	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^
 
 
@@ -153,10 +153,16 @@ tt2text : tt_text.c
 # Convert between Latitude/Longitude and UTM coordinates.
 
 ll2utm : ll2utm.c utm.a
-	$(CC) $(CFLAGS) -I utm -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^
 
 utm2ll : utm2ll.c utm.a
-	$(CC) $(CFLAGS) -I utm -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^
+
+
+# Convert from log file to GPX.
+
+log2gpx : log2gpx.c misc/strsep.c misc/strtok_r.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 
 # Test application to generate sound.
@@ -172,7 +178,7 @@ demod_afsk.o : tune.h
 
 
 testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c regex.a misc.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		fsk_demod_agc.h
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -DNOFIX -o atest $^
@@ -183,7 +189,7 @@ noisy3.wav : gen_packets
 	./gen_packets -B 300 -n 100 -o noisy3.wav
 
 testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c regex.a misc.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		tune.h 
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
@@ -194,7 +200,7 @@ noisy96.wav : gen_packets
 	./gen_packets -B 9600 -n 100 -o noisy96.wav
 
 testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c regex.a misc.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		tune.h 
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
@@ -206,14 +212,14 @@ testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.
 
 
 atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a regex.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
 		fsk_fast_filter.h
 	$(CC) $(CFLAGS) -o $@ $^
 	echo " " > tune.h
 	./atest ..\\direwolf-0.2\\02_Track_2.wav 
 
 atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a regex.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
 		fsk_fast_filter.h
 	$(CC) $(CFLAGS) -o $@ $^
 	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
@@ -247,6 +253,14 @@ udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec
 	./udptest
 
 
+# Unit test for telemetry decoding.
+
+
+etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
+	$(CC) $(CFLAGS) -DTEST -o $@ $^
+	./etest
+	
+
 # Multiple AGWPE network or serial port clients to test TNCs side by side.
 
 aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
@@ -258,7 +272,7 @@ SRCS = direwolf.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c \
 		fcs_calc.c ax25_pad.c decode_aprs.c symbols.c \
 		server.c kiss.c kissnet.c kiss_frame.c hdlc_send.c fcs_calc.c gen_tone.c audio_win.c \
 		digipeater.c dedupe.c tq.c xmit.c beacon.c \
-		encode_aprs.c latlong.c \
+		encode_aprs.c latlong.c telemetry.c \
 		dtmf.c aprs_tt.c tt_text.c igate.c
 
 
@@ -275,15 +289,15 @@ clean :
 
 
 dist-win : direwolf.exe decode_aprs.exe CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf \
-			Raspberry-Pi-APRS.pdf APRStt-Implementation-Notes.pdf
+			Raspberry-Pi-APRS.pdf Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf
 	rm -f ../$z-win.zip
 	zip ../$z-win.zip CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf \
-		Raspberry-Pi-APRS.pdf APRStt-Implementation-Notes.pdf LICENSE* *.conf \
+		Raspberry-Pi-APRS.pdf Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf LICENSE* *.conf \
 		direwolf.exe decode_aprs.exe tocalls.txt symbols-new.txt symbolsX.txt \
-		text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe aclients.exe
+		text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe aclients.exe log2gpx.exe
 
 dist-src : CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-Pi-APRS.pdf \
-		APRStt-Implementation-Notes.pdf \
+		Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf \
 		direwolf.desktop dw-start.sh \
 		tocalls.txt symbols-new.txt symbolsX.txt
 	rm -f fsk_fast_filter.h
@@ -292,7 +306,7 @@ dist-src : CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-Pi
 	(cd .. ; zip $z-src.zip \
 		$z/CHANGES.txt $z/LICENSE* \
 		$z/User-Guide.pdf $z/Quick-Start-Guide-Windows.pdf \
-		$z/Raspberry-Pi-APRS.pdf $z/APRStt-Implementation-Notes.pdf \
+		$z/Raspberry-Pi-APRS.pdf $z/Raspberry-Pi-APRS-Tracker.pdf $z/APRStt-Implementation-Notes.pdf \
 		$z/Makefile* $z/*.c $z/*.h $z/regex/* $z/misc/* $z/utm/* \
 		$z/*.conf $z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
 		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
@@ -309,6 +323,10 @@ Quick-Start-Guide-Windows.pdf : Quick-Start-Guide-Windows.docx
 Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
 	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
 
+Raspberry-Pi-APRS-Tracker.pdf : Raspberry-Pi-APRS-Tracker.docx
+	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
+
+
 APRStt-Implementation-Notes.pdf : APRStt-Implementation-Notes.docx
 	echo "***** APRStt-Implementation-Notes.pdf is out of date *****"
 
@@ -316,6 +334,16 @@ APRStt-Implementation-Notes.pdf : APRStt-Implementation-Notes.docx
 backup :
 	mkdir /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
 	cp -r . /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
+
+#
+# The locations below appear to be the most recent.
+# The copy at http://www.aprs.org/tocalls.txt is out of date.
+#
+
+tocalls-symbols :
+	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
+	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
+	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
 
 #
 # The following is updated by "make depend"

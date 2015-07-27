@@ -145,14 +145,64 @@ int main (int argc, char *argv[])
 	modem.samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	
 	modem.bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	
 
+	// Results v0.9: 
+	//
+	// fix_bits = 0 	971 packets, 69 sec
+	// fix_bits = SINGLE	990          64
+	// fix_bits = DOUBLE    992          65
+	// fix_bits = TRIPLE    992          67
+	// fix_bits = TWO_SEP   1004        476 
+
+	// Essentially no difference in time for those with order N time.
+	// Time increases greatly for the one with order N^2 time.
+
+
+	// Results: version 1.1, decoder C, modem.fix_bits = RETRY_MAX - 1
+	//
+	// 971 NONE
+	// +19 SINGLE
+	// +2  DOUBLE
+	// +12 TWO_SEP
+	// +3  REMOVE_MANY
+	// ----
+	// 1007 Total in 1008 sec.   More than twice as long as earlier version.
+
+	// Results: version 1.1, decoders ABC, modem.fix_bits = RETRY_MAX - 1
+	//
+	// 976 NONE
+	// +21  SINGLE
+	// +1   DOUBLE
+	// +22  TWO_SEP
+	// +1   MANY
+	// +3   REMOVE_MANY
+	// ----
+	// 1024 Total in 2042 sec.
+	// About 34 minutes of CPU time for a roughly 40 minute CD.
+	// Many computers wouldn't be able to keep up.
+
+	// The SINGLE and TWO_SEP techniques are the most effective.
+	// Should we reorder the enum values so that TWO_SEP
+	// comes after SINGLE?   That way "FIX_BITS 2" would 
+	// use the two most productive techniques and not waste
+	// time on the others.  People with plenty of CPU power
+	// to spare can still specify larger numbers for the other
+	// techniques with less return on investment.
+
+
+
+// TODO: tabulate results from atest2.c.txt
+
+
 	/* TODO: should have a command line option for this. */
-	/* Results v0.9: 971/69, 990/64, 992/65, 992/67, 1004/476 */
 
 	modem.fix_bits = RETRY_NONE;
-	modem.fix_bits = RETRY_SINGLE;
-	modem.fix_bits = RETRY_DOUBLE;
-	//modem.fix_bits = RETRY_TRIPLE;
-	//modem.fix_bits = RETRY_TWO_SEP;
+	//modem.fix_bits = RETRY_SWAP_SINGLE;
+	//modem.fix_bits = RETRY_SWAP_DOUBLE;
+	//modem.fix_bits = RETRY_SWAP_TRIPLE;
+	//modem.fix_bits = RETRY_INSERT_DOUBLE;
+	modem.fix_bits = RETRY_SWAP_TWO_SEP;
+	//modem.fix_bits = RETRY_REMOVE_MANY;
+	//modem.fix_bits = RETRY_MAX - 1;
 
 	for (channel=0; channel<MAX_CHANS; channel++) {
 
@@ -162,6 +212,7 @@ int main (int argc, char *argv[])
 	  modem.space_freq[channel] = DEFAULT_SPACE_FREQ;		
 	  modem.baud[channel] = DEFAULT_BAUD;	
 	  strcpy (modem.profiles[channel], "C");	
+	  //strcpy (modem.profiles[channel], "ABC");	
 	// temp	
 	// strcpy (modem.profiles[channel], "F");		
 	  modem.num_subchan[channel] = strlen(modem.profiles[channel]);	
@@ -334,7 +385,6 @@ int main (int argc, char *argv[])
                 /* process_rec_frame, below, is called. */
 
 	}
-
 	text_color_set(DW_COLOR_INFO);
 	printf ("\n\n");
 	printf ("%d packets decoded in %d seconds.\n", packets_decoded, (int)(time(NULL) - start_time));
@@ -415,7 +465,7 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 
 	text_color_set(DW_COLOR_DEBUG);
 	printf ("\n");
-
+	printf("DECODED[%d] ", packets_decoded );
 	if (h != AX25_SOURCE) {
 	  printf ("Digipeater ");
 	}

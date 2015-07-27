@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013,2014  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -31,6 +31,9 @@
  *		http://www.aprs.org/aprstt.html
  *
  *---------------------------------------------------------------*/
+
+#define APRS_TT_C 1
+
 
 // TODO:  clean up terminolgy.  
 // "Message" has a specific meaning in APRS and this is not it.  
@@ -872,6 +875,7 @@ static int parse_symbol (char *e)
  *
  * Outputs:	m_latitude
  *		m_longitude
+ *		m_dao
  *
  * Returns:	0 for success or one of the TT_ERROR_... codes.
  *
@@ -914,6 +918,9 @@ static int parse_location (char *e)
 	m_dao[2] = e[0];
 	m_dao[3] = e[1];	/* Type of location.  e.g.  !TB6! */
 				/* Will be changed by point types. */
+
+				/* If this ever changes, be sure to update corresponding */
+				/* section in process_comment() in decode_aprs.c */
 
 	len = strlen(e);
 
@@ -1320,7 +1327,13 @@ static void raw_tt_data_to_app (int chan, char *msg)
  * thru the multi modem duplicate processing.
  */
 
-	app_process_rec_packet (chan, -1, pp, -2, RETRY_NONE, "tt");
+	if (pp != NULL) {
+	  app_process_rec_packet (chan, -1, pp, -2, RETRY_NONE, "tt");
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Could not convert \"%s\" into APRS packet.\n", raw_tt_msg);
+	}
 
 #endif
 }

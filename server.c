@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -85,6 +85,12 @@
  * 		Getting Started with Winsock
  *		http://msdn.microsoft.com/en-us/library/windows/desktop/bb530742(v=vs.85).aspx
  *
+ *
+ * Major change in 1.1:
+ *
+ *		Formerly a single client was allowed.
+ *		Now we can have multiple concurrent clients.
+ *
  *---------------------------------------------------------------*/
 
 
@@ -122,21 +128,42 @@
 #include "server.h"
 
 
+/*
+ * Previously, we allowed only one network connection at a time to each port.
+ * In version 1.1, we allow multiple concurrent client apps to connect.
+ */
 
-static int client_sock;		/* File descriptor for socket for */
-				/* communication with client application. */
-				/* Set to -1 if not connected. */
-				/* (Don't use SOCKET type because it is unsigned.) */
+#define MAX_NET_CLIENTS 3
 
-static int enable_send_raw_to_client;	/* Should we send received packets to client app? */
-static int enable_send_monitor_to_client;
+static int client_sock[MAX_NET_CLIENTS];	
+					/* File descriptor for socket for */
+					/* communication with client application. */
+					/* Set to -1 if not connected. */
+					/* (Don't use SOCKET type because it is unsigned.) */
+
+static int enable_send_raw_to_client[MAX_NET_CLIENTS];
+					/* Should we send received packets to client app in raw form? */
+					/* Note that it starts as false for a new connection. */
+					/* the client app must send a command to enable this. */
+
+static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
+					/* Should we send received packets to client app in monitor form? */
+					/* Note that it starts as false for a new connection. */
+					/* the client app must send a command to enable this. */
 
 
 static int num_channels;	/* Number of radio ports. */
 
 
-static void * connect_listen_thread (void *arg);
-static void * cmd_listen_thread (void *arg);
+// TODO:  define in one place, use everywhere.
+#if __WIN32__
+#define THREAD_F unsigned __stdcall
+#else 
+#define THREAD_F void *
+#endif
+
+static THREAD_F connect_listen_thread (void *arg);
+static THREAD_F cmd_listen_thread (void *arg);
 
 /*
  * Message header for AGW protocol.
@@ -169,12 +196,13 @@ struct agwpe_s {
  * Purpose:     Print message to/from client for debugging.
  *
  * Inputs:	fromto		- Direction of message.
+ *		client		- client number, 0 .. MAX_NET_CLIENTS-1
  *		pmsg		- Address of the message block.
  *		msg_len		- Length of the message.
  *
  *--------------------------------------------------------------------*/
 
-static int debug_client = 0;		/* Print information flowing from and to client. */
+static int debug_client = 0;		/* Debug option: Print information flowing from and to client. */
 
 void server_set_debug (int n) 
 {	
@@ -208,7 +236,7 @@ void hex_dump (unsigned char *p, int len)
 
 typedef enum fromto_e { FROM_CLIENT=0, TO_CLIENT=1 } fromto_t;
 
-static void debug_print (fromto_t fromto, struct agwpe_s *pmsg, int msg_len)
+static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int msg_len)
 {
 	char direction [10];
 	char datakind[80];
@@ -269,15 +297,15 @@ static void debug_print (fromto_t fromto, struct agwpe_s *pmsg, int msg_len)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n");
 
-	dw_printf ("%s %s %s AGWPE client application, total length = %d\n",
-			prefix[(int)fromto], datakind, direction, msg_len);
+	dw_printf ("%s %s %s AGWPE client application %d, total length = %d\n",
+			prefix[(int)fromto], datakind, direction, client, msg_len);
 
 	dw_printf ("\tportx = %d, port_hi_reserved = %d\n", pmsg->portx, pmsg->port_hi_reserved);
 	dw_printf ("\tkind_lo = %d = '%c', kind_hi = %d\n", pmsg->kind_lo, pmsg->kind_lo, pmsg->kind_hi);
 	dw_printf ("\tcall_from = \"%s\", call_to = \"%s\"\n", pmsg->call_from, pmsg->call_to);
 	dw_printf ("\tdata_len = %d, user_reserved = %d, data =\n", pmsg->data_len, pmsg->user_reserved);
 
-	hex_dump ((char*)pmsg + sizeof(struct agwpe_s), pmsg->data_len);
+	hex_dump ((unsigned char*)pmsg + sizeof(struct agwpe_s), pmsg->data_len);
 
 	if (msg_len < 36) {
 	  text_color_set (DW_COLOR_ERROR);
@@ -303,9 +331,9 @@ static void debug_print (fromto_t fromto, struct agwpe_s *pmsg, int msg_len)
  *
  * Outputs:	
  *
- * Description:	This starts two threads:
- *		  *  to listen for a connection from client app.
- *		  *  to listen for commands from client app.
+ * Description:	This starts at least two threads:
+ *		  *  one to listen for a connection from client app.
+ *		  *  one or more to listen for commands from client app.
  *		so the main application doesn't block while we wait for these.
  *
  *--------------------------------------------------------------------*/
@@ -313,15 +341,17 @@ static void debug_print (fromto_t fromto, struct agwpe_s *pmsg, int msg_len)
 
 void server_init (struct misc_config_s *mc)
 {
+	int client;
+
 #if __WIN32__
 	HANDLE connect_listen_th;
-	HANDLE cmd_listen_th;
+	HANDLE cmd_listen_th[MAX_NET_CLIENTS];
 #else
 	pthread_t connect_listen_tid;
-	pthread_t cmd_listen_tid;
+	pthread_t cmd_listen_tid[MAX_NET_CLIENTS];
 #endif
 	int e;
-	int server_port = mc->agwpe_port;
+	int server_port = mc->agwpe_port;		/* Usually 8000 but can be changed. */
 
 
 #if DEBUG
@@ -329,16 +359,18 @@ void server_init (struct misc_config_s *mc)
 	dw_printf ("server_init ( %d )\n", server_port);
 	debug_a = 1;
 #endif
-	client_sock = -1;
-	enable_send_raw_to_client = 0;
-	enable_send_monitor_to_client = 0;
+	for (client=0; client<MAX_NET_CLIENTS; client++) {
+	  client_sock[client] = -1;
+	  enable_send_raw_to_client[client] = 0;
+	  enable_send_monitor_to_client[client] = 0;
+	}
 	num_channels = mc->num_channels;
 
 /*
- * This waits for a client to connect and sets client_sock.
+ * This waits for a client to connect and sets an available client_sock[n].
  */
 #if __WIN32__
-	connect_listen_th = _beginthreadex (NULL, 0, connect_listen_thread, (void *)server_port, 0, NULL);
+	connect_listen_th = (HANDLE)_beginthreadex (NULL, 0, connect_listen_thread, (void *)(unsigned int)server_port, 0, NULL);
 	if (connect_listen_th == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not create AGW connect listening thread\n");
@@ -354,23 +386,28 @@ void server_init (struct misc_config_s *mc)
 #endif
 
 /*
- * This reads messages from client when client_sock is valid.
+ * These read messages from client when client_sock[n] is valid.
+ * Currently we start up a separate thread for each potential connection.
+ * Possible later refinement.  Start one now, others only as needed.
  */
+	for (client = 0; client < MAX_NET_CLIENTS; client++) {
+
 #if __WIN32__
-	cmd_listen_th = _beginthreadex (NULL, 0, cmd_listen_thread, NULL, 0, NULL);
-	if (cmd_listen_th == NULL) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Could not create AGW command listening thread\n");
-	  return;
-	}
+	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, cmd_listen_thread, (void*)client, 0, NULL);
+	  if (cmd_listen_th[client] == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Could not create AGW command listening thread\n");
+	    return;
+	  }
 #else
-	e = pthread_create (&cmd_listen_tid, NULL, cmd_listen_thread, NULL);
-	if (e != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  perror("Could not create AGW command listening thread");
-	  return;
-	}
+	  e = pthread_create (&cmd_listen_tid[client], NULL, cmd_listen_thread, (void *)(long)client);
+	  if (e != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    perror("Could not create AGW command listening thread");
+	    return;
+	  }
 #endif
+	}
 }
 
 
@@ -393,7 +430,7 @@ void server_init (struct misc_config_s *mc)
  *
  *--------------------------------------------------------------------*/
 
-static void * connect_listen_thread (void *arg)
+static THREAD_F connect_listen_thread (void *arg)
 {
 #if __WIN32__
 
@@ -414,7 +451,7 @@ static void * connect_listen_thread (void *arg)
 	if (err != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("WSAStartup failed: %d\n", err);
-	    return (NULL);
+	    return (NULL);		// TODO: what should this be for Windows?
 	}
 
 	if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
@@ -471,46 +508,59 @@ static void * connect_listen_thread (void *arg)
 #endif
 
  	while (1) {
-  	 
-	  while (client_sock > 0) {
-	    SLEEP_SEC(1);			/* Already connected.  Try again later. */
+
+	  int client;
+	  int c;
+	  
+	  client = -1;
+	  for (c = 0; c < MAX_NET_CLIENTS && client < 0; c++) {
+	    if (client_sock[c] <= 0) {
+	      client = c;
+	    }
 	  }
 
-#define QUEUE_SIZE 5
+/*
+ * Listen for connection if we have not reached maximum.
+ */
+	  if (client >= 0) {
 
-	  if(listen(listen_sock,QUEUE_SIZE) == SOCKET_ERROR)
-	  {
-	    text_color_set(DW_COLOR_ERROR);
-            dw_printf("Listen failed with error: %d\n", WSAGetLastError());
-	    return (NULL);
-	  }
+	    if(listen(listen_sock, MAX_NET_CLIENTS) == SOCKET_ERROR)
+	    {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf("Listen failed with error: %d\n", WSAGetLastError());
+	      return (NULL);
+	    }
 	
-	  text_color_set(DW_COLOR_INFO);
-          dw_printf("Ready to accept AGW client application on port %s ...\n", server_port_str);
+	    text_color_set(DW_COLOR_INFO);
+            dw_printf("Ready to accept AGW client application %d on port %s ...\n", client, server_port_str);
          
-          client_sock = accept(listen_sock, NULL, NULL);
+            client_sock[client] = accept(listen_sock, NULL, NULL);
 
-	  if (client_sock == -1) {
-	    text_color_set(DW_COLOR_ERROR);
-            dw_printf("Accept failed with error: %d\n", WSAGetLastError());
-            closesocket(listen_sock);
-            WSACleanup();
-            return (NULL);
-          }
+	    if (client_sock[client] == -1) {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf("Accept failed with error: %d\n", WSAGetLastError());
+              closesocket(listen_sock);
+              WSACleanup();
+              return (NULL);
+            }
 
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf("\nConnected to AGW client application ...\n\n");
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf("\nConnected to AGW client application %d ...\n\n", client);
 
 /*
  * The command to change this is actually a toggle, not explicit on or off.
  * Make sure it has proper state when we get a new connection.
  */ 
-	  enable_send_raw_to_client = 0;
-	  enable_send_monitor_to_client = 0;
-
+	    enable_send_raw_to_client[client] = 0;
+	    enable_send_monitor_to_client[client] = 0;
+	  }
+	  else {
+	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
+	  }
  	}
 
-#else
+#else		/* End of Windows case, now Linux */
+
 
     	struct sockaddr_in sockaddr; /* Internet socket address stuct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
@@ -547,35 +597,44 @@ static void * connect_listen_thread (void *arg)
 #endif
 
  	while (1) {
-  	 
-	  while (client_sock > 0) {
-	    SLEEP_SEC(1);			/* Already connected.  Try again later. */
+
+	  int client;
+	  int c;
+	  
+	  client = -1;
+	  for (c = 0; c < MAX_NET_CLIENTS && client < 0; c++) {
+	    if (client_sock[c] <= 0) {
+	      client = c;
+	    }
 	  }
 
-#define QUEUE_SIZE 5
+	  if (client >= 0) {
 
-	  if(listen(listen_sock,QUEUE_SIZE) == -1)
-	  {
-	    text_color_set(DW_COLOR_ERROR);
-	    perror ("connect_listen_thread: Listen failed");
-	    return (NULL);
-	  }
+	    if(listen(listen_sock,MAX_NET_CLIENTS) == -1)
+	    {
+	      text_color_set(DW_COLOR_ERROR);
+	      perror ("connect_listen_thread: Listen failed");
+	      return (NULL);
+	    }
 	
-	  text_color_set(DW_COLOR_INFO);
-          dw_printf("Ready to accept AGW client application on port %d ...\n", server_port);
+	    text_color_set(DW_COLOR_INFO);
+            dw_printf("Ready to accept AGW client application %d on port %d ...\n", client, server_port);
          
-          client_sock = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
+            client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf("\nConnected to AGW client application ...\n\n");
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf("\nConnected to AGW client application %d...\n\n", client);
 
 /*
  * The command to change this is actually a toggle, not explicit on or off.
  * Make sure it has proper state when we get a new connection.
  */ 
-	  enable_send_raw_to_client = 0;
-	  enable_send_monitor_to_client = 0;
-
+	    enable_send_raw_to_client[client] = 0;
+	    enable_send_monitor_to_client[client] = 0;
+	  }
+	  else {
+	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
+	  }
  	}
 #endif
 }
@@ -616,13 +675,15 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	int err;
 	int info_len;
 	unsigned char *pinfo;
+	int client;
+
 
 /*
  * RAW format
  */
-	
-	if (enable_send_raw_to_client 
-			&& client_sock > 0){
+	for (client=0; client<MAX_NET_CLIENTS; client++) {
+
+	  if (enable_send_raw_to_client[client] && client_sock[client] > 0){
 
 	    memset (&agwpe_msg.hdr, 0, sizeof(agwpe_msg.hdr));
 
@@ -642,37 +703,38 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    memcpy (agwpe_msg.data + 1, fbuf, (size_t)flen);
 
 	    if (debug_client) {
-	      debug_print (TO_CLIENT, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
 	    }
 
 #if __WIN32__	
-            err = send (client_sock, (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len, 0);
+            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len, 0);
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nError %d sending message to AGW client application.  Closing connection.\n\n", WSAGetLastError());
-	      closesocket (client_sock);
-	      client_sock = -1;
+	      closesocket (client_sock[client]);
+	      client_sock[client] = -1;
 	      WSACleanup();
 	    }
 #else
-            err = write (client_sock, &agwpe_msg, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
-	      close (client_sock);
-	      client_sock = -1;    
+	      close (client_sock[client]);
+	      client_sock[client] = -1;    
 	    }
 #endif
+	  }
 	}
 
 
 /* MONITOR format - only for UI frames. */
 
+	for (client=0; client<MAX_NET_CLIENTS; client++) {
 	
-	if (enable_send_monitor_to_client 
-			&& client_sock > 0 
+	  if (enable_send_monitor_to_client[client] && client_sock[client] > 0 
 			&& ax25_get_control(pp) == AX25_UI_FRAME){
 
 	    time_t clock;
@@ -710,29 +772,30 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    agwpe_msg.hdr.data_len = strlen(agwpe_msg.data) + 1 /* include null */ ;
 
 	    if (debug_client) {
-	      debug_print (TO_CLIENT, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
 	    }
 
 #if __WIN32__	
-            err = send (client_sock, (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len, 0);
+            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len, 0);
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to AGW client application.  Closing connection.\n\n", WSAGetLastError());
-	      closesocket (client_sock);
-	      client_sock = -1;
+	      dw_printf ("\nError %d sending message to AGW client application %d.  Closing connection.\n\n", WSAGetLastError(), client);
+	      closesocket (client_sock[client]);
+	      client_sock[client] = -1;
 	      WSACleanup();
 	    }
 #else
-            err = write (client_sock, &agwpe_msg, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
-	      close (client_sock);
-	      client_sock = -1;    
+	      dw_printf ("\nError sending message to AGW client application %d.  Closing connection.\n\n", client);
+	      close (client_sock[client]);
+	      client_sock[client] = -1;    
 	    }
 #endif
+	  }
 	}
 
 } /* server_send_rec_packet */
@@ -800,9 +863,9 @@ static int read_from_socket (int fd, char *ptr, int len)
  *
  * Purpose:     Wait for command messages from an application.
  *
- * Inputs:	arg		- Not used.
+ * Inputs:	arg		- client number, 0 .. MAX_NET_CLIENTS-1
  *
- * Outputs:	client_sock	- File descriptor for communicating with client app.
+ * Outputs:	client_sock[n]	- File descriptor for communicating with client app.
  *
  * Description:	Process messages from the client application.
  *		Note that the client can go away and come back again and
@@ -810,10 +873,9 @@ static int read_from_socket (int fd, char *ptr, int len)
  *
  *--------------------------------------------------------------------*/
 
-static void * cmd_listen_thread (void *arg)
+static THREAD_F cmd_listen_thread (void *arg)
 {
 	int n;
-
 
 	struct {
 	  struct agwpe_s hdr;		/* Command header. */
@@ -822,44 +884,85 @@ static void * cmd_listen_thread (void *arg)
 					/* Maximum for 'V': 1 + 8*10 + 256 */
 	} cmd;
 
+	int client = (int) arg;
+
+	assert (client >= 0 && client < MAX_NET_CLIENTS);
+
 	while (1) {
 
-	  while (client_sock <= 0) {
+	  while (client_sock[client] <= 0) {
 	    SLEEP_SEC(1);			/* Not connected.  Try again later. */
 	  }
 
-	  n = read_from_socket (client_sock, (char *)(&cmd.hdr), sizeof(cmd.hdr));
+	  n = read_from_socket (client_sock[client], (char *)(&cmd.hdr), sizeof(cmd.hdr));
 	  if (n != sizeof(cmd.hdr)) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\nError getting message header from client application.\n");
+	    dw_printf ("\nError getting message header from AGW client application %d.\n", client);
 	    dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
 	    dw_printf ("Closing connection.\n\n");
 #if __WIN32__
-	    closesocket (client_sock);
+	    closesocket (client_sock[client]);
 #else
-	    close (client_sock);
+	    close (client_sock[client]);
 #endif
-	    client_sock = -1;
+	    client_sock[client] = -1;
 	    continue;
 	  }
 
-	  assert (cmd.hdr.data_len >= 0 && cmd.hdr.data_len < sizeof(cmd.data));
+/*
+ * Take some precautions to guard against bad data
+ * which could cause problems later.
+ */
+
+/*
+ * Call to/from must not exceeed 9 characters.
+ * It's not guaranteed that unused bytes will contain 0 so we
+ * don't issue error message in this case. 
+ */
+
+	  cmd.hdr.call_from[sizeof(cmd.hdr.call_from)-1] = '\0';
+	  cmd.hdr.call_to[sizeof(cmd.hdr.call_to)-1] = '\0';
+
+/*
+ * Following data must fit in available buffer.
+ * Leave room for an extra nul byte terminator at end later.
+ */
+
+	  if (cmd.hdr.data_len < 0 || cmd.hdr.data_len > sizeof(cmd.data) - 1) {
+
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("\nInvalid message from AGW client application %d.\n", client);
+	    dw_printf ("Data Length of %d is out of range.\n", cmd.hdr.data_len);
+	
+	    /* This is a bad situation. */
+	    /* If we tried to read again, the header probably won't be there. */
+	    /* No point in trying to continue reading.  */
+
+	    dw_printf ("Closing connection.\n\n");
+#if __WIN32__
+	    closesocket (client_sock[client]);
+#else
+	    close (client_sock[client]);
+#endif
+	    client_sock[client] = -1;
+	    return NULL;
+	  }
 
 	  cmd.data[0] = '\0';
 
 	  if (cmd.hdr.data_len > 0) {
-	    n = read_from_socket (client_sock, cmd.data, cmd.hdr.data_len);
+	    n = read_from_socket (client_sock[client], cmd.data, cmd.hdr.data_len);
 	    if (n != cmd.hdr.data_len) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError getting message data from client application.\n");
+	      dw_printf ("\nError getting message data from AGW client application %d.\n", client);
 	      dw_printf ("Tried to read %d bytes but got only %d.\n", cmd.hdr.data_len, n);
 	      dw_printf ("Closing connection.\n\n");
 #if __WIN32__
-	      closesocket (client_sock);
+	      closesocket (client_sock[client]);
 #else
-	      close (client_sock);
+	      close (client_sock[client]);
 #endif
-	      client_sock = -1;
+	      client_sock[client] = -1;
 	      return NULL;
 	    }
 	    if (n > 0) {
@@ -872,7 +975,7 @@ static void * cmd_listen_thread (void *arg)
  */
 
 	  if (debug_client) {
-	    debug_print (FROM_CLIENT, &cmd.hdr, sizeof(cmd.hdr) + cmd.hdr.data_len);
+	    debug_print (FROM_CLIENT, client, &cmd.hdr, sizeof(cmd.hdr) + cmd.hdr.data_len);
 	  }
 
 	  switch (cmd.hdr.kind_lo) {
@@ -901,15 +1004,15 @@ static void * cmd_listen_thread (void *arg)
 		assert (sizeof(reply) == 44);
 
 	        if (debug_client) {
-	          debug_print (TO_CLIENT, &reply.hdr, sizeof(reply));
+	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply));
 	        }
 
 // TODO:  Should have unified function instead of multiple versions everywhere.
 
 #if __WIN32__	      
-	        send (client_sock, (char*)(&reply), sizeof(reply), 0);
+	        send (client_sock[client], (char*)(&reply), sizeof(reply), 0);
 #else
-	        write (client_sock, &reply, sizeof(reply));
+	        n = write (client_sock[client], &reply, sizeof(reply));
 #endif
 	      }
 	      break;
@@ -940,13 +1043,13 @@ static void * cmd_listen_thread (void *arg)
 		assert (reply.hdr.data_len == 100);
 
 	        if (debug_client) {
-	          debug_print (TO_CLIENT, &reply.hdr, sizeof(reply));
+	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply));
 	        }
 
 #if __WIN32__     
-	        send (client_sock, (char*)(&reply), sizeof(reply), 0);
+	        send (client_sock[client], (char*)(&reply), sizeof(reply), 0);
 #else
-	        write (client_sock, &reply, sizeof(reply));
+	        n = write (client_sock[client], &reply, sizeof(reply));
 #endif
 	      }
 	      break;
@@ -991,13 +1094,13 @@ static void * cmd_listen_thread (void *arg)
 		assert (sizeof(reply) == 48);
 
 	        if (debug_client) {
-	          debug_print (TO_CLIENT, &reply.hdr, sizeof(reply));
+	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply));
 	        }
 
 #if __WIN32__     
-	        send (client_sock, (char*)(&reply), sizeof(reply), 0);
+	        send (client_sock[client], (char*)(&reply), sizeof(reply), 0);
 #else
-	        write (client_sock, &reply, sizeof(reply));
+	        n = write (client_sock[client], &reply, sizeof(reply));
 #endif
 	      }
 	      break;
@@ -1027,13 +1130,13 @@ static void * cmd_listen_thread (void *arg)
 	        reply.hdr.data_len = strlen(reply.info);
 
 	        if (debug_client) {
-	          debug_print (TO_CLIENT, &reply.hdr, sizeof(reply.hdr) + reply.hdr.data_len);
+	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply.hdr) + reply.hdr.data_len);
 	        }
 
 #if __WIN32__     
-	        send (client_sock, &reply, sizeof(reply.hdr) + reply.hdr.data_len, 0);
+	        send (client_sock[client], &reply, sizeof(reply.hdr) + reply.hdr.data_len, 0);
 #else
-	        write (client_sock, &reply, sizeof(reply.hdr) + reply.hdr.data_len);
+	        write (client_sock[client], &reply, sizeof(reply.hdr) + reply.hdr.data_len);
 #endif	      
 
 #endif
@@ -1047,14 +1150,14 @@ static void * cmd_listen_thread (void *arg)
 
 	      // Actually it is a toggle so we must be sure to clear it for a new connection.
 
-	      enable_send_raw_to_client = ! enable_send_raw_to_client;
+	      enable_send_raw_to_client[client] = ! enable_send_raw_to_client[client];
 	      break;
 
 	    case 'm':				/* Ask to start receiving Monitor frames */
 
 	      // Actually it is a toggle so we must be sure to clear it for a new connection.
 
-	      enable_send_monitor_to_client = ! enable_send_monitor_to_client;
+	      enable_send_monitor_to_client[client] = ! enable_send_monitor_to_client[client];
 	      break;
 
 
@@ -1073,6 +1176,8 @@ static void * cmd_listen_thread (void *arg)
 		packet_t pp;
     		//unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
     		//int flen;
+
+		// We have already assured these do not exceed 9 characters.
 
 	      	strcpy (stemp, cmd.hdr.call_from);
 	      	strcat (stemp, ">");
@@ -1125,11 +1230,23 @@ static void * cmd_listen_thread (void *arg)
 	      	//	data length
 	      	//	data which is raw ax.25 frame.
 		//		
-
 	      
 		packet_t pp;
 
-		pp = ax25_from_frame ((unsigned char *)cmd.data+1, cmd.hdr.data_len, -1);
+		// Bug fix in version 1.1:
+		//
+		// The first byte of data is described as:
+		//
+		// 		the “TNC” to use
+		//		00=Port 1
+		//		16=Port 2
+		//
+		// I don't know what that means; we already a port number in the header.
+		// Anyhow, the original code here added one to cmd.data to get the 
+		// first byte of the frame.  Unfortunately, it did not subtract one from
+		// cmd.hdr.data_len so we ended up sending an extra byte.
+
+		pp = ax25_from_frame ((unsigned char *)cmd.data+1, cmd.hdr.data_len - 1, -1);
 
 		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
@@ -1177,13 +1294,13 @@ static void * cmd_listen_thread (void *arg)
 		// That's why more cumbersome size expression is used.
 
 	        if (debug_client) {
-	          debug_print (TO_CLIENT, &reply.hdr, sizeof(reply.hdr) + sizeof(reply.data));
+	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply.hdr) + sizeof(reply.data));
 	        }
 
 #if __WIN32__     
-	        send (client_sock, (char*)(&reply), sizeof(reply.hdr) + sizeof(reply.data), 0);
+	        send (client_sock[client], (char*)(&reply), sizeof(reply.hdr) + sizeof(reply.data), 0);
 #else
-	        write (client_sock, &reply, sizeof(reply.hdr) + sizeof(reply.data));
+	        n = write (client_sock[client], &reply, sizeof(reply.hdr) + sizeof(reply.data));
 #endif
 	      }
 	      break;
@@ -1201,7 +1318,7 @@ static void * cmd_listen_thread (void *arg)
 
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\n");
-	      dw_printf ("Can't process command from AGW client app.\n");
+	      dw_printf ("Can't process command from AGW client app %d.\n", client);
 	      dw_printf ("Connected packet mode is not implemented.\n");
 
 	      break;
@@ -1211,9 +1328,10 @@ static void * cmd_listen_thread (void *arg)
 
 		Not sure what we might want to do here.  
 		AGWterminal sends this for beacon or ask QRA.
+		None of the other tested applications use it.
 
 
-		<<< Send UNPROTO Information from AGWPE client application, total length = 253
+		<<< Send UNPROTO Information from AGWPE client application 0, total length = 253
 		        portx = 0, port_hi_reserved = 0
 		        kind_lo = 77 = 'M', kind_hi = 0
 		        call_from = "SV2AGW-1", call_to = "BEACON"
@@ -1222,21 +1340,43 @@ static void * cmd_listen_thread (void *arg)
 		  010:  73 20 74 68 65 20 6e 65 77 20 41 47 57 20 50 61  s the new AGW Pa
 		  020:  63 6b 65 74 20 45 6e 67 69 6e 65 20 77 69 6e 73  cket Engine wins
 
-		<<< Send UNPROTO Information from AGWPE client application, total length = 37
+		<<< Send UNPROTO Information from AGWPE client application 0, total length = 37
 		        portx = 0, port_hi_reserved = 0
 		        kind_lo = 77 = 'M', kind_hi = 0
 		        call_from = "SV2AGW-1", call_to = "QRA"
 		        data_len = 1, user_reserved = 32218432, data =
 		  000:  0d                                               .
 
+	      {
+	      
+		packet_t pp;
+		int pid = cmd.datakind_hi & 0xff;
+			/* "AX.25 PID 0x00 or 0xF0 for AX.25 0xCF NETROM and others" */
+
+
+		This is not right.
+		It needs to be more like "V" Transmit UI data frame
+		except there are no digipeaters involved.
+
+		pp = ax25_from_frame ((unsigned char *)cmd.data, cmd.hdr.data_len, -1);
+
+		if (pp != NULL) {
+		  tq_append (cmd.hdr.portx, TQ_PRIO_1_LO, pp);
+		  ax25_set_pid (pp, pid);
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Failed to create frame from AGW 'M' message.\n");
+		}
+	      }
 	      break;
 
 #endif
 	    default:
 
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("--- Unexpected Command from application using AGW protocol:\n");
-	      debug_print (FROM_CLIENT, &cmd.hdr, sizeof(cmd.hdr) + cmd.hdr.data_len);
+	      dw_printf ("--- Unexpected Command from application %d using AGW protocol:\n", client);
+	      debug_print (FROM_CLIENT, client, &cmd.hdr, sizeof(cmd.hdr) + cmd.hdr.data_len);
 
 	      break;
 	  }

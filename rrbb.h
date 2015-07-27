@@ -37,6 +37,9 @@ typedef struct rrbb_s {
 	int subchan;		/* Which modem when more than one per channel. */
 	int audio_level;	/* Received audio level at time of frame capture. */
 	unsigned int len;	/* Current number of samples in array. */
+	int fix_bits;		/* Level of effort to recover from */
+				/* a bad FCS on the frame. */
+
 
 	int is_scrambled;	/* Is data scrambled G3RUH / K9NG style? */
 	int descram_state;	/* Descrambler state before first data bit of frame. */
@@ -46,6 +49,7 @@ typedef struct rrbb_s {
 	slice_t data[MAX_NUM_BITS];
 #else
 	unsigned int data[(MAX_NUM_BITS+SOI-1)/SOI];
+	unsigned int computed_data[MAX_NUM_BITS];
 #endif
 	int magic2;
 } *rrbb_t;
@@ -79,6 +83,8 @@ void rrbb_set_slice_val (rrbb_t b, slice_t slice_val);
 #endif
 
 int rrbb_get_bit (rrbb_t b, unsigned int ind);
+unsigned int rrbb_get_computed_bit (rrbb_t b, unsigned int ind);
+int rrbb_compute_bits (rrbb_t b);
 
 //void rrbb_flip_bit (rrbb_t b, unsigned int ind);
 
@@ -98,5 +104,8 @@ int rrbb_get_audio_level (rrbb_t b);
 int rrbb_get_is_scrambled (rrbb_t b);
 
 int rrbb_get_descram_state (rrbb_t b);
+
+int rrbb_get_fix_bits(rrbb_t b);
+void rrbb_set_fix_bits(rrbb_t b, int fix_bits);
 
 #endif

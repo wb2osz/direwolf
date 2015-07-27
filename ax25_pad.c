@@ -1,10 +1,8 @@
-// TODO:  Shouldn't this be using dw_printf???
-
 
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011 , 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -39,7 +37,7 @@
  *		(b) print in human-readable text.
  *		(c) take it apart piece by piece.
  *
- *		Looking at the more general case, we might want to modify
+ *		Looking at the more general case, we also want to modify
  *		an existing packet.  For instance an APRS repeater might 
  *		want to change "WIDE2-2" to "WIDE2-1" and retransmit it.
  *
@@ -56,8 +54,8 @@
  *					and decrementing the remaining count in
  *					WIDEn-n, TRACEn-n, etc.?   
  *					NO.  The limit is 8 when transmitting AX.25 over the radio.
- *					However, communication with an IGate server
- *					could have a longer VIA path but that is in text form.)
+ *					However, communication with an IGate server could have 
+ *					a longer VIA path but that is only in text form, not here.)
  *
  *	Each address is composed of:
  *
@@ -113,6 +111,8 @@
  *	Next we have:
  *
  *	* One byte Control Field 	- APRS uses 3 for UI frame
+ *					   The more general AX.25 frame can have two.
+ *
  *	* One byte Protocol ID 		- APRS uses 0xf0 for no layer 3
  *
  *	Finally the Information Field of 1-256 bytes.
@@ -164,6 +164,9 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 static int new_count = 0;
 static int delete_count = 0;
 
+#define CLEAR_LAST_ADDR_FLAG  this_p->frame_data[this_p->num_addr*7-1] &= ~ SSID_LAST_MASK
+#define SET_LAST_ADDR_FLAG  this_p->frame_data[this_p->num_addr*7-1] |= SSID_LAST_MASK
+
 
 /*------------------------------------------------------------------------------
  *
@@ -200,6 +203,7 @@ static packet_t ax25_new (void)
 	this_p = calloc(sizeof (struct packet_s), (size_t)1);
 	this_p->magic1 = MAGIC;
 	this_p->magic2 = MAGIC;
+	this_p->num_addr = (-1);
 	return (this_p);
 }
 
@@ -239,6 +243,12 @@ void ax25_delete (packet_t this_p)
  *		strict	- True to enforce rules for packets sent over the air.
  *			  False to be more lenient for packets from IGate server.
  *
+ *			  Messages from an IGate server can have longer 
+ *		 	  addresses after qAC.  Up to 9 observed so far. 
+ *
+ *			  We can just truncate the name because we will only
+ *			  end up discarding it.    TODO:  check on this.
+ *
  * Returns:	Pointer to new packet object in the current implementation.
  *
  * Outputs:	Use the "get" functions to retrieve information in different ways.
@@ -266,13 +276,14 @@ packet_t ax25_from_text (char *monitor, int strict)
 	int keep_going;
 	char temp[512];
 	int ssid_temp, heard_temp;
-
+	char atemp[AX25_MAX_ADDR_LEN];
 
 	
 	packet_t this_p = ax25_new ();
 
 	/* Is it possible to have a nul character (zero byte) in the */
 	/* information field of an AX.25 frame? */
+	/* Yes, but it would be difficult in the from-text case. */
 
 	strcpy (stuff, monitor);
 
@@ -323,6 +334,24 @@ packet_t ax25_from_text (char *monitor, int strict)
 #endif
 
 /*
+ * Initialize the packet with two addresses and control/pid
+ * for APRS.
+ */
+	memset (this_p->frame_data + AX25_DESTINATION*7, ' ' << 1, 6);
+	this_p->frame_data[AX25_DESTINATION*7+6] = SSID_H_MASK | SSID_RR_MASK;
+ 
+	memset (this_p->frame_data + AX25_SOURCE*7, ' ' << 1, 6);
+	this_p->frame_data[AX25_SOURCE*7+6] = SSID_H_MASK | SSID_RR_MASK | SSID_LAST_MASK;
+
+	this_p->frame_data[14] = AX25_UI_FRAME;
+	this_p->frame_data[15] = AX25_NO_LAYER_3;
+
+	this_p->frame_len = 7 + 7 + 1 + 1;
+	this_p->num_addr = (-1);
+	assert (ax25_get_num_addr(this_p) == 2);
+
+
+/*
  * Separate the addresses from the rest.
  */
 	pinfo = strchr (stuff, ':');
@@ -341,15 +370,10 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  pinfo[AX25_MAX_INFO_LEN] = '\0';
 	}
 	
-	strcpy ((char*)(this_p->the_rest + 2), pinfo);
-	this_p->the_rest_len = strlen(pinfo) + 2;
-
 /*
- * Now separate the addresses.
+ * Separate the addresses.
  * Note that source and destination order is swappped.
  */
-
-	this_p->num_addr = 2;
 
 /*
  * Source address.
@@ -363,14 +387,16 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  return (NULL);
 	}
 
-	if ( ! ax25_parse_addr (pa, strict, this_p->addrs[AX25_SOURCE], &ssid_temp, &heard_temp)) {
+	if ( ! ax25_parse_addr (pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Failed to create packet from text.  Bad source address\n");
 	  ax25_delete (this_p);
 	  return (NULL);
 	}
 
-	this_p->ssid_etc[AX25_SOURCE] = SSID_H_MASK | SSID_RR_MASK;
+	ax25_set_addr (this_p, AX25_SOURCE, pa);
+	ax25_set_h (this_p, AX25_SOURCE);	// c/r in this position
+
 	ax25_set_ssid (this_p, AX25_SOURCE, ssid_temp);
 
 /*
@@ -385,14 +411,16 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  return (NULL);
 	}
 
-	if ( ! ax25_parse_addr (pa, strict, this_p->addrs[AX25_DESTINATION], &ssid_temp, &heard_temp)) {
+	if ( ! ax25_parse_addr (pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Failed to create packet from text.  Bad destination address\n");
 	  ax25_delete (this_p);
 	  return (NULL);
 	}
 
-	this_p->ssid_etc[AX25_DESTINATION] = SSID_H_MASK | SSID_RR_MASK;
+	ax25_set_addr (this_p, AX25_DESTINATION, pa);
+	ax25_set_h (this_p, AX25_DESTINATION);	// c/r in this position
+
 	ax25_set_ssid (this_p, AX25_DESTINATION, ssid_temp);
 
 /*
@@ -405,16 +433,17 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 	  k = this_p->num_addr;
 
-	  this_p->num_addr++;
+	  // JWL 10:38 this_p->num_addr++;
 
-	  if ( ! ax25_parse_addr (pa, strict, this_p->addrs[k], &ssid_temp, &heard_temp)) {
+	  if ( ! ax25_parse_addr (pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Failed to create packet from text.  Bad digipeater address\n");
 	    ax25_delete (this_p);
 	    return (NULL);
 	  }
 
-	  this_p->ssid_etc[k] = SSID_RR_MASK;
+	  ax25_set_addr (this_p, k, pa);
+	  
 	  ax25_set_ssid (this_p, k, ssid_temp);
 
 	  // Does it have an "*" at the end? 
@@ -427,9 +456,13 @@ packet_t ax25_from_text (char *monitor, int strict)
 	    }
 	  }
         }
-	
-	this_p->the_rest[0] = AX25_UI_FRAME;
-	this_p->the_rest[1] = AX25_NO_LAYER_3;
+
+/*
+ * Append the info part.  
+ */
+	strcpy ((char*)(this_p->frame_data+this_p->frame_len), pinfo);
+	this_p->frame_len += strlen(pinfo);
+
 
 	return (this_p);
 }
@@ -470,7 +503,16 @@ packet_t ax25_from_frame (unsigned char *fbuf, int flen, int alevel)
  *
  *	We are not concerned with the FCS (CRC) because someone else checked it.
  *
- * Is is possible to have zero length for info?  No.
+ * Is is possible to have zero length for info?  
+ *
+ * In the original version, assuming APRS, the answer was no.
+ * We always had at least 3 octets after the address part:
+ * control, protocol, and first byte of info part for data type.
+ *
+ * In later versions, this restriction was relaxed so other
+ * variations of AX.25 could be used.  Now the minimum length
+ * is 7+7 for addresses plus 1 for control.
+ *
  */
 
 	if (flen < AX25_MIN_PACKET_LEN || flen > AX25_MAX_PACKET_LEN)
@@ -482,149 +524,16 @@ packet_t ax25_from_frame (unsigned char *fbuf, int flen, int alevel)
 
 	this_p = ax25_new ();
 
-/*
- * Extract the addresses.
- * The last one has '1' in the LSB of the last byte.
- */
+/* Copy the whole thing intact. */
 
-#if 1
+	memcpy (this_p->frame_data, fbuf, flen);
+	this_p->frame_data[flen] = 0;
+	this_p->frame_len = flen;
 
-/* 
- * 0.9 - Try new strategy that will allow KISS mode 
- * to handle non AX.25 frame. 
- */
-
-	this_p->num_addr = 0;		/* Number of addresses extracted. */
+/* Find number of addresses. */
 	
-	addr_bytes = 0;
-	for (a = 0; a < flen && addr_bytes == 0; a++) {
-	  if (fbuf[a] & 0x01) {
-	    addr_bytes = a + 1;
-	  }
-	}
-
-	if (addr_bytes % 7 == 0) {
-	  int addrs = addr_bytes / 7;
-	  if (addrs >= AX25_MIN_ADDRS && addrs <= AX25_MAX_ADDRS) {
-	    this_p->num_addr = addrs;
-	    
-	    for (a = 0; a < addrs; a++){ 
-	      unsigned char *pin;
-	      char *pout;
-	      int j;
-	      char ch;
-	
-	      pin = fbuf + a * 7;
-              pout = & this_p->addrs[a][0];
-
-	      for (j=0; j<6; j++) 
-	      {
-	        ch = *pin++ >> 1;
-	        if (ch != ' ')
-	        {
-	          *pout++ = ch;
-	        }
-	      }
-	      *pout = '\0';
-
-	      this_p->ssid_etc[a] = *pin & ~ SSID_LAST_MASK;
-	    }
-	  }
-	}
-	
-	pf = fbuf + this_p->num_addr * 7;
-
-#else 
-
-	pf = fbuf;		/* Transmitted form from here. */
-
-	this_p->num_addr = 0;		/* Number of addresses extracted. */
-	found_last = 0;
-
-	while (this_p->num_addr < AX25_MAX_ADDRS && ! found_last) {
-
-	  unsigned char *pin;
-	  char *pout;
-	  int j;
-	  char ch;
-	
-	  pin = pf;
-          pout = & this_p->addrs[this_p->num_addr][0];
-
-	  for (j=0; j<6; j++) 
-	  {
-	    ch = *pin++ >> 1;
-	    if (ch != ' ')
-	    {
-	      *pout++ = ch;
-	    }
-	  }
-	  *pout = '\0';
-
-	  this_p->ssid_etc[this_p->num_addr] = pf[6] & ~ SSID_LAST_MASK;
-	
-  	  this_p->num_addr++;
-
-	  if (pf[6] & SSID_LAST_MASK) {	/* Is this the last one? */
-	    found_last = 1;
-          }
-	  else {
-	    pf += 7;			/* Get ready for next one. */
-	  }
-	}
-
-	if (this_p->num_addr < 2) {
-	  int k;
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Frame format error detected in ax25_from_frame, %s, line %d.\n", __FILE__, __LINE__);
-	  dw_printf ("Did not find a minimum of two addresses at beginning of AX.25 frame.\n");
-	  for (k=0; k<14; k++) {
-	    dw_printf (" %02x", fbuf[k]);
-	  }
-	  dw_printf ("\n");
-	  /* Should we keep going or delete the packet? */
-	}
-
-/*
- * pf still points to the last address (repeater or source).
- *
- * Verify that it has the last address bit set.
- */
-	if ((pf[6] & SSID_LAST_MASK) == 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Last address in header does not have LSB set.\n");
-	  ax25_delete (this_p);
-	  return (NULL);
-	}
-
-	pf += 7;
-
-#endif
-
-	if (this_p->num_addr * 7 > flen - 1) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Frame too short to include control field.\n");
-	  ax25_delete (this_p);
-	  return (NULL);
-	}
-
-
-
-
-/*
- * pf should now point to control field.
- * Previously we separated out control, PID, and Info here.
- *
- * Now (version 0.8) we save control, PID, and info together.
- * This makes it easier to act as a dumb KISS TNC
- * for AX.25-based protocols other than APRS.
- */
-	this_p->the_rest_len = flen - (pf - fbuf);
-
-	assert (this_p->the_rest_len >= 1);
-
-	memcpy (this_p->the_rest, pf, (size_t)this_p->the_rest_len);
-	this_p->the_rest[this_p->the_rest_len] = '\0';
+	this_p->num_addr = (-1);
+	(void) ax25_get_num_addr (this_p);
 
 	return (this_p);
 }
@@ -700,6 +609,8 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	*out_ssid = 0;
 	*out_heard = 0;
 
+	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
+
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
 	i = 0;
@@ -755,6 +666,8 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	  return 0;
 	}
 
+	//dw_printf ("ax25_parse_addr out: %s %d %d\n", out_addr, *out_ssid, *out_heard);
+
 	return (1);
 
 } /* end ax25_parse_addr */
@@ -803,33 +716,66 @@ packet_t ax25_unwrap_third_party (packet_t from_pp)
  *
  * Inputs:	n	- Index of address.   Use the symbols 
  *			  AX25_DESTINATION, AX25_SOURCE, AX25_REPEATER1, etc.
+ *
+ *			  Must be either an existing address or one greater
+ *			  than the final which causes a new one to be added.
+ *
  *		ad	- Address with optional dash and substation id.
  *
  * Assumption:	ax25_from_text or ax25_from_frame was called first.
  *
- * TODO:  ax25_from_text could use this.
+ * TODO:  	ax25_from_text could use this.
  *
  * Returns:	None.
  *		
- *
  *------------------------------------------------------------------------------*/
 
 void ax25_set_addr (packet_t this_p, int n, char *ad)
 {
 	int ssid_temp, heard_temp;
+	char atemp[AX25_MAX_ADDR_LEN];
+	int i;
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 	assert (n >= 0 && n < AX25_MAX_ADDRS);
 	assert (strlen(ad) < AX25_MAX_ADDR_LEN);
 
-	if (n+1 > this_p->num_addr) {
-	  this_p->num_addr = n+1;
-	  this_p->ssid_etc[n] = SSID_RR_MASK;
+	//dw_printf ("ax25_set_addr (%d, %s) num_addr=%d\n", n, ad, this_p->num_addr);
+
+	if (n >= 0 && n < this_p->num_addr) {
+
+	  //dw_printf ("ax25_set_addr , existing case\n");
+/* 
+ * Set existing address position. 
+ */
+	  ax25_parse_addr (ad, 0, atemp, &ssid_temp, &heard_temp);
+
+	  memset (this_p->frame_data + n*7, ' ' << 1, 6);
+
+	  for (i=0; i<6 && atemp[i] != '\0'; i++) {
+	    this_p->frame_data[n*7+i] = atemp[i] << 1;
+	  }
+	  ax25_set_ssid (this_p, n, ssid_temp);
+	}
+	else if (n == this_p->num_addr) {		
+
+	  //dw_printf ("ax25_set_addr , appending case\n");
+/* 
+ * One beyond last position, process as insert.
+ */
+
+	  ax25_insert_addr (this_p, n, ad);
+	}
+	else { 
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error, ax25_set_addr, bad position %d for '%s'\n", n, ad);
 	}
 
-	ax25_parse_addr (ad, 0, this_p->addrs[n], &ssid_temp, &heard_temp);
-	ax25_set_ssid (this_p, n, ssid_temp);
+	//dw_printf ("------\n");
+	//dw_printf ("dump after ax25_set_addr (%d, %s)\n", n, ad);
+	//ax25_hex_dump (this_p);
+	//dw_printf ("------\n");
 }
 
 
@@ -864,11 +810,16 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 {
 	int k;
 	int ssid_temp, heard_temp;
+	char atemp[AX25_MAX_ADDR_LEN];
+	int i;
+	int expect;
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 	assert (n >= AX25_REPEATER_1 && n < AX25_MAX_ADDRS);
 	assert (strlen(ad) < AX25_MAX_ADDR_LEN);
+
+	//dw_printf ("ax25_insert_addr (%d, %s)\n", n, ad);
 
 	/* Don't do it if we already have the maximum number. */
 	/* Should probably return success/fail code but currently the caller doesn't care. */
@@ -877,18 +828,33 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 	  return;
 	}
 
-	/* Shift the current occupant and others up. */
-
-	for (k=this_p->num_addr; k>n; k--) {
-	  strcpy (this_p->addrs[k], this_p->addrs[k-1]);
-	  this_p->ssid_etc[k] = this_p->ssid_etc[k-1];
-	}
+	CLEAR_LAST_ADDR_FLAG;
 
 	this_p->num_addr++;
 
-	ax25_parse_addr (ad, 0, this_p->addrs[n], &ssid_temp, &heard_temp);
-	this_p->ssid_etc[n] = SSID_RR_MASK;
+	memmove (this_p->frame_data + (n+1)*7, this_p->frame_data + n*7, this_p->frame_len - (n*7));
+	memset (this_p->frame_data + n*7, ' ' << 1, 6);
+	this_p->frame_len += 7;
+	this_p->frame_data[n*7+6] = SSID_RR_MASK;
+
+	SET_LAST_ADDR_FLAG;
+
+	ax25_parse_addr (ad, 0, atemp, &ssid_temp, &heard_temp);
+	memset (this_p->frame_data + n*7, ' ' << 1, 6);
+	for (i=0; i<6 && atemp[i] != '\0'; i++) {
+	  this_p->frame_data[n*7+i] = atemp[i] << 1;
+	}
+	
 	ax25_set_ssid (this_p, n, ssid_temp);
+
+	// Sanity check after messing with number of addresses.
+
+	expect = this_p->num_addr;
+	this_p->num_addr = (-1);
+	if (expect != ax25_get_num_addr (this_p)) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error ax25_remove_addr expect %d, actual %d\n", expect, this_p->num_addr);
+	}
 }
 
 
@@ -914,6 +880,7 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 void ax25_remove_addr (packet_t this_p, int n)
 {
 	int k;
+	int expect; 
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
@@ -921,12 +888,23 @@ void ax25_remove_addr (packet_t this_p, int n)
 
 	/* Shift those beyond to fill this position. */
 
+	CLEAR_LAST_ADDR_FLAG;
+
 	this_p->num_addr--;
 
-	for (k = n; k < this_p->num_addr; k++) {
-	  strcpy (this_p->addrs[k], this_p->addrs[k+1]);
-	  this_p->ssid_etc[k] = this_p->ssid_etc[k+1];
+	memmove (this_p->frame_data + n*7, this_p->frame_data + (n+1)*7, this_p->frame_len - ((n+1)*7));
+	this_p->frame_len -= 7;
+	SET_LAST_ADDR_FLAG;
+
+	// Sanity check after messing with number of addresses.
+
+	expect = this_p->num_addr;
+	this_p->num_addr = (-1);
+	if (expect != ax25_get_num_addr (this_p)) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error ax25_remove_addr expect %d, actual %d\n", expect, this_p->num_addr);
 	}
+
 }
 
 
@@ -947,8 +925,38 @@ void ax25_remove_addr (packet_t this_p, int n)
 
 int ax25_get_num_addr (packet_t this_p)
 {
+	unsigned char *pf;
+	int a;
+	int addr_bytes;
+
+
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
+
+/* Use cached value if already set. */
+
+	if (this_p->num_addr >= 0) {
+	  return (this_p->num_addr);
+	}
+
+/* Otherwise, determine the number ofaddresses. */
+
+	this_p->num_addr = 0;		/* Number of addresses extracted. */
+	
+	addr_bytes = 0;
+	for (a = 0; a < this_p->frame_len && addr_bytes == 0; a++) {
+	  if (this_p->frame_data[a] & SSID_LAST_MASK) {
+	    addr_bytes = a + 1;
+	  }
+	}
+
+	if (addr_bytes % 7 == 0) {
+	  int addrs = addr_bytes / 7;
+	  if (addrs >= AX25_MIN_ADDRS && addrs <= AX25_MAX_ADDRS) {
+	    this_p->num_addr = addrs;
+	  }
+	}
+	
 	return (this_p->num_addr);
 }
 
@@ -1004,17 +1012,11 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 {	
 	int ssid;
 	char sstr[4];
+	int i;
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
-/*
- * This assert failure popped up once and it is not clear why.
- * Let's print out more information about the situation so we 
- * might have a clue about the root cause.
- * Try to keep going instead of dying at this point.
- */
-	//assert (n >= 0 && n < this_p->num_addr);
 
 	if (n < 0) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1032,13 +1034,20 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	  return;
 	}
 
-	strcpy (station, this_p->addrs[n]);
+	memset (station, 0, 7);
+	for (i=0; i<6; i++) {
+	  unsigned char ch;
+
+	  ch = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
+	  if (ch <= ' ') break;
+	  station[i] = ch;
+	}
 
 	ssid = ax25_get_ssid (this_p, n);
 	if (ssid != 0) {
 	  sprintf (sstr, "-%d", ssid);
 	  strcat (station, sstr);
-	}    
+	}   
 }
 
 
@@ -1051,24 +1060,26 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
  * Inputs:	n	- Index of address.   Use the symbols 
  *			  AX25_DESTINATION, AX25_SOURCE, AX25_REPEATER1, etc.
  *
- * Warning:	No bounds checking is performed.  Be careful.
- *		  
  * Assumption:	ax25_from_text or ax25_from_frame was called first.
  *
  * Returns:	Substation id, as integer 0 .. 15.
- *
- * Bugs:	Rewrite to keep call and SSID separate internally.
  *
  *------------------------------------------------------------------------------*/
 
 int ax25_get_ssid (packet_t this_p, int n)
 {
-
+	
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
-	assert (n >= 0 && n < this_p->num_addr);
-
-	return ((this_p->ssid_etc[n] & SSID_SSID_MASK) >> SSID_SSID_SHIFT);
+	
+	if (n >= 0 && n < this_p->num_addr) {
+	  return ((this_p->frame_data[n*7+6] & SSID_SSID_MASK) >> SSID_SSID_SHIFT);
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: ax25_get_ssid(%d), num_addr=%d\n", n, this_p->num_addr);
+	  return (0);
+	}
 }
 
 
@@ -1083,8 +1094,6 @@ int ax25_get_ssid (packet_t this_p, int n)
  *
  *		ssid	- New SSID.  Must be in range of 0 to 15.
  *
- * Warning:	No bounds checking is performed.  Be careful.
- *		  
  * Assumption:	ax25_from_text or ax25_from_frame was called first.
  *
  * Bugs:	Rewrite to keep call and SSID separate internally.
@@ -1096,10 +1105,16 @@ void ax25_set_ssid (packet_t this_p, int n, int ssid)
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
-	assert (n >= 0 && n < this_p->num_addr);
 
-	this_p->ssid_etc[n] =   (this_p->ssid_etc[n] & ~ SSID_SSID_MASK) |
+
+	if (n >= 0 && n < this_p->num_addr) {
+	  this_p->frame_data[n*7+6] =   (this_p->frame_data[n*7+6] & ~ SSID_SSID_MASK) |
 		((ssid << SSID_SSID_SHIFT) & SSID_SSID_MASK) ;
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: ax25_set_ssid(%d,%d), num_addr=%d\n", n, ssid, this_p->num_addr);
+	}
 }
 
 
@@ -1127,7 +1142,14 @@ int ax25_get_h (packet_t this_p, int n)
 	assert (this_p->magic2 == MAGIC);
 	assert (n >= 0 && n < this_p->num_addr);
 
-	return ((this_p->ssid_etc[n] & SSID_H_MASK) >> SSID_H_SHIFT);
+	if (n >= 0 && n < this_p->num_addr) {
+	  return ((this_p->frame_data[n*7+6] & SSID_H_MASK) >> SSID_H_SHIFT);
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: ax25_get_h(%d), num_addr=%d\n", n, this_p->num_addr);
+	  return (0);
+	}
 }
 
 
@@ -1153,9 +1175,14 @@ void ax25_set_h (packet_t this_p, int n)
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
-	assert (n >= 0 && n < this_p->num_addr);
 
-	this_p->ssid_etc[n] |= SSID_H_MASK;
+	if (n >= 0 && n < this_p->num_addr) {
+	  this_p->frame_data[n*7+6] |= SSID_H_MASK;
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: ax25_set_hd(%d), num_addr=%d\n", n, this_p->num_addr);
+	}
 }
 
 
@@ -1182,6 +1209,7 @@ int ax25_get_heard(packet_t this_p)
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
+
 	result = AX25_SOURCE;
 
 	for (i = AX25_REPEATER_1; i < ax25_get_num_addr(this_p); i++) {
@@ -1217,6 +1245,7 @@ int ax25_get_first_not_repeated(packet_t this_p)
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
+
 	for (i = AX25_REPEATER_1; i < ax25_get_num_addr(this_p); i++) {
 	
 	  if ( ! ax25_get_h(this_p,i)) {
@@ -1246,18 +1275,36 @@ int ax25_get_first_not_repeated(packet_t this_p)
 
 int ax25_get_info (packet_t this_p, unsigned char **paddr)
 {
+	unsigned char *info_ptr;
+	int info_len;
+
+
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
 	if (this_p->num_addr >= 2) {
-	  *paddr = this_p->the_rest + ax25_get_info_offset(this_p);
-	  return (ax25_get_num_info(this_p));
+
+	  /* AX.25 */
+
+	  info_ptr = this_p->frame_data + ax25_get_info_offset(this_p);
+	  info_len = ax25_get_num_info(this_p);
+	}
+	else {
+
+	  /* Not AX.25.  Treat Whole packet as info. */
+
+	  info_ptr = this_p->frame_data;
+	  info_len = this_p->frame_len;
 	}
 
-	/* Not AX.25.  Whole packet is info. */
+	/* Add nul character in case caller treats as printable string. */
+	
+	assert (info_len >= 0);
 
-	*paddr = this_p->the_rest;
-	return (this_p->the_rest_len);
+	info_ptr[info_len] = '\0';
+
+	*paddr = info_ptr;
+	return (info_len);
 }
 
 
@@ -1281,7 +1328,7 @@ int ax25_get_dti (packet_t this_p)
 	assert (this_p->magic2 == MAGIC);
 
 	if (this_p->num_addr >= 2) {
-	  return (this_p->the_rest[ax25_get_info_offset(this_p)]);
+	  return (this_p->frame_data[ax25_get_info_offset(this_p)]);
 	}
 	return (' ');
 }
@@ -1417,49 +1464,173 @@ void ax25_format_addrs (packet_t this_p, char *result)
  *
  * Errors:	Returns -1.
  *
- *
  *------------------------------------------------------------------*/
 
 int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN]) 
 {
-	int j, k;
-	unsigned char *pout;
-	int len;
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
-	pout = result;
+	assert (this_p->frame_len > 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
 
-	for (j=0; j<this_p->num_addr; j++) {
+	memcpy (result, this_p->frame_data, this_p->frame_len);
 
-	  char *s;
+	return (this_p->frame_len);
+}
 
-	  memset (pout, ' ' << 1, (size_t)6);
 
-	  s = this_p->addrs[j];
-	  for (k=0; *s != '\0'; k++, s++) {
-	    pout[k] = *s << 1;	    
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_hex_dump
+ *
+ * Purpose:	Print out packet in hexadecimal for debugging.
+ *
+ * Inputs:	fptr		- Pointer to frame data.
+ *
+ *		flen		- Frame length, bytes.  Does not include CRC.
+ *		
+ *------------------------------------------------------------------*/
+
+static void hex_dump (unsigned char *p, int len) 
+{
+	int n, i, offset;
+
+	offset = 0;
+	while (len > 0) {
+	  n = len < 16 ? len : 16; 
+	  dw_printf ("  %03x: ", offset);
+	  for (i=0; i<n; i++) {
+	    dw_printf (" %02x", p[i]);
+	  }
+	  for (i=n; i<16; i++) {
+	    dw_printf ("   ");
+	  }
+	  dw_printf ("  ");
+	  for (i=0; i<n; i++) {
+	    dw_printf ("%c", isprint(p[i]) ? p[i] : '.');
+	  }
+	  dw_printf ("\n");
+	  p += 16;
+	  offset += 16;
+	  len -= 16;
+	}
+}
+
+/* Text description of control octet. */
+
+static void ctrl_to_text (int c, char *out)
+{
+	if      ((c & 1) == 0)       { sprintf (out, "I frame: n(r)=%d, p=%d, n(s)=%d",  (c>>5)&7, (c>>4)&1, (c>>1)&7); }
+	else if ((c & 0xf) == 0x01)  { sprintf (out, "S frame RR: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xf) == 0x05)  { sprintf (out, "S frame RNR: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xf) == 0x09)  { sprintf (out, "S frame REJ: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xf) == 0x0D)  { sprintf (out, "S frame sREJ: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xef) == 0x6f) { sprintf (out, "U frame SABME: p=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x2f) { sprintf (out, "U frame SABM: p=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x43) { sprintf (out, "U frame DISC: p=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x0f) { sprintf (out, "U frame DM: f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x63) { sprintf (out, "U frame UA: f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x87) { sprintf (out, "U frame FRMR: f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x03) { sprintf (out, "U frame UI: p/f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0xAF) { sprintf (out, "U frame XID: p/f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0xe3) { sprintf (out, "U frame TEST: p/f=%d", (c>>4)&1); }
+	else                         { sprintf (out, "Unknown frame type for control = 0x%02x", c); }
+}
+
+/* Text description of protocol id octet. */
+
+static void pid_to_text (int p, char *out)
+{
+
+	if      ((p & 0x30) == 0x10) { sprintf (out, "AX.25 layer 3 implemented."); }
+	else if ((p & 0x30) == 0x20) { sprintf (out, "AX.25 layer 3 implemented."); }
+	else if (p == 0x01)          { sprintf (out, "ISO 8208/CCITT X.25 PLP"); }
+	else if (p == 0x06)          { sprintf (out, "Compressed TCP/IP packet. Van Jacobson (RFC 1144)"); }
+	else if (p == 0x07)          { sprintf (out, "Uncompressed TCP/IP packet. Van Jacobson (RFC 1144)"); }
+	else if (p == 0x08)          { sprintf (out, "Segmentation fragment"); }
+	else if (p == 0xC3)          { sprintf (out, "TEXNET datagram protocol"); }
+	else if (p == 0xC4)          { sprintf (out, "Link Quality Protocol"); }
+	else if (p == 0xCA)          { sprintf (out, "Appletalk"); }
+	else if (p == 0xCB)          { sprintf (out, "Appletalk ARP"); }
+	else if (p == 0xCC)          { sprintf (out, "ARPA Internet Protocol"); }
+	else if (p == 0xCD)          { sprintf (out, "ARPA Address resolution"); }
+	else if (p == 0xCE)          { sprintf (out, "FlexNet"); }
+	else if (p == 0xCF)          { sprintf (out, "NET/ROM"); }
+	else if (p == 0xF0)          { sprintf (out, "No layer 3 protocol implemented."); }
+	else if (p == 0xFF)          { sprintf (out, "Escape character. Next octet contains more Level 3 protocol information."); }
+	else                         { sprintf (out, "Unknown protocol id = 0x%02x", p); }
+}
+
+
+
+void ax25_hex_dump (packet_t this_p) 
+{
+	int n;
+	unsigned char *fptr = this_p->frame_data;
+	int flen = this_p->frame_len;
+
+
+	
+	if (this_p->num_addr >= AX25_MIN_ADDRS && this_p->num_addr <= AX25_MAX_ADDRS) {
+	  int c, p;
+	  char cp_text[120];
+	  char l_text[20];
+
+	  c = fptr[this_p->num_addr*7];
+	  p = fptr[this_p->num_addr*7+1];
+
+	  ctrl_to_text (c, cp_text);
+
+	  if ( (c & 0x01) == 0 ||				/* I   xxxx xxx0 */
+	     	c == 0x03 || c == 0x13) {			/* UI  000x 0011 */
+
+	    char p_text[100];
+
+	    pid_to_text (p, p_text);
+
+	    strcat (cp_text, ", ");
+	    strcat (cp_text, p_text);
+
 	  }
 
-	  if (j == this_p->num_addr - 1) {
-	    pout[6] = this_p->ssid_etc[j] | SSID_LAST_MASK;
-	  }
-	  else {
-	   pout[6] = this_p->ssid_etc[j] & ~ SSID_LAST_MASK;
-	  }
-	  pout += 7;
+	  sprintf (l_text, ", length = %d", flen);
+	  strcat (cp_text, l_text);
+
+	  dw_printf ("%s\n", cp_text);
 	}
 
-	memcpy (pout, this_p->the_rest, (size_t)this_p->the_rest_len);
-	pout += this_p->the_rest_len;
 
-	len = pout - result;
+	dw_printf (" dest    %c%c%c%c%c%c %2d c/r=%d res=%d last=%d\n", 
+				fptr[0]>>1, fptr[1]>>1, fptr[2]>>1, fptr[3]>>1, fptr[4]>>1, fptr[5]>>1,
+				(fptr[6]&SSID_SSID_MASK)>>SSID_SSID_SHIFT,
+				(fptr[6]&SSID_H_MASK)>>SSID_H_SHIFT, 
+				(fptr[6]&SSID_RR_MASK)>>SSID_RR_SHIFT,
+				fptr[6]&SSID_LAST_MASK);
 
-	assert (len <= AX25_MAX_PACKET_LEN);
+	dw_printf (" source  %c%c%c%c%c%c %2d c/r=%d res=%d last=%d\n", 
+				fptr[7]>>1, fptr[8]>>1, fptr[9]>>1, fptr[10]>>1, fptr[11]>>1, fptr[12]>>1,
+				(fptr[13]&SSID_SSID_MASK)>>SSID_SSID_SHIFT,
+				(fptr[13]&SSID_H_MASK)>>SSID_H_SHIFT, 
+				(fptr[13]&SSID_RR_MASK)>>SSID_RR_SHIFT,
+				fptr[13]&SSID_LAST_MASK);
 
-	return (len);
-}
+	for (n=2; n<this_p->num_addr; n++) {	
+
+	  dw_printf (" digi %d  %c%c%c%c%c%c %2d   h=%d res=%d last=%d\n", 
+				n - 1,
+				fptr[n*7+0]>>1, fptr[n*7+1]>>1, fptr[n*7+2]>>1, fptr[n*7+3]>>1, fptr[n*7+4]>>1, fptr[n*7+5]>>1,
+				(fptr[n*7+6]&SSID_SSID_MASK)>>SSID_SSID_SHIFT,
+				(fptr[n*7+6]&SSID_H_MASK)>>SSID_H_SHIFT, 
+				(fptr[n*7+6]&SSID_RR_MASK)>>SSID_RR_SHIFT,
+				fptr[n*7+6]&SSID_LAST_MASK);
+
+	}
+
+	hex_dump (fptr, flen);
+
+} /* end ax25_hex_dump */
+
 
 
 /*------------------------------------------------------------------
@@ -1486,12 +1657,21 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
 
 int ax25_is_aprs (packet_t this_p) 
 {
+	int ctrl, pid, is_aprs;
+
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
-	return (this_p->num_addr >= 2 &&
-		ax25_get_control(this_p) == AX25_UI_FRAME && 
-		ax25_get_pid(this_p) == AX25_NO_LAYER_3);
+	ctrl = ax25_get_control(this_p);
+	pid = ax25_get_pid(this_p);
+
+	is_aprs = this_p->num_addr >= 2 && ctrl == AX25_UI_FRAME && pid == AX25_NO_LAYER_3;
+
+#if 0 
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("ax25_is_aprs(): ctrl=%02x, pid=%02x, is_aprs=%d\n", ctrl, pid, is_aprs);
+#endif
+	return (is_aprs);
 }
 
 /*------------------------------------------------------------------
@@ -1514,7 +1694,7 @@ int ax25_get_control (packet_t this_p)
 	assert (this_p->magic2 == MAGIC);
 
 	if (this_p->num_addr >= 2) {
-	  return (this_p->the_rest[ax25_get_control_offset(this_p)]);
+	  return (this_p->frame_data[ax25_get_control_offset(this_p)]);
 	}
 	return (-1);
 }
@@ -1530,6 +1710,10 @@ int ax25_get_control (packet_t this_p)
  * Returns:	APRS uses 0xf0 for no layer 3.
  *		This could also be used in other situations.
  *
+ * AX.25:	"The Protocol Identifier (PID) field appears in information
+ *		 frames (I and UI) only. It identifies which kind of
+ *		 Layer 3 protocol, if any, is in use."
+ *
  *------------------------------------------------------------------*/
 
 
@@ -1539,7 +1723,7 @@ int ax25_get_pid (packet_t this_p)
 	assert (this_p->magic2 == MAGIC);
 
 	if (this_p->num_addr >= 2) {
-	  return (this_p->the_rest[ax25_get_pid_offset(this_p)]);
+	  return (this_p->frame_data[ax25_get_pid_offset(this_p)]);
 	}
 	return (-1);
 }
@@ -1717,6 +1901,6 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 
 } /* end ax25_safe_print */
 
+
+
 /* end ax25_pad.c */
-
-

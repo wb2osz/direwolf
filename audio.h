@@ -22,7 +22,8 @@
 enum ptt_method_e { 
 	PTT_METHOD_NONE,	/* VOX or no transmit. */
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
-	PTT_METHOD_GPIO };	/* General purpos I/O. */
+	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
+	PTT_METHOD_LPT };	/* Parallel printer port, Linux only. */
 
 typedef enum ptt_method_e ptt_method_t;
 
@@ -93,6 +94,9 @@ struct audio_s {
 					/* PTT_RTS, PTT_DTR. */
 
 	int ptt_gpio[MAX_CHANS];	/* GPIO number. */
+	
+	int ptt_lpt_bit[MAX_CHANS];	/* Bit number for parallel printer port.  */
+					/* Bit 0 = pin 2, ..., bit 7 = pin 9. */
 
 	int ptt_invert[MAX_CHANS];	/* Invert the output. */
 
@@ -153,7 +157,7 @@ struct audio_s {
 
 #define DEFAULT_BITS_PER_SAMPLE	16
 
-#define DEFAULT_FIX_BITS RETRY_SINGLE
+#define DEFAULT_FIX_BITS RETRY_SWAP_SINGLE
 
 /* 
  * Standard for AFSK on VHF FM. 

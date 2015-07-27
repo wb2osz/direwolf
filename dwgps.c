@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -108,6 +108,10 @@ int dwgps_init (void)
 
 #if __WIN32__
 
+/*
+ * Windows version.  Not implemented yet.
+ */
+
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("GPS interface not yet available in Windows version.\n");
 	init_status = INIT_FAILED;
@@ -117,11 +121,39 @@ int dwgps_init (void)
 
 	int err;
 
+#if USE_GPS_SHM
+
+/*
+ * Linux - Shared memory interface to gpsd.
+ *
+ * I wanted to use this method because it is simpler and more efficient.
+ *
+ * The current version of gpsd, supplied with Raspian, is 3.6 from back in 
+ * May 2012, is missing support for the shared memory interface.  
+ * https://github.com/raspberrypi/linux/issues/523
+ *
+ * I tried to download a newer source and build with shared memory support
+ * but ran into a couple other issues.
+ * 
+ * 	sudo apt-get install libncurses5-dev
+ * 	sudo apt-get install scons
+ * 	cd ~
+ * 	wget http://download-mirror.savannah.gnu.org/releases/gpsd/gpsd-3.11.tar.gz
+ * 	tar xfz gpsd-3.11.tar.gz
+ * 	cd gpsd-3.11
+ * 	scons prefix=/usr libdir=lib/arm-linux-gnueabihf shm_export=True python=False
+ * 	sudo scons udev-install
+ * 
+ * For now, we will use the socket interface.
+ * Maybe get back to this again someday.
+ */
+
 	err = gps_open (GPSD_SHARED_MEMORY, NULL, &gpsdata);
 	if (err != 0) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Unable to connect to GPS receiver.\n");
+	  dw_printf ("Unable to connect to GPSD shared memory interface, status=%d.\n", err);
 	  if (err == NL_NOHOST) {
+	    // I don't think this is right but we are not using it anyhow.
 	    dw_printf ("Shared memory interface is not enabled in libgps.\n");
 	    dw_printf ("Download the gpsd source and build with 'shm_export=True' option.\n");
 	  }
@@ -133,7 +165,30 @@ int dwgps_init (void)
 	}
 	init_status = INIT_SUCCESS;
 	return (0);
+
 #else
+
+/* 
+ * Linux - Socket interface to gpsd.
+ */
+
+	err = gps_open ("localhost", DEFAULT_GPSD_PORT, &gpsdata);
+	if (err != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unable to connect to GPSD stream, status%d.\n", err);
+	  dw_printf ("%s\n", gps_errstr(errno));
+	  init_status = INIT_FAILED;
+	  return (-1);
+	}
+
+	gps_stream(&gpsdata, WATCH_ENABLE | WATCH_JSON, NULL);
+
+	init_status = INIT_SUCCESS;
+	return (0);
+
+#endif 
+
+#else	/* end ENABLE_GPS */
 
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("GPS interface not enabled in this version.\n");
@@ -160,7 +215,7 @@ int dwgps_init (void)
  *		*palt		- Altitude, meters.
  *
  * Returns:	-1 = error
- *		0 = data not available (no fix)
+ *		0 = location currently not available (no fix)
  *		2 = 2D fix, lat/lon, speed, and course are set.
  *		3 - 3D fix, altitude is also set.
  *
@@ -184,12 +239,42 @@ int dwgps_read (double *plat, double *plon, float *pspeed, float *pcourse, float
 	  return (-1);
 	}
 
+#if USE_GPS_SHM
+
+/*
+ * Shared memory version.
+ */
+
 	err = gps_read (&gpsdata);
 
 #if DEBUG
 	dw_printf ("gps_read returns %d bytes\n", err);
 #endif
+
+#else
+
+/* 
+ * Socket version.
+ */
+
+	// Wait for up to 1000 milliseconds.
+	// This should only happen in the beaconing thread so 
+	// I'm not worried about other functions hanging.
+
+        if (gps_waiting(&gpsdata, 1000)) {
+
+	  err = gps_read (&gpsdata);
+	}
+	else {
+	  gps_stream(&gpsdata, WATCH_ENABLE | WATCH_JSON, NULL);
+	  sleep (1);
+	}
+
+#endif
+
 	if (err > 0) {
+	  /* Data is available. */
+
 	  if (gpsdata.status >= STATUS_FIX && gpsdata.fix.mode >= MODE_2D) {
 
 	     *plat = gpsdata.fix.latitude;
@@ -208,10 +293,12 @@ int dwgps_read (double *plat, double *plon, float *pspeed, float *pcourse, float
 	   return (0);
 	}
 	else if (err == 0) {
-	   /* No data available */
+
+	   /* No data available at the present time. */
 	   return (0);
 	}
 	else {
+
 	  /* More serious error. */
 	  return (-1);
 	}
@@ -244,6 +331,10 @@ void dwgps_term (void) {
 #elif ENABLE_GPS
 
 	if (init_status == INIT_SUCCESS) {
+
+#ifndef USE_GPS_SHM
+	  gps_stream(&gpsdata, WATCH_DISABLE, NULL);
+#endif
 	  gps_close (&gpsdata);
 	}
 #else 
@@ -264,6 +355,7 @@ void dwgps_term (void) {
  * Description: Compile with -DTEST option.
  *
  *			gcc -DTEST dwgps.c textcolor.c -lgps
+ *			./a.out
  *
  *--------------------------------------------------------------------*/
 

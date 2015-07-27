@@ -1,20 +1,21 @@
-APRS SYMBOLS (Icons)                                        07 Oct 2013
+APRS SYMBOLS (Icons)                                        28 Aug 2014
 -----------------------------------------------------------------------
                                                                  WB4APR
 
 This original APRS symbol specification is updated periodically with 
 new symbols as they are defined.  This is THE master list for APRS. But
-almost all new symbols will be formed as Overlays to the basic set. So
-be sure to check the symbols-new.txt file noted below!
+almost all new symbols since 2007 will be formed as Overlays to the 
+basic set. So be sure to check the symbols-new.txt file noted below!
+
+http://aprs.org/symbols/symbols-new.txt
 
 NEW OVERLAYS ON ALL ALTERNATE SYMBOLS: As of 1 October 2007, the use of 
 overlay characters on all alternate symbols was allowed as needed in 
 order to further expand the APRS symbol set.  These overlay expansions 
 of up to 36 different usages for each of the 94 alternate symbols adds 
-hundreds of potential new symbols.  Since this overlay info will no 
-longer fit in this original document it is found in a new document:
-
-http://aprs.org/symbols/symbols-new.txt
+hundreds of potential new symbols.  Since each of the original 94 
+symbols can now have up to 36 other definitions, this new overlay info
+is now found in the above file.
 
 If an alternate symbol from the table below, contains significant
 definitions of its overlay characters, then the entry will have an "O"
@@ -23,10 +24,17 @@ document.  The # symbol indicates the original Overlay subset.
 
 For details on Upgrading your symbol set, please see the background
 information on Symbols prepared by Stephen Smith, WA8LMF:
-http://www.ew.usna.edu/~bruninga/aprs/symbols-background.txt
+http://aprs.org/symbols/symbols-background.txt
 
 UPDATE CHRONOLOGY:
 
+28 Aug 14: Added notation on newly availble BASE codes (begun in 2007)
+           Old WX versions of these: Bb{*:DFegJp were moved to ovlays
+           Expanded #w Flooding to include Avalanches, Mud/Landslides
+           Changed #D from "avail" to new family called Depots
+           Changed name of overlay Car to generic Vehicles w overlays
+           Edited name of /E Eyeball to include "Events"
+19 May 14: Added many new Aircraft and Ship symbols see symbols-new.txt
 07 Oct 13: Added JetSki [Js] & Ham Club [C-] ovrlys to symbols-new.txt
 19 Sep 11: Added T & 2 overlay for 1 & 2 hop Message TX Igates
            Updated overlay "portable" (;) overlays for events
@@ -100,7 +108,9 @@ Alt:  >KOSY[^ksuv\                               <==[removed /0An]
 
 SYMBOLS.TXT      APRS DISPLAY SYMBOLS             APRSdos    ORIGINAL
 ======================================================================
-Document dated:  28 Apr 99  FInal APRSdos symbol spec (still updated!)
+Document dated:  28 Apr 99  FInal APRSdos symbol spec 
+**************:  This file Remains CUrrent and is Updated Frequently
+**************:  See date and updates at the top of this file.
 Author(s):       Bob Bruninga, WB4APR <bruninga@usna.edu>
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -113,8 +123,8 @@ tables or may be used as an alphanumeric overlay over some symbols:
          &       RESERVED for possible AUXILLIARY tables (Aug 09)
          /       Primary   symbol Table  (Mostly stations)
          \       Alternate symbol table  (Mostly Objects)
-         0-9     Alternate OVERLAY symbol with 0-9 overlayed
-         A-Z     Alternate OVERLAY symbol with A-Z overlayed
+         0-9     Alternate OVERLAY symbols with 0-9 overlayed
+         A-Z     Alternate OVERLAY symbols with A-Z overlayed
       
 For ease of reference we refer to these as the SYMBOL CHARACTERS and
 often abbreviate them as "/$" which refers to the Table character "/"
@@ -128,8 +138,8 @@ symbols through Oct 2007 were:
   CIRCLE, SQUARE, CAR, TRUCK, VAN, DIGIS, GATES
   Civil-Defense(RACES), NWS sites, WX stations, Triangle
 
-After that, provisions should be made in all software to allow for
-overlays on any alternate symbol as they may be used in the future.
+After 2007, provisions should be made in all software to allow for
+overlays on *any/all* alternate symbols for use in the future.
 
 SYMBOLS WITH STAND-ALONE GPS TRACKERS:  Stand-alone devices that
 transmit raw GPS have no method to convey their symbol.  For this
@@ -162,16 +172,16 @@ for the stand-alone trackers described above.
 
 /$ XYZ BASIC SYMBOL TABLE        \$  XYZ OTHER SYMBOL TABLE (\)
 -- --- ------------------------  --  --- ----------------------
-/! BB  Police, Sheriff           \!  OB  EMERGENCY (!)            
+/! BB  Police, Sheriff           \!  OBO EMERGENCY (and overlays)            
 /" BC  reserved  (was rain)      \"  OC  reserved
 /# BD  DIGI (white center)       \#  OD# OVERLAY DIGI (green star)
 /$ BE  PHONE                     \$  OEO Bank or ATM  (green box) 
 /% BF  DX CLUSTER                \%  OFO Power Plant with overlay
 /& BG  HF GATEway                \&  OG# I=Igte R=RX T=1hopTX 2=2hopTX
 /' BH  Small AIRCRAFT (SSID = 7) \'  OHO Crash (& now Incident sites)
-/( BI  Mobile Satellite Station  \(  OI  CLOUDY (other clouds w ovrly)
+/( BI  Mobile Satellite Station  \(  OIO CLOUDY (other clouds w ovrly)
 /) BJ  Wheelchair (handicapped)  \)  OJO Firenet MEO, MODIS Earth Obs.
-/* BK  SnowMobile                \*  OK  SNOW (& future ovrly codes)
+/* BK  SnowMobile                \*  OK  AVAIL (SNOW moved to ` ovly S)
 /+ BL  Red Cross                 \+  OL  Church
 /, BM  Boy Scouts                \,  OM  Girl Scouts
 /- BN  House QTH (VHF)           \-  ONO House (H=HF) (O = Op Present)
@@ -181,38 +191,38 @@ for the stand-alone trackers described above.
 
 /$ XYZ PRIMARY SYMBOL TABLE      \$  XYZ ALTERNATE SYMBOL TABLE (\)
 -- --- ------------------------  --  --- --------------------------
-/0 P0  # circle (obsolete)       \0  A0# CIRCLE (E/I/W=IRLP/Echolink/WIRES)
-/1 P1  TBD (these were numbered) \1  A1
-/2 P2  TBD (circles like pool)   \2  A2
-/3 P3  TBD (balls.  But with)    \3  A3
-/4 P4  TBD (overlays, we can)    \4  A4
-/5 P5  TBD (put all #'s on one)  \5  A5
-/6 P6  TBD (So 1-9 are available)\6  A6
-/7 P7  TBD (for new uses?)       \7  A7
+/0 P0  # circle (obsolete)       \0  A0# CIRCLE (IRLP/Echolink/WIRES)
+/1 P1  TBD (these were numbered) \1  A1  AVAIL
+/2 P2  TBD (circles like pool)   \2  A2  AVAIL
+/3 P3  TBD (balls.  But with)    \3  A3  AVAIL
+/4 P4  TBD (overlays, we can)    \4  A4  AVAIL
+/5 P5  TBD (put all #'s on one)  \5  A5  AVAIL
+/6 P6  TBD (So 1-9 are available)\6  A6  AVAIL
+/7 P7  TBD (for new uses?)       \7  A7  AVAIL
 /8 P8  TBD (They are often used) \8  A8O 802.11 or other network node
 /9 P9  TBD (as mobiles at events)\9  A9  Gas Station (blue pump)  
-/: MR  FIRE                      \:  NR  Hail (& future ovrly codes)                    
-/; MS  Campground (Portable ops) \;  NSO Park/Picnic + overlay events        
+/: MR  FIRE                      \:  NR  AVAIL (Hail ==> ` ovly H)                    
+/; MS  Campground (Portable ops) \;  NSO Park/Picnic + overlay events 
 /< MT  Motorcycle     (SSID =10) \<  NTO ADVISORY (one WX flag)
 /= MU  RAILROAD ENGINE           \=  NUO APRStt Touchtone (DTMF users)
-/> MV  CAR            (SSID = 9) \>  NV# OVERLAYED CAR
+/> MV  CAR            (SSID = 9) \>  NV# OVERLAYED CARs & Vehicles
 /? MW  SERVER for Files          \?  NW  INFO Kiosk  (Blue box with ?)
 /@ MX  HC FUTURE predict (dot)   \@  NX  HURICANE/Trop-Storm
 /A PA  Aid Station               \A  AA# overlayBOX DTMF & RFID & XO
-/B PB  BBS or PBBS               \B  AB  Blwng Snow (& future codes)
+/B PB  BBS or PBBS               \B  AB  AVAIL (BlwngSnow ==> E ovly B
 /C PC  Canoe                     \C  AC  Coast Guard          
-/D PD                            \D  AD  Drizzle (proposed APRStt)
-/E PE  EYEBALL (Eye catcher!)    \E  AE  Smoke (& other vis codes)
-/F PF  Farm Vehicle (tractor)    \F  AF  Freezng rain (&future codes)
-/G PG  Grid Square (6 digit)     \G  AG  Snow Shwr (& future ovrlys)
+/D PD                            \D ADO  DEPOTS (Drizzle ==> ' ovly D)
+/E PE  EYEBALL (Events, etc!)    \E  AE  Smoke (& other vis codes)
+/F PF  Farm Vehicle (tractor)    \F  AF  AVAIL (FrzngRain ==> `F)
+/G PG  Grid Square (6 digit)     \G  AG  AVAIL (Snow Shwr ==> I ovly S)
 /H PH  HOTEL (blue bed symbol)   \H  AHO \Haze (& Overlay Hazards)
 /I PI  TcpIp on air network stn  \I  AI  Rain Shower  
-/J PJ                            \J  AJ  Lightening (& future ovrlys)
+/J PJ                            \J  AJ  AVAIL (Lightening ==> I ovly L)
 /K PK  School                    \K  AK  Kenwood HT (W)              
 /L PL  PC user (Jan 03)          \L  AL  Lighthouse                     
 /M PM  MacAPRS                   \M  AMO MARS (A=Army,N=Navy,F=AF) 
 /N PN  NTS Station               \N  AN  Navigation Buoy          
-/O PO  BALLOON        (SSID =11) \O  AO  Rocket (new June 2004)
+/O PO  BALLOON        (SSID =11) \O  AO  Overlay Balloon (Rocket = \O)
 /P PP  Police                    \P  AP  Parking                    
 /Q PQ  TBD                       \Q  AQ  QUAKE                       
 /R PR  REC. VEHICLE   (SSID =13) \R  ARO Restaurant                   
@@ -223,18 +233,18 @@ for the stand-alone trackers described above.
 /W PW  National WX Service Site  \W  AW# # NWS site (NWS options)
 /X PX  HELO           (SSID = 6) \X  AX  Pharmacy Rx (Apothicary)
 /Y PY  YACHT (sail)   (SSID = 5) \Y  AYO Radios and devices
-/Z PZ  WinAPRS                   \Z  AZ
-/[ HS  Human/Person (HT)         \[  DSO W.Cloud (& humans w Ovrly)                 
+/Z PZ  WinAPRS                   \Z  AZ  AVAIL
+/[ HS  Human/Person (HT)         \[  DSO W.Cloud (& humans w Ovrly)
 /\ HT  TRIANGLE(DF station)      \\  DTO New overlayable GPS symbol
-/] HU  MAIL/PostOffice(was PBBS) \]  DU
-/^ HV  LARGE AIRCRAFT            \^  DV# # Aircraft (shows heading)
+/] HU  MAIL/PostOffice(was PBBS) \]  DU  AVAIL
+/^ HV  LARGE AIRCRAFT            \^  DV# other Aircraft ovrlys (2014)
 /_ HW  WEATHER Station (blue)    \_  DW# # WX site (green digi)
 /` HX  Dish Antenna              \`  DX  Rain (all types w ovrly)    
 
 /$ XYZ LOWER CASE SYMBOL TABLE   \$  XYZ SECONDARY SYMBOL TABLE (\)
 -- --- ------------------------  --  --- --------------------------
-/a LA  AMBULANCE     (SSID = 1)  \a  SA#O ARRL, ARES, WinLINK
-/b LB  BIKE          (SSID = 4)  \b  SB  Blwng Dst/Snd (& others)
+/a LA  AMBULANCE     (SSID = 1)  \a  SA#O ARRL,ARES,WinLINK,Dstar, etc
+/b LB  BIKE          (SSID = 4)  \b  SB  AVAIL(Blwng Dst/Snd => E ovly)
 /c LC  Incident Command Post     \c  SC#O CD triangle RACES/SATERN/etc
 /d LD  Fire dept                 \d  SD  DX spot by callsign
 /e LE  HORSE (equestrian)        \e  SE  Sleet (& future ovrly codes)
@@ -248,27 +258,28 @@ for the stand-alone trackers described above.
 /m LM  Mic-E Repeater            \m  SM  Value Sign (3 digit display)   
 /n LN  Node (black bulls-eye)    \n  SN# OVERLAY TRIANGLE         
 /o LO  EOC                       \o  SO  small circle                    
-/p LP  ROVER (puppy, or dog)     \p  SP  Prtly Cldy (& future ovrlys)            
-/q LQ  GRID SQ shown above 128 m \q  SQ
+/p LP  ROVER (puppy, or dog)     \p  SP  AVAIL (PrtlyCldy => ( ovly P
+/q LQ  GRID SQ shown above 128 m \q  SQ  AVAIL
 /r LR  Repeater         (Feb 07) \r  SR  Restrooms                
-/s LS  SHIP (pwr boat)  (SSID-8) \s  SS# OVERLAY SHIP/boat (top view)
+/s LS  SHIP (pwr boat)  (SSID-8) \s  SS# OVERLAY SHIP/boats
 /t LT  TRUCK STOP                \t  ST  Tornado                  
 /u LU  TRUCK (18 wheeler)        \u  SU# OVERLAYED TRUCK
 /v LV  VAN           (SSID = 15) \v  SV# OVERLAYED Van
-/w LW  WATER station             \w  SW  Flooding                 
-/x LX  xAPRS (Unix)              \x  SX  Wreck or Obstruction ->X<-                                
+/w LW  WATER station             \w  SWO Flooding (Avalanches/Slides)   
+/x LX  xAPRS (Unix)              \x  SX  Wreck or Obstruction ->X<-
 /y LY  YAGI @ QTH                \y  SY  Skywarn
 /z LZ  TBD                       \z  SZ# OVERLAYED Shelter 
-/{ J1                            \{  Q1  Fog (& future ovrly codes)
+/{ J1                            \{  Q1  AVAIL? (Fog ==> E ovly F)
 /| J2  TNC Stream Switch         \|  Q2  TNC Stream Switch
-/} J3                            \}  Q3
+/} J3                            \}  Q3  AVAIL? (maybe)
 /~ J4  TNC Stream Switch         \~  Q4  TNC Stream Switch
 
 HEADING SYMBOLS:  Although all symbols are supposed to have a heading
 line showing the direction of movement with a length proportional to
 the log of speed, some symbols were desiged as top-down views so that 
 they could be displayed actually always POINTING in the direction of 
-movement.  These special symbols are:
+movement.  Now All symbols should be oriented (if practical).  These 
+original special symbols were:
  
 \> OVERLAYED CAR
 \s Overlayed Ship
@@ -277,10 +288,14 @@ movement.  These special symbols are:
 /g Glider
 \n Overlayed Triangle
 
-AREA SYMBOLS!  You can define BOX/CIRCLE/LINE or TRIANGLE areas in all
-colors, either open or filled in, any size from 60 feet to 100 miles. 
-Simply move the cursor to the location, press HOME, move the cursor to 
-the lower right corner of the AREA and hit INPUT-ADD-OBJECTS-AREA.  
+AREA SYMBOLS!  The special symbol \l (lower case L) was special.  It
+indicates an area definition.  You can define these as a BOX, CIRCLE,
+LINE or TRIANGLE area in all colors, either open or filled in, any 
+size from 60 feet to 100 miles.  In APRSdos they were generated auto-
+matically by simply moving the cursor to the location, press HOME, 
+move the cursor to the lower right corner of the AREA and hit INPUT-
+ADD-OBJECTS-AREA.  
+
 Enter the type of area, and color.  NOTE that AREA shapes can only be 
 defined by selecting the upper left corner first, then the lower right 
 second.  The line is an exception.  It is still top to bottom, but the 
@@ -294,10 +309,12 @@ cautious in using the color fill option, since all other objects in
 that area that occur earlier in your PLIST will be obscured.  AND you 
 do NOT know the order of other stations P-lists. 
 
-AREAS FORMAT: The new format for specifying special areas uses the 
-CSE/SPD field to provide the additional information as follows:
+AREAS FORMAT: Use of the special AREAS symbol (/l) triggers special
+processing of the next 7 bytes normally used for CSE and SPD.  In 
+this special case the processing is as follows:
 
 $CSE/SPD...  Normal Field description
+
 lTyy/Cxx...  Where:  l (lower case L) is  symbol for "LOCATION SHAPES"
                      T is Type of shape:  0=circle, 1=line, 2=elipse
                                           3=triangle 4=box
@@ -314,7 +331,7 @@ Type of 6 and are drawn down and to the left.
 HURRICANES, TROPICAL STORMS and DEPRESSIONS:  These symbols will be
 differentiated by colors red, yellos, and blue.  Additionally a radius
 of Huricane and also Tropical storm winds will also be shown if the
-format detailed in WX.txt is used.
+special format detailed in WX.txt is used.
 
 SYMBOLS ON MAPS!  APRS can also be permanently embedded in maps.  To 
 embed a symbol in a map, simply make the first four characters of the 
@@ -325,9 +342,12 @@ same location.  An example are the VORTAC nav-aids in Alaska.  The
 Anchorage VORTAC appears as ANC on all maps below 128 miles. The label 
 entry is #\VFANC,LAT,LONG,128.
 
-VALUE SIGNPOSTS:  Signposts display as a yellow box with a 1-3 letter 
-overlay on them.  You specify the 1-3 letter overlay by enclosing them 
-in braces in the comment field.  Thus a VALUE Signpost with {55} would 
+VALUE SIGNPOSTS:  This is another special handling Symbol.  Signposts
+trigger a display as a yellow box with a 1-3 letter overlay on them. 
+The use of this symbol (\m) triggers a search for a 1-3 letter 
+string of characters encolsed in braces in the comment field.  
+
+Thus a VALUE Signpost with {55} in the comment field would 
 appear as a sign with 55 on it, designed for posting the speed 
 of traffic past speed measuring devices. APRSdos has a version named
 APRStfc.EXE that monitors traffic speed and posts these speed signs
@@ -336,21 +356,21 @@ map, they ONLY appear at 8 miles and below AND they do not show any
 callsign or name.  Only the yellow box and the 3 letters or numbers.  
 Select them from the OBJECT menu under VALUE...
 
-APRS 1.2 OVERLAY TYPE SYMBOLS [April 2007]:
--------------------------------------------
+APRS 1.2 OVERLAY TYPE SYMBOLS EXPANSION!  [April 2007]:
+-------------------------------------------------------
 
 All alternate symbols have the potential to be overlayed.  This was 
 the original intent and was only limited to a few due to limitations 
 in Mac and WinAPRS.  Those original "numbered" symbols are marked 
 with a # in the table above.  But by 2007, it was time to move on.  
-In APRS 1.2 it is proposed that any ALTENATE symbol can have overlays.
+In APRS 1.2 it was proposed that any ALTENATE symbol can have overlays.
 Kenwood has already responded with the new D710 that can now display 
 these overlays on all symbols.  
 
 To help define these hundreds of new symbol combinations, we have
 added a new file called:
 
-http://www.ew.usna.edu/~bruninga/aprs/symbols-new.txt
+http:aprs.org/symbols/symbols-new.txt
 
 The overlay symbols may be used in two ways.  First, simply as an 
 overlay on a basic symbol type.  Most uses of these symbols will be

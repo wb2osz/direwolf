@@ -54,6 +54,7 @@
 #include "igate.h"
 #include "latlong.h"
 #include "symbols.h"
+#include "LatLong-UTMconversion.h"
 
 
 //#include "tq.h"
@@ -415,6 +416,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	  strcpy (p_modem->ptt_device[channel], "");
 	  p_modem->ptt_line[channel] = PTT_LINE_RTS;
 	  p_modem->ptt_gpio[channel] = 0;
+	  p_modem->ptt_lpt_bit[channel] = 0;
 	  p_modem->ptt_invert[channel] = 0;
 
 	  p_modem->slottime[channel] = DEFAULT_SLOTTIME;				
@@ -477,6 +479,8 @@ void config_init (char *fname, struct audio_s *p_modem,
 	
 	//strcpy (p_misc_config->nullmodem, DEFAULT_NULLMODEM);
 	strcpy (p_misc_config->nullmodem, "");
+	strcpy (p_misc_config->nmea_port, "");
+	strcpy (p_misc_config->logdir, "");
 
 
 /* 
@@ -642,16 +646,28 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    else {
-	      char *p;
 
-	      strncpy (p_digi_config->mycall[channel], t, sizeof(p_digi_config->mycall[channel])-1);
+	      // Definitely set for current channel.
+	      // Set for other channels which have not been set yet.
 
-	      for (p = p_digi_config->mycall[channel]; *p != '\0'; p++) {
-	        if (islower(*p)) {
-		  *p = toupper(*p);	/* silently force upper case. */
+	      int c;
+
+	      for (c = 0; c < MAX_CHANS; c++) {
+
+	        if (c == channel || strlen(p_digi_config->mycall[c]) == 0 || strcasecmp(p_digi_config->mycall[c], "NOCALL") == 0) {
+
+	          char *p;
+
+	          strncpy (p_digi_config->mycall[c], t, sizeof(p_digi_config->mycall[c])-1);
+
+	          for (p = p_digi_config->mycall[c]; *p != '\0'; p++) {
+	            if (islower(*p)) {
+		      *p = toupper(*p);	/* silently force upper case. */
+	            }
+	          }
+	          // TODO: additional checks if valid
 	        }
 	      }
-	      // TODO: additional checks if valid
 	    }
 	  }
 
@@ -898,6 +914,7 @@ void config_init (char *fname, struct audio_s *p_modem,
  *
  * PTT  serial-port [-]rts-or-dtr
  * PTT  GPIO  [-]gpio-num
+ * PTT  LPT  [-]bit-num
  */
 
 	  else if (strcasecmp(t, "PTT") == 0) {
@@ -910,7 +927,60 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 
-	    if (strcasecmp(t, "GPIO") != 0) {
+	    if (strcasecmp(t, "GPIO") == 0) {
+
+/* GPIO case, Linux only. */
+
+#if __WIN32__
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: PTT with GPIO is only available on Linux.\n", line);
+#else		
+	      t = strtok (NULL, " ,\t\n\r");
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: Missing GPIO number.\n", line);
+	        continue;
+	      }
+
+	      if (*t == '-') {
+	        p_modem->ptt_gpio[channel] = atoi(t+1);
+		p_modem->ptt_invert[channel] = 1;
+	      }
+	      else {
+	        p_modem->ptt_gpio[channel] = atoi(t);
+		p_modem->ptt_invert[channel] = 0;
+	      }
+	      p_modem->ptt_method[channel] = PTT_METHOD_GPIO;
+#endif
+	    }
+	    else if (strcasecmp(t, "LPT") == 0) {
+
+/* Parallel printer case, x86 Linux only. */
+
+#if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
+
+	      t = strtok (NULL, " ,\t\n\r");
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: Missing LPT bit number.\n", line);
+	        continue;
+	      }
+
+	      if (*t == '-') {
+	        p_modem->ptt_lpt_bit[channel] = atoi(t+1);
+		p_modem->ptt_invert[channel] = 1;
+	      }
+	      else {
+	        p_modem->ptt_lpt_bit[channel] = atoi(t);
+		p_modem->ptt_invert[channel] = 0;
+	      }
+	      p_modem->ptt_method[channel] = PTT_METHOD_LPT;
+#else
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: PTT with LPT is only available on x86 Linux.\n", line);
+#endif		
+	    }
+	    else  {
 
 /* serial port case. */
 
@@ -949,34 +1019,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	      p_modem->ptt_method[channel] = PTT_METHOD_SERIAL;
 	    }
-	    else {
 
-/* GPIO case, Linux only. */
-
-// TODO:
-#if 0
-//#if __WIN32__
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: PTT with GPIO is only available on Linux.\n", line);
-#else		
-	      t = strtok (NULL, " ,\t\n\r");
-	      if (t == NULL) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file line %d: Missing GPIO number.\n", line);
-	        continue;
-	      }
-
-	      if (*t == '-') {
-	        p_modem->ptt_gpio[channel] = atoi(t+1);
-		p_modem->ptt_invert[channel] = 1;
-	      }
-	      else {
-	        p_modem->ptt_gpio[channel] = atoi(t);
-		p_modem->ptt_invert[channel] = 0;
-	      }
-	      p_modem->ptt_method[channel] = PTT_METHOD_GPIO;
-#endif
-	    }
 	  }
 
 
@@ -1193,6 +1236,48 @@ void config_init (char *fname, struct audio_s *p_modem,
    	    }
 	  }
 
+/*
+ * REGEN 		- Signal regeneration.
+ */
+
+	  else if (strcasecmp(t, "regen") == 0) {
+	    int from_chan, to_chan;
+	    //int e;
+	    //char message[100];
+	    	    
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
+	      continue;
+	    }
+	    from_chan = atoi(t);
+	    if (from_chan < 0 || from_chan > p_digi_config->num_chans-1) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: FROM-channel must be in range of 0 to %d on line %d.\n", 
+							p_digi_config->num_chans-1, line);
+	      continue;
+	    }
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+	    to_chan = atoi(t);
+	    if (to_chan < 0 || to_chan > p_digi_config->num_chans-1) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: TO-channel must be in range of 0 to %d on line %d.\n", 
+							p_digi_config->num_chans-1, line);
+	      continue;
+	    }
+	
+
+	    p_digi_config->regen[from_chan][to_chan] = 1;
+
+	  }
 
 /*
  * ==================== APRStt gateway ==================== 
@@ -2017,6 +2102,36 @@ void config_init (char *fname, struct audio_s *p_modem,
 	  }
 
 /*
+ * NMEA		- Device name for communication with NMEA device.
+ */
+	  else if (strcasecmp(t, "nmea") == 0) {
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing device name for NMEA port on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      strncpy (p_misc_config->nmea_port, t, sizeof(p_misc_config->nmea_port)-1);
+	    }
+	  }
+
+/*
+ * LOGDIR	- Directory name for storing log files.  Use "." for current working directory.
+ */
+	  else if (strcasecmp(t, "logdir") == 0) {
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing directory name for LOGDIR on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      strncpy (p_misc_config->logdir, t, sizeof(p_misc_config->logdir)-1);
+	    }
+	  }
+
+/*
  * FIX_BITS 		- Attempt to fix frames with bad FCS. 
  */
 
@@ -2029,7 +2144,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= RETRY_NONE && n <= RETRY_TWO_SEP) {
+            if (n >= RETRY_NONE && n <= RETRY_REMOVE_TWO_SEP) {
 	      p_modem->fix_bits = (retry_t)n;
 	    }
 	    else {
@@ -2050,7 +2165,8 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    	    
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Old style 'BEACON' has been replaced with new commands.\n", line);
-	    
+	    dw_printf ("Use PBEACON, OBEACON, or CBEACON instead.\n");
+  
 	  }
 
 
@@ -2067,7 +2183,21 @@ void config_init (char *fname, struct audio_s *p_modem,
 		   strcasecmp(t, "OBEACON") == 0 ||
 		   strcasecmp(t, "TBEACON") == 0 ||
 		   strcasecmp(t, "CBEACON") == 0) {
+#if __WIN32__
+	    if (strcasecmp(t, "TBEACON") == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TBEACON is available only in Linux version.\n", line);
+	      continue;
+	    }
+#endif
 
+#ifndef ENABLE_GPS
+	    if (strcasecmp(t, "TBEACON") == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Rebuild with GPS support for TBEACON to be available.\n", line);
+	      continue;
+	    }
+#endif
 	    if (p_misc_config->num_beacons < MAX_BEACONS) {
 
 	      memset (&(p_misc_config->beacon[p_misc_config->num_beacons]), 0, sizeof(struct beacon_s));
@@ -2201,12 +2331,14 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	      b = 0;
 	      for (k=0; k<p_misc_config->num_beacons; k++) {
-	        if (p_misc_config->beacon[p_misc_config->num_beacons].chan == j) b++;
+	        if (p_misc_config->beacon[p_misc_config->num_beacons].sendto_chan == j) b++;
 	      }
 	      if (b == 0) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file: Beaconing should be configured for channel %d when digipeating is enabled.\n", i); 
-	        p_digi_config->enabled[i][j] = 0;
+	        dw_printf ("Config file: Beaconing should be configured for channel %d when digipeating is enabled.\n", i);
+		// It's a recommendation, not a requirement.
+		// Was there some good reason to turn it off in earlier version?
+	        //p_digi_config->enabled[i][j] = 0;	      
 	      }
 	    }
 	  }
@@ -2245,16 +2377,22 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 	int q;
 	char temp_symbol[100];
 	int ok;
-	
-	strcpy (temp_symbol, "");
+	char zone[8];
+	double easting = G_UNKNOWN;
+	double northing = G_UNKNOWN;
 
-	b->chan = 0;
+	strcpy (temp_symbol, "");
+	strcpy (zone, "");
+
+	b->sendto_type = SENDTO_XMIT;
+	b->sendto_chan = 0;
 	b->delay = 60;
 	b->every = 600;
-	//b->delay = 6;		// TODO: temp. remove
+	//b->delay = 6;		// temp test.
 	//b->every = 3600;
 	b->lat = G_UNKNOWN;
 	b->lon = G_UNKNOWN;
+	b->alt_m = G_UNKNOWN;
 	b->symtab = '/';
 	b->symbol = '-';	/* house */
 
@@ -2353,10 +2491,31 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 	  }
 	  else if (strcasecmp(keyword, "SENDTO") == 0) {
 	    if (value[0] == 'i' || value[0] == 'I') {
-	       b->chan = -1;
+	       b->sendto_type = SENDTO_IGATE;
+	       b->sendto_chan = 0;
+	    }
+	    else if (value[0] == 'r' || value[0] == 'R') {
+	       b->sendto_type = SENDTO_RECV;
+	       b->sendto_chan = atoi(value+1);
+	    }
+	    else if (value[0] == 't' || value[0] == 'T' || value[0] == 'x' || value[0] == 'X') {
+	       b->sendto_type = SENDTO_XMIT;
+	       b->sendto_chan = atoi(value+1);
 	    }
 	    else {
-	       b->chan = atoi(value);
+	       b->sendto_type = SENDTO_XMIT;
+	       b->sendto_chan = atoi(value);
+	    }
+	  }
+	  else if (strcasecmp(keyword, "DEST") == 0) {
+	    b->dest = strdup(value);
+	    for (p = b->dest; *p != '\0'; p++) {
+	      if (islower(*p)) {
+	        *p = toupper(*p);	/* silently force upper case. */
+	      }
+	    }
+	    if (strlen(b->dest) > 9) {
+	       b->dest[9] = '\0';
 	    }
 	  }
 	  else if (strcasecmp(keyword, "VIA") == 0) {
@@ -2378,6 +2537,18 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 	  }
 	  else if (strcasecmp(keyword, "LONG") == 0 || strcasecmp(keyword, "LON") == 0) {
 	    b->lon = parse_ll (value, LON, line);
+	  }
+	  else if (strcasecmp(keyword, "ALT") == 0 || strcasecmp(keyword, "ALTITUDE") == 0) {
+	    b->alt_m = atof(value);
+	  }
+	  else if (strcasecmp(keyword, "ZONE") == 0) {
+	    strncpy(zone, value, sizeof(zone));
+	  }
+	  else if (strcasecmp(keyword, "EAST") == 0 || strcasecmp(keyword, "EASTING") == 0) {
+	    easting = atof(value);
+	  }
+	  else if (strcasecmp(keyword, "NORTH") == 0 || strcasecmp(keyword, "NORTHING") == 0) {
+	    northing = atof(value);
 	  }
 	  else if (strcasecmp(keyword, "SYMBOL") == 0) {
 	    /* Defer processing in case overlay appears later. */
@@ -2419,10 +2590,66 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 	  else if (strcasecmp(keyword, "COMPRESS") == 0 || strcasecmp(keyword, "COMPRESSED") == 0) {
 	    b->compress = atoi(value);
 	  }
+	  else if (strcasecmp(keyword, "MESSAGING") == 0) {
+	    b->messaging = atoi(value);
+	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Invalid option keyword, %s.\n", line, keyword);
 	    return (0);
+	  }
+	}
+
+/*
+ * Convert UTM coordintes to lat / long.
+ */
+	if (strlen(zone) > 0 || easting != G_UNKNOWN || northing != G_UNKNOWN) {
+
+	  if (strlen(zone) > 0 && easting != G_UNKNOWN && northing != G_UNKNOWN) {
+
+	    int znum;
+	    char *zlet;
+
+            znum = strtoul(zone, &zlet, 10);
+
+            if (znum >= 1 && znum <= 60) {
+
+              //printf ("zlet = %c 0x%02x\n", *zlet, *zlet);
+
+              if (*zlet == '\0' || strchr ("CDEFGHJKLMNPQRSTUVWX", *zlet) != NULL) {
+
+                if (easting >= 0 && easting <= 999999) {
+
+                 if (northing >= 0 && northing <= 9999999) {
+ 
+                    UTMtoLL (WSG84, northing, easting, zone, &b->lat, &b->lon);
+
+                    // printf ("config UTM debug: latitude = %.6f, longitude = %.6f\n", b->lat, b->lon);
+
+		  }
+	          else {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Config file, line %d: Northing value is out of range.\n", line);
+                  }
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file, line %d: Easting value is out of range.\n", line);
+                }
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Latitudinal band must be one of CDEFGHJKLMNPQRSTUVWX.\n", line);
+              }
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: UTM zone is out of range.\n", line);
+            }
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Config file, line %d: When any of ZONE, EASTING, NORTHING specifed, they must all be specified.\n", line);
 	  }
 	}
 

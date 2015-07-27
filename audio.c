@@ -50,15 +50,13 @@
  *
  *		http://www.alsa-project.org/main/index.php/Asoundrc
  *
- * Credits:	Fabrice FAURE contributed code for the SDR UDP interface.
+ * Credits:	Release 1.0: Fabrice FAURE contributed code for the SDR UDP interface.
  *
  *		Discussion here:  http://gqrx.dk/doc/streaming-audio-over-udp
  *
- *
- * Future:	Will probably rip out the OSS code.
- *		ALSA was added to Linux kernel 10 years ago.
- *		Cygwin doesn't have it but I see no reason to support Cygwin
- *		now that we have a native Windows version.
+ *		Release 1.1:  Gabor Berczi provided fixes for the OSS code
+ *		which had fallen into decay.
+ *		
  *
  *---------------------------------------------------------------*/
 
@@ -81,7 +79,15 @@
 #if USE_ALSA
 #include <alsa/asoundlib.h>
 #else
+#ifdef __OpenBSD__
+#include <soundcard.h>
+#else
 #include <sys/soundcard.h>
+#endif
+#endif
+
+#ifdef __FreeBSD__
+#include <errno.h>
 #endif
 
 #include "direwolf.h"
@@ -101,6 +107,7 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *name, c
 //static void alsa_select_device (char *pick_dev, int direction, char *result);
 #else
 
+static int set_oss_params (int fd, struct audio_s *pa);
 static int oss_audio_device_fd = -1;	/* Single device, both directions. */
 
 #endif
@@ -180,10 +187,10 @@ int audio_open (struct audio_s *pa)
 	int err;
 	int chan;
 
-#if USE_ALSA
-
 	char audio_in_name[30];
 	char audio_out_name[30];
+
+#if USE_ALSA
 
 	assert (audio_in_handle == NULL);
 	assert (audio_out_handle == NULL);
@@ -234,19 +241,18 @@ int audio_open (struct audio_s *pa)
 	outbuf_ptr = NULL;
 	outbuf_len = 0;
 
-#if USE_ALSA
-
 /*
  * Determine the type of audio input.
  */
+
 	audio_in_type = AUDIO_IN_TYPE_SOUNDCARD; 	
-	
+
 	if (strcasecmp(pa->adevice_in, "stdin") == 0 || strcmp(pa->adevice_in, "-") == 0) {
 	  audio_in_type = AUDIO_IN_TYPE_STDIN;
 	  /* Change - to stdin for readability. */
 	  strcpy (pa->adevice_in, "stdin");
 	}
-	else if (strncasecmp(pa->adevice_in, "udp:", 4) == 0) {
+	if (strncasecmp(pa->adevice_in, "udp:", 4) == 0) {
 	  audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
 	  /* Supply default port if none specified. */
 	  if (strcasecmp(pa->adevice_in,"udp") == 0 ||
@@ -285,7 +291,7 @@ int audio_open (struct audio_s *pa)
  * Soundcard - ALSA.
  */
 	  case AUDIO_IN_TYPE_SOUNDCARD:
-
+#if USE_ALSA
 	    err = snd_pcm_open (&audio_in_handle, audio_in_name, SND_PCM_STREAM_CAPTURE, 0);
 	    if (err < 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -296,6 +302,23 @@ int audio_open (struct audio_s *pa)
 
 	    inbuf_size_in_bytes = set_alsa_params (audio_in_handle, pa, audio_in_name, "input");
 	    break;
+#else // OSS
+	oss_audio_device_fd = open (pa->adevice_in, O_RDWR);
+
+	if (oss_audio_device_fd < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("%s:\n", pa->adevice_in);
+//	  sprintf (message, "Could not open audio device %s", pa->adevice_in);
+//	  perror (message);
+	  return (-1);
+	}
+
+	outbuf_size_in_bytes = inbuf_size_in_bytes = set_oss_params (oss_audio_device_fd, pa);
+
+	if (inbuf_size_in_bytes <= 0 || outbuf_size_in_bytes <= 0) {
+	  return (-1);
+	}
+#endif
 
 /*
  * UDP.
@@ -353,6 +376,8 @@ int audio_open (struct audio_s *pa)
 /*
  * Output device.  Only "soundcard" is supported at this time. 
  */
+
+#if USE_ALSA
 	err = snd_pcm_open (&audio_out_handle, audio_out_name, SND_PCM_STREAM_PLAYBACK, 0);
 
 	if (err < 0) {
@@ -368,34 +393,7 @@ int audio_open (struct audio_s *pa)
 	  return (-1);
 	}
 
-
-
-
-#else /* end of ALSA case */
-
-
-#error OSS support will probably be removed.  Complain if you still care about OSS.
-
-	oss_audio_device_fd = open (pa->adevice_in, O_RDWR);
-
-	if (oss_audio_device_fd < 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("%s:\n", pa->adevice_in);
-	  sprintf (message, "Could not open audio device %s", pa->adevice_in);
-	  perror (message);
-	  return (-1);
-	}
-
-	outbuf_size_in_bytes = inbuf_size_in_bytes = set_oss_params (oss_audio_device_fd, pa);
-
-	if (inbuf_size_in_bytes <= 0 || outbuf_size_in_bytes <= 0) {
-	  return (-1);
-	}
-
-
-
-#endif	/* end of OSS case */
-
+#endif
 
 /*
  * Finally allocate buffer for each direction.
@@ -811,7 +809,7 @@ int audio_get (void)
 	        this_time = time(NULL);
 	        if (this_time >= last_time + duration) {
 	          text_color_set(DW_COLOR_DEBUG);
-	          dw_printf ("\nPast %d seconds, %d audio samples, %d errors.\n\n", 
+	          dw_printf ("\nPast %d seconds, %d audio samples processed, %d errors.\n\n", 
 			duration, sample_count, error_count);
 	          last_time = this_time;
 	          sample_count = 0;
