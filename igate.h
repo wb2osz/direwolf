@@ -14,6 +14,8 @@
 
 #include "ax25_pad.h"
 #include "digipeater.h"
+#include "audio.h"
+
 
 #define DEFAULT_IGATE_PORT 14580
 
@@ -55,7 +57,7 @@ struct igate_config_s {
 
 /* Call this once at startup */
 
-void igate_init (struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config);
+void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config);
 
 /* Call this with each packet received from the radio. */
 

@@ -2,97 +2,197 @@
 # Makefile for Linux version of Dire Wolf.
 #
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.desktop 
+	@echo " "
+	@echo "Next step - install with:"
+	@echo " "
+	@echo "        sudo make install"
+	@echo " "
 
-CC = gcc
+CC := gcc
+CFLAGS := -O3 -pthread -Igeotranz
+
 
 #
-# The DSP filters can be sped up considerably with the SSE 
-# instructions.  The SSE instructions were introduced in 1999 
-# with the Pentium III series.
+# The DSP filters spend a lot of time spinning around in little
+# loops multiplying and adding arrays of numbers.  The Intel "SSE"
+# instructions, introduced in 1999 with the Pentium III series,
+# can speed this up considerably.
+#
 # SSE2 instructions, added in 2000, don't seem to offer any advantage.
 #
-# Let's look at impact of various optimization levels.
 #
-# Benchmark results with Ubuntu gcc version 4.6.3, 32 bit platform.
+# Let's take a look at the effect of the compile options.
+#
+#
+# Times are elapsed time to process Track 2 of the TNC test CD.
+#
+# i.e.   "./atest 02_Track_2.wav"
+# Default demodulator type is new "E" added for version 1.2.
+#
+
+#
+# ---------- x86 (32 bit) ---------- 
+#
+
+#
+# gcc 4.6.3 running on Ubuntu 12.04.05.
 # Intel(R) Celeron(R) CPU 2.53GHz.  Appears to have only 32 bit instructions.
+# Probably from around 2004 or 2005.
 #
-#       seconds options, comments
-#       ------  -----------------
-#          123  -O2     
-#          128  -O3	Slower than -O2 ?
-#          123  -Ofast  (should be same as -O3 -ffastmath)
-#          126  -Ofast -march=pentium
-#           88  -Ofast -msse
-#          108  -Ofast -march=pentium -msse
-#           88  -Ofast -march=pentium3   (this implies -msse)
-#           89  -Ofast -march=pentium3 -msse
+# When gcc is generating code for a 32 bit x86 target, it assumes the ancient 
+# i386 processor.  This is good for portability but bad for performance.
 #
+# The code can run considerably faster by taking advantage of the SSE instructions 
+# available in the Pentium 3 or later.
 #
-# Raspberry Pi, ARM11 (ARMv6 + VFP2)
-# gcc (Debian 4.6.3-14+rpi1) 4.6.3
-# 
-#       seconds options, comments
-#       ------  -----------------
-#         1015  -O2     
-#          948  -O3	
-#          928  -Ofast  
-#          937  -Ofast -fmpu=vfp   (worse, no option for vfp2)
-# 
-# Are we getting any vectorizing?
+#       seconds options		comments
+#       ------  -------		--------
+#         524	
+#         183	-O2     
+#         182	-O3	
+#         183	-O3 -ffast-math  	(should be same as -Ofast)
+#         184	-Ofast 	   	
+#         189	-O3 -ffast-math -march=pentium
+#         122	-O3 -ffast-math -msse
+#         122	-O3 -ffast-math -march=pentium -msse
+#         121	-O3 -ffast-math -march=pentium3   (this implies -msse)
+#         120	-O3 -ffast-math -march=native
+#
+# Note that "-march=native" is essentially the same as "-march=pentium3."  
 #
 
-
-
-# 
-# Release 0.9 added a new feature than can consume a lot of CPU
-# power:  multiple AFSK demodulators running in parallel.
-# These spend a lot of time spinning around in little loops
-# calculating the sums of products for the DSP filters.
-#
-# When gcc is generating code for a 32 bit x86 target, it
-# assumes the ancient i386 processor.  This is good for
-# portability but bad for performance.
-#
-# The code can run considerably faster by taking advantage of
-# the SSE instructions available in the Pentium 3 or later.
-# Here we find out if the gcc compiler is generating code
-# for the i386.  If so, we add the option to assume we will 
-# have at least a Pentium 3 to run on.
-#
-# When generating code for the x86_64 target, it is automatically
-# assumed that the SSE instructions are available.
-#
-# If you are using gcc version 4.6 or later, you might get a 
-# small improvement by using the new "-Ofast" option that is
-# not available in older compilers.  
-# "-O3" is used here for compatibility with older compilers.
-#
-# You might also get some improvement by using "-march=native"
-# to fine tune the application for your particular type of
-# hardware.
-#
-# If you are planning to distribute the binary version to
-# other people (in some ham radio software collection), avoid
-# fine tuning it for your particular computer.  It could
-# cause compatibility issues for those with older computers.
-#
+# If the compiler is generating code for the i386 target, we can
+# get much better results by telling it we have at least a Pentium 3.
 
 arch := $(shell echo | gcc -E -dM - | grep __i386__)
-
 ifneq ($(arch),)
-# You might see improvement with -march fine tuned to your hardware.
-# Probably should keep pentium3 if you will be redistributing binaries
-# to other people.
-CFLAGS := -O3 -march=pentium3 -pthread -Iutm
-else
-CFLAGS := -O3 -pthread -Iutm
+CFLAGS += -march=pentium3
 endif
 
 
+#
+# ---------- x86_64 ---------- 
+#
+
+#
+# gcc 4.8.2 running on Ubuntu 14.04.1.
+# Intel Core 2 Duo from around 2007 or 2008.
+#
+# 64 bit target implies that we have SSE and probably even better vector instructions.
+#
+#       seconds options		comments
+#       ------  -------		--------
+#         245	
+#          75	-01
+#          72 	-02
+#          71  	-03     
+#          73  	-O3 -march=native
+#          42	-O3 -ffast-math  
+#          42  	-Ofast			(note below)   
+#          40	-O3 -ffast-math -march=native    
+#	  
+#
+# Note that "-Ofast" is a newer option roughly equivalent to "-O3 -ffast-math".
+# I use the longer form because it is compatible with older compilers.
+#
+# Why don't I don't have "-march=native?"
+# Older compilers don't recognize "native" as one of the valid options.  
+# One article said it was added with gcc 4.2 but I haven't verified that.
+#
+
+# Add -ffastmath in only if compiler version recognizes it.
+
+useffast := $(shell gcc --help -v 2>/dev/null | grep ffast-math)
+ifneq ($(useffast),)
+CFLAGS += -ffast-math
+endif
+
+
+#
+# ---------- ARM - Raspberry Pi 1 models ---------- 
+#
+# Raspberry Pi (before RPi model 2), ARM11 (ARMv6 + VFP2)
+# gcc (Debian 4.6.3-14+rpi1) 4.6.3
+# 
+#
+#       seconds options 	comments
+#       ------  -------		---------
+#         892	-O3   	
+#         887	-O3 -ffast-math  	
+#          x  	-O3 -ffast-math -march=native	(error: bad value for -march switch)
+#         887 	-O3 -ffast-math -mfpu=vfp
+#         890   -O3 -ffast-math -march=armv6zk -mcpu=arm1176jzf-s -mfloat-abi=hard -mfpu=vfp
+#
+#
+# The compiler, supplied with Raspbian, is configured with these options which are
+# good for the pre version 2 models.
+#	--with-arch=armv6 --with-fpu=vfp --with-float=hard
+# 
+# Run "gcc --help -v 2" and look near the end.
+#
+#
+
+#
+# ---------- ARM - Raspberry Pi 2  ---------- 
+#
+# Besides the higher clock speed, the Raspberry Pi 2 has the NEON instruction set 
+# which which should make things considerably faster.  
+#
+#
+#       seconds options 	comments
+#       ------  -------		---------
+#         426	-O3 -ffast-math  		(already more than twice as fast)
+#         429 	-O3 -mfpu=neon
+#         419 	-O3 -mfpu=neon -funsafe-math-optimizations
+#         412 	-O3 -ffast-math -mfpu=neon
+#         413 	-O3 -ffast-math -mfpu=neon-vfpv4
+#         430 	-O3 -ffast-math -mfpu=neon-vfpv4 -march=armv7-a
+#         412 	-O3 -ffast-math -mfpu=neon-vfpv4 -mtune=arm7
+#         410	-O3 -ffast-math -mfpu=neon-vfpv4 -funsafe-math-optimizations
+
+#
+#	gcc -march=armv7-a -mfpu=neon-vfpv4 
+#
+# I expected the -mfpu=neon option to have a much larger impact.
+# Adding -march=armv7-a makes it slower!
+
+#
+# If you compile with the RPi 2 specific options above and try to run it on the RPi 
+# model B (pre version 2), it will die with "illegal instruction."
+#
+# Dire Wolf is known to work on the BeagleBone, CubieBoard2, etc.
+# The best compiler options will depend on the specific type of processor
+# and the compiler target defaults.
+#
+
+neon := $(shell cat /proc/cpuinfo | grep neon)
+ifneq ($(neon),)
+CFLAGS += -mfpu=neon
+endif
+
+
+#
+# You would expect "-march=native" to produce the fastest code.
+# Why don't I use it here?
+#
+#	1. In my benchmarks, above, it has a negligible impact if any at all.
+#	2. Some older versions of gcc don't recognize "native" as a valid choice.
+#	3. Results are less portable.  Not a consideration if you are 
+#		building only for your own use but very important for anyone
+#		redistributing a "binary" version.
+#
+# If you are planning to distribute the binary version to other 
+# people (in some ham radio software collection, RPM, or DEB package), 
+# avoid # fine tuning it for your particular computer.  It could
+# cause compatibility issues for those with older computers.
+#
+
+
+#CFLAGS += -D_FORTIFY_SOURCE
 
 # If you want to use OSS (for FreeBSD, OpenBSD) instead of
-# ALSA (for Linux), comment out the two lines below.
+# ALSA (for Linux), comment out (or remove) the two lines below.
 
 CFLAGS += -DUSE_ALSA
 LDLIBS += -lasound
@@ -104,23 +204,22 @@ LDLIBS += -lasound
 #LDLIBS += -lgps
 
 
-
 # Name of current directory.
 # Used to generate zip file name for distribution.
 
-z=$(notdir ${CURDIR})
+z := $(notdir ${CURDIR})
 
 
 # Main application.
 
-direwolf : direwolf.o config.o  demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
-		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o \
+direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o audio.o digipeater.o dedupe.o tq.o xmit.o \
+		gen_tone.o audio.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o \
-		utm.a
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o dtime_now.o \
+		geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread -lrt $(LDLIBS) -lm
 
 
@@ -137,53 +236,155 @@ fsk_fast_filter.h : demod_afsk.c
 
 
 
-utm.a : LatLong-UTMconversion.o
+# UTM, USNG, MGRS conversions.
+
+geotranz.a : error_string.o  mgrs.o  polarst.o  tranmerc.o  ups.o  usng.o  utm.o
 	ar -cr $@ $^
 
-LatLong-UTMconversion.o : utm/LatLong-UTMconversion.c
+error_string.o : geotranz/error_string.c
 	$(CC) $(CFLAGS) -c -o $@ $^
+
+mgrs.o : geotranz/mgrs.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+polarst.o : geotranz/polarst.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+tranmerc.o : geotranz/tranmerc.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+ups.o : geotranz/ups.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+usng.o : geotranz/usng.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+utm.o : geotranz/utm.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+
+
+# Where should we install it?
+
+# My understanding, of the convention, is that something you compile
+# from source, that is not a standard part of the operating system,
+# should go in /usr/local/bin.
+
+# However, if you are preparing a "binary" RPM or DEB package, the 
+# installation location should be /usr/bin.
+
+# This is a step in the right direction but not sufficient to use /usr instead.
+
+INSTALLDIR := /usr/local
+
+
+# direwolf.desktop was previously handcrafted for the Raspberry Pi.
+# It was hardcoded with lxterminal, /home/pi, and so on.
+# In version 1.2, try to customize this to match other situations better.
+
+# TODO1.2:  Test this better.
+
+
+direwolf.desktop :
+	@echo "Generating customized direwolf.desktop ..."
+	@echo '[Desktop Entry]' > $@
+	@echo 'Type=Application' >> $@
+ifneq ($(wildcard /usr/bin/lxterminal),)
+	@echo "Exec=lxterminal -t \"Dire Wolf\" -e \"$(INSTALLDIR)/bin/direwolf\"" >> $@ 
+else ifneq ($(wildcard /usr/bin/lxterm),)
+	@echo "Exec=lxterm -hold -title \"Dire Wolf\" -bg white -e \"$(INSTALLDIR)/bin/direwolf\"" >> $@ 
+else
+	@echo "Exec=xterm -hold -title \"Dire Wolf\" -bg white -e \"$(INSTALLDIR)/bin/direwolf\"" >> $@
+endif
+	@echo 'Name=Dire Wolf' >> $@
+	@echo 'Comment=APRS Soundcard TNC' >> $@
+	@echo 'Icon=/usr/share/direwolf/dw-icon.png' >> $@
+	@echo "Path=$(HOME)" >> $@
+	@echo '#Terminal=true' >> $@
+	@echo 'Categories=HamRadio' >> $@
+	@echo 'Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25' >> $@
 
 
 # Optional installation into /usr/local/...
 # Needs to be run as root or with sudo.
-
 # TODO: Review file locations.
 
-install : direwolf decode_aprs tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
-	install direwolf /usr/local/bin
-	install decode_aprs /usr/local/bin
-	install text2tt /usr/local/bin
-	install tt2text /usr/local/bin
-	install ll2utm /usr/local/bin
-	install utm2ll /usr/local/bin
-	install aclients /usr/local/bin
-	install log2gpx /usr/local/bin
+install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets \
+		tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+	install direwolf $(INSTALLDIR)/bin
+	install decode_aprs $(INSTALLDIR)/bin
+	install text2tt $(INSTALLDIR)/bin
+	install tt2text $(INSTALLDIR)/bin
+	install ll2utm $(INSTALLDIR)/bin
+	install utm2ll $(INSTALLDIR)/bin
+	install aclients $(INSTALLDIR)/bin
+	install log2gpx $(INSTALLDIR)/bin
+	install gen_packets $(INSTALLDIR)/bin
+	install atest $(INSTALLDIR)/bin
+	install ttcalc $(INSTALLDIR)/bin
+	install dwespeak.sh $(INSTALLDIR)/bin
 	install -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
 	install -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
 	install -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
 	install -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
 	install -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
-	install -D --mode=644 CHANGES.txt /usr/local/share/doc/direwolf/CHANGES.txt
-	install -D --mode=644 LICENSE-dire-wolf.txt /usr/local/share/doc/direwolf/LICENSE-dire-wolf.txt
-	install -D --mode=644 LICENSE-other.txt /usr/local/share/doc/direwolf/LICENSE-other.txt
-	install -D --mode=644 User-Guide.pdf /usr/local/share/doc/direwolf/User-Guide.pdf
-	install -D --mode=644 Raspberry-Pi-APRS.pdf /usr/local/share/doc/direwolf/Raspberry-Pi-APRS.pdf
-	install -D --mode=644 Raspberry-Pi-APRS-Tracker.pdf /usr/local/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
-	install -D --mode=644 APRStt-Implementation-Notes.pdf /usr/local/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	install -D --mode=644 Quick-Start-Guide-Windows.pdf /usr/local/share/doc/direwolf/Quick-Start-Guide-Windows.pdf
+	install -D --mode=644 CHANGES.txt $(INSTALLDIR)/share/doc/direwolf/CHANGES.txt
+	install -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
+	install -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
+	install -D --mode=644 User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	install -D --mode=644 Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
+	install -D --mode=644 Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
+	install -D --mode=644 APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	install -D --mode=644 A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
+	install -D --mode=644 A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	install -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
+	install -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
+	install -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
+	install -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
+	install -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
+	install -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
+	install -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
+	install -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
+	install -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
+	install -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+	@echo " "
+	@echo "If this is your first install, not an upgrade, type this"
+	@echo "to put a copy of the sample configuration file in your home directory:"
+	@echo " "
+	@echo "        make install-conf"
+	@echo " "
 
+
+# TODO:  Should we put the sample direwolf.conf file somewhere like
+# /usr/share/doc/direwolf/examples or /etc/ax25 and add that to the 
+# end of the search path list?
+# That would make it easy to see user customizations compared to the
+# latest sample.
+
+# These would be done as ordinary user.
 
 # The Raspberry Pi has ~/Desktop but Ubuntu does not.
 
 # TODO: Handle Linux variations correctly.
 
 
+.PHONY: install-conf
+install-conf : direwolf.conf
+	cp direwolf.conf ~
+ifneq ($(wildcard $(HOME)/Desktop),)
+	@echo " "
+	@echo "This will add a desktop icon on some systems:"
+	@echo " "
+	@echo "        make install-rpi"
+	@echo " "
+endif
+
+
+.PHONY: install-rpi
 install-rpi : dw-start.sh
 	cp dw-start.sh ~
 	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
 
-install-conf : direwolf.conf
-	cp direwolf.conf ~
 
 
 # Separate application to decode raw data.
@@ -204,10 +405,10 @@ tt2text : tt_text.c
 
 # Convert between Latitude/Longitude and UTM coordinates.
 
-ll2utm : ll2utm.c utm.a
+ll2utm : ll2utm.c geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
-utm2ll : utm2ll.c utm.a
+utm2ll : utm2ll.c geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 
@@ -219,7 +420,7 @@ log2gpx : log2gpx.c
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c textcolor.c 
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c textcolor.c dsp.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) -lm
 
 demod.o : tune.h
@@ -238,14 +439,19 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o
 atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c textcolor.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
-	time ./atest ../direwolf-0.2/02_Track_2.wav 
 
 # Unit test for inner digipeater algorithm
 
 
-dtest : digipeater.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c
+dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c
 	$(CC) $(CFLAGS) -DTEST -o $@ $^
 	./dtest
+
+
+# Unit test for APRStt.
+
+ttest : aprs_tt.c tt_text.c  latlong.c misc.a  geotranz.a
+	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^
 
 
 # Unit test for IGate
@@ -277,40 +483,58 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
 	$(CC) $(CFLAGS) -g -o $@ $^ 
 
 
-SRCS = direwolf.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c multi_modem.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c \
-		server.c kiss.c kissnet.c kiss_frame.c hdlc_send.c fcs_calc.c gen_tone.c audio.c \
-		digipeater.c dedupe.c tq.c xmit.c beacon.c encode_aprs.c latlong.c encode_aprs.c latlong.c telemetry.c log.c
+# Touch Tone to Speech sample application.
+
+ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o 
+	$(CC) $(CFLAGS) -g -o $@ $^ 
 
 
-depend : $(SRCS)
-	makedepend $(INCLUDES) $^
+depend : $(wildcard *.c)
+	makedepend -f $(lastword $(MAKEFILE_LIST)) -- $(CFLAGS) -- $^
 
- 
+
+.PHONY: clean 
 clean :
-	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll fsk_fast_filter.h *.o *.a
+	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc \
+		fsk_fast_filter.h *.o *.a direwolf.desktop
 	echo " " > tune.h
 
 
 # Package it up for distribution.
 
-dist-src : CHANGES.txt  User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-Pi-APRS.pdf \
-		Raspberry-Pi-APRS-Tracker.pdf direwolf.desktop dw-start.sh 
+.PHONY: dist-src
+dist-src : CHANGES.txt User-Guide.pdf Raspberry-Pi-APRS.pdf \
+		Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf \
+		A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		dw-start.sh dwespeak.bat dwespeak.sh \
+		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
 	rm -f fsk_fast_filter.h
 	echo " " > tune.h
 	rm -f ../$z-src.zip
-	(cd .. ; zip $z-src.zip $z/CHANGES.txt $z/LICENSE* \
-		$z/User-Guide.pdf $z/Quick-Start-Guide-Windows.pdf $z/Raspberry-Pi-APRS.pdf Raspberry-Pi-APRS-Tracker.pdf \
-		$z/Makefile* $z/*.c $z/*.h $z/regex/* $z/misc/* $z/utm/* \
-		$z/*.conf $z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
+	egrep '^C|^L' direwolf.txt | cut -c2-999 > direwolf.conf
+	(cd .. ; zip $z-src.zip \
+		$z/CHANGES.txt \
+		$z/LICENSE* \
+		$z/User-Guide.pdf \
+		$z/Raspberry-Pi-APRS.pdf \
+		$z/Raspberry-Pi-APRS-Tracker.pdf \
+		$z/APRStt-Implementation-Notes.pdf \
+		$z/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
+		$z/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		$z/Makefile* \
+		$z/*.c $z/*.h \
+		$z/regex/* $z/misc/* $z/geotranz/* \
+		$z/man1/* \
+		$z/direwolf.conf $z/direwolf.txt \
+		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
 		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
-		$z/direwolf.desktop $z/dw-start.sh )
+		$z/dw-start.sh $z/direwolf.spec \
+		$z/dwespeak.bat $z/dwespeak.sh )
+		
 
 
 #User-Guide.pdf : User-Guide.docx
 #	echo "***** User-Guide.pdf is out of date *****"
-
-#Quick-Start-Guide-Windows.pdf : Quick-Start-Guide-Windows.docx
-#	echo "***** Quick-Start-Guide-Windows.pdf is out of date *****" 
 
 #Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
 #	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
@@ -318,24 +542,31 @@ dist-src : CHANGES.txt  User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-P
 #Raspberry-Pi-APRS-Tracker.pdf : Raspberry-Pi-APRS-Tracker.docx
 #	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
 
+#A-Better-APRS-Packet-Demodulator.pdf : A-Better-APRS-Packet-Demodulator.docx
+#	echo "***** A-Better-APRS-Packet-Demodulator.pdf is out of date *****"
 
-backup :
-	mkdir /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
-	cp -r . /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
 
 #
 # The locations below appear to be the most recent.
 # The copy at http://www.aprs.org/tocalls.txt is out of date.
 #
 
+.PHONY: tocalls-symbols
 tocalls-symbols :
+	cp tocalls.txt tocalls.txt~
 	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
+	diff tocalls.txt~ tocalls.txt
+	cp symbols-new.txt symbols-new.txt~
 	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
+	diff symbols-new.txt~ symbols-new.txt
+	cp symbolsX.txt symbolsX.txt~
 	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
+	diff symbolsX.txt~ symbolsX.txt
 
 
 #
 # The following is updated by "make depend"
 #
 # DO NOT DELETE
+
 

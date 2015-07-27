@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -22,6 +22,15 @@
 //#define DEBUG2 1		/* Parsing of base 91 compressed format. */
 //#define DEBUG3 1		/* Parsing of special messages. */
 //#define DEBUG4 1		/* Resulting display form. */
+
+#if TEST
+
+#define DEBUG1 1
+#define DEBUG2 1
+#define DEBUG3 1
+#define DEBUG4 1
+
+#endif
 
 
 /*------------------------------------------------------------------
@@ -220,6 +229,7 @@ static int t_ndp (char *str)
  *
  * Inputs:	station	- Name of station reporting telemetry.
  *		info 	- Pointer to packet Information field.
+ *		quiet	- suppress error messages.
  *
  * Outputs:	output	- Decoded telemetry in human readable format.
  *		comment	- Any comment after the data.
@@ -243,7 +253,7 @@ static int t_ndp (char *str)
  *		
  *--------------------------------------------------------------------*/
 
-void telemetry_data_original (char *station, char *info, char *output, char *comment) 
+void telemetry_data_original (char *station, char *info, int quiet, char *output, char *comment) 
 {
 	int n;
 	int seq;
@@ -275,8 +285,10 @@ void telemetry_data_original (char *station, char *info, char *output, char *com
 	}
 
 	if (strncmp(info, "T#", 2) != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: Information part of telemetry packet must begin with \"#\"\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Error: Information part of telemetry packet must begin with \"#\"\n");
+	  }
 	  return;	
 	}
 
@@ -298,9 +310,11 @@ void telemetry_data_original (char *station, char *info, char *output, char *com
 	      ndp[n] = t_ndp(p);
 	    }
 	    if (strlen(p) != 3 || araw[n] < 0 || araw[n] > 255 || araw[n] != (int)(araw[n])) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Telemetry analog values should be 3 digit integer values in range of 000 to 255.\n");	      
-	      dw_printf("Some applications might not interpret \"%s\" properly.\n", p);	      
+	      if ( ! quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Telemetry analog values should be 3 digit integer values in range of 000 to 255.\n");	      
+	        dw_printf("Some applications might not interpret \"%s\" properly.\n", p);
+	      }	      
 	    }
 	    n++;
 	  }
@@ -312,8 +326,10 @@ void telemetry_data_original (char *station, char *info, char *output, char *com
 	    int k;
 
 	    if (strlen(next) < 8) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Expected to find 8 binary digits after \"%s\" for the digital values.\n", p);	      
+	      if ( ! quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Expected to find 8 binary digits after \"%s\" for the digital values.\n", p);	
+	      }      
 	    }
 	    if (strlen(next) > 8) {
 	      strcpy (comment, next+8);
@@ -327,16 +343,20 @@ void telemetry_data_original (char *station, char *info, char *output, char *com
 	        draw[k] = 1;
 	      }
 	      else {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf("Found \"%c\" when expecting 0 or 1 for digital value %d.\n", next[k], k+1);	      
+	        if ( ! quiet) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Found \"%c\" when expecting 0 or 1 for digital value %d.\n", next[k], k+1);	
+	        }      
 	      }
  	    }
 	    n++;
 	  }
 	}
 	if (n < T_NUM_ANALOG+1) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Found fewer than expected number of telemetry data values.\n");	
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Found fewer than expected number of telemetry data values.\n");	
+	  }
 	}      
 
 /*
@@ -632,6 +652,7 @@ void telemetry_unit_label_message (char *station, char *msg)
  *			  In this case it is the destination for the message,
  *			  not the sender.
  *		msg 	- Rest of message after "EQNS."
+ *		quiet	- suppress error messages.
  *
  * Outputs:	Stored for future use when data values are received.
  *
@@ -643,7 +664,7 @@ void telemetry_unit_label_message (char *station, char *msg)
  *
  *--------------------------------------------------------------------*/
 
-void telemetry_coefficents_message (char *station, char *msg) 
+void telemetry_coefficents_message (char *station, char *msg, int quiet) 
 {
 	int n;
 	char stemp[256];
@@ -678,18 +699,22 @@ void telemetry_coefficents_message (char *station, char *msg)
 	      pm->coeff_ndp[n/3][n%3] = t_ndp (p);
 	    }
 	    else {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Equation coefficent position A%d%c is empty.\n", n/3+1, n%3+'a');
-	      dw_printf ("Some applications might not handle this correctly.\n");
+	      if ( ! quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Equation coefficent position A%d%c is empty.\n", n/3+1, n%3+'a');
+	        dw_printf ("Some applications might not handle this correctly.\n");
+	      }
 	    }
 	  }
 	  n++;
 	}
 
 	if (n != T_NUM_ANALOG * 3) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Found %d equation coefficents when 15 were expected.\n", n);
-	  dw_printf ("Some applications might not handle this correctly.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Found %d equation coefficents when 15 were expected.\n", n);
+	    dw_printf ("Some applications might not handle this correctly.\n");
+	  }
 	}
 
 #if DEBUG3
@@ -718,6 +743,7 @@ void telemetry_coefficents_message (char *station, char *msg)
  *			  In this case it is the destination for the message,
  *			  not the sender.
  *		msg 	- Rest of message after "BITS."
+ *		quiet	- suppress error messages.
  *
  * Outputs:	Stored for future use when data values are received.
  *
@@ -727,7 +753,7 @@ void telemetry_coefficents_message (char *station, char *msg)
  *
  *--------------------------------------------------------------------*/
 
-void telemetry_bit_sense_message (char *station, char *msg) 
+void telemetry_bit_sense_message (char *station, char *msg, int quiet) 
 {
 	int n;
 	struct t_metadata_s *pm;
@@ -741,8 +767,10 @@ void telemetry_bit_sense_message (char *station, char *msg)
 	pm = t_get_metadata(station);
 
 	if (strlen(msg) < 8) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("The telemetry bit sense message should have at least 8 characters.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("The telemetry bit sense message should have at least 8 characters.\n");
+	  }
 	}
 
 	for (n = 0; n < T_NUM_DIGITAL && n < strlen(msg); n++) {
@@ -754,8 +782,10 @@ void telemetry_bit_sense_message (char *station, char *msg)
 	    pm->sense[n] = 0;
 	  }
 	  else {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Bit position %d sense value was \"%c\" when 0 or 1 was expected.\n", n+1, msg[n]);
+	    if ( ! quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Bit position %d sense value was \"%c\" when 0 or 1 was expected.\n", n+1, msg[n]);
+	    }
 	  }
 	}
 
@@ -927,7 +957,18 @@ static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_A
 } /* end t_data_process */
 
 
+/*-------------------------------------------------------------------
+ *
+ * Unit test.   Run with:
+ *
+ *	make -f Makefile.? etest
+ *
+ *--------------------------------------------------------------------*/
+
+
 #if TEST
+
+
 
 int main ( )
 {
@@ -938,32 +979,41 @@ int main ( )
 	strcpy (comment, "");
 
 
+	text_color_set(DW_COLOR_INFO);
+	dw_printf ("Unit test for telemetry decoding functions...\n");	
+
 #if DEBUG1
+
+	text_color_set(DW_COLOR_INFO);
+	dw_printf ("part 1\n");	
 
 	// From protocol spec.
 
-	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,01101001", result, comment);
+	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,01101001", 0, result, comment);
 
 	// Try adding a comment.
 
-	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,01101001Comment,with,commas", result, comment);
+	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,01101001Comment,with,commas", 0, result, comment);
 	strcpy (comment, "");
 
 	// Try shortening or omitting parts.
 
-	telemetry_data_original ("WB2OSZ", "T005,199,000,255,073,123,0110", result, comment);
-	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,0110", result, comment);
-	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123", result, comment);
-	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,,123,01101001", result, comment);
-	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,01101009", result, comment);
+	telemetry_data_original ("WB2OSZ", "T005,199,000,255,073,123,0110", 0, result, comment);
+	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,0110", 0, result, comment);
+	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123", 0, result, comment);
+	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,,123,01101001", 0, result, comment);
+	telemetry_data_original ("WB2OSZ", "T#005,199,000,255,073,123,01101009", 0, result, comment);
 
 	// Local observation.
 
-	telemetry_data_original ("WB2OSZ", "T#491,4.9,0.3,25.0,0.0,1.0,00000000", result, comment); 
+	telemetry_data_original ("WB2OSZ", "T#491,4.9,0.3,25.0,0.0,1.0,00000000", 0, result, comment); 
 
 #endif
 
 #if DEBUG2
+
+	text_color_set(DW_COLOR_INFO);
+	dw_printf ("part 2\n");	
 
 	// From protocol spec.
 
@@ -985,26 +1035,32 @@ int main ( )
 
 #if DEBUG3
 
+	text_color_set(DW_COLOR_INFO);
+	dw_printf ("part 3\n");	
+
 	telemetry_name_message ("N0QBF-11", "Battery,Btemp,ATemp,Pres,Alt,Camra,Chut,Sun,10m,ATV");
 
 	telemetry_unit_label_message ("N0QBF-11", "v/100,deg.F,deg.F,Mbar,Kft,Click,OPEN,on,on,hi");
 
-	telemetry_coefficents_message ("N0QBF-11", "0,5.2,0,0,.53,-32,3,4.39,49,-32,3,18,1,2,3");
+	telemetry_coefficents_message ("N0QBF-11", "0,5.2,0,0,.53,-32,3,4.39,49,-32,3,18,1,2,3", 0);
 
 	// Error if less than 15 or empty field.
-	telemetry_coefficents_message ("N0QBF-11", "0,5.2,0,0,.53,-32,3,4.39,49,-32,3,18,1,2");
-	telemetry_coefficents_message ("N0QBF-11", "0,5.2,0,0,.53,-32,3,4.39,49,-32,3,18,1,,3");
+	telemetry_coefficents_message ("N0QBF-11", "0,5.2,0,0,.53,-32,3,4.39,49,-32,3,18,1,2", 0);
+	telemetry_coefficents_message ("N0QBF-11", "0,5.2,0,0,.53,-32,3,4.39,49,-32,3,18,1,,3", 0);
 
-	telemetry_bit_sense_message ("N0QBF-11", "10110000,N0QBF's Big Balloon");
+	telemetry_bit_sense_message ("N0QBF-11", "10110000,N0QBF's Big Balloon", 0);
 
 	// Too few and invalid digits.
-	telemetry_bit_sense_message ("N0QBF-11", "1011000");
-	telemetry_bit_sense_message ("N0QBF-11", "10110008");
+	telemetry_bit_sense_message ("N0QBF-11", "1011000", 0);
+	telemetry_bit_sense_message ("N0QBF-11", "10110008", 0);
 
 #endif
 
-	telemetry_coefficents_message ("M0XER-3", "0,0.001,0,0,0.001,0,0,0.1,-273.2,0,1,0,0,1,0");
-	telemetry_bit_sense_message ("M0XER-3", "11111111,10mW research balloon");
+	text_color_set(DW_COLOR_INFO);
+	dw_printf ("part 4\n");	
+
+	telemetry_coefficents_message ("M0XER-3", "0,0.001,0,0,0.001,0,0,0.1,-273.2,0,1,0,0,1,0", 0);
+	telemetry_bit_sense_message ("M0XER-3", "11111111,10mW research balloon", 0);
 	telemetry_name_message ("M0XER-3", "Vbat,Vsolar,Temp,Sat");
 	telemetry_unit_label_message ("M0XER-3", "V,V,C,,m");
 
@@ -1013,6 +1069,8 @@ int main ( )
 	telemetry_data_base91 ("M0XER-3", "n0RS(:>b!+", result);
 	telemetry_data_base91 ("M0XER-3", "x&G=!(8s!,", result);
 
+
+	// TODO: Should return success/fail so visual inspection is not needed. 
 
 	exit (0);
 }

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -51,17 +51,15 @@
 #include "dsp.h"
 
 
+static float slice_point[MAX_SUBCHANS];
+
+
 /* Add sample to buffer and shift the rest down. */
 
 __attribute__((hot))
 static inline void push_sample (float val, float *buff, int size)
 {
-	int j;
-
-	// TODO: memmove any faster?  
-	for (j = size - 1; j >= 1; j--) {
-	  buff[j] = buff[j-1];
-	}
+	memmove(buff+1,buff,(size-1)*sizeof(float));
 	buff[0] = val; 
 }
 
@@ -69,15 +67,29 @@ static inline void push_sample (float val, float *buff, int size)
 /* FIR filter kernel. */
 
 __attribute__((hot))
-static inline float convolve (const float *data, const float *filter, int filter_size)
+static inline float convolve (const float *__restrict__ data, const float *__restrict__ filter, int filter_size)
 {
-	  float sum = 0;
-	  int j;
+	float sum = 0.0f;
+	int j;
 
-	  for (j=0; j<filter_size; j++) {
+#if 0
+	//  As suggested here,  http://locklessinc.com/articles/vectorize/
+	//  Unfortunately, older compilers don't recognize it.
+
+	//  Get more information by using -ftree-vectorizer-verbose=5
+
+	float *d = __builtin_assume_aligned(data, 16);
+	float *f = __builtin_assume_aligned(filter, 16);
+
+	for (j=0; j<filter_size; j++) {
+	    sum += f[j] * d[j];
+	}
+#else
+	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
-	  }
-	  return (sum);
+	}
+#endif
+	return (sum);
 }
 
 /* Automatic gain control. */
@@ -128,6 +140,7 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
 void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s *D)
 {	
 	float fc;
+	int j;
 
 	memset (D, 0, sizeof(struct demodulator_state_s));
 
@@ -136,29 +149,37 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
         D->pll_step_per_sample = 
 		(int) round(TICKS_PER_PLL_CYCLE * (double) baud / (double)samples_per_sec);
 	
-	D->filter_len_bits =  72 * 9600.0 / (44100.0 * 2.0);		
-	D->lp_filter_size = (int) (( D->filter_len_bits * (float)samples_per_sec / baud) + 0.5);
+	D->lp_filter_len_bits =  72 * 9600.0 / (44100.0 * 2.0);		
+	D->lp_filter_size = (int) (( D->lp_filter_len_bits * (float)samples_per_sec / baud) + 0.5);
+	D->lp_window = BP_WINDOW_HAMMING;
+	D->lpf_baud = 0.59;	
+
+	D->agc_fast_attack = 0.080;	
+	D->agc_slow_decay = 0.00012;
+
+	D->pll_locked_inertia = 0.88;
+	D->pll_searching_inertia = 0.67;
+
+
+#ifdef TUNE_LP_WINDOW
+	D->lp_window = TUNE_LP_WINDOW;
+#endif
+
 #if TUNE_LP_FILTER_SIZE
 	D->lp_filter_size = TUNE_LP_FILTER_SIZE;
 #endif
 
-	D->lpf_baud = 0.59;	
 #ifdef TUNE_LPF_BAUD
 	D->lpf_baud = TUNE_LPF_BAUD;
 #endif	
 
-	D->agc_fast_attack = 0.080;	
 #ifdef TUNE_AGC_FAST
 	D->agc_fast_attack = TUNE_AGC_FAST;
 #endif
 
-	D->agc_slow_decay = 0.00012;
 #ifdef TUNE_AGC_SLOW
 	D->agc_slow_decay = TUNE_AGC_SLOW;
 #endif
-
-	D->pll_locked_inertia = 0.88;
-	D->pll_searching_inertia = 0.67;
 
 #if defined(TUNE_PLL_LOCKED) && defined(TUNE_PLL_SEARCHING)
 	D->pll_locked_inertia = TUNE_PLL_LOCKED;
@@ -169,7 +190,14 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 
 	//dw_printf ("demod_9600_init: call gen_lowpass(fc=%.2f, , size=%d, )\n", fc, D->lp_filter_size);
 
-	gen_lowpass (fc, D->lp_filter, D->lp_filter_size, BP_WINDOW_HAMMING);
+	gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window);
+
+	/* Version 1.2: Experiment with different slicing levels. */
+
+	for (j = 0; j < MAX_SUBCHANS; j++) {
+	  slice_point[j] = 0.02 * (j - 0.5 * (MAX_SUBCHANS-1));
+	  //dw_printf ("slice_point[%d] = %+5.2f\n", j, slice_point[j]);
+	}
 
 } /* end fsk_demod_init */
 
@@ -227,20 +255,9 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
  * 		ftp://ftp.tapr.org/general/9600baud/96man2x0.txt
  *
  *
- * TODO:	This works in a simulated environment but it has not yet
- *		been successfully tested for interoperability with 
- *		other systems over the air.
- *		That's why it is not mentioned in documentation.
- *
- *		The signal from the radio speaker does NOT have 
- *		enough bandwidth and the waveform is hopelessly distorted.
- *		It will be necessary to obtain a signal right after
- *		the discriminator of the receiver.
- *		It will probably also be necessary to tap directly into
- *		the modulator, bypassing the microphone amplifier.
- *
  *--------------------------------------------------------------------*/
 
+static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D)
@@ -258,8 +275,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 
 	int j;
 	int subchan = 0;
-	int demod_data;					/* Still scrambled. */
-	static int descram;				/* Data bit de-scrambled. */
+	int demod_data;				/* Still scrambled. */
 
 
 	assert (chan >= 0 && chan < MAX_CHANS);
@@ -279,9 +295,13 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * indexing in the later loops that multipy and add.
  */
 
-	/* Scale to nice number, range -1.0 to +1.0. */
+	/* Scale to nice number for convenience. */
+	/* Consistent with the AFSK demodulator, we'd like to use */
+	/* only half of the dynamic range to have some headroom. */
+	/* i.e.  input range +-16k becomes +-1 here and is */
+	/* displayed in the heard line as audio level 100. */
 
-	fsam = sam / 32768.0;
+	fsam = sam / 16384.0;
 
 	push_sample (fsam, D->raw_cb, D->lp_filter_size);
 
@@ -290,6 +310,30 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  */
 
 	amp = convolve (D->raw_cb, D->lp_filter, D->lp_filter_size);
+
+
+/*
+ * Version 1.2: Capture the post-filtering amplitude for display.
+ * This is similar to the AGC without the normalization step.
+ * We want decay to be substantially slower to get a longer
+ * range idea of the received audio.
+ * For AFSK, we keep mark and space amplitudes.
+ * Here we keep + and - peaks because there could be a DC bias.
+ */
+
+	if (amp >= D->alevel_mark_peak) {
+	  D->alevel_mark_peak = amp * D->quick_attack + D->alevel_mark_peak * (1. - D->quick_attack);
+	}
+	else {
+	  D->alevel_mark_peak = amp * D->sluggish_decay + D->alevel_mark_peak * (1. - D->sluggish_decay);
+	}
+
+	if (amp <= D->alevel_space_peak) {
+	  D->alevel_space_peak = amp * D->quick_attack + D->alevel_space_peak * (1. - D->quick_attack);
+	}
+	else {
+	  D->alevel_space_peak = amp * D->sluggish_decay + D->alevel_space_peak * (1. - D->sluggish_decay);
+	}
 
 /* 
  * The input level can vary greatly.
@@ -300,23 +344,60 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * and scaling the results to be roughly in the -1.0 to +1.0 range.
  */
 
-	demod_out = 2.0 * agc (amp, D->agc_fast_attack, D->agc_slow_decay, &(D->m_peak), &(D->m_valley));
+	demod_out = agc (amp, D->agc_fast_attack, D->agc_slow_decay, &(D->m_peak), &(D->m_valley));
+
+
+// TODO: There is potential for multiple decoders with one filter.
 
 //dw_printf ("peak=%.2f valley=%.2f amp=%.2f norm=%.2f\n", D->m_peak, D->m_valley, amp, norm);
 
 	/* Throw in a little Hysteresis??? */
 	/* (Not to be confused with Hysteria.) */
+	/* Doesn't seem to have any value. */
+	/* Using a level of .02 makes things worse. */
+	/* Might want to experiment with this again someday. */
 
-	if (demod_out > 0.01) {
-	  demod_data = 1;
+
+//	if (demod_out > 0.03) {
+//	  demod_data = 1;
+//	}
+//	else if (demod_out < -0.03) {
+//	  demod_data = 0;
+//	} 
+//	else {
+//	  demod_data = D->slicer[subchan].prev_demod_data;
+//	}
+
+	if (D->num_slicers <= 1) {
+
+	  /* Normal case of one demodulator to one HDLC decoder. */
+	  /* Demodulator output is difference between response from two filters. */
+	  /* AGC should generally keep this around -1 to +1 range. */
+
+	  demod_data = demod_out > 0;
+
+	  nudge_pll (chan, subchan, demod_data, D);
 	}
-	else if (demod_out < -0.01) {
-	  demod_data = 0;
-	} 
 	else {
-	  demod_data = D->prev_demod_data;
+	  int s;
+
+	  assert (subchan == 0);
+
+	  /* Multiple slicers each feeding its own HDLC decoder. */
+
+	  for (s=0; s<D->num_slicers; s++) {
+	    demod_data = demod_out > slice_point[s];
+	    nudge_pll (chan, s, demod_data, D);		
+	  }
 	}
 
+} /* end demod_9600_process_sample */
+
+
+__attribute__((hot))
+static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D)
+{
+	int descram;				/* Data bit de-scrambled. */
 
 /*
  * Next, a PLL is used to sample near the centers of the data bits.
@@ -343,10 +424,10 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * This was optimized for 1200 baud AFSK.  There might be some opportunity
  * for improvement here.
  */
-	D->prev_d_c_pll = D->data_clock_pll;
-	D->data_clock_pll += D->pll_step_per_sample;
+	D->slicer[subchan].prev_d_c_pll = D->slicer[subchan].data_clock_pll;
+	D->slicer[subchan].data_clock_pll += D->pll_step_per_sample;
 
-	if (D->data_clock_pll < 0 && D->prev_d_c_pll > 0) {
+	if (D->slicer[subchan].data_clock_pll < 0 && D->slicer[subchan].prev_d_c_pll > 0) {
 
 	  /* Overflow. */
 
@@ -354,56 +435,37 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * At this point, we need to descramble the data as
  * in hardware based designs by G3RUH and K9NG.
  *
+ * Future Idea:  allow unscrambled baseband data.
+ *
  * http://www.amsat.org/amsat/articles/g3ruh/109/fig03.gif
  */
 
-	  //assert (modem.modem_type[chan] == SCRAMBLE);
+	  //assert (modem.modem_type[chan] == MODEM_SCRAMBLE);
 
-	  //if (modem.modem_type[chan] == SCRAMBLE) {
-
-
-//  TODO:  This needs to be rearranged to allow attempted "fixing"
-//  	of corrupted bits later.  We need to store the original 
-//	received bits and do the descrambling after attempted
-//	repairs.  However, we also need to descramble now to 
-//	detect the flag sequences.
+	  //if (modem.modem_type[chan] == MODEM_SCRAMBLE) {
 
 
-	    descram = descramble (demod_data, &(D->lfsr));
-#if SLICENDICE
-	    // TODO: Needs more thought. 
-	    // Does it even make sense to remember demod_out in this case?
-	    // We would need to do the re-thresholding before descrambling.
-	    //hdlc_rec_bit_sam (chan, subchan, descram, descram ? 1.0 : -1.0);
-#else
+	    descram = descramble (demod_data, &(D->slicer[subchan].lfsr));
 
-// TODO: raw received bit and true later.
-
-	    hdlc_rec_bit (chan, subchan, descram, 0, D->lfsr);
-
-#endif
+	    hdlc_rec_bit (chan, subchan, demod_data, 1, D->slicer[subchan].lfsr);
 
 	    //D->prev_descram = descram;
 	  //}
 	  //else {
 	    /* Baseband signal for completeness - not in common use. */
-#if SLICENDICE
-	    //hdlc_rec_bit_sam (chan, subchan, demod_data, demod_data ? 1.0 : -1.0);
-#else
 	    //hdlc_rec_bit (chan, subchan, demod_data);
-#endif
 	  //}
 	}
 
-        if (demod_data != D->prev_demod_data) {
+        if (demod_data != D->slicer[subchan].prev_demod_data) {
 
 	  // Note:  Test for this demodulator, not overall for channel.
 
-	  if (hdlc_rec_data_detect_1 (chan, subchan)) {
-	    D->data_clock_pll = (int)(D->data_clock_pll * D->pll_locked_inertia);
+	  if (hdlc_rec_gathering (chan, subchan)) {
+	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_locked_inertia);
 	  }
 	  else {
-	    D->data_clock_pll = (int)(D->data_clock_pll * D->pll_searching_inertia);
+	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_searching_inertia);
 	  }
 	}
 
@@ -411,7 +473,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 #if DEBUG5
 
 	//if (chan == 0) {
-	if (hdlc_rec_data_detect_1 (chan,subchan)) {
+	if (hdlc_rec_gathering (chan,subchan)) {
 	
 	  char fname[30];
 
@@ -454,9 +516,11 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * Remember demodulator output (pre-descrambling) so we can compare next time
  * for the DPLL sync.
  */
-	D->prev_demod_data = demod_data;
+	D->slicer[subchan].prev_demod_data = demod_data;
 
-} /* end demod_9600_process_sample */
+} /* end nudge_pll */
+
+
 
 
 

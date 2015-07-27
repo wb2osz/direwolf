@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -58,7 +58,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-//#include <ctype.h>	/* for isdigit */
+#include <ctype.h>	/* for isdigit, isupper */
 #include "regex.h"
 #include <sys/unistd.h>
 
@@ -68,17 +68,23 @@
 #include "textcolor.h"
 #include "dedupe.h"
 #include "tq.h"
+#include "pfilter.h"
 
 
-static packet_t digipeat_match (packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt);
+static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
+				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *type_filter);
+
+//static int filter_by_type (char *source, char *infop, char *type_filter);
+
 
 /*
+ * Keep pointer to configuration options.
  * Set by digipeater_init and used later.
  */
 
 
-static struct digi_config_s my_config;
+static struct audio_s	    *save_audio_config_p;
+static struct digi_config_s *save_digi_config_p;
 
 
 /*------------------------------------------------------------------------------
@@ -87,19 +93,21 @@ static struct digi_config_s my_config;
  * 
  * Purpose:	Initialize with stuff from configuration file.
  *
- * Input:	p_digi_config	- Address of structure with all the
- *				necessary configuration details.
+ * Inputs:	p_audio_config	- Configuration for audio channels.
+ *
+ *		p_digi_config	- Digipeater configuration details.
  *		
- * Outputs:	Make local copy for later use.
+ * Outputs:	Save pointers to configuration for later use.
  *		
  * Description:	Called once at application startup time.
  *
  *------------------------------------------------------------------------------*/
 
-void digipeater_init (struct digi_config_s *p_digi_config) 
+void digipeater_init (struct audio_s *p_audio_config, struct digi_config_s *p_digi_config) 
 {
-	memcpy (&my_config, p_digi_config, sizeof(my_config));
-
+	save_audio_config_p = p_audio_config;
+	save_digi_config_p = p_digi_config;
+	
 	dedupe_init (p_digi_config->dedupe_time);
 }
 
@@ -131,7 +139,12 @@ void digipeater (int from_chan, packet_t pp)
 
 	// dw_printf ("digipeater()\n");
 	
-	assert (from_chan >= 0 && from_chan < my_config.num_chans);
+	assert (from_chan >= 0 && from_chan < MAX_CHANS);
+
+	if ( ! save_audio_config_p->achan[from_chan].valid) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("digipeater: Did not expect to receive on invalid channel %d.\n", from_chan);
+	}
 
 
 /*
@@ -140,12 +153,14 @@ void digipeater (int from_chan, packet_t pp)
  * We want these to get out quickly.
  */
 
-	for (to_chan=0; to_chan<my_config.num_chans; to_chan++) {
-	  if (my_config.enabled[from_chan][to_chan]) {
+	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	  if (save_digi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan == from_chan) {
-	      result = digipeat_match (pp, my_config.mycall[from_chan], my_config.mycall[to_chan], 
-			&my_config.alias[from_chan][to_chan], &my_config.wide[from_chan][to_chan], 
-			to_chan, my_config.preempt[from_chan][to_chan]);
+	      result = digipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
+					   save_audio_config_p->achan[to_chan].mycall, 
+			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
+			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
+				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
 	        tq_append (to_chan, TQ_PRIO_0_HI, result);
@@ -161,12 +176,14 @@ void digipeater (int from_chan, packet_t pp)
  * These are lower priority
  */
 
-	for (to_chan=0; to_chan<my_config.num_chans; to_chan++) {
-	  if (my_config.enabled[from_chan][to_chan]) {
+	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	  if (save_digi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan != from_chan) {
-	      result = digipeat_match (pp, my_config.mycall[from_chan], my_config.mycall[to_chan], 
-			&my_config.alias[from_chan][to_chan], &my_config.wide[from_chan][to_chan], 
-			to_chan, my_config.preempt[from_chan][to_chan]);
+	      result = digipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
+					   save_audio_config_p->achan[to_chan].mycall, 
+			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
+			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
+				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
 	        tq_append (to_chan, TQ_PRIO_1_LO, result);
@@ -185,27 +202,29 @@ void digipeater (int from_chan, packet_t pp)
  * 
  * Purpose:	A simple digipeater for APRS.
  *
- * Input:	pp	- Pointer to a packet object.
+ * Input:	pp		- Pointer to a packet object.
  *	
  *		mycall_rec	- Call of my station, with optional SSID,
- *				associated with the radio channel where the 
- *				packet was received.
+ *				  associated with the radio channel where the 
+ *				  packet was received.
  *
- *		mycall_rec	- Call of my station, with optional SSID,
- *				associated with the radio channel where the 
- *				packet was received.  Could be the same as
- *				mycall_rec or different.
+ *		mycall_xmit	- Call of my station, with optional SSID,
+ *				  associated with the radio channel where the 
+ *				  packet is to be transmitted.  Could be the same as
+ *				  mycall_rec or different.
  *
- *		alias	- Compiled pattern for my station aliases or 
- *				"trapping" (repeating only once).
+ *		alias		- Compiled pattern for my station aliases or 
+ *				  "trapping" (repeating only once).
  *
- *		wide	- Compiled pattern for normal WIDEn-n digipeating.
+ *		wide		- Compiled pattern for normal WIDEn-n digipeating.
  *
  *		to_chan		- Channel number that we are transmitting to.
  *				  This is needed to maintain a history for 
  *			 	  removing duplicates during specified time period.
  *
-		preempt	- Option for "preemptive" digipeating.
+ *		preempt		- Option for "preemptive" digipeating.
+ *
+ *		filter_str	- Filter expression string or NULL.
  *		
  * Returns:	Packet object for transmission or NULL.
  *
@@ -237,8 +256,8 @@ static char *dest_ssid_path[16] = {
 			"WIDE2-2"  };	/* West */
 				  
 
-static packet_t digipeat_match (packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt)
+static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
+				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *filter_str)
 {
 	int ssid;
 	int r;
@@ -247,6 +266,23 @@ static packet_t digipeat_match (packet_t pp, char *mycall_rec, char *mycall_xmit
 	int err;
 	char err_msg[100];
 
+/*
+ * First check if filtering has been configured.
+ */
+
+
+	if (filter_str != NULL) {
+
+	  if (pfilter(from_chan, to_chan, filter_str, pp) != 1) {
+
+// TODO1.2: take out debug message
+//#if DEBUG
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Packet was rejected for digipeating from channel %d to %d by filter: %s\n", from_chan, to_chan, filter_str);
+//#endif
+	    return(NULL);
+	  }
+	}
 
 /*
  * The spec says:
@@ -328,10 +364,10 @@ static packet_t digipeat_match (packet_t pp, char *mycall_rec, char *mycall_xmit
 	if (dedupe_check(pp, to_chan)) {
 //#if DEBUG
 	  /* Might be useful if people are wondering why */
-	  /* some are not repeated.  Might cause confusion. */
+	  /* some are not repeated.  Might also cause confusion. */
 
 	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("Digipeater: Drop redundant packet.\n");
+	  dw_printf ("Digipeater: Drop redundant packet to channel %d.\n", to_chan);
 //#endif
 	  assert (result == NULL);
 	  return NULL;
@@ -358,7 +394,6 @@ static packet_t digipeat_match (packet_t pp, char *mycall_rec, char *mycall_xmit
  * If preemptive digipeating is enabled, try matching my call 
  * and aliases against all remaining unused digipeaters.
  */
-
 
 	if (preempt != PREEMPT_OFF) {
 	  int r2;
@@ -482,10 +517,10 @@ void digi_regen (int from_chan, packet_t pp)
 
 	// dw_printf ("digi_regen()\n");
 	
-	assert (from_chan >= 0 && from_chan < my_config.num_chans);
+	assert (from_chan >= 0 && from_chan < MAX_CHANS);
 
-	for (to_chan=0; to_chan<my_config.num_chans; to_chan++) {
-	  if (my_config.regen[from_chan][to_chan]) {
+	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	  if (save_digi_config_p->regen[from_chan][to_chan]) {
 	    result = ax25_dup (pp); 
 	    if (result != NULL) {
 	      // TODO:  if AX.25 and has been digipeated, put in HI queue?
@@ -495,6 +530,7 @@ void digi_regen (int from_chan, packet_t pp)
 	}
 
 } /* end dig_regen */
+
 
 
 /*-------------------------------------------------------------------------
@@ -519,6 +555,8 @@ static regex_t wide_re;
 static int failed;
 
 static enum preempt_e preempt = PREEMPT_OFF;
+
+static char typefilter[20] = "";
 
 
 static void test (char *in, char *out)
@@ -575,7 +613,9 @@ static void test (char *in, char *out)
 	text_color_set(DW_COLOR_REC);
 	dw_printf ("Rec\t%s\n", rec);
 
-	result = digipeat_match (pp, mycall, mycall, &alias_re, &wide_re, 0, preempt);
+//TODO:											Add filtering to test.
+//											V
+	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, NULL);
 	
 	if (result != NULL) {
 
@@ -788,6 +828,69 @@ int main (int argc, char *argv[])
 	test (	"W1ABC>TEST11,CITYA*,CITYW,CITYX,CITYY,CITYZ:nomatch",
 		"");
 
+
+#if 0	/* changed strategy */
+/*
+ * New in version 1.2.
+ */
+
+
+	// no filter.
+	if (filter_by_type ("CWAPID", ":NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "") != 1) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 1\n"); failed++; }
+	
+	// message should not match psqt
+	if (filter_by_type ("CWAPID", ":NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "pqst") != 0) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 2\n"); failed++; }
+	
+	// This should match position
+	if (filter_by_type ("N3LEE-7", "`cHDl <0x1c>[/\"5j}", "qstp") != 1) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 3\n"); failed++; }
+	
+	// This should match nws
+	if (filter_by_type ("CWAPID", ":NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "n") != 1) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 4\n"); failed++; }
+	
+	// But not this.
+	if (filter_by_type ("CWAPID", ":zzz-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "n") != 0) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 5\n"); failed++; }
+
+	// This should match nws
+	if (filter_by_type ("CWAPID", ";CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", "n") != 1) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 6\n"); failed++; }
+
+	// But not this due do addressee prefix mismatch
+	if (filter_by_type ("CWAPID", ";NWSttttz *DDHHMMzLATLONICONADVISETYPE{seq#", "n") != 0) 
+	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 7\n"); failed++; }
+
+
+/*
+ * Filtering integrated with rest of process...
+ */
+
+	strcpy (typefilter, "w");
+
+	test (	"N8VIM>APN391,WIDE2-1:$ULTW00000000010E097D2884FFF389DC000102430002033400000000",
+		"N8VIM>APN391,WB2OSZ-9*:$ULTW00000000010E097D2884FFF389DC000102430002033400000000");
+
+	test (	"AB1OC-10>APWW10,WIDE1-1,WIDE2-1:>FN42er/# Hollis, NH iGate Operational",
+		"");
+ 
+	strcpy (typefilter, "s");
+
+	test (	"AB1OC-10>APWW10,WIDE1-1,WIDE2-1:>FN42er/# Hollis, NH iGate Operational",
+		"AB1OC-10>APWW10,WB2OSZ-9*,WIDE2-1:>FN42er/# Hollis, NH iGate Operational");
+
+	test (	"K1ABC-9>TR4R8R,WIDE1-1:`c6LlIb>/`\"4K}_%",
+		"");
+
+	strcpy (typefilter, "up");
+
+	test (	"K1ABC-9>TR4R8R,WIDE1-1:`c6LlIb>/`\"4K}_%",
+		"K1ABC-9>TR4R8R,WB2OSZ-9*:`c6LlIb>/`\"4K}_%");
+
+	strcpy (typefilter, "");
+#endif
 
 /* 
  * Did I miss any cases?

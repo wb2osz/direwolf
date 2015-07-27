@@ -18,3 +18,7 @@ void longitude_to_nmea (double dlong, char *slong, char *hemi);
 
 double latitude_from_nmea (char *pstr, char *phemi);
 double longitude_from_nmea (char *pstr, char *phemi);
+
+double ll_distance_km (double lat1, double lon1, double lat2, double lon2);
+
+int ll_from_grid_square (char *maidenhead, double *dlat, double *dlon);

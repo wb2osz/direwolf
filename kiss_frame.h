@@ -1,6 +1,8 @@
 
 /* kiss_frame.h */
 
+#include "audio.h"		/* for struct audio_s */
+
 
 /*
  * Special characters used by SLIP protocol.
@@ -38,6 +40,7 @@ typedef struct kiss_frame_s {
 } kiss_frame_t;
 
 
+void kiss_frame_init (struct audio_s *pa);
 
 int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out);
 

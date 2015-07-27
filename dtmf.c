@@ -1,7 +1,11 @@
+
+//#define DEBUG 1
+
+
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -40,9 +44,6 @@
 #include "dtmf.h"
 
 
-// Define for unit test.
-//#define DTMF_TEST 1
-
 
 #if DTMF_TEST
 #define TIMEOUT_SEC 1	/* short for unit test below. */
@@ -56,25 +57,25 @@
 static int const dtmf_tones[NUM_TONES] = { 697, 770, 852, 941, 1209, 1336, 1477, 1633 };
 
 /*
- * Current state of the decoding. 
+ * Current state of the DTMF decoding. 
  */
 
-static struct {
+static struct dd_s {	 /* Separate for each audio channel. */
+
 	int sample_rate;	/* Samples per sec.  Typ. 44100, 8000, etc. */
 	int block_size;		/* Number of samples to process in one block. */
 	float coef[NUM_TONES];	
 
-	struct {		/* Separate for each audio channel. */
+	int n;			/* Samples processed in this block. */
+	float Q1[NUM_TONES];
+	float Q2[NUM_TONES];
+	char prev_dec;	
+	char debounced;
+	char prev_debounced;
+	int timeout;
 
-		int n;		/* Samples processed in this block. */
-		float Q1[NUM_TONES];
-		float Q2[NUM_TONES];
-		char prev_dec;	
-		char debounced;
-		char prev_debounced;
-		int timeout;
-	} C[MAX_CHANS];		
-} D;
+} dd[MAX_CHANS];		
+
 
 
 
@@ -86,30 +87,51 @@ static struct {
  * Purpose:     Initialize the DTMF decoder.
  *		This should be called once at application start up time.
  *
- * Inputs:      sample_rate	- Audio sample frequency, typically 
- *				  44100, 22050, 8000, etc.
+ * Inputs:      p_audio_config - Configuration for audio interfaces.
+ *
+ *			All we care about is:
+ *
+ *				samples_per_sec - Audio sample frequency, typically 
+ *				  		44100, 22050, 8000, etc.
+ *
+ *			This is a associated with the soundcard.
+ *			In version 1.2, we can have multiple soundcards
+ *			with potentially different sample rates.
  *
  * Returns:     None.
  *
  *----------------------------------------------------------------*/
 
-void dtmf_init (int sample_rate)
+
+void dtmf_init (struct audio_s *p_audio_config)
 {
 	int j;		/* Loop over all tones frequencies. */
 	int c;		/* Loop over all audio channels. */
+	
 
 /*
- * Processing block size.
+ * Pick a suitable processing block size.
  * Larger = narrower bandwidth, slower response.
  */
-	D.sample_rate = sample_rate;
-	D.block_size = (205 * sample_rate) / 8000;
+
+	for (c=0; c<MAX_CHANS; c++) {
+	  struct dd_s *D = &(dd[c]);
+	  int a = ACHAN2ADEV(c);
+	  if (p_audio_config->achan[c].dtmf_decode != DTMF_DECODE_OFF) {
 
 #if DEBUG
-	dw_printf ("    freq      k     coef    \n");
+	    dw_printf ("channel %d:\n", c);
 #endif
-	for (j=0; j<NUM_TONES; j++) {
-	  float k; 
+
+	    D->sample_rate = p_audio_config->adev[a].samples_per_sec;
+	    D->block_size = (205 * D->sample_rate) / 8000;
+	
+
+#if DEBUG
+	    dw_printf ("    freq      k     coef    \n");
+#endif
+	    for (j=0; j<NUM_TONES; j++) {
+	      float k; 
 
 
 // Why do some insist on rounding k to the nearest integer?
@@ -117,26 +139,29 @@ void dtmf_init (int sample_rate)
 // What is to be gained?
 // More consistent results for all the tones when k is not rounded off.
 
-	  k = D.block_size * (float)(dtmf_tones[j]) / (float)(D.sample_rate);
+	      k = D->block_size * (float)(dtmf_tones[j]) / (float)(D->sample_rate);
 
-	  D.coef[j] = 2 * cos(2 * M_PI * (float)k / (float)(D.block_size));
+	      D->coef[j] = 2 * cos(2 * M_PI * (float)k / (float)(D->block_size));
 
-	  assert (D.coef[j] > 0 && D.coef[j] < 2.0);
+	      assert (D->coef[j] > 0 && D->coef[j] < 2.0);
 #if DEBUG
-	  dw_printf ("%8d   %5.1f   %8.5f  \n", dtmf_tones[j], k, D.coef[j]);
+	      dw_printf ("%8d   %5.1f   %8.5f  \n", dtmf_tones[j], k, D->coef[j]);
 #endif
+	    }
+	  }
 	}
 
 	for (c=0; c<MAX_CHANS; c++) {
-	  D.C[c].n = 0;
+	  struct dd_s *D = &(dd[c]); 
+	  D->n = 0;
 	  for (j=0; j<NUM_TONES; j++) {
-	    D.C[c].Q1[j] = 0;
-	    D.C[c].Q2[j] = 0;
+	    D->Q1[j] = 0;
+	    D->Q2[j] = 0;
 	  }
-	  D.C[c].prev_dec = ' ';
-	  D.C[c].debounced = ' ';
-	  D.C[c].prev_debounced = ' ';
-	  D.C[c].timeout = 0;
+	  D->prev_dec = ' ';
+	  D->debounced = ' ';
+	  D->prev_debounced = ' ';
+	  D->timeout = 0;
 	}
 
 }
@@ -167,29 +192,33 @@ char dtmf_sample (int c, float input)
 	float output[NUM_TONES];
 	char decoded;
 	char ret;
+	struct dd_s *D;
 	static const char rc2char[16] = { 	'1', '2', '3', 'A',
 						'4', '5', '6', 'B',
 						'7', '8', '9', 'C',
 						'*', '0', '#', 'D' };
+
+	D = &(dd[c]);
+
 	for (i=0; i<NUM_TONES; i++) {
-	  Q0 = input + D.C[c].Q1[i] * D.coef[i] - D.C[c].Q2[i];
-	  D.C[c].Q2[i] = D.C[c].Q1[i];
-	  D.C[c].Q1[i] = Q0;
+	  Q0 = input + D->Q1[i] * D->coef[i] - D->Q2[i];
+	  D->Q2[i] = D->Q1[i];
+	  D->Q1[i] = Q0;
 	}
 
 /*
  * Is it time to process the block?
  */
-	D.C[c].n++;
-	if (D.C[c].n == D.block_size) {
+	D->n++;
+	if (D->n == D->block_size) {
 	  int row, col;
 
 	  for (i=0; i<NUM_TONES; i++) {
-	    output[i] = sqrt(D.C[c].Q1[i] * D.C[c].Q1[i] + D.C[c].Q2[i] * D.C[c].Q2[i] - D.C[c].Q1[i] * D.C[c].Q2[i] * D.coef[i]);
-	    D.C[c].Q1[i] = 0;
-	    D.C[c].Q2[i] = 0;
+	    output[i] = sqrt(D->Q1[i] * D->Q1[i] + D->Q2[i] * D->Q2[i] - D->Q1[i] * D->Q2[i] * D->coef[i]);
+	    D->Q1[i] = 0;
+	    D->Q2[i] = 0;
 	  }
-	  D.C[c].n = 0;
+	  D->n = 0;
 
 
 /*
@@ -233,42 +262,42 @@ char dtmf_sample (int c, float input)
 	    decoded = rc2char[row*4+col];
 	  }
 	  else {
-	    decoded = '.';
+	    decoded = ' ';
 	  }
 
 // Consider valid only if we get same twice in a row.
 
-	  if (decoded == D.C[c].prev_dec) {
-	    D.C[c].debounced = decoded;
+	  if (decoded == D->prev_dec) {
+	    D->debounced = decoded;
 	    /* Reset timeout timer. */
 	    if (decoded != ' ') {
-	      D.C[c].timeout = ((TIMEOUT_SEC) * D.sample_rate) / D.block_size;
+	      D->timeout = ((TIMEOUT_SEC) * D->sample_rate) / D->block_size;
 	    }
 	  }
-	  D.C[c].prev_dec = decoded;
+	  D->prev_dec = decoded;
 
 // Return only new button pushes.
 // Also report timeout after period of inactivity.
 
 	  ret = '.';
-	  if (D.C[c].debounced != D.C[c].prev_debounced) {
-	    if (D.C[c].debounced != ' ') {
-	      ret = D.C[c].debounced;
+	  if (D->debounced != D->prev_debounced) {
+	    if (D->debounced != ' ') {
+	      ret = D->debounced;
 	    }
 	  }
 	  if (ret == '.') {
-	    if (D.C[c].timeout > 0) {
-	      D.C[c].timeout--;
-	      if (D.C[c].timeout == 0) {
+	    if (D->timeout > 0) {
+	      D->timeout--;
+	      if (D->timeout == 0) {
 	        ret = '$';
               }
             }
 	  }
-	  D.C[c].prev_debounced = D.C[c].debounced;
+	  D->prev_debounced = D->debounced;
 
 #if DEBUG
-	  dw_printf ("     dec=%c, deb=%c, ret=%c \n", 
-			decoded, D.C[c].debounced, ret);
+	  dw_printf ("     dec=%c, deb=%c, ret=%c, to=%d \n", 
+			decoded, D->debounced, ret, D->timeout);
 #endif
 	  return (ret);
 	}
@@ -282,6 +311,8 @@ char dtmf_sample (int c, float input)
  * Name:        main
  *
  * Purpose:     Unit test for functions above.
+ *
+ * Usage:	rm a.exe ; gcc -DDTMF_TEST dtmf.c textcolor.c ; ./a.exe
  *
  *----------------------------------------------------------------*/
 
@@ -298,6 +329,7 @@ push_button (char button, int ms)
 	char x;
 	static char result[100];
 	static int result_len = 0;
+	int c = 0;			// fake channel number.
 
 
 	switch (button) {
@@ -319,8 +351,14 @@ push_button (char button, int ms)
 	  case 'D':  fa = dtmf_tones[3]; fb = dtmf_tones[7]; break;
 	  case '?':
 
+// TODO: why are timeouts failing.  Do we care?
+
 	    if (strcmp(result, "123A456B789C*0#D123$789$") == 0) {
 	      dw_printf ("\nSuccess!\n");
+	    }
+	    else if (strcmp(result, "123A456B789C*0#D123789") == 0) {
+	      dw_printf ("\n * Time-out failed, otherwise OK *\n");
+	      dw_printf ("\"%s\"\n", result);
 	    }
 	    else {
 	      dw_printf ("\n *** TEST FAILED ***\n");
@@ -331,11 +369,11 @@ push_button (char button, int ms)
 	  default:  fa = 0; fb = 0;
 	}
 
-	for (i = 0; i < (ms*D.sample_rate)/1000; i++) {
+	for (i = 0; i < (ms*dd[c].sample_rate)/1000; i++) {
 
 	  input = sin(phasea) + sin(phaseb);
-	  phasea += 2 * M_PI * fa / D.sample_rate;
-	  phaseb += 2 * M_PI * fb / D.sample_rate;
+	  phasea += 2 * M_PI * fa / dd[c].sample_rate;
+	  phaseb += 2 * M_PI * fb / dd[c].sample_rate;
 
 	  /* Make sure it is insensitive to signal amplitude. */
 
@@ -351,10 +389,19 @@ push_button (char button, int ms)
 	}
 }
 
+static struct audio_s my_audio_config;
+
+
 main ()
 {
 
-	dtmf_init(44100);	
+	memset (&my_audio_config, 0, sizeof(my_audio_config));
+	my_audio_config.adev[0].defined = 1;
+	my_audio_config.adev[0].samples_per_sec = 44100;
+	my_audio_config.achan[0].valid = 1;
+	my_audio_config.achan[0].dtmf_decode = DTMF_DECODE_ON;
+
+	dtmf_init(&my_audio_config);	
 
 	dw_printf ("\nFirst, check all button tone pairs. \n\n");
 	/* Max auto dialing rate is 10 per second. */
@@ -389,7 +436,7 @@ main ()
 
 	dw_printf ("\nTest timeout after inactivity.\n\n");
 	/* For this test we use 1 second. */
-	/* In practice, it will probably more like 10 or 20. */
+	/* In practice, it will probably more like 5. */
 
 	push_button ('1', 250); push_button (' ', 500);
 	push_button ('2', 250); push_button (' ', 500);

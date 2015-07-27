@@ -575,11 +575,13 @@ static void * client_thread_net (void *arg)
 	    char result[400];
 	    char *p;
 	    int col, len;
+	    alevel_t alevel;
 
 	    //printf ("server %d, portx = %d\n", my_index, mon_cmd.portx);
 
 	    use_chan == mon_cmd.portx;
-	    pp = ax25_from_frame ((unsigned char *)(data+1), mon_cmd.data_len-1, -1);
+	    memset (&alevel, 0xff, sizeof(alevel));
+	    pp = ax25_from_frame ((unsigned char *)(data+1), mon_cmd.data_len-1, alevel);
 	    ax25_format_addrs (pp, result);
 	    info_len = ax25_get_info (pp, (unsigned char **)(&pinfo));
 	    pinfo[info_len] = '\0';

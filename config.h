@@ -32,8 +32,6 @@ enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 
 struct misc_config_s {
 
-	int num_channels;	/* Number of radio channels. */
-
 	int agwpe_port;		/* Port number for the “AGW TCPIP Socket Interface” */
 	int kiss_port;		/* Port number for the “KISS” protocol. */
 	int enable_kiss_pt;	/* Enable pseudo terminal for KISS. */

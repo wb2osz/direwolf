@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -97,7 +97,7 @@
 #include "tq.h"
 #include "igate.h"
 #include "latlong.h"
-
+#include "pfilter.h"
 
 
 #if __WIN32__
@@ -191,9 +191,15 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 
 int main (int argc, char *argv[])
 {
+	struct audio_s audio_config;
 	struct igate_config_s igate_config;
 	struct digi_config_s digi_config;
 	packet_t pp;
+
+	memset (&audio_config, 0, sizeof(audio_config));
+	audio_config.adev[0].num_chans = 2;
+	strcpy (audio_config.achan[0].mycall, "WB2OSZ-1");
+	strcpy (audio_config.achan[0].mycall, "WB2OSZ-2");
 
 	memset (&igate_config, 0, sizeof(igate_config));
 
@@ -209,9 +215,6 @@ int main (int argc, char *argv[])
 	igate_config.tx_limit_5 = 5;
 
 	memset (&digi_config, 0, sizeof(digi_config));
-	digi_config.num_chans = 2;
-	strcpy (digi_config.mycall[0], "WB2OSZ-1");
-	strcpy (digi_config.mycall[1], "WB2OSZ-2");
 
 	igate_init(&igate_config, &digi_config);
 
@@ -271,15 +274,10 @@ int main (int argc, char *argv[])
  * we need to reestablish the connection later.
  */
 
-static struct igate_config_s g_config;
 
-static int g_num_chans;			/* Number of radio channels. */
-
-static char g_mycall[MAX_CHANS][AX25_MAX_ADDR_LEN];
-					/* Call-ssid associated */
-                                        /* with each of the radio channels.  */
-                                        /* Could be the same or different. */
-
+static struct audio_s		*save_audio_config_p;
+static struct igate_config_s	*save_igate_config_p;
+static struct digi_config_s 	*save_digi_config_p;
 
 /*
  * Statistics.  
@@ -324,11 +322,14 @@ static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
  *
  * Purpose:     One time initialization when main application starts up.
  *
- * Inputs:	p_igate_config	- IGate configuration.
- *
- *		p_digi_config	- Digipeater configuration.  All we care about is:
+ * Inputs:	p_audio_config	- Audio channel configuration.  All we care about is:
  *				  - Number of radio channels.
  *				  - Radio call and SSID for each channel.
+ *
+ *		p_igate_config	- IGate configuration.
+ *
+ *		p_digi_config	- Digipeater configuration.  
+ *				  All we care about here is the packet filtering options.
  *
  * Description:	This starts two threads:
  *
@@ -338,7 +339,7 @@ static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
  *--------------------------------------------------------------------*/
 
 
-void igate_init (struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config)
+void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config)
 {
 #if __WIN32__
 	HANDLE connnect_th;
@@ -360,6 +361,12 @@ void igate_init (struct igate_config_s *p_igate_config, struct digi_config_s *p_
 				p_igate_config->t2_filter);
 #endif
 
+/*
+ * Save the arguments for later use.
+ */
+	save_audio_config_p = p_audio_config;
+	save_igate_config_p = p_igate_config;
+	save_digi_config_p = p_digi_config;
 
 	stats_failed_connect = 0;	
 	stats_connects = 0;		
@@ -373,16 +380,6 @@ void igate_init (struct igate_config_s *p_igate_config, struct digi_config_s *p_
 	
 	rx_to_ig_init ();
 	ig_to_tx_init ();
-/*
- * Save the arguments for later use.
- */
-	memcpy (&g_config, p_igate_config, sizeof (g_config));
-
-	g_num_chans = p_digi_config->num_chans;
-	assert (g_num_chans >= 1 && g_num_chans <= MAX_CHANS);
-	for (j=0; j<g_num_chans; j++) {
-	  strcpy (g_mycall[j], p_digi_config->mycall[j]);
-	}
 
 
 /*
@@ -396,7 +393,7 @@ void igate_init (struct igate_config_s *p_igate_config, struct digi_config_s *p_
 
 /*
  * This connects to the server and sets igate_sock.
- * It also sends periodic messages to say I'm still here.
+ * It also sends periodic messages to say I'm still alive.
  */
 
 #if __WIN32__
@@ -507,10 +504,10 @@ static void * connnect_thread (void *arg)
 	WSADATA wsadata;
 #endif
 
-	sprintf (server_port_str, "%d", g_config.t2_server_port);
+	sprintf (server_port_str, "%d", save_igate_config_p->t2_server_port);
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
-        dw_printf ("DEBUG: igate connect_thread start, port = %d = '%s'\n", g_config.t2_server_port, server_port_str);
+        dw_printf ("DEBUG: igate connect_thread start, port = %d = '%s'\n", save_igate_config_p->t2_server_port, server_port_str);
 #endif
 
 #if __WIN32__
@@ -562,15 +559,15 @@ static void * connnect_thread (void *arg)
 	    SLEEP_SEC (5);
 
 	    ai_head = NULL;
-	    err = getaddrinfo(g_config.t2_server_name, server_port_str, &hints, &ai_head);
+	    err = getaddrinfo(save_igate_config_p->t2_server_name, server_port_str, &hints, &ai_head);
 	    if (err != 0) {
 	      text_color_set(DW_COLOR_ERROR);
 #if __WIN32__
 	      dw_printf ("Can't get address for IGate server %s, err=%d\n", 
-					g_config.t2_server_name, WSAGetLastError());
+					save_igate_config_p->t2_server_name, WSAGetLastError());
 #else 
 	      dw_printf ("Can't get address for IGate server %s, %s\n", 
-					g_config.t2_server_name, gai_strerror(err));
+					save_igate_config_p->t2_server_name, gai_strerror(err));
 #endif
 	      freeaddrinfo(ai_head);
 
@@ -631,7 +628,7 @@ static void * connnect_thread (void *arg)
 	      if (err != 0) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf("Connect to IGate server %s (%s) failed.\n\n",
-					g_config.t2_server_name, ipaddr_str);
+					save_igate_config_p->t2_server_name, ipaddr_str);
 	        (void) close (is);
 	        is = -1;
 		stats_failed_connect++;
@@ -645,7 +642,7 @@ static void * connnect_thread (void *arg)
 	      if (err == SOCKET_ERROR) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf("Connect to IGate server %s (%s) failed.\n\n",
-					g_config.t2_server_name, ipaddr_str);
+					save_igate_config_p->t2_server_name, ipaddr_str);
 	        closesocket (is);
 	        is = -1;
 		stats_failed_connect++; 
@@ -656,7 +653,7 @@ static void * connnect_thread (void *arg)
 	      if (err != 0) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf("Connect to IGate server %s (%s) failed.\n\n",
-					g_config.t2_server_name, ipaddr_str);
+					save_igate_config_p->t2_server_name, ipaddr_str);
 	        (void) close (is);
 	        is = -1;
 		stats_failed_connect++;
@@ -677,7 +674,7 @@ static void * connnect_thread (void *arg)
 /* Success. */
 
 	      text_color_set(DW_COLOR_INFO);
- 	      dw_printf("\nNow connected to IGate server %s (%s)\n", g_config.t2_server_name, ipaddr_str );
+ 	      dw_printf("\nNow connected to IGate server %s (%s)\n", save_igate_config_p->t2_server_name, ipaddr_str );
 	      if (strchr(ipaddr_str, ':') != NULL) {
 	      	dw_printf("Check server status here http://[%s]:14501\n\n", ipaddr_str);
 	      }
@@ -708,11 +705,11 @@ static void * connnect_thread (void *arg)
 
 	      SLEEP_SEC(3);
 	      sprintf (stemp, "user %s pass %s vers Dire-Wolf %d.%d", 
-			g_config.t2_login, g_config.t2_passcode,
+			save_igate_config_p->t2_login, save_igate_config_p->t2_passcode,
 			MAJOR_VERSION, MINOR_VERSION);
-	      if (g_config.t2_filter != NULL) {
+	      if (save_igate_config_p->t2_filter != NULL) {
 	        strcat (stemp, " filter ");
-	        strcat (stemp, g_config.t2_filter);
+	        strcat (stemp, save_igate_config_p->t2_filter);
 	      }
 	      strcat (stemp, "\r\n");
 	      send_msg_to_server (stemp);
@@ -793,6 +790,24 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	if ( ! ok_to_send) {
 	  return;	/* Login not complete. */
 	}
+
+/*
+ * Check for filtering from specified channel to the IGate server.
+ */
+
+	if (save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
+
+	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp) != 1) {
+
+// TODO1.2: take out debug message.  
+//#if DEBUG
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
+//#endif
+	    return;
+	  }
+	}
+
 
 	/* Count only while connected. */
 	stats_rf_recv_packets++;
@@ -932,7 +947,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	ax25_format_addrs (pp, msg);
 	msg[strlen(msg)-1] = '\0';    /* Remove trailing ":" */
 	strcat (msg, ",qAR,");
-	strcat (msg, g_mycall[chan]);
+	strcat (msg, save_audio_config_p->achan[chan].mycall);
 	strcat (msg, ":");
 	strcat (msg, (char*)pinfo);
 	strcat (msg, "\r\n");
@@ -1155,6 +1170,7 @@ static void * igate_recv_thread (void *arg)
 /*
  * Convert to third party packet and transmit.
  */
+	    
 	    text_color_set(DW_COLOR_REC);
 	    dw_printf ("\n[ig] ");
 	    ax25_safe_print ((char *)message, len, 0);
@@ -1192,17 +1208,18 @@ static void xmit_packet (char *message)
 	char payload[500];	/* what is max len? */
 	char *pinfo = NULL;
 	int info_len;
+	int to_chan = save_igate_config_p->tx_chan;	/* which could be -1 if not configured for xmit!!! */
 
 /*
  * Is IGate to Radio direction enabled?
  */
-	if (g_config.tx_chan == -1) {
+	if (to_chan == -1) {
 	  return;
 	}
 
 	stats_tx_igate_packets++;
 
-	assert (g_config.tx_chan >= 0 && g_config.tx_chan < MAX_CHANS);
+	assert (save_igate_config_p->tx_chan >= 0 && save_igate_config_p->tx_chan < MAX_CHANS);
 
 /*
  * Try to parse it into a packet object.
@@ -1215,6 +1232,30 @@ static void xmit_packet (char *message)
 	  dw_printf ("Tx IGate: Could not parse message from server.\n");
 	  dw_printf ("%s\n", message);
 	  return;
+	}
+
+
+/*
+ * Apply our own packet filtering if configured.
+ */
+
+//TODO1.2: Should we allow IGating to RF with more than one channel?
+
+	assert (to_chan >= 0 && to_chan < MAX_CHANS);
+
+	if (save_digi_config_p->filter_str[MAX_CHANS][to_chan] != NULL) {
+
+	  if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3) != 1) {
+
+// TODO1.2: take out debug message.  One person liked it as a confirmation of what was going on.
+// Maybe it should be part of a more comprehensive debug facility?
+//#if DEBUG
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
+//#endif
+	    ax25_delete (pp3);
+	    return;
+	  }
 	}
 
 /*
@@ -1234,7 +1275,7 @@ static void xmit_packet (char *message)
  */
 	ax25_set_addr (pp3, AX25_REPEATER_1, "TCPIP");
 	ax25_set_h (pp3, AX25_REPEATER_1);
-	ax25_set_addr (pp3, AX25_REPEATER_2, g_mycall[g_config.tx_chan]); 
+	ax25_set_addr (pp3, AX25_REPEATER_2, save_audio_config_p->achan[save_igate_config_p->tx_chan].mycall); 
 	ax25_set_h (pp3, AX25_REPEATER_2);
 
 /*
@@ -1256,9 +1297,9 @@ static void xmit_packet (char *message)
 	  packet_t pradio;
 
 	  sprintf (radio, "%s>%s%d%d%s:}%s",
-				g_mycall[g_config.tx_chan],
+				save_audio_config_p->achan[save_igate_config_p->tx_chan].mycall,
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
-				g_config.tx_via,
+				save_igate_config_p->tx_via,
 				payload);
 
 	  pradio = ax25_from_text (radio, 1);
@@ -1268,7 +1309,7 @@ static void xmit_packet (char *message)
 	  ax25_delete (pradio);
 #else
 	  /* This consumes packet so don't reference it again! */
-	  tq_append (g_config.tx_chan, TQ_PRIO_1_LO, pradio);
+	  tq_append (save_igate_config_p->tx_chan, TQ_PRIO_1_LO, pradio);
 #endif
 	  stats_rf_xmit_packets++;
 	  ig_to_tx_remember (pp3);
@@ -1473,14 +1514,14 @@ static int ig_to_tx_allow (packet_t pp)
 	  if (ig2tx_time_stamp[j] >= now - 300) count_5++;
 	}
 
-	if (count_1 >= g_config.tx_limit_1) {
+	if (count_1 >= save_igate_config_p->tx_limit_1) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 1 minute.\n", g_config.tx_limit_1);
+	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 1 minute.\n", save_igate_config_p->tx_limit_1);
 	  return 0;
 	}
-	if (count_5 >= g_config.tx_limit_5) {
+	if (count_5 >= save_igate_config_p->tx_limit_5) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 5 minutes.\n", g_config.tx_limit_5);
+	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 5 minutes.\n", save_igate_config_p->tx_limit_5);
 	  return 0;
 	}
 

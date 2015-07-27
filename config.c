@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@
 #include <assert.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 
 #if __WIN32__
 #include "pthreads/pthread.h"
@@ -54,7 +55,18 @@
 #include "igate.h"
 #include "latlong.h"
 #include "symbols.h"
-#include "LatLong-UTMconversion.h"
+#include "xmit.h"
+
+// geotranz
+
+#include "utm.h"
+#include "mgrs.h"
+#include "usng.h"
+#include "error_string.h"
+
+#define D2R(d) ((d) * M_PI / 180.)
+#define R2D(r) ((r) * 180. / M_PI)
+
 
 
 //#include "tq.h"
@@ -122,8 +134,33 @@ static const struct units_s {
 
 #define NUM_UNITS (sizeof(units) / sizeof(struct units_s))
 
-static int beacon_options(char *cmd, struct beacon_s *b, int line);
+static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_s *p_audio_config);
 
+/* Do we have a string of all digits? */
+
+static int alldigits(char *p)
+{
+	if (p == NULL) return (0);
+	if (strlen(p) == 0) return (0);
+	while (*p != '\0') {
+	  if ( ! isdigit(*p)) return (0);
+	  p++;
+	}
+	return (1);
+}
+
+/* Do we have a string of all letters or + or -  ? */
+
+static int alllettersorpm(char *p)
+{
+	if (p == NULL) return (0);
+	if (strlen(p) == 0) return (0);
+	while (*p != '\0') {
+	  if ( ! isalpha(*p) && *p != '+' && *p != '-') return (0);
+	  p++;
+	}
+	return (1);
+}
 
 /*------------------------------------------------------------------
  *
@@ -247,6 +284,83 @@ static double parse_ll (char *str, enum parse_ll_which_e which, int line)
 	return (degrees);
 }
 
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        parse_utm_zone
+ *
+ * Purpose:     Parse UTM zone from configuration file.
+ *
+ * Inputs:      szone	- String like [-]number[letter]
+ *
+ * Output:	hemi	- Hemisphere, 'N' or 'S'.
+ *
+ * Returns:	Zone as number.  
+ *		Type is long because Convert_UTM_To_Geodetic expects that.
+ *
+ * Errors:	Prints message and return 0.
+ *
+ * Description:	
+ *		It seems there are multiple conventions for specifying the UTM hemisphere.
+ *		
+ *		  - MGRS latitude band.  North if missing or >= 'N'.
+ *		  - Negative zone for south.
+ *		  - Separate North or South.
+ *		
+ *		I'm using the first alternatve.
+ *		GEOTRANS uses the third.
+ *		We will also recognize the second one but I'm not sure if I want to document it.
+ *
+ *----------------------------------------------------------------*/
+
+long parse_utm_zone (char *szone, char *hemi)
+{
+	long lzone;
+	char *zlet;
+
+
+	*hemi = 'N';	/* default */
+
+        lzone = strtol(szone, &zlet, 10);
+
+        if (*zlet == '\0') {
+	  /* Number is not followed by letter something else.  */
+	  /* Allow negative number to mean south. */
+
+	  if (lzone < 0) {
+	    *hemi = 'S';
+	    lzone = (- lzone);
+	  }
+	}
+	else {
+	  if (islower (*zlet)) {
+	    *zlet = toupper(*zlet);
+	  }
+	  if (strchr ("CDEFGHJKLMNPQRSTUVWX", *zlet) != NULL) {
+	    if (*zlet < 'N') {
+	      *hemi = 'S';
+	    }
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+            dw_printf ("Latitudinal band in \"%s\" must be one of CDEFGHJKLMNPQRSTUVWX.\n", szone);
+ 	    *hemi = '?';
+	  }
+        }
+
+        if (lzone < 1 || lzone > 60) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("UTM Zone number %ld must be in range of 1 to 60.\n", lzone);
+        
+        }
+
+	return (lzone);
+}
+
+
+
+
 #if 0
 main ()
 {
@@ -338,7 +452,7 @@ static int parse_interval (char *str, int line)
  *
  * Inputs:	fname		- Name of configuration file.
  *
- * Outputs:	p_modem		- Radio channel parameters stored here.
+ * Outputs:	p_audio_config		- Radio channel parameters stored here.
  *
  *		p_digi_config	- Digipeater configuration stored here.
  *
@@ -361,7 +475,7 @@ static int parse_interval (char *str, int line)
  *--------------------------------------------------------------------*/
 
 
-void config_init (char *fname, struct audio_s *p_modem, 
+void config_init (char *fname, struct audio_s *p_audio_config, 
 			struct digi_config_s *p_digi_config,
 			struct tt_config_s *p_tt_config,
 			struct igate_config_s *p_igate_config,
@@ -374,6 +488,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	//int err;
 	int line;
 	int channel;
+	int adevice;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -384,52 +499,75 @@ void config_init (char *fname, struct audio_s *p_modem,
  * First apply defaults.
  */
 
-	memset (p_modem, 0, sizeof(struct audio_s));
+	memset (p_audio_config, 0, sizeof(struct audio_s));
 
-	strcpy (p_modem->adevice_in, DEFAULT_ADEVICE);
-	strcpy (p_modem->adevice_out, DEFAULT_ADEVICE);
+	/* First audio device is always available with defaults. */
+	/* Others must be explicitly defined before use. */
 
-	p_modem->num_channels = DEFAULT_NUM_CHANNELS;		/* -2 stereo */
-	p_modem->samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	/* -r option */
-	p_modem->bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	/* -8 option for 8 instead of 16 bits */
-	p_modem->fix_bits = DEFAULT_FIX_BITS;
+	for (adevice=0; adevice<MAX_ADEVS; adevice++) {
 
-	for (channel=0; channel<MAX_CHANS; channel++) {
+	  strcpy (p_audio_config->adev[adevice].adevice_in, DEFAULT_ADEVICE);
+	  strcpy (p_audio_config->adev[adevice].adevice_out, DEFAULT_ADEVICE);
 
-	  p_modem->modem_type[channel] = AFSK;			
-	  p_modem->mark_freq[channel] = DEFAULT_MARK_FREQ;		/* -m option */
-	  p_modem->space_freq[channel] = DEFAULT_SPACE_FREQ;		/* -s option */
-	  p_modem->baud[channel] = DEFAULT_BAUD;			/* -b option */
-
-	  /* None.  Will set default later based on other factors. */
-	  strcpy (p_modem->profiles[channel], "");	
-
-	  p_modem->num_freq[channel] = 1;				
-	  p_modem->num_subchan[channel] = 1;				
-	  p_modem->offset[channel] = 0;
-
-	  //  temp test.
-	  // p_modem->num_subchan[channel] = 9;				
-	  // p_modem->offset[channel] = 60;
-
-	  p_modem->ptt_method[channel] = PTT_METHOD_NONE;
-	  strcpy (p_modem->ptt_device[channel], "");
-	  p_modem->ptt_line[channel] = PTT_LINE_RTS;
-	  p_modem->ptt_gpio[channel] = 0;
-	  p_modem->ptt_lpt_bit[channel] = 0;
-	  p_modem->ptt_invert[channel] = 0;
-
-	  p_modem->slottime[channel] = DEFAULT_SLOTTIME;				
-	  p_modem->persist[channel] = DEFAULT_PERSIST;				
-	  p_modem->txdelay[channel] = DEFAULT_TXDELAY;				
-	  p_modem->txtail[channel] = DEFAULT_TXTAIL;				
+	  p_audio_config->adev[adevice].defined = 0;
+	  p_audio_config->adev[adevice].num_channels = DEFAULT_NUM_CHANNELS;		/* -2 stereo */
+	  p_audio_config->adev[adevice].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	/* -r option */
+	  p_audio_config->adev[adevice].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	/* -8 option for 8 instead of 16 bits */
 	}
 
+	p_audio_config->adev[0].defined = 1;
+
+	for (channel=0; channel<MAX_CHANS; channel++) {
+	  int ot;
+
+	  p_audio_config->achan[channel].valid = 0;				/* One or both channels will be */
+								/* set to valid when corresponding */
+								/* audio device is defined. */
+	  p_audio_config->achan[channel].modem_type = MODEM_AFSK;			
+	  p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;		/* -m option */
+	  p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;		/* -s option */
+	  p_audio_config->achan[channel].baud = DEFAULT_BAUD;			/* -b option */
+
+	  /* None.  Will set default later based on other factors. */
+	  strcpy (p_audio_config->achan[channel].profiles, "");	
+
+	  p_audio_config->achan[channel].num_freq = 1;				
+	  p_audio_config->achan[channel].offset = 0;
+
+	  p_audio_config->achan[channel].fix_bits = DEFAULT_FIX_BITS;
+	  p_audio_config->achan[channel].sanity_test = SANITY_APRS;
+	  p_audio_config->achan[channel].passall = 0;
+
+	  for (ot = 0; ot < NUM_OCTYPES; ot++) {
+	    p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_NONE;
+	    strcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "");
+	    p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_NONE;
+	    p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_NONE;
+	    p_audio_config->achan[channel].octrl[ot].ptt_gpio = 0;
+	    p_audio_config->achan[channel].octrl[ot].ptt_lpt_bit = 0;
+	    p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
+	    p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 0;
+	  }
+
+	  p_audio_config->achan[channel].dwait = DEFAULT_DWAIT;				
+	  p_audio_config->achan[channel].slottime = DEFAULT_SLOTTIME;				
+	  p_audio_config->achan[channel].persist = DEFAULT_PERSIST;				
+	  p_audio_config->achan[channel].txdelay = DEFAULT_TXDELAY;				
+	  p_audio_config->achan[channel].txtail = DEFAULT_TXTAIL;				
+	}
+
+	/* First channel should always be valid. */
+	/* If there is no ADEVICE, it uses default device in mono. */
+
+	p_audio_config->achan[0].valid = 1;
+
+
 	memset (p_digi_config, 0, sizeof(struct digi_config_s));
-	p_digi_config->num_chans = p_modem->num_channels;
+	//p_digi_config->num_chans = p_audio_config->adev[0].num_channels;	// TODO: rethink for > 2 case.
 	p_digi_config->dedupe_time = DEFAULT_DEDUPE;
 
 	memset (p_tt_config, 0, sizeof(struct tt_config_s));	
+	p_tt_config->gateway_enabled = 0;
 	p_tt_config->ttloc_size = 2;	/* Start with at least 2.  */
 					/* When full, it will be increased by 50 %. */
 	p_tt_config->ttloc_ptr = malloc (sizeof(struct ttloc_s) * p_tt_config->ttloc_size);
@@ -450,7 +588,6 @@ void config_init (char *fname, struct audio_s *p_modem,
 	p_tt_config->xmit_delay[6] = 8 * 60;
 
 	memset (p_misc_config, 0, sizeof(struct misc_config_s));
-	p_misc_config->num_channels = p_modem->num_channels;
 	p_misc_config->agwpe_port = DEFAULT_AGWPE_PORT;
 	p_misc_config->kiss_port = DEFAULT_KISS_PORT;
 	p_misc_config->enable_kiss_pt = 0;				/* -p option */
@@ -493,6 +630,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 
 	channel = 0;
+	adevice = 0;
 
 	fp = fopen (fname, "r");
 #ifndef __WIN32__
@@ -540,24 +678,42 @@ void config_init (char *fname, struct audio_s *p_modem,
  */
 
 /*
- * ADEVICE 		- Name of input sound device, and optionally output, if different.
+ * ADEVICE[n] 		- Name of input sound device, and optionally output, if different.
  */
 
 	  /* Note that ALSA name can contain comma such as hw:1,0 */
 
-	  if (strcasecmp(t, "ADEVICE") == 0) {
+	  if (strncasecmp(t, "ADEVICE", 7) == 0) {
+	    adevice = 0;
+	    if (isdigit(t[7])) {
+	      adevice = t[7] - '0';
+	    }
+
+	    if (adevice < 0 || adevice >= MAX_ADEVS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Device number %d out of range for ADEVICE command on line %d.\n", adevice, line);
+	      adevice = 0;
+	      continue;
+	    }
+
 	    t = strtok (NULL, " \t\n\r");
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing name of audio device for ADEVICE command on line %d.\n", line);
 	      continue;
 	    }
-	    strncpy (p_modem->adevice_in, t, sizeof(p_modem->adevice_in)-1);
-	    strncpy (p_modem->adevice_out, t, sizeof(p_modem->adevice_out)-1);
+
+	    p_audio_config->adev[adevice].defined = 1;
+	
+	    /* First channel of device is valid. */
+	    p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
+
+	    strncpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in)-1);
+	    strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);
 
 	    t = strtok (NULL, " \t\n\r");
 	    if (t != NULL) {
-	      strncpy (p_modem->adevice_out, t, sizeof(p_modem->adevice_out)-1);
+	      strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);
 	    }
 	  }
 
@@ -575,7 +731,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= MIN_SAMPLES_PER_SEC && n <= MAX_SAMPLES_PER_SEC) {
-	      p_modem->samples_per_sec = n;
+	      p_audio_config->adev[adevice].samples_per_sec = n;
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
@@ -585,7 +741,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	  }
 
 /*
- * ACHANNELS 		- Number of audio channels: 1 or 2
+ * ACHANNELS 		- Number of audio channels for current device: 1 or 2
  */
 
 	  else if (strcasecmp(t, "ACHANNELS") == 0) {
@@ -597,10 +753,15 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= 1 && n <= MAX_CHANS) {
-	      p_modem->num_channels = n;
-	      p_digi_config->num_chans = p_modem->num_channels;
-	      p_misc_config->num_channels = p_modem->num_channels;
+            if (n ==1 || n == 2) {
+	      p_audio_config->adev[adevice].num_channels = n;
+
+	      /* Set valid channels depending on mono or stereo. */
+
+	      p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
+	      if (n == 2) {
+	        p_audio_config->achan[ADEVFIRSTCHAN(adevice) + 1].valid = 1;
+	      }
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
@@ -626,12 +787,26 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n < MAX_CHANS) {
+
 	      channel = n;
+
+	      if ( ! p_audio_config->achan[n].valid) {
+
+	        if ( ! p_audio_config->adev[ACHAN2ADEV(n)].defined) {
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: Channel number %d is not valid because audio device %d is not defined.\n", 
+								line, n, ACHAN2ADEV(n));
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: Channel number %d is not valid because audio device %d is not in stereo.\n", 
+								line, n, ACHAN2ADEV(n));
+	        }
+	      }
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Audio channel number must be 0 or 1.\n", line);
-	      channel = 0;
+              dw_printf ("Line %d: Channel number must in range of 0 to %d.\n", line, MAX_CHANS-1);
    	    }
 	  }
 
@@ -654,13 +829,16 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	      for (c = 0; c < MAX_CHANS; c++) {
 
-	        if (c == channel || strlen(p_digi_config->mycall[c]) == 0 || strcasecmp(p_digi_config->mycall[c], "NOCALL") == 0) {
+	        if (c == channel || 
+			strlen(p_audio_config->achan[c].mycall) == 0 || 
+			strcasecmp(p_audio_config->achan[c].mycall, "NOCALL") == 0 ||
+			strcasecmp(p_audio_config->achan[c].mycall, "N0CALL") == 0) {
 
 	          char *p;
 
-	          strncpy (p_digi_config->mycall[c], t, sizeof(p_digi_config->mycall[c])-1);
+	          strncpy (p_audio_config->achan[c].mycall, t, sizeof(p_audio_config->achan[c].mycall)-1);
 
-	          for (p = p_digi_config->mycall[c]; *p != '\0'; p++) {
+	          for (p = p_audio_config->achan[c].mycall; *p != '\0'; p++) {
 	            if (islower(*p)) {
 		      *p = toupper(*p);	/* silently force upper case. */
 	            }
@@ -673,9 +851,19 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 
 /*
- * MODEM	- Replaces former HBAUD, MARK, SPACE, and adds new multi modem capability.
+ * MODEM	- Set modem properties for current channel.
  *
- * MODEM  baud [ mark  space  [A][B][C]  [  num-decoders spacing ] ]
+ *
+ * Old style:
+ * 	MODEM  baud [ mark  space  [A][B][C][+]  [  num-decoders spacing ] ] 
+ *
+ * New style, version 1.2:
+ *	MODEM  speed [ option ] ...
+ *
+ * Options:
+ *	mark:space	- AFSK tones.  Defaults based on speed.
+ *	num@offset	- Multiple decoders on different frequencies.
+ *	
  */
 
 	  else if (strcasecmp(t, "MODEM") == 0) {
@@ -683,146 +871,253 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    t = strtok (NULL, " ,\t\n\r");
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing date transmission rate for MODEM command.\n", line);
+	      dw_printf ("Line %d: Missing data transmission speed for MODEM command.\n", line);
 	      continue;
 	    }
 	    n = atoi(t);
             if (n >= 100 && n <= 10000) {
-	      p_modem->baud[channel] = n;
+	      p_audio_config->achan[channel].baud = n;
 	      if (n != 300 && n != 1200 && n != 9600) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: Warning: Non-standard baud rate.  Are you sure?\n", line);
     	      }
 	    }
 	    else {
-	      p_modem->baud[channel] = DEFAULT_BAUD;
+	      p_audio_config->achan[channel].baud = DEFAULT_BAUD;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Unreasonable baud rate. Using %d.\n", 
-				 line, p_modem->baud[channel]);
+				 line, p_audio_config->achan[channel].baud);
    	    }
 
 
+	    /* Set defaults based on speed. */
+	    /* Should be same as -B command line option in direwolf.c. */
+
+	    if (p_audio_config->achan[channel].baud < 600) {
+              p_audio_config->achan[channel].modem_type = MODEM_AFSK;
+              p_audio_config->achan[channel].mark_freq = 1600;
+              p_audio_config->achan[channel].space_freq = 1800;
+	    }
+	    else if (p_audio_config->achan[channel].baud > 2400) {
+              p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
+              p_audio_config->achan[channel].mark_freq = 0;
+              p_audio_config->achan[channel].space_freq = 0;
+	    }
+	    else {
+              p_audio_config->achan[channel].modem_type = MODEM_AFSK;
+              p_audio_config->achan[channel].mark_freq = 1200;
+              p_audio_config->achan[channel].space_freq = 2200;
+	    }
 
 	    /* Get mark frequency. */
 
 	    t = strtok (NULL, " ,\t\n\r");
 	    if (t == NULL) {
-	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("Note: Using scrambled baseband rather than AFSK modem.\n");
-	      p_modem->modem_type[channel] = SCRAMBLE;	
-	      p_modem->mark_freq[channel] = 0;	
-	      p_modem->space_freq[channel] = 0;	
+	      /* all done. */
 	      continue;
 	    }
 
-	    n = atoi(t);
-	    /* Originally the upper limit was 3000. */
-	    /* Version 1.0 increased to 5000 because someone */
-	    /* wanted to use 2400/4800 Hz AFSK. */
-	    /* Of course the MIC and SPKR connections won't */
-	    /* have enough bandwidth so radios must be modified. */
-            if (n >= 300 && n <= 5000) {
-	      p_modem->mark_freq[channel] = n;
-	    }
-	    else {
-	      p_modem->mark_freq[channel] = DEFAULT_MARK_FREQ;
-	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Unreasonable mark tone frequency. Using %d.\n", 
-				 line, p_modem->mark_freq[channel]);
-   	    }
-	    
-	    /* Get space frequency */
+	    if (alldigits(t)) {
 
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing tone frequency for space.\n", line);
-	      continue;
-	    }
-	    n = atoi(t);
-            if (n >= 300 && n <= 5000) {
-	      p_modem->space_freq[channel] = n;
-	    }
-	    else {
-	      p_modem->space_freq[channel] = DEFAULT_SPACE_FREQ;
-	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Unreasonable space tone frequency. Using %d.\n", 
-					 line, p_modem->space_freq[channel]);
-   	    }
+/* old style */
 
-	    /* New feature in 0.9 - Optional filter profile(s). */
-
-	    /* First, set a default based on platform and baud. */
-
-	    if (p_modem->baud[channel] < 600) {
-
-	      /* "D" is a little better at 300 baud. */
-
-	      strcpy (p_modem->profiles[channel], "D");
-	    }
-	    else {
-#if __arm__
-	      /* We probably don't have a lot of CPU power available. */
-
-	      if (p_modem->baud[channel] == DEFAULT_BAUD &&
-		  p_modem->mark_freq[channel] == DEFAULT_MARK_FREQ && 
-		  p_modem->space_freq[channel] == DEFAULT_SPACE_FREQ &&
-		  p_modem->samples_per_sec == DEFAULT_SAMPLES_PER_SEC) {
-
-	        strcpy (p_modem->profiles[channel], "F");
+	      n = atoi(t);
+	      /* Originally the upper limit was 3000. */
+	      /* Version 1.0 increased to 5000 because someone */
+	      /* wanted to use 2400/4800 Hz AFSK. */
+	      /* Of course the MIC and SPKR connections won't */
+	      /* have enough bandwidth so radios must be modified. */
+              if (n >= 300 && n <= 5000) {
+	        p_audio_config->achan[channel].mark_freq = n;
 	      }
 	      else {
-	        strcpy (p_modem->profiles[channel], "A");
-	      }
-#else
-	      strcpy (p_modem->profiles[channel], "C");
-#endif
-	    }
-
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t != NULL) {
-	      if (isalpha(t[0])) {
-		// TODO: should check all letters.
-		strncpy (p_modem->profiles[channel], t, sizeof(p_modem->profiles[channel]));
-	        p_modem->num_subchan[channel] = strlen(p_modem->profiles[channel]);
-	        t = strtok (NULL, " ,\t\n\r");
-		if (strlen(p_modem->profiles[channel]) > 1 && t != NULL) {
-	          text_color_set(DW_COLOR_ERROR);
-                  dw_printf ("Line %d: Can't combine multiple demodulator types and multiple frequencies.\n", line);
-		  continue;
-		}
-	      }
-	    }
-
-	    /* New feature in 0.9 - optional number of decoders and frequency offset between. */
-
-	    if (t != NULL) {
-	      n = atoi(t);
-              if (n < 1 || n > MAX_SUBCHANS) {
+	        p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;
 	        text_color_set(DW_COLOR_ERROR);
-                dw_printf ("Line %d: Number of modems is out of range. Using 3.\n", line);
-		n = 3;
+                dw_printf ("Line %d: Unreasonable mark tone frequency. Using %d.\n", 
+				 line, p_audio_config->achan[channel].mark_freq);
+   	      }
+	    
+	      /* Get space frequency */
+
+	      t = strtok (NULL, " ,\t\n\r");
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Missing tone frequency for space.\n", line);
+	        continue;
 	      }
-	      p_modem->num_freq[channel] = n;
-	      p_modem->num_subchan[channel] = n;
+	      n = atoi(t);
+              if (n >= 300 && n <= 5000) {
+	        p_audio_config->achan[channel].space_freq = n;
+	      }
+	      else {
+	        p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Unreasonable space tone frequency. Using %d.\n", 
+					 line, p_audio_config->achan[channel].space_freq);
+   	      }
+
+	      /* Gently guide users toward new format. */
+
+	      if (p_audio_config->achan[channel].baud == 1200 &&
+                  p_audio_config->achan[channel].mark_freq == 1200 &&
+                  p_audio_config->achan[channel].space_freq == 2200) {
+
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: The AFSK frequencies can be omitted when using the 1200 baud default 1200:2200.\n", line);
+	      }
+	      if (p_audio_config->achan[channel].baud == 300 &&
+                  p_audio_config->achan[channel].mark_freq == 1600 &&
+                  p_audio_config->achan[channel].space_freq == 1800) {
+
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: The AFSK frequencies can be omitted when using the 300 baud default 1600:1800.\n", line);
+	      }
+
+	      /* New feature in 0.9 - Optional filter profile(s). */
 
 	      t = strtok (NULL, " ,\t\n\r");
 	      if (t != NULL) {
-	        n = atoi(t);
-                if (n < 5 || n > abs(p_modem->mark_freq[channel] - p_modem->space_freq[channel])/2) {
-	          text_color_set(DW_COLOR_ERROR);
-                  dw_printf ("Line %d: Unreasonable value for offset between modems.  Using 50 Hz.\n", line);
-		  n = 50;
+
+	        /* Look for some combination of letter(s) and + */
+
+	        if (isalpha(t[0]) || t[0] == '+') {
+		  char *pc;
+
+		  /* Here we only catch something other than letters and + mixed in. */
+		  /* Later, we check for valid letters and no more than one letter if + specified. */
+
+	          for (pc = t; *pc != '\0'; pc++) {
+		    if ( ! isalpha(*pc) && ! *pc == '+') {
+	              text_color_set(DW_COLOR_ERROR);
+                      dw_printf ("Line %d: Demodulator type can only contain letters and + character.\n", line);
+		    }
+		  }    
+		
+		  strncpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
+	          t = strtok (NULL, " ,\t\n\r");
+		  if (strlen(p_audio_config->achan[channel].profiles) > 1 && t != NULL) {
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: Can't combine multiple demodulator types and multiple frequencies.\n", line);
+		    continue;
+		  }
 	        }
-		p_modem->offset[channel] = n;
-	      }
-	      else {
-	        text_color_set(DW_COLOR_ERROR);
-                dw_printf ("Line %d: Missing frequency offset between modems.  Using 50 Hz.\n", line);
-	        p_modem->offset[channel] = 50;
 	      }
 
-// TODO: power saver	      
+	      /* New feature in 0.9 - optional number of decoders and frequency offset between. */
+
+	      if (t != NULL) {
+	        n = atoi(t);
+                if (n < 1 || n > MAX_SUBCHANS) {
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: Number of demodulators is out of range. Using 3.\n", line);
+		  n = 3;
+	        }
+	        p_audio_config->achan[channel].num_freq = n;
+
+	        t = strtok (NULL, " ,\t\n\r");
+	        if (t != NULL) {
+	          n = atoi(t);
+                  if (n < 5 || n > abs(p_audio_config->achan[channel].mark_freq - p_audio_config->achan[channel].space_freq)/2) {
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: Unreasonable value for offset between modems.  Using 50 Hz.\n", line);
+		    n = 50;
+	          }
+		  p_audio_config->achan[channel].offset = n;
+
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: New style for multiple demodulators is %d@%d\n", line,
+			p_audio_config->achan[channel].num_freq, p_audio_config->achan[channel].offset);	  
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: Missing frequency offset between modems.  Using 50 Hz.\n", line);
+	          p_audio_config->achan[channel].offset = 50;
+	        }    
+	      }
+	    }
+	    else {
+
+/* New style. */
+
+	      while (t != NULL) {
+		char *s;
+
+		if ((s = strchr(t, ':')) != NULL) {		/* mark:space */
+
+	          p_audio_config->achan[channel].mark_freq = atoi(t);
+	          p_audio_config->achan[channel].space_freq = atoi(s+1);
+
+		  if (p_audio_config->achan[channel].mark_freq == 0 && p_audio_config->achan[channel].space_freq == 0) {
+		    p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
+	          }
+	          else {
+		    p_audio_config->achan[channel].modem_type = MODEM_AFSK;
+
+                    if (p_audio_config->achan[channel].mark_freq < 300 || p_audio_config->achan[channel].mark_freq > 5000) {
+	              p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;
+	              text_color_set(DW_COLOR_ERROR);
+                      dw_printf ("Line %d: Unreasonable mark tone frequency. Using %d instead.\n", 
+				 line, p_audio_config->achan[channel].mark_freq);
+		    }
+                    if (p_audio_config->achan[channel].space_freq < 300 || p_audio_config->achan[channel].space_freq > 5000) {
+	              p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;
+	              text_color_set(DW_COLOR_ERROR);
+                      dw_printf ("Line %d: Unreasonable space tone frequency. Using %d instead.\n", 
+				 line, p_audio_config->achan[channel].space_freq);
+		    }
+	          }
+	        }
+
+		else if ((s = strchr(t, '@')) != NULL) {		/* num@offset */
+
+	          p_audio_config->achan[channel].num_freq = atoi(t);
+	          p_audio_config->achan[channel].offset = atoi(s+1);
+
+                  if (p_audio_config->achan[channel].num_freq < 1 || p_audio_config->achan[channel].num_freq > MAX_SUBCHANS) {
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: Number of demodulators is out of range. Using 3.\n", line);
+	            p_audio_config->achan[channel].num_freq = 3;
+		  }
+
+                  if (p_audio_config->achan[channel].offset < 5 || 
+			p_audio_config->achan[channel].offset > abs(p_audio_config->achan[channel].mark_freq - p_audio_config->achan[channel].space_freq)/2) {
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: Offset between demodulators is unreasonable. Using 50 Hz.\n", line);
+	            p_audio_config->achan[channel].offset = 50;
+		  }
+		}
+
+	        else if (alllettersorpm(t)) {		/* profile of letter(s) + - */
+
+		  // Will be validated later.
+		  strncpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
+	        }
+
+		else if (*t == '/') {		/* /div */
+		  int n = atoi(t+1);
+
+                  if (n >= 1 && n <= 8) {
+	            p_audio_config->achan[channel].decimate = n;
+		  }
+	    	  else {
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: Ignoring unreasonable sample rate division factor of %d.\n", line, n);
+		  }
+		}
+
+		else {
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: Unrecognized option for MODEM: %s\n", line, t);
+	        } 
+
+	        t = strtok (NULL, " ,\t\n\r");
+	      }
+
+	      /* A later place catches disallowed combination of + and @. */
+	      /* A later place sets /n for 300 baud if not specified by user. */
+
+	      //printf ("debug: div = %d\n", p_audio_config->achan[channel].decimate);
+
 	    }
 	  }
 
@@ -831,6 +1126,7 @@ void config_init (char *fname, struct audio_s *p_modem,
  *				and 9600 for baseband with scrambling.
  */
 
+#if 0
 	  else if (strcasecmp(t, "HBAUD") == 0) {
 	    int n;
 	    t = strtok (NULL, " ,\t\n\r");
@@ -841,30 +1137,32 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 100 && n <= 10000) {
-	      p_modem->baud[channel] = n;
+	      p_audio_config->achan[channel].baud = n;
 	      if (n != 300 && n != 1200 && n != 9600) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: Warning: Non-standard baud rate.  Are you sure?\n", line);
     	      }
 	      if (n == 9600) {
 		/* TODO: should be separate option to keep it more general. */
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Line %d: Note: Using scrambled baseband for 9600 baud.\n", line);
-	        p_modem->modem_type[channel] = SCRAMBLE;		
+	        //text_color_set(DW_COLOR_ERROR);
+	        //dw_printf ("Line %d: Note: Using scrambled baseband for 9600 baud.\n", line);
+	        p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;		
     	      }
 	    }
 	    else {
-	      p_modem->baud[channel] = DEFAULT_BAUD;
+	      p_audio_config->achan[channel].baud = DEFAULT_BAUD;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Unreasonable baud rate. Using %d.\n", 
-				 line, p_modem->baud[channel]);
+				 line, p_audio_config->achan[channel].baud);
    	    }
 	  }
+#endif
 
 /*
  * (deprecated) MARK 		- Mark tone frequency.
  */
 
+#if 0
 	  else if (strcasecmp(t, "MARK") == 0) {
 	    int n;
 	    t = strtok (NULL, " ,\t\n\r");
@@ -875,20 +1173,22 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 300 && n <= 3000) {
-	      p_modem->mark_freq[channel] = n;
+	      p_audio_config->achan[channel].mark_freq = n;
 	    }
 	    else {
-	      p_modem->mark_freq[channel] = DEFAULT_MARK_FREQ;
+	      p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Unreasonable mark tone frequency. Using %d.\n", 
-				 line, p_modem->mark_freq[channel]);
+				 line, p_audio_config->achan[channel].mark_freq);
    	    }
 	  }
+#endif
 
 /*
  * (deprecated) SPACE 		- Space tone frequency.
  */
 
+#if 0
 	  else if (strcasecmp(t, "SPACE") == 0) {
 	    int n;
 	    t = strtok (NULL, " ,\t\n\r");
@@ -899,31 +1199,118 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 300 && n <= 3000) {
-	      p_modem->space_freq[channel] = n;
+	      p_audio_config->achan[channel].space_freq = n;
 	    }
 	    else {
-	      p_modem->space_freq[channel] = DEFAULT_SPACE_FREQ;
+	      p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Unreasonable space tone frequency. Using %d.\n", 
-					 line, p_modem->space_freq[channel]);
+					 line, p_audio_config->achan[channel].space_freq);
    	    }
 	  }
+#endif
 
 /*
- * PTT 		- Push To Talk signal line.
+ * DTMF  		- Enable DTMF decoder.
  *
- * PTT  serial-port [-]rts-or-dtr
- * PTT  GPIO  [-]gpio-num
- * PTT  LPT  [-]bit-num
+ * Future possibilities: 
+ *	Option to determine if it goes to APRStt gateway and/or application.
+ *	Disable normal demodulator to reduce CPU requirements.
  */
 
-	  else if (strcasecmp(t, "PTT") == 0) {
-	    //int n;
+
+	  else if (strcasecmp(t, "DTMF") == 0) {
+
+	    p_audio_config->achan[channel].dtmf_decode = DTMF_DECODE_ON;
+
+	  }
+
+
+/*
+ * FIX_BITS  n  [ APRS | AX25 | NONE ] [ PASSALL ]
+ *
+ *	- Attempt to fix frames with bad FCS. 
+ */
+
+	  else if (strcasecmp(t, "FIX_BITS") == 0) {
+	    int n;
 	    t = strtok (NULL, " ,\t\n\r");
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: Missing serial port name for PTT command.\n", 
-			line);
+	      dw_printf ("Line %d: Missing value for FIX_BITS command.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= RETRY_NONE && n <= RETRY_REMOVE_TWO_SEP) {
+	      p_audio_config->achan[channel].fix_bits = (retry_t)n;
+	    }
+	    else {
+	      p_audio_config->achan[channel].fix_bits = DEFAULT_FIX_BITS;
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid value for FIX_BITS. Using %d.\n", 
+			line, p_audio_config->achan[channel].fix_bits);
+   	    }
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    while (t != NULL) {
+
+	      // If more than one sanity test, we silently take the last one.
+
+	      if (strcasecmp(t, "APRS") == 0) {
+	        p_audio_config->achan[channel].sanity_test = SANITY_APRS;
+	      }
+	      else if (strcasecmp(t, "AX25") == 0 || strcasecmp(t, "AX.25") == 0) {
+	        p_audio_config->achan[channel].sanity_test = SANITY_AX25;
+	      }
+	      else if (strcasecmp(t, "NONE") == 0) {
+	        p_audio_config->achan[channel].sanity_test = SANITY_NONE;
+	      }
+	      else if (strcasecmp(t, "PASSALL") == 0) {
+	        p_audio_config->achan[channel].passall = 1;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Invalid option '%s' for FIX_BITS.\n", line, t);
+	      }
+	      t = strtok (NULL, " ,\t\n\r");
+	    }
+	  }
+
+
+/*
+ * PTT 		- Push To Talk signal line.
+ * DCD		- Data Carrier Detect indicator.
+ *
+ * xxx  serial-port [-]rts-or-dtr [ [-]rts-or-dtr ]
+ * xxx  GPIO  [-]gpio-num
+ * xxx  LPT  [-]bit-num
+ *
+ * Applies to most recent CHANNEL command.
+ */
+
+	  else if (strcasecmp(t, "PTT") == 0 || strcasecmp(t, "DCD") == 0) {
+	    //int n;
+	    int ot;
+	    char otname[8];
+
+	    if (strcasecmp(t, "PTT") == 0) {
+	      ot = OCTYPE_PTT;
+	      strcpy (otname, "PTT");
+	    }
+	    else if (strcasecmp(t, "DCD") == 0) {
+	      ot = OCTYPE_DCD;
+	      strcpy (otname, "DCD");
+	    }
+	    else {
+	      ot = OCTYPE_FUTURE;
+	      strcpy (otname, "FUTURE");
+	    }
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: Missing serial port name for %s command.\n", 
+			line, otname);
 	      continue;
 	    }
 
@@ -933,24 +1320,24 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 #if __WIN32__
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: PTT with GPIO is only available on Linux.\n", line);
+	      dw_printf ("Config file line %d: %s with GPIO is only available on Linux.\n", line, otname);
 #else		
 	      t = strtok (NULL, " ,\t\n\r");
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file line %d: Missing GPIO number.\n", line);
+	        dw_printf ("Config file line %d: Missing GPIO number for %s.\n", line, otname);
 	        continue;
 	      }
 
 	      if (*t == '-') {
-	        p_modem->ptt_gpio[channel] = atoi(t+1);
-		p_modem->ptt_invert[channel] = 1;
+	        p_audio_config->achan[channel].octrl[ot].ptt_gpio = atoi(t+1);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
 	      }
 	      else {
-	        p_modem->ptt_gpio[channel] = atoi(t);
-		p_modem->ptt_invert[channel] = 0;
+	        p_audio_config->achan[channel].octrl[ot].ptt_gpio = atoi(t);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	      }
-	      p_modem->ptt_method[channel] = PTT_METHOD_GPIO;
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIO;
 #endif
 	    }
 	    else if (strcasecmp(t, "LPT") == 0) {
@@ -962,66 +1349,131 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      t = strtok (NULL, " ,\t\n\r");
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file line %d: Missing LPT bit number.\n", line);
+	        dw_printf ("Config file line %d: Missing LPT bit number for %s.\n", line, otname);
 	        continue;
 	      }
 
 	      if (*t == '-') {
-	        p_modem->ptt_lpt_bit[channel] = atoi(t+1);
-		p_modem->ptt_invert[channel] = 1;
+	        p_audio_config->achan[channel].octrl[ot].ptt_lpt_bit = atoi(t+1);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
 	      }
 	      else {
-	        p_modem->ptt_lpt_bit[channel] = atoi(t);
-		p_modem->ptt_invert[channel] = 0;
+	        p_audio_config->achan[channel].octrl[ot].ptt_lpt_bit = atoi(t);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	      }
-	      p_modem->ptt_method[channel] = PTT_METHOD_LPT;
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_LPT;
 #else
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: PTT with LPT is only available on x86 Linux.\n", line);
+	      dw_printf ("Config file line %d: %s with LPT is only available on x86 Linux.\n", line, otname);
 #endif		
 	    }
 	    else  {
 
 /* serial port case. */
 
-	      strncpy (p_modem->ptt_device[channel], t, sizeof(p_modem->ptt_device[channel]));
+	      strncpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 
 	      t = strtok (NULL, " ,\t\n\r");
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file line %d: Missing RTS or DTR after PTT device name.\n", 
-			line);
+	        dw_printf ("Config file line %d: Missing RTS or DTR after %s device name.\n", 
+			line, otname);
 	        continue;
 	      }
 
 	      if (strcasecmp(t, "rts") == 0) {
-	        p_modem->ptt_line[channel] = PTT_LINE_RTS;
-		p_modem->ptt_invert[channel] = 0;
+	        p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_RTS;
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	      }
 	      else if (strcasecmp(t, "dtr") == 0) {
-	        p_modem->ptt_line[channel] = PTT_LINE_DTR;
-		p_modem->ptt_invert[channel] = 0;
+	        p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_DTR;
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	      }
 	      else if (strcasecmp(t, "-rts") == 0) {
-	        p_modem->ptt_line[channel] = PTT_LINE_RTS;
-		p_modem->ptt_invert[channel] = 1;
+	        p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_RTS;
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
 	      }
 	      else if (strcasecmp(t, "-dtr") == 0) {
-	        p_modem->ptt_line[channel] = PTT_LINE_DTR;
-		p_modem->ptt_invert[channel] = 1;
+	        p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_DTR;
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file line %d: Expected RTS or DTR after PTT device name.\n", 
-			line);
+	        dw_printf ("Config file line %d: Expected RTS or DTR after %s device name.\n", 
+			line, otname);
 	        continue;
 	      }
 
-	      p_modem->ptt_method[channel] = PTT_METHOD_SERIAL;
+
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_SERIAL;
+
+
+	      /* In version 1.2, we allow a second one for same serial port. */
+	      /* Some interfaces want the two control lines driven with opposite polarity. */
+	      /* e.g.   PTT COM1 RTS -DTR  */
+
+	      t = strtok (NULL, " ,\t\n\r");
+	      if (t != NULL) {
+
+	        if (strcasecmp(t, "rts") == 0) {
+	          p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_RTS;
+		  p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 0;
+	        }
+	        else if (strcasecmp(t, "dtr") == 0) {
+	          p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_DTR;
+		  p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 0;
+	        }
+	        else if (strcasecmp(t, "-rts") == 0) {
+	          p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_RTS;
+		  p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 1;
+	        }
+	        else if (strcasecmp(t, "-dtr") == 0) {
+	          p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_DTR;
+		  p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 1;
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: Expected RTS or DTR after first RTS or DTR.\n", 
+			line);
+	          continue;
+	        }
+
+		/* Would not make sense to specify the same one twice. */
+
+		if (p_audio_config->achan[channel].octrl[ot].ptt_line == p_audio_config->achan[channel].octrl[ot].ptt_line2) {
+	          dw_printf ("Config file line %d: Doesn't make sense to specify the some control line twice.\n", 
+			line);
+	        }
+
+	      }  /* end of second serial port control line. */
+	    }  /* end of serial port case. */
+
+	  }  /* end of PTT */
+
+
+/*
+ * DWAIT 		- Extra delay for receiver squelch.
+ */
+
+	  else if (strcasecmp(t, "DWAIT") == 0) {
+	    int n;
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing delay time for DWAIT command.\n", line);
+	      continue;
 	    }
-
+	    n = atoi(t);
+            if (n >= 0 && n <= 255) {
+	      p_audio_config->achan[channel].dwait = n;
+	    }
+	    else {
+	      p_audio_config->achan[channel].dwait = DEFAULT_DWAIT;
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid delay time for DWAIT. Using %d.\n", 
+			line, p_audio_config->achan[channel].dwait);
+   	    }
 	  }
-
 
 /*
  * SLOTTIME 		- For non-digipeat transmit delay timing.
@@ -1037,13 +1489,13 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
-	      p_modem->slottime[channel] = n;
+	      p_audio_config->achan[channel].slottime = n;
 	    }
 	    else {
-	      p_modem->slottime[channel] = DEFAULT_SLOTTIME;
+	      p_audio_config->achan[channel].slottime = DEFAULT_SLOTTIME;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid delay time for persist algorithm. Using %d.\n", 
-			line, p_modem->slottime[channel]);
+			line, p_audio_config->achan[channel].slottime);
    	    }
 	  }
 
@@ -1061,13 +1513,13 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
-	      p_modem->persist[channel] = n;
+	      p_audio_config->achan[channel].persist = n;
 	    }
 	    else {
-	      p_modem->persist[channel] = DEFAULT_PERSIST;
+	      p_audio_config->achan[channel].persist = DEFAULT_PERSIST;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid probability for persist algorithm. Using %d.\n", 
-			line, p_modem->persist[channel]);
+			line, p_audio_config->achan[channel].persist);
    	    }
 	  }
 
@@ -1085,13 +1537,13 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
-	      p_modem->txdelay[channel] = n;
+	      p_audio_config->achan[channel].txdelay = n;
 	    }
 	    else {
-	      p_modem->txdelay[channel] = DEFAULT_TXDELAY;
+	      p_audio_config->achan[channel].txdelay = DEFAULT_TXDELAY;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid time for transmit delay. Using %d.\n", 
-			line, p_modem->txdelay[channel]);
+			line, p_audio_config->achan[channel].txdelay);
    	    }
 	  }
 
@@ -1109,18 +1561,49 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
-	      p_modem->txtail[channel] = n;
+	      p_audio_config->achan[channel].txtail = n;
 	    }
 	    else {
-	      p_modem->txtail[channel] = DEFAULT_TXTAIL;
+	      p_audio_config->achan[channel].txtail = DEFAULT_TXTAIL;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid time for transmit timing. Using %d.\n", 
-			line, p_modem->txtail[channel]);
+			line, p_audio_config->achan[channel].txtail);
    	    }
 	  }
 
 /*
+ * SPEECH  script 
+ *
+ * Specify script for text-to-speech function.		
+ */
+
+	  else if (strcasecmp(t, "SPEECH") == 0) {
+	    int n;
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing script for Text-to-Speech function.\n", line);
+	      continue;
+	    }
+	    
+	    /* See if we can run it. */
+
+	    if (xmit_speak_it(t, -1, " ") == 0) {
+	      strcpy (p_audio_config->tts_script, t);
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Error trying to run Text-to-Speech function.\n", line);
+	      continue;
+	   }
+	  }
+
+/*
  * ==================== Digipeater parameters ==================== 
+ */
+
+/*
+ * DIGIPEAT  from-chan  to-chan  alias-pattern  wide-pattern  [ OFF|DROP|MARK|TRACE ] 
  */
 
 	  else if (strcasecmp(t, "digipeat") == 0) {
@@ -1136,10 +1619,16 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    from_chan = atoi(t);
-	    if (from_chan < 0 || from_chan > p_digi_config->num_chans-1) {
+	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: FROM-channel must be in range of 0 to %d on line %d.\n", 
-							p_digi_config->num_chans-1, line);
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[from_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
+							line, from_chan);
 	      continue;
 	    }
 
@@ -1150,10 +1639,16 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    to_chan = atoi(t);
-	    if (to_chan < 0 || to_chan > p_digi_config->num_chans-1) {
+	    if (to_chan < 0 || to_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: TO-channel must be in range of 0 to %d on line %d.\n", 
-							p_digi_config->num_chans-1, line);
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[to_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
+							line, to_chan);
 	      continue;
 	    }
 	
@@ -1194,21 +1689,25 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    if (t != NULL) {
 	      if (strcasecmp(t, "OFF") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_OFF;
+	        t = strtok (NULL, " ,\t\n\r");
 	      }
 	      else if (strcasecmp(t, "DROP") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_DROP;
+	        t = strtok (NULL, " ,\t\n\r");
 	      }
 	      else if (strcasecmp(t, "MARK") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_MARK;
+	        t = strtok (NULL, " ,\t\n\r");
 	      }
 	      else if (strcasecmp(t, "TRACE") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
+	        t = strtok (NULL, " ,\t\n\r");
 	      }
-	      else {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file: Expected OFF, DROP, MARK, or TRACE on line %d.\n", line);
-	      }
+	    }
 
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Found \"%s\" where end of line was expected.\n", line, t);     
 	    }
 	  }
 
@@ -1242,8 +1741,8 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	  else if (strcasecmp(t, "regen") == 0) {
 	    int from_chan, to_chan;
-	    //int e;
-	    //char message[100];
+	    int e;
+	    char message[100];
 	    	    
 
 	    t = strtok (NULL, " ,\t\n\r");
@@ -1253,10 +1752,16 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    from_chan = atoi(t);
-	    if (from_chan < 0 || from_chan > p_digi_config->num_chans-1) {
+	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: FROM-channel must be in range of 0 to %d on line %d.\n", 
-							p_digi_config->num_chans-1, line);
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[from_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
+							line, from_chan);
 	      continue;
 	    }
 
@@ -1267,10 +1772,16 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    to_chan = atoi(t);
-	    if (to_chan < 0 || to_chan > p_digi_config->num_chans-1) {
+	    if (to_chan < 0 || to_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: TO-channel must be in range of 0 to %d on line %d.\n", 
-							p_digi_config->num_chans-1, line);
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[to_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
+							line, to_chan);
 	      continue;
 	    }
 	
@@ -1278,6 +1789,87 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    p_digi_config->regen[from_chan][to_chan] = 1;
 
 	  }
+
+
+/*
+ * ==================== Packet Filtering for digipeater or IGate ==================== 
+ */
+
+/*
+ * FILTER  from-chan  to-chan  filter_specification_expression
+ * FILTER  from-chan  IG       filter_specification_expression
+ * FILTER  IG         to-chan  filter_specification_expression
+ */
+
+	  else if (strcasecmp(t, "FILTER") == 0) {
+	    int from_chan, to_chan;
+	    int e;
+	    char message[100];
+	    	    
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
+	      continue;
+	    }
+	    if (*t == 'i' || *t == 'I') {
+	      from_chan = MAX_CHANS;
+	    }
+	    else {
+	      from_chan = isdigit(*t) ? atoi(t) : -999;
+	      if (from_chan < 0 || from_chan >= MAX_CHANS) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Filter FROM-channel must be in range of 0 to %d or \"IG\" on line %d.\n", 
+							MAX_CHANS-1, line);
+	        continue;
+	      }
+
+	      if ( ! p_audio_config->achan[from_chan].valid) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
+							line, from_chan);
+	        continue;
+	      }
+	    }
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+	    if (*t == 'i' || *t == 'I') {
+	      to_chan = MAX_CHANS;
+	    }
+	    else {
+	      to_chan = isdigit(*t) ? atoi(t) : -999;
+	      if (to_chan < 0 || to_chan >= MAX_CHANS) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Filter TO-channel must be in range of 0 to %d or \"IG\" on line %d.\n", 
+							MAX_CHANS-1, line);
+	        continue;
+	      }
+	      if ( ! p_audio_config->achan[to_chan].valid) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
+							line, to_chan);
+	        continue;
+	      }
+	    }
+
+	    t = strtok (NULL, "\n\r");		/* Take rest of line including spaces. */
+
+	    if (t == NULL) {
+	      t = " ";				/* Empty means permit nothing. */
+	    }
+
+	    p_digi_config->filter_str[from_chan][to_chan] = strdup(t);
+
+//TODO1.2:  Do a test run to see errors now instead of waiting.
+
+	  }
+
 
 /*
  * ==================== APRStt gateway ==================== 
@@ -1626,6 +2218,9 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    int j;
 	    int znum;
 	    char *zlet;
+	    double dlat, dlon;
+	    long lerr;
+
 
 	    assert (p_tt_config->ttloc_size >= 2);
 	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
@@ -1641,7 +2236,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_UTM;
 	    strcpy(tl->pattern, "");
-	    strcpy(tl->utm.zone, "");
+	    tl->utm.lzone = 0;
 	    tl->utm.scale = 1;
 	    tl->utm.x_offset = 0;
 	    tl->utm.y_offset = 0;
@@ -1652,6 +2247,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTUTM command.\n", line);
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
 	    strcpy (tl->pattern, t);
@@ -1659,11 +2255,14 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: TTUTM pattern must begin with upper case 'B'.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
 	    }
 	    for (j=1; j<strlen(t); j++) {
 	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y') {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTUTM pattern must be B, optional digit, xxx, yyy.\n", line);
+		// Bail out somehow.  continue would match inner for.
 	      }
 	    }
 
@@ -1673,54 +2272,254 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing zone for TTUTM command.\n", line);
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    memset (tl->utm.zone, 0, sizeof (tl->utm.zone));
-	    strncpy (tl->utm.zone, t, sizeof (tl->utm.zone) - 1);
 
-            znum = strtoul(tl->utm.zone, &zlet, 10);
+	    tl->utm.lzone = parse_utm_zone (t, &(tl->utm.hemi));
 
-            if (znum < 1 || znum > 60) {
+ 	    /* Optional scale. */
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t != NULL) {
+	      
+	      tl->utm.scale = atof(t);
+
+	      /* Optional x offset. */
+
+	      t = strtok (NULL, " ,\t\n\r");
+	      if (t != NULL) {
+
+	        tl->utm.x_offset = atof(t);
+
+	        /* Optional y offset. */
+
+	        t = strtok (NULL, " ,\t\n\r");
+	        if (t != NULL) {
+	     
+	          tl->utm.y_offset = atof(t);
+	        }
+	      }
+	    }
+
+	    /* Practice run to see if conversion might fail later with actual location. */
+
+	    lerr = Convert_UTM_To_Geodetic(tl->utm.lzone, tl->utm.hemi,               
+                        tl->utm.x_offset + 5 * tl->utm.scale,
+                        tl->utm.y_offset + 5 * tl->utm.scale,
+                        &dlat, &dlon);
+
+            if (lerr != 0) {
+	      char message [300];
+
+              utm_error_string (lerr, message);
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Zone number is out of range.\n\n", line);
-              continue;
+              dw_printf ("Line %d: Invalid UTM location: \n%s\n", line, message);
+	      p_tt_config->ttloc_len--;
+	      continue;
+            }
+	  }
+
+/*
+ * TTUSNG, TTMGRS 		- Specify zone/square for touch tone locations.
+ *
+ * TTUSNG   pattern  zone_square 
+ * TTMGRS   pattern  zone_square 
+ */
+	  else if (strcasecmp(t, "TTUSNG") == 0 || strcasecmp(t, "TTMGRS") == 0) {
+
+	    struct ttloc_s *tl;
+	    int j;
+	    int znum;
+	    char *zlet;
+	    int num_x, num_y;
+	    double lat, lon;
+	    long lerr;
+	    char message[300];
+
+	    assert (p_tt_config->ttloc_size >= 2);
+	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    /* Allocate new space, but first, if already full, make larger. */
+	    if (p_tt_config->ttloc_len == p_tt_config->ttloc_size) {
+	      p_tt_config->ttloc_size += p_tt_config->ttloc_size / 2;
+	      p_tt_config->ttloc_ptr = realloc (p_tt_config->ttloc_ptr, sizeof(struct ttloc_s) * p_tt_config->ttloc_size);
+	    }
+	    p_tt_config->ttloc_len++;
+	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
+
+// TODO1.2: in progress...
+	    if (strcasecmp(t, "TTMGRS") == 0) {
+	      tl->type = TTLOC_MGRS;
+	    }
+	    else {
+	      tl->type = TTLOC_USNG;
+	    }
+	    strcpy(tl->pattern, "");
+	    strcpy(tl->mgrs.zone, "");
+
+	    /* Pattern: B [digit] x... y... */
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing pattern for TTUSNG/TTMGRS command.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+	    strcpy (tl->pattern, t);
+
+	    if (t[0] != 'B') {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTUSNG/TTMGRS pattern must begin with upper case 'B'.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+	    num_x = 0;
+	    num_y = 0;
+	    for (j=1; j<strlen(t); j++) {
+	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y') {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: TTUSNG/TTMGRS pattern must be B, optional digit, xxx, yyy.\n", line);
+		// Bail out somehow.  continue would match inner for.
+	      }
+	      if (t[j] == 'x') num_x++;
+	      if (t[j] == 'y') num_y++;
+	    }
+	    if (num_x < 1 || num_x > 5 || num_x != num_y) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTUSNG/TTMGRS must have 1 to 5 x and same number y.\n", line);  
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+
+	    /* Zone 1 - 60 and optional latitudinal letter. */
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing zone & square for TTUSNG/TTMGRS command.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+	    memset (tl->mgrs.zone, 0, sizeof (tl->mgrs.zone));
+	    strncpy (tl->mgrs.zone, t, sizeof (tl->mgrs.zone) - 1);
+
+	    /* Try converting it rather do our own error checking. */
+
+	    if (tl->type == TTLOC_MGRS) {
+	      lerr = Convert_MGRS_To_Geodetic (tl->mgrs.zone, &lat, &lon);
+	    }
+	    else {
+	      lerr = Convert_USNG_To_Geodetic (tl->mgrs.zone, &lat, &lon);
+	    }
+            if (lerr != 0) {
+
+              mgrs_error_string (lerr, message);
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid USNG/MGRS zone & square:  %s\n%s\n", line, tl->mgrs.zone, message);
+	      p_tt_config->ttloc_len--;
+	      continue;
             }
 
-            if (*zlet != '\0' && strchr ("CDEFGHJKLMNPQRSTUVWX", *zlet) == NULL) {
+	    /* Should be the end. */
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t != NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Latitudinal band must be one of CDEFGHJKLMNPQRSTUVWX.\n\n", line);
-              continue;
-            }
+              dw_printf ("Line %d: Unexpected stuff at end ignored:  %s\n", line, t);
+	    }
+	  }
 
-	    /* Optional scale. */
+
+/*
+ * TTSATSQ 		- Define pattern to be used for Satellite square.
+ *
+ * TTSATSQ   pattern    
+ *
+ *			Pattern would be  B[0-9A-D]xxxx 
+ */
+	  else if (strcasecmp(t, "TTSATSQ") == 0) {
+
+// TODO1.2:  TTSATSQ To be continued...
+
+	    struct ttloc_s *tl;
+	    int j;
+
+	    assert (p_tt_config->ttloc_size >= 2);
+	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    /* Allocate new space, but first, if already full, make larger. */
+	    if (p_tt_config->ttloc_len == p_tt_config->ttloc_size) {
+	      p_tt_config->ttloc_size += p_tt_config->ttloc_size / 2;
+	      p_tt_config->ttloc_ptr = realloc (p_tt_config->ttloc_ptr, sizeof(struct ttloc_s) * p_tt_config->ttloc_size);
+	    }
+	    p_tt_config->ttloc_len++;
+	    assert (p_tt_config->ttloc_len > 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
+	    tl->type = TTLOC_SATSQ;
+	    strcpy(tl->pattern, "");
+	    tl->point.lat = 0;
+	    tl->point.lon = 0;
+
+	    /* Pattern: B, optional additional button, exactly xxxx for matching */
 
 	    t = strtok (NULL, " ,\t\n\r");
 	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing pattern for TTSATSQ command.\n", line);
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    tl->utm.scale = atof(t);
+	    strcpy (tl->pattern, t);
 
-	    /* Optional x offset. */
-
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
+	    if (t[0] != 'B') {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTSATSQ pattern must begin with upper case 'B'.\n", line);
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    tl->utm.x_offset = atof(t);
 
-	    /* Optional y offset. */
+	    /* Optionally one of 0-9ABCD */
 
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
+	    if (strchr("ABCD", t[1]) != NULL || isdigit(t[1])) {
+	      j = 2;
+	    }
+	    else {
+	      j = 1;
+	    }
+
+	    if (strcmp(t+j, "xxxx") != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTSATSQ pattern must end with exactly xxxx in lower case.\n", line);
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    tl->utm.y_offset = atof(t);
+
+	    /* temp debugging */
+
+	    //for (j=0; j<p_tt_config->ttloc_len; j++) {
+	    //  dw_printf ("debug ttloc %d/%d %s\n", j, p_tt_config->ttloc_size, 
+	    //		p_tt_config->ttloc_ptr[j].pattern);
+	    //}
 	  }
 
 /*
  * TTMACRO 		- Define compact message format with full expansion
  *
  * TTMACRO   pattern  definition
+ *
+ *		pattern can contain:
+ *			0-9 which must match exactly.
+ *				In version 1.2, also allow A,B,C,D for exact match.
+ *			x, y, z which are used for matching of variable fields.
+ *			
+ *		definition can contain:
+ *			0-9, A, B, C, D, *, #, x, y, z.
+ *			Not sure why # was included in there.
  */
 	  else if (strcasecmp(t, "TTMACRO") == 0) {
 
@@ -1746,6 +2545,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	    /* Pattern: Any combination of digits, x, y, and z. */
 	    /* Also make note of which letters are used in pattern and defintition. */
+ 	    /* Version 1.2: also allow A,B,C,D in the pattern. */
 
 	    t = strtok (NULL, " ,\t\n\r");
 	    if (t == NULL) {
@@ -1758,15 +2558,19 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    p_count[0] = p_count[1] = p_count[2] = 0;
 
 	    for (j=0; j<strlen(t); j++) {
-	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y' && t[j] != 'z') {
+	      if ( strchr ("0123456789ABCDxyz", t[j]) == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Line %d: TTMACRO pattern can contain only digits and lower case x, y, or z.\n", line);
+	        dw_printf ("Line %d: TTMACRO pattern can contain only digits, A, B, C, D, and lower case x, y, or z.\n", line);
 	        continue;
 	      }
+	      /* Count how many x, y, z in the pattern. */
 	      if (t[j] >= 'x' && t[j] <= 'z') {
 		p_count[t[j]-'x']++;
 	      }
 	    }
+
+	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("Line %d: TTMACRO pattern \"%s\" p_count = %d %d %d.\n", line, t, p_count[0], p_count[1], p_count[2]);
 
 	    /* Now gather up the definition. */
 	    /* It can contain touch tone characters and lower case x, y, z for substitutions. */
@@ -1812,15 +2616,33 @@ void config_init (char *fname, struct audio_s *p_modem,
 /*
  * TTOBJ 		- TT Object Report options.
  *
- * TTOBJ  xmit-chan  header 
+ * TTOBJ  recv-chan  xmit-chan  [ via-path ] 
  */
 
 
-// TODO:  header can be generated automatically.  Should not be in config file.
-
-
 	  else if (strcasecmp(t, "TTOBJ") == 0) {
-	    int n;
+	    int r, x;
+
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing DTMF receive channel for TTOBJ command.\n", line);
+	      continue;
+	    }
+
+	    r = atoi(t);
+	    if (r < 0 || r > MAX_CHANS-1) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: DTMF receive channel must be in range of 0 to %d on line %d.\n", 
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[r].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TTOBJ DTMF receive channel %d is not valid.\n", 
+							line, r);
+	      continue;
+	    }
 
 	    t = strtok (NULL, " ,\t\n\r");
 	    if (t == NULL) {
@@ -1829,25 +2651,35 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 
-	    n = atoi(t);
-	    if (n < 0 || n > p_digi_config->num_chans-1) {
+	    x = atoi(t);
+	    if (x < 0 || x > MAX_CHANS-1) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Transmit channel must be in range of 0 to %d on line %d.\n", 
-							p_digi_config->num_chans-1, line);
+							MAX_CHANS-1, line);
 	      continue;
 	    }
-	    p_tt_config->obj_xmit_chan = n;
+	    if ( ! p_audio_config->achan[x].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TTOBJ transmit channel %d is not valid.\n", 
+							line, x);
+	      continue;
+	    }
+
+// This enables the DTMF decoder on the specified channel.
+// Additional channels can be enabled with the DTMF command.
+// Note that they do not enable the APRStt gateway.
+
+	    p_audio_config->achan[r].dtmf_decode = DTMF_DECODE_ON;
+	    p_tt_config->gateway_enabled = 1;
+	    p_tt_config->obj_recv_chan = r;
+	    p_tt_config->obj_xmit_chan = x;
 
 	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing object header for TTOBJ command.\n", line);
-	      continue;
-	    }
-	    // TODO: Should do some validity checking.
+	    if (t != NULL) {
 
-	    strncpy (p_tt_config->obj_xmit_header, t, sizeof(p_tt_config->obj_xmit_header));
-	
+	      // TODO: Should do some validity checking.
+	      strncpy (p_tt_config->obj_xmit_via, t, sizeof(p_tt_config->obj_xmit_via));
+	    }
 	  }
 
 /*
@@ -1950,10 +2782,10 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    }
 
 	    n = atoi(t);
-	    if (n < 0 || n > p_digi_config->num_chans-1) {
+	    if (n < 0 || n > MAX_CHANS-1) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Transmit channel must be in range of 0 to %d on line %d.\n", 
-							p_digi_config->num_chans-1, line);
+							MAX_CHANS-1, line);
 	      continue;
 	    }
 	    p_igate_config->tx_chan = n;
@@ -2040,6 +2872,8 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 /*
  * AGWPORT 		- Port number for "AGW TCPIP Socket Interface" 
+ *
+ * In version 1.2 we allow 0 to disable listening.
  */
 
 	  else if (strcasecmp(t, "AGWPORT") == 0) {
@@ -2051,7 +2885,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) {
+            if ((n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) || n == 0) {
 	      p_misc_config->agwpe_port = n;
 	    }
 	    else {
@@ -2075,7 +2909,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) {
+            if ((n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) || n == 0) {
 	      p_misc_config->kiss_port = n;
 	    }
 	    else {
@@ -2129,30 +2963,6 @@ void config_init (char *fname, struct audio_s *p_modem,
 	    else {
 	      strncpy (p_misc_config->logdir, t, sizeof(p_misc_config->logdir)-1);
 	    }
-	  }
-
-/*
- * FIX_BITS 		- Attempt to fix frames with bad FCS. 
- */
-
-	  else if (strcasecmp(t, "FIX_BITS") == 0) {
-	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing value for FIX_BITS command.\n", line);
-	      continue;
-	    }
-	    n = atoi(t);
-            if (n >= RETRY_NONE && n <= RETRY_REMOVE_TWO_SEP) {
-	      p_modem->fix_bits = (retry_t)n;
-	    }
-	    else {
-	      p_modem->fix_bits = DEFAULT_FIX_BITS;
-	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid value for FIX_BITS. Using %d.\n", 
-			line, p_modem->fix_bits);
-   	    }
 	  }
 
 /*
@@ -2217,7 +3027,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 	      /* Save line number because some errors will be reported later. */
 	      p_misc_config->beacon[p_misc_config->num_beacons].lineno = line;
 
-	      if (beacon_options(t + strlen("xBEACON") + 1, &(p_misc_config->beacon[p_misc_config->num_beacons]), line)) {
+	      if (beacon_options(t + strlen("xBEACON") + 1, &(p_misc_config->beacon[p_misc_config->num_beacons]), line, p_audio_config)) {
 	        p_misc_config->num_beacons++;
 	      }
 	    }
@@ -2238,7 +3048,7 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	    int n;
 
-#define SB_NUM(name,sbvar,minn,maxx,unit)  								\
+#define SB_NUM(name,sbvar,minn,maxx,unit)  							\
 	    t = strtok (NULL, " ,\t\n\r");							\
 	    if (t == NULL) {									\
 	      text_color_set(DW_COLOR_ERROR);							\
@@ -2312,18 +3122,24 @@ void config_init (char *fname, struct audio_s *p_modem,
  */
 	int i, j, k, b;
 
-	for (i=0; i<p_digi_config->num_chans; i++) {
-	  for (j=0; j<p_digi_config->num_chans; j++) {
+	for (i=0; i<MAX_CHANS; i++) {
+	  for (j=0; j<MAX_CHANS; j++) {
 
 	    if (p_digi_config->enabled[i][j]) {
 
-	      if (strcmp(p_digi_config->mycall[i], "NOCALL") == 0) {
+	      if ( strcmp(p_audio_config->achan[i].mycall, "") == 0 || 
+		   strcmp(p_audio_config->achan[i].mycall, "NOCALL") == 0 || 
+		   strcmp(p_audio_config->achan[i].mycall, "N0CALL") == 0) {
+
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file: MYCALL must be set for receive channel %d before digipeating is allowed.\n", i);
 	        p_digi_config->enabled[i][j] = 0;
 	      }
 
-	      if (strcmp(p_digi_config->mycall[j], "NOCALL") == 0) {
+	      if ( strcmp(p_audio_config->achan[j].mycall, "") == 0 || 
+	           strcmp(p_audio_config->achan[j].mycall, "NOCALL") == 0 ||
+		   strcmp(p_audio_config->achan[j].mycall, "N0CALL") == 0) {
+
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file: MYCALL must be set for transmit channel %d before digipeating is allowed.\n", i); 
 	        p_digi_config->enabled[i][j] = 0;
@@ -2331,27 +3147,30 @@ void config_init (char *fname, struct audio_s *p_modem,
 
 	      b = 0;
 	      for (k=0; k<p_misc_config->num_beacons; k++) {
-	        if (p_misc_config->beacon[p_misc_config->num_beacons].sendto_chan == j) b++;
+	        if (p_misc_config->beacon[k].sendto_chan == j) b++;
 	      }
 	      if (b == 0) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file: Beaconing should be configured for channel %d when digipeating is enabled.\n", i);
+	        dw_printf ("Config file: Beaconing should be configured for channel %d when digipeating is enabled.\n", j); 
 		// It's a recommendation, not a requirement.
 		// Was there some good reason to turn it off in earlier version?
-	        //p_digi_config->enabled[i][j] = 0;	      
+	        //p_digi_config->enabled[i][j] = 0;
 	      }
 	    }
 	  }
 
-	  if (strlen(p_igate_config->t2_login) > 0) {
+	  if (p_audio_config->achan[i].valid && strlen(p_igate_config->t2_login) > 0) {
 
-	    if (strcmp(p_digi_config->mycall[i], "NOCALL") == 0) {
+	    if (strcmp(p_audio_config->achan[i].mycall, "NOCALL") == 0  || strcmp(p_audio_config->achan[i].mycall, "N0CALL") == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: MYCALL must be set for receive channel %d before Rx IGate is allowed.\n", i);
 	      strcpy (p_igate_config->t2_login, "");
 	    }
 	    if (p_igate_config->tx_chan >= 0 && 
-			strcmp(p_digi_config->mycall[p_igate_config->tx_chan], "NOCALL") == 0) {
+			( strcmp(p_audio_config->achan[p_igate_config->tx_chan].mycall, "") == 0 ||
+		          strcmp(p_audio_config->achan[p_igate_config->tx_chan].mycall, "NOCALL") == 0 ||
+			  strcmp(p_audio_config->achan[p_igate_config->tx_chan].mycall, "N0CALL") == 0)) {
+
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: MYCALL must be set for transmit channel %d before Tx IGate is allowed.\n", i);
 	      p_igate_config->tx_chan = -1;
@@ -2368,7 +3187,7 @@ void config_init (char *fname, struct audio_s *p_modem,
  * Returns 1 for success, 0 for serious error.
  */
 
-static int beacon_options(char *cmd, struct beacon_s *b, int line)
+static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_s *p_audio_config)
 {
 	char options[1000];
 	char *o;
@@ -2495,16 +3314,35 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 	       b->sendto_chan = 0;
 	    }
 	    else if (value[0] == 'r' || value[0] == 'R') {
+	       int n = atoi(value+1);
+	       if ( n < 0 || n >= MAX_CHANS || ! p_audio_config->achan[n].valid) {
+	         text_color_set(DW_COLOR_ERROR);
+	         dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
+	         continue;
+	       }
 	       b->sendto_type = SENDTO_RECV;
-	       b->sendto_chan = atoi(value+1);
+	       b->sendto_chan = n;
 	    }
 	    else if (value[0] == 't' || value[0] == 'T' || value[0] == 'x' || value[0] == 'X') {
-	       b->sendto_type = SENDTO_XMIT;
-	       b->sendto_chan = atoi(value+1);
+	      int n = atoi(value+1);
+	      if ( n < 0 || n >= MAX_CHANS || ! p_audio_config->achan[n].valid) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
+	        continue;
+	      }
+
+	      b->sendto_type = SENDTO_XMIT;
+	      b->sendto_chan = n;
 	    }
 	    else {
+	       int n = atoi(value);
+	       if ( n < 0 || n >= MAX_CHANS || ! p_audio_config->achan[n].valid) {
+	         text_color_set(DW_COLOR_ERROR);
+	         dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
+	         continue;
+	       }
 	       b->sendto_type = SENDTO_XMIT;
-	       b->sendto_chan = atoi(value);
+	       b->sendto_chan = n;
 	    }
 	  }
 	  else if (strcasecmp(keyword, "DEST") == 0) {
@@ -2607,44 +3445,25 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 
 	  if (strlen(zone) > 0 && easting != G_UNKNOWN && northing != G_UNKNOWN) {
 
-	    int znum;
-	    char *zlet;
+	    long lzone;
+	    char hemi;
+	    long lerr;
+	    double dlat, dlon;
 
-            znum = strtoul(zone, &zlet, 10);
+	    lzone = parse_utm_zone (zone, &hemi);
 
-            if (znum >= 1 && znum <= 60) {
+	    lerr = Convert_UTM_To_Geodetic(lzone, hemi, easting, northing, &dlat, &dlon);
 
-              //printf ("zlet = %c 0x%02x\n", *zlet, *zlet);
-
-              if (*zlet == '\0' || strchr ("CDEFGHJKLMNPQRSTUVWX", *zlet) != NULL) {
-
-                if (easting >= 0 && easting <= 999999) {
-
-                 if (northing >= 0 && northing <= 9999999) {
- 
-                    UTMtoLL (WSG84, northing, easting, zone, &b->lat, &b->lon);
-
-                    // printf ("config UTM debug: latitude = %.6f, longitude = %.6f\n", b->lat, b->lon);
-
-		  }
-	          else {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Config file, line %d: Northing value is out of range.\n", line);
-                  }
-	        }
-	        else {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Config file, line %d: Easting value is out of range.\n", line);
-                }
-	      }
-	      else {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file, line %d: Latitudinal band must be one of CDEFGHJKLMNPQRSTUVWX.\n", line);
-              }
+            if (lerr == 0) {
+              b->lat = R2D(dlat);
+	      b->lon = R2D(dlon);
 	    }
 	    else {
+	      char message [300];
+
+              utm_error_string (lerr, message);
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file, line %d: UTM zone is out of range.\n", line);
+              dw_printf ("Line %d: Invalid UTM location: \n%s\n", line, message);
             }
 	  }
 	  else {
@@ -2680,6 +3499,26 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: Could not find symbol matching %s.\n", line, temp_symbol);
 	    }
+	  }
+	}
+
+/* Check is here because could be using default channel when SENDTO= is not specified. */
+
+	if (b->sendto_type == SENDTO_XMIT) {
+
+	  if ( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || ! p_audio_config->achan[b->sendto_chan].valid) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, b->sendto_chan);
+	    return (0);
+	  }
+
+	  if ( strcmp(p_audio_config->achan[b->sendto_chan].mycall, "") == 0 || 
+	       strcmp(p_audio_config->achan[b->sendto_chan].mycall, "NOCALL") == 0 || 
+	       strcmp(p_audio_config->achan[b->sendto_chan].mycall, "N0CALL") == 0 ) {
+
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", b->sendto_chan); 
+	    return (0);
 	  }
 	}
 

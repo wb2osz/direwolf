@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -57,6 +57,8 @@
  *		
  *			'x'	Unregister CallSign 
  *		
+ *			'y'	Ask Outstanding frames waiting on a Port   (new in 1.2)
+ *		
  *			A message is printed if any others are received.
  *
  *			TODO: Should others be implemented?
@@ -77,6 +79,8 @@
  *			'U'	Received AX.25 frame in monitor format.
  *				(Enabled with 'm' command.)
  *
+ *			'y'	Outstanding frames waiting on a Port   (new in 1.2)
+ *		
  *
  *
  * References:	AGWPE TCP/IP API Tutorial
@@ -111,6 +115,11 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#ifdef __OpenBSD__
+#include <errno.h>
+#else
+#include <sys/errno.h>
+#endif
 #endif
 
 #include <unistd.h>
@@ -126,6 +135,7 @@
 #include "textcolor.h"
 #include "audio.h"
 #include "server.h"
+
 
 
 /*
@@ -152,10 +162,11 @@ static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
 					/* the client app must send a command to enable this. */
 
 
-static int num_channels;	/* Number of radio ports. */
 
 
 // TODO:  define in one place, use everywhere.
+// TODO:  Macro to terminate thread when no point to go on.
+
 #if __WIN32__
 #define THREAD_F unsigned __stdcall
 #else 
@@ -329,6 +340,8 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
  *				  Main program has default of 8000 but allows
  *				  an alternative to be specified on the command line
  *
+ *				0 means disable.  New in version 1.2.
+ *
  * Outputs:	
  *
  * Description:	This starts at least two threads:
@@ -338,8 +351,10 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
  *
  *--------------------------------------------------------------------*/
 
+static struct audio_s *save_audio_config_p;
 
-void server_init (struct misc_config_s *mc)
+
+void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 {
 	int client;
 
@@ -359,12 +374,21 @@ void server_init (struct misc_config_s *mc)
 	dw_printf ("server_init ( %d )\n", server_port);
 	debug_a = 1;
 #endif
+
+	save_audio_config_p = audio_config_p;
+
 	for (client=0; client<MAX_NET_CLIENTS; client++) {
 	  client_sock[client] = -1;
 	  enable_send_raw_to_client[client] = 0;
 	  enable_send_monitor_to_client[client] = 0;
 	}
-	num_channels = mc->num_channels;
+
+	if (server_port == 0) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Disabled AGW network client port.\n");
+	  return;
+	}
+
 
 /*
  * This waits for a client to connect and sets an available client_sock[n].
@@ -459,7 +483,7 @@ static THREAD_F connect_listen_thread (void *arg)
           dw_printf("Could not find a usable version of Winsock.dll\n");
           WSACleanup();
 	  //sleep (1);
-          return (NULL);
+          return (NULL);		// TODO: what should this be for Windows?
 	}
 
 	memset (&hints, 0, sizeof(hints));
@@ -474,14 +498,14 @@ static THREAD_F connect_listen_thread (void *arg)
 	    dw_printf("getaddrinfo failed: %d\n", err);
 	    //sleep (1);
 	    WSACleanup();
-	    return (NULL);
+	    return (NULL);		// TODO: what should this be for Windows?
 	}
 
 	listen_sock= socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 	if (listen_sock == INVALID_SOCKET) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("connect_listen_thread: Socket creation failed, err=%d", WSAGetLastError());
-	  return (NULL);
+	  return (NULL);		// TODO: what should this be for Windows?
 	}
 
 #if DEBUG
@@ -492,12 +516,13 @@ static THREAD_F connect_listen_thread (void *arg)
 	err = bind( listen_sock, ai->ai_addr, (int)ai->ai_addrlen);
 	if (err == SOCKET_ERROR) {
 	  text_color_set(DW_COLOR_ERROR);
-          dw_printf("Bind failed with error: %d\n", WSAGetLastError());
+          dw_printf("Bind failed with error: %d\n", WSAGetLastError());		// TODO: translate number to text?
 	  dw_printf("Some other application is probably already using port %s.\n", server_port_str);
+	  dw_printf("Try using a different port number with AGWPORT in the configuration file.\n");
           freeaddrinfo(ai);
           closesocket(listen_sock);
           WSACleanup();
-          return (NULL);
+          return (NULL);		// TODO: what should this be for Windows?
         }
 
 	freeaddrinfo(ai);
@@ -528,7 +553,7 @@ static THREAD_F connect_listen_thread (void *arg)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf("Listen failed with error: %d\n", WSAGetLastError());
-	      return (NULL);
+	      return (NULL);		// TODO: what should this be for Windows?
 	    }
 	
 	    text_color_set(DW_COLOR_INFO);
@@ -541,7 +566,7 @@ static THREAD_F connect_listen_thread (void *arg)
               dw_printf("Accept failed with error: %d\n", WSAGetLastError());
               closesocket(listen_sock);
               WSACleanup();
-              return (NULL);
+              return (NULL);		// TODO: what should this be for Windows?
             }
 
 	    text_color_set(DW_COLOR_INFO);
@@ -585,7 +610,10 @@ static THREAD_F connect_listen_thread (void *arg)
 
         if (bind(listen_sock,(struct sockaddr*)&sockaddr,sizeof(sockaddr))  == -1) {
 	  text_color_set(DW_COLOR_ERROR);
-    	  perror ("connect_listen_thread: Bind failed");
+          dw_printf("Bind failed with error: %d\n", errno);
+          dw_printf("%s\n", strerror(errno));
+	  dw_printf("Some other application is probably already using port %d.\n", server_port);
+	  dw_printf("Try using a different port number with AGWPORT in the configuration file.\n");
           return (NULL);
 	}
 
@@ -873,6 +901,40 @@ static int read_from_socket (int fd, char *ptr, int len)
  *
  *--------------------------------------------------------------------*/
 
+
+static void send_to_client (int client, void *reply_p)
+{
+	struct agwpe_s *ph;
+	int len;
+#if __WIN32__     
+#else
+	int err;
+#endif
+
+	ph = (struct agwpe_s *) reply_p;	// Replies are often hdr + other stuff.
+
+	len = sizeof(struct agwpe_s) + ph->data_len;
+
+	/* Not sure what max data length might be. */
+
+	if (ph->data_len < 0 || ph->data_len > 4096) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid data length %d for AGW protocol message to client %d.\n", ph->data_len, client);
+	  debug_print (TO_CLIENT, client, ph, len);
+	}
+
+	if (debug_client) {
+	  debug_print (TO_CLIENT, client, ph, len);
+	}
+
+#if __WIN32__     
+	send (client_sock[client], (char*)(ph), len, 0);
+#else
+	err = write (client_sock[client], ph, len);
+#endif
+}
+
+
 static THREAD_F cmd_listen_thread (void *arg)
 {
 	int n;
@@ -884,7 +946,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 					/* Maximum for 'V': 1 + 8*10 + 256 */
 	} cmd;
 
-	int client = (int) arg;
+	int client = (int)(long)arg;
 
 	assert (client >= 0 && client < MAX_NET_CLIENTS);
 
@@ -945,7 +1007,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    close (client_sock[client]);
 #endif
 	    client_sock[client] = -1;
-	    return NULL;
+	    return NULL;		// TODO: what should this be for Windows?
 	  }
 
 	  cmd.data[0] = '\0';
@@ -992,7 +1054,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	        memset (&reply, 0, sizeof(reply));
 	        reply.hdr.kind_lo = 'R';
 	        reply.hdr.data_len = sizeof(reply.major_version) + sizeof(reply.minor_version);
-		assert (reply.hdr.data_len ==8);
+		assert (reply.hdr.data_len == 8);
 
 		// Xastir only prints this and doesn't care otherwise.
 		// APRSIS32 doesn't seem to care.
@@ -1003,17 +1065,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		assert (sizeof(reply) == 44);
 
-	        if (debug_client) {
-	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply));
-	        }
+	        send_to_client (client, &reply);
 
-// TODO:  Should have unified function instead of multiple versions everywhere.
-
-#if __WIN32__	      
-	        send (client_sock[client], (char*)(&reply), sizeof(reply), 0);
-#else
-	        n = write (client_sock[client], &reply, sizeof(reply));
-#endif
 	      }
 	      break;
 
@@ -1022,35 +1075,66 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      {
 		struct {
 		  struct agwpe_s hdr;
-	 	  char info[100];
+	 	  char info[200];
 		} reply;
+
+
+		int j, count;
 
 
 	        memset (&reply, 0, sizeof(reply));
 	        reply.hdr.kind_lo = 'G';
-	        reply.hdr.data_len = sizeof (reply.info);
+
 
 		// Xastir only prints this and doesn't care otherwise.
 		// YAAC uses this to identify available channels.
 
+		// The interface manual wants the first to be "Port1" 
+		// so channel 0 corresponds to "Port1."
+		// We can have gaps in the numbering.
+		// I wonder what applications will think about that.
+
+#if 1
+		// No other place cares about total number.
+
+		count = 0;
+		for (j=0; j<MAX_CHANS; j++) {
+	 	  if (save_audio_config_p->achan[j].valid) {
+		    count++;
+		  }
+		}
+		sprintf (reply.info, "%d;", count);
+
+		for (j=0; j<MAX_CHANS; j++) {
+	 	  if (save_audio_config_p->achan[j].valid) {
+		    char stemp[100];
+		    int a = ACHAN2ADEV(j);
+		    // If I was really ambitious, some description could be provided.
+		    static const char *names[8] = { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth" };
+
+		    if (save_audio_config_p->adev[a].num_channels == 1) {
+		      sprintf (stemp, "Port%d %s soundcard mono;", j+1, names[a]);
+		      strcat (reply.info, stemp);
+		    }
+		    else {
+		      sprintf (stemp, "Port%d %s soundcard %s;", j+1, names[a], j&1 ? "right" : "left");
+		      strcat (reply.info, stemp);
+		    }
+		  }
+		}
+
+#else
 		if (num_channels == 1) {
 		  sprintf (reply.info, "1;Port1 Single channel;");
 		}
 		else {
 		  sprintf (reply.info, "2;Port1 Left channel;Port2 Right Channel;");
 		}
-
-		assert (reply.hdr.data_len == 100);
-
-	        if (debug_client) {
-	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply));
-	        }
-
-#if __WIN32__     
-	        send (client_sock[client], (char*)(&reply), sizeof(reply), 0);
-#else
-	        n = write (client_sock[client], &reply, sizeof(reply));
 #endif
+	        reply.hdr.data_len = strlen(reply.info) + 1;
+
+	        send_to_client (client, &reply);
+
 	      }
 	      break;
 
@@ -1093,15 +1177,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		assert (sizeof(reply) == 48);
 
-	        if (debug_client) {
-	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply));
-	        }
+	        send_to_client (client, &reply);
 
-#if __WIN32__     
-	        send (client_sock[client], (char*)(&reply), sizeof(reply), 0);
-#else
-	        n = write (client_sock[client], &reply, sizeof(reply));
-#endif
 	      }
 	      break;
 
@@ -1129,16 +1206,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        reply.hdr.data_len = strlen(reply.info);
 
-	        if (debug_client) {
-	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply.hdr) + reply.hdr.data_len);
-	        }
-
-#if __WIN32__     
-	        send (client_sock[client], &reply, sizeof(reply.hdr) + reply.hdr.data_len, 0);
-#else
-	        write (client_sock[client], &reply, sizeof(reply.hdr) + reply.hdr.data_len);
-#endif	      
-
+	        send_to_client (client, &reply);
 #endif
 	      }
 	      break;
@@ -1232,6 +1300,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		//		
 	      
 		packet_t pp;
+		alevel_t alevel;
 
 		// Bug fix in version 1.1:
 		//
@@ -1246,7 +1315,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 		// first byte of the frame.  Unfortunately, it did not subtract one from
 		// cmd.hdr.data_len so we ended up sending an extra byte.
 
-		pp = ax25_from_frame ((unsigned char *)cmd.data+1, cmd.hdr.data_len - 1, -1);
+		memset (&alevel, 0xff, sizeof(alevel));
+		pp = ax25_from_frame ((unsigned char *)cmd.data+1, cmd.hdr.data_len - 1, alevel);
 
 		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
@@ -1293,15 +1363,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 		// Previously used sizeof(reply) but compiler rounded it up to next byte boundary.
 		// That's why more cumbersome size expression is used.
 
-	        if (debug_client) {
-	          debug_print (TO_CLIENT, client, &reply.hdr, sizeof(reply.hdr) + sizeof(reply.data));
-	        }
+	        send_to_client (client, &reply);
 
-#if __WIN32__     
-	        send (client_sock[client], (char*)(&reply), sizeof(reply.hdr) + sizeof(reply.data), 0);
-#else
-	        n = write (client_sock[client], &reply, sizeof(reply.hdr) + sizeof(reply.data));
-#endif
 	      }
 	      break;
 
@@ -1318,7 +1381,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\n");
-	      dw_printf ("Can't process command from AGW client app %d.\n", client);
+	      dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.kind_lo, client);
 	      dw_printf ("Connected packet mode is not implemented.\n");
 
 	      break;
@@ -1372,6 +1435,31 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      break;
 
 #endif
+
+
+	    case 'y':				/* Ask Outstanding frames waiting on a Port  */
+
+	      {
+		struct {
+		  struct agwpe_s hdr;
+		  int data;			// Assuming little-endian architecture.
+		} reply;
+
+
+	        memset (&reply, 0, sizeof(reply));
+		reply.hdr.portx = cmd.hdr.portx;	/* Reply with same port number */
+	        reply.hdr.kind_lo = 'y';
+	        reply.hdr.data_len = 4;
+		reply.data = 0;		
+	
+	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
+		  reply.data = tq_count (cmd.hdr.portx, TQ_PRIO_0_HI) + tq_count (cmd.hdr.portx, TQ_PRIO_1_LO);
+		}
+
+	        send_to_client (client, &reply);
+	      }
+	      break;
+
 	    default:
 
 	      text_color_set(DW_COLOR_ERROR);

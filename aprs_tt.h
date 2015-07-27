@@ -13,9 +13,9 @@
  */
 
 struct ttloc_s {
-	enum { TTLOC_POINT, TTLOC_VECTOR, TTLOC_GRID, TTLOC_UTM, TTLOC_MACRO } type;
+	enum { TTLOC_POINT, TTLOC_VECTOR, TTLOC_GRID, TTLOC_UTM, TTLOC_MGRS, TTLOC_USNG, TTLOC_MACRO, TTLOC_SATSQ } type;
 
-	char pattern[20];	/* e.g. B998, B5bbbdddd, B2xxyy, Byyyxxx */
+	char pattern[20];	/* e.g. B998, B5bbbdddd, B2xxyy, Byyyxxx, BAxxxx */
 				/* For macros, it should be all fixed digits, */
 				/* and the letters x, y, z.  e.g.  911, xxyyyz */
 
@@ -40,11 +40,16 @@ struct ttloc_s {
 	  } grid;
 
 	  struct {
-	    char zone[8];
 	    double scale;
 	    double x_offset;
 	    double y_offset;
+	    long lzone;		/* UTM zone, should be 1-60 */
+	    char hemi;		/* UTM Hemisphere, should be 'N' or 'S'. */
 	  } utm;
+
+	  struct {
+	    char zone[8];	/* Zone and square for USNG/MGRS */
+	  } mgrs;
 
 	  struct {
 	    char *definition;
@@ -60,9 +65,14 @@ struct ttloc_s {
 
 struct tt_config_s {
 
+	int gateway_enabled;		/* Send DTMF sequences to APRStt gateway. */
+
+	int obj_recv_chan;		/* Channel to listen for tones. */
+
 	int obj_xmit_chan;		/* Channel to transmit object report. */
-	char obj_xmit_header[AX25_MAX_ADDRS*AX25_MAX_ADDR_LEN];	
-					/* e.g.  "WB2OSZ-5>APDW07,WIDE1-1" */
+
+	char obj_xmit_via[AX25_MAX_REPEATERS * (AX25_MAX_ADDR_LEN+1)];	
+					/* e.g.  empty or "WIDE2-1,WIDE1-1" */
 	
 	int retain_time;		/* Seconds to keep information about a user. */
 	int num_xmits;			/* Number of times to transmit object report. */
@@ -96,11 +106,14 @@ void aprs_tt_button (int chan, char button);
 #define TT_ERROR_INVALID_SYMBOL	7	/* Invalid symbol specification. */
 #define TT_ERROR_INVALID_LOC	8	/* Invalid location. */
 #define TT_ERROR_NO_CALL	9	/* No call or object name included. */
+#define TT_ERROR_SATSQ		10	/* Satellite square must be 4 digits. */
 
 
 #define APRSTT_LOC_DESC_LEN 32		/* Need at least 26 */
 
 void aprs_tt_dao_to_desc (char *dao, char *str);
+
+void aprs_tt_sequence (int chan, char *msg);
 
 #endif
 

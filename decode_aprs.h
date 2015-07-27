@@ -22,6 +22,8 @@
 
 typedef struct decode_aprs_s {
 
+	int g_quiet;			/* Suppress error messages when decoding. */
+
         char g_src[AX25_MAX_ADDR_LEN];
 
         char g_msg_type[60];		/* Message type.  Telemetry descriptions get pretty long. */
@@ -54,9 +56,11 @@ typedef struct decode_aprs_s {
         double g_lat, g_lon;		/* Location, degrees.  Negative for South or West. */
 					/* Set to G_UNKNOWN if missing or error. */
 
-        char g_maidenhead[9];		/* 4 or 6 (or 8?) character maidenhead locator. */
+        char g_maidenhead[12];		/* 4 or 6 (or 8?) character maidenhead locator. */
 
-        char g_name[20];			/* Object or item name. */
+        char g_name[12];		/* Object or item name. Max. 9 characters. */
+
+	char g_addressee[12];		/* Addressee for a "message."  Max. 9 characters. */
 
         float g_speed;			/* Speed in MPH.  */
 
@@ -68,7 +72,7 @@ typedef struct decode_aprs_s {
 
         int g_gain;			/* Antenna gain in dB. */
 
-        char g_directivity[10];		/* Direction of max signal strength */
+        char g_directivity[12];		/* Direction of max signal strength */
 
         float g_range;			/* Precomputed radio range in miles. */
 
@@ -76,7 +80,7 @@ typedef struct decode_aprs_s {
 
         char g_mfr[80];			/* Manufacturer or application. */
 
-        char g_mic_e_status[30];		/* MIC-E message. */
+        char g_mic_e_status[32];	/* MIC-E message. */
 
         double g_freq;			/* Frequency, MHz */
 
@@ -98,7 +102,7 @@ typedef struct decode_aprs_s {
 
 
 
-extern void decode_aprs (decode_aprs_t *A, packet_t pp);
+extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet);
 
 extern void decode_aprs_print (decode_aprs_t *A);
 

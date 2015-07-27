@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
  *
  * Name:        atest.c
  *
- * Purpose:     Unit test for the AFSK demodulator.
+ * Purpose:     Test fixture for the AFSK demodulator.
  *
  * Inputs:	Takes audio from a .WAV file insted of the audio device.
  *
@@ -38,16 +38,11 @@
  *		(2) Burn a physical CD.
  *
  *		(3) "Rip" the desired tracks with Windows Media Player.
- *			This results in .WMA files.
+ *			Select .WAV file format.
  *		
- *		(4) Upload the .WMA file(s) to http://media.io/ and
- *			convert to .WAV format.
+ *		"Track 2" is used for most tests because that is more
+ *		realistic for most people using the speaker output.
  *
- *
- * Comparison to others:
- *
- *	Here are some other scores from Track 2 of the TNC Test CD:
- *		http://sites.google.com/site/ki4mcw/Home/arduino-tnc
  *
  * 	Without ONE_CHAN defined:
  *
@@ -60,13 +55,6 @@
  *
  *	  Only process one channel.  
  *
- *	  Version 0.4 decoded 870 packets.  
- *
- *	  After a little tweaking, version 0.5 decodes 931 packets.
- *
- *	  After more tweaking, version 0.6 gets 965 packets.
- *	  This is without the option to retry after getting a bad FCS.
- *
  *--------------------------------------------------------------------*/
 
 // #define X 1
@@ -74,7 +62,6 @@
 
 #include <stdio.h>
 #include <unistd.h>
-//#include <fcntl.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
@@ -86,12 +73,16 @@
 
 #include "audio.h"
 #include "demod.h"
-// #include "fsk_demod_agc.h"
+#include "multi_modem.h"
 #include "textcolor.h"
 #include "ax25_pad.h"
 #include "hdlc_rec2.h"
+#include "dlq.h"
+#include "ptt.h"
 
 
+
+#if 0	/* Typical but not flexible enough. */
 
 struct wav_header {             /* .WAV file header. */
         char riff[4];           /* "RIFF" */
@@ -108,29 +99,86 @@ struct wav_header {             /* .WAV file header. */
         char data[4];           /* "data" */
         int datasize;          /* number of bytes following. */
 } ;
-
+#endif
 					/* 8 bit samples are unsigned bytes */
 					/* in range of 0 .. 255. */
  
  					/* 16 bit samples are signed short */
 					/* in range of -32768 .. +32767. */
 
-static struct wav_header header;
+static struct {
+        char riff[4];          /* "RIFF" */
+        int filesize;          /* file length - 8 */
+        char wave[4];          /* "WAVE" */
+} header;
+
+static struct {
+	char id[4];		/* "LIST" or "fmt " */
+	int datasize;
+} chunk;
+
+static struct {
+        short wformattag;       /* 1 for PCM. */
+        short nchannels;        /* 1 for mono, 2 for stereo. */
+        int nsamplespersec;    /* sampling freq, Hz. */
+        int navgbytespersec;   /* = nblockalign*nsamplespersec. */
+        short nblockalign;      /* = wbitspersample/8 * nchannels. */
+        short wbitspersample;   /* 16 or 8. */
+	char extras[4];
+} format;
+
+static struct {
+	char data[4];		/* "data" */
+	int datasize;
+} wav_data;
+
+
 static FILE *fp;
 static int e_o_f;
 static int packets_decoded = 0;
-static int decimate = 1;		/* Reduce that sampling rate. */
+static int decimate = 0;		/* Reduce that sampling rate if set. */
 					/* 1 = normal, 2 = half, etc. */
+
+static struct audio_s my_audio_config;
+
+static int error_if_less_than = 0;	/* Exit with error status if this minimum not reached. */
+
+
+
+//#define EXPERIMENT_G 1
+//#define EXPERIMENT_H 1
+
+#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
+
+static 	int count[MAX_SUBCHANS];
+
+#if EXPERIMENT_H
+extern float space_gain[MAX_SUBCHANS];
+#endif
+
+#endif
+
+static void usage (void);
+
 
 
 int main (int argc, char *argv[])
 {
 
-	//int err;
+	int err;
 	int c;
-	struct audio_s modem;
 	int channel;
 	time_t start_time;
+
+
+
+#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
+	int j;
+
+	for (j=0; j<MAX_SUBCHANS; j++) {
+	  count[j] = 0;
+	}
+#endif
 
 	text_color_init(1);
 	text_color_set(DW_COLOR_INFO);
@@ -139,11 +187,11 @@ int main (int argc, char *argv[])
  * First apply defaults.
  */
 	
-	memset (&modem, 0, sizeof(modem));
+	memset (&my_audio_config, 0, sizeof(my_audio_config));
 
-	modem.num_channels = DEFAULT_NUM_CHANNELS;		
-	modem.samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	
-	modem.bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	
+	my_audio_config.adev[0].num_channels = DEFAULT_NUM_CHANNELS;		
+	my_audio_config.adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	
+	my_audio_config.adev[0].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	
 
 	// Results v0.9: 
 	//
@@ -157,7 +205,7 @@ int main (int argc, char *argv[])
 	// Time increases greatly for the one with order N^2 time.
 
 
-	// Results: version 1.1, decoder C, modem.fix_bits = RETRY_MAX - 1
+	// Results: version 1.1, decoder C, my_audio_config.fix_bits = RETRY_MAX - 1
 	//
 	// 971 NONE
 	// +19 SINGLE
@@ -167,7 +215,7 @@ int main (int argc, char *argv[])
 	// ----
 	// 1007 Total in 1008 sec.   More than twice as long as earlier version.
 
-	// Results: version 1.1, decoders ABC, modem.fix_bits = RETRY_MAX - 1
+	// Results: version 1.1, decoders ABC, my_audio_config.fix_bits = RETRY_MAX - 1
 	//
 	// 976 NONE
 	// +21  SINGLE
@@ -189,48 +237,27 @@ int main (int argc, char *argv[])
 	// techniques with less return on investment.
 
 
-
-// TODO: tabulate results from atest2.c.txt
-
-
-	/* TODO: should have a command line option for this. */
-
-	modem.fix_bits = RETRY_NONE;
-	//modem.fix_bits = RETRY_SWAP_SINGLE;
-	//modem.fix_bits = RETRY_SWAP_DOUBLE;
-	//modem.fix_bits = RETRY_SWAP_TRIPLE;
-	//modem.fix_bits = RETRY_INSERT_DOUBLE;
-	modem.fix_bits = RETRY_SWAP_TWO_SEP;
-	//modem.fix_bits = RETRY_REMOVE_MANY;
-	//modem.fix_bits = RETRY_MAX - 1;
-
 	for (channel=0; channel<MAX_CHANS; channel++) {
 
-	  modem.modem_type[channel] = AFSK;
+	  my_audio_config.achan[channel].modem_type = MODEM_AFSK;
 
-	  modem.mark_freq[channel] = DEFAULT_MARK_FREQ;		
-	  modem.space_freq[channel] = DEFAULT_SPACE_FREQ;		
-	  modem.baud[channel] = DEFAULT_BAUD;	
-	  strcpy (modem.profiles[channel], "C");	
-	  //strcpy (modem.profiles[channel], "ABC");	
-	// temp	
-	// strcpy (modem.profiles[channel], "F");		
-	  modem.num_subchan[channel] = strlen(modem.profiles[channel]);	
+	  my_audio_config.achan[channel].mark_freq = DEFAULT_MARK_FREQ;		
+	  my_audio_config.achan[channel].space_freq = DEFAULT_SPACE_FREQ;		
+	  my_audio_config.achan[channel].baud = DEFAULT_BAUD;	
 
-	  modem.num_freq[channel] = 1;				
-	  modem.offset[channel] = 0;				
-// temp test
-	  //modem.num_subchan[channel] = modem.num_freq[channel] = 3;
-	  //modem.num_subchan[channel] = modem.num_freq[channel] = 5;				
-	  //modem.offset[channel] = 100;				
+	  strcpy (my_audio_config.achan[channel].profiles, "E");	
+ 		
+	  my_audio_config.achan[channel].num_freq = 1;				
+	  my_audio_config.achan[channel].offset = 0;	
 
-	  //strcpy (modem.ptt_device[channel], "");
-	  //modem.ptt_line[channel] = PTT_NONE;
+	  my_audio_config.achan[channel].fix_bits = RETRY_NONE;	
 
-	  //modem.slottime[channel] = DEFAULT_SLOTTIME;				
-	  //modem.persist[channel] = DEFAULT_PERSIST;				
-	  //modem.txdelay[channel] = DEFAULT_TXDELAY;				
-	  //modem.txtail[channel] = DEFAULT_TXTAIL;				
+	  my_audio_config.achan[channel].sanity_test = SANITY_APRS;	
+	  //my_audio_config.achan[channel].sanity_test = SANITY_AX25;	
+	  //my_audio_config.achan[channel].sanity_test = SANITY_NONE;	
+
+	  my_audio_config.achan[channel].passall = 0;				
+	  //my_audio_config.achan[channel].passall = 1;				
 	}
 
 	while (1) {
@@ -245,7 +272,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "B:P:D:",
+          c = getopt_long(argc, argv, "B:P:D:F:e:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -257,70 +284,97 @@ int main (int argc, char *argv[])
 						/*    1200 implies 1200/2200 AFSK. */
 						/*    9600 implies scrambled. */
 
-              modem.baud[0] = atoi(optarg);
+              my_audio_config.achan[0].baud = atoi(optarg);
 
-              printf ("Data rate set to %d bits / second.\n", modem.baud[0]);
+              dw_printf ("Data rate set to %d bits / second.\n", my_audio_config.achan[0].baud);
 
-              if (modem.baud[0] < 100 || modem.baud[0] > 10000) {
-                fprintf (stderr, "Use a more reasonable bit rate in range of 100 - 10000.\n");
+              if (my_audio_config.achan[0].baud < 100 || my_audio_config.achan[0].baud > 10000) {
+		text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
                 exit (EXIT_FAILURE);
               }
-	      if (modem.baud[0] < 600) {
-                modem.modem_type[0] = AFSK;
-                modem.mark_freq[0] = 1600;
-                modem.space_freq[0] = 1800;
-	      }
-	      else if (modem.baud[0] > 2400) {
-                modem.modem_type[0] = SCRAMBLE;
-                modem.mark_freq[0] = 0;
-                modem.space_freq[0] = 0;
-                printf ("Using scrambled baseband signal rather than AFSK.\n");
+	      if (my_audio_config.achan[0].baud < 600) {
+                my_audio_config.achan[0].modem_type = MODEM_AFSK;
+                my_audio_config.achan[0].mark_freq = 1600;
+                my_audio_config.achan[0].space_freq = 1800;
+	        strcpy (my_audio_config.achan[0].profiles, "D");	      }
+	      else if (my_audio_config.achan[0].baud > 2400) {
+                my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
+                my_audio_config.achan[0].mark_freq = 0;
+                my_audio_config.achan[0].space_freq = 0;
+	        strcpy (my_audio_config.achan[0].profiles, " ");	// avoid getting default later.
+                dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
 	      }
 	      else {
-                modem.modem_type[0] = AFSK;
-                modem.mark_freq[0] = 1200;
-                modem.space_freq[0] = 2200;
+                my_audio_config.achan[0].modem_type = MODEM_AFSK;
+                my_audio_config.achan[0].mark_freq = 1200;
+                my_audio_config.achan[0].space_freq = 2200;
 	      }
               break;
 
 	    case 'P':				/* -P for modem profile. */
 
-	      printf ("Demodulator profile set to \"%s\"\n", optarg);
-	      strcpy (modem.profiles[0], optarg); 
+	      dw_printf ("Demodulator profile set to \"%s\"\n", optarg);
+	      strcpy (my_audio_config.achan[0].profiles, optarg); 
 	      break;	
 
 	    case 'D':				/* -D reduce sampling rate for lower CPU usage. */
 
 	      decimate = atoi(optarg);
-	      printf ("Decimate factor = %d\n", decimate);
-	      modem.decimate[0] = decimate;
+
+	      dw_printf ("Divide audio sample rate by %d\n", decimate);
+	      if (decimate < 1 || decimate > 8) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Unreasonable value for -D.\n");
+		exit (1);
+	      }
+	      dw_printf ("Divide audio sample rate by %d\n", decimate);
+	      my_audio_config.achan[0].decimate = decimate;
 	      break;	
 
-            case '?':
+	    case 'F':				/* -D set "fix bits" level. */
+
+	      my_audio_config.achan[0].fix_bits = atoi(optarg);
+
+	      if (my_audio_config.achan[0].fix_bits < RETRY_NONE || my_audio_config.achan[0].fix_bits >= RETRY_MAX) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Invalid Fix Bits level.\n");
+		exit (1);
+	      }
+	      break;	
+
+	    case 'e':				/* -e error if less than this number decoded. */
+
+	      error_if_less_than = atoi(optarg);
+	      break;	
+
+             case '?':
 
               /* Unknown option message was already printed. */
-              //usage (argv);
+              usage ();
               break;
 
             default:
 
               /* Should not be here. */
-              printf("?? getopt returned character code 0%o ??\n", c);
-              //usage (argv);
-	  }
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf("?? getopt returned character code 0%o ??\n", c);
+              usage ();
+	    }
         }
     
 	if (optind >= argc) {
-	  printf ("Specify .WAV file name on command line.\n");
-	  exit (1);
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Specify .WAV file name on command line.\n");
+	  usage ();
 	}
 
 	fp = fopen(argv[optind], "rb");
         if (fp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
-           fprintf (stderr, "Couldn't open file for read: %s\n", argv[optind]);
-	   //perror ("more info?");
-           exit (1);
+          dw_printf ("Couldn't open file for read: %s\n", argv[optind]);
+	  //perror ("more info?");
+          exit (1);
         }
 
 	start_time = time(NULL);
@@ -328,29 +382,67 @@ int main (int argc, char *argv[])
 
 /*
  * Read the file header.  
+ * Doesn't handle all possible cases but good enough for our purposes.
  */
 
-        fread (&header, sizeof(header), (size_t)1, fp);
+        err= fread (&header, (size_t)12, (size_t)1, fp);
 
-	assert (header.nchannels == 1 || header.nchannels == 2);
-	assert (header.wbitspersample == 8 || header.wbitspersample == 16);
+	if (strncmp(header.riff, "RIFF", 4) != 0 || strncmp(header.wave, "WAVE", 4) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("This is not a .WAV format file.\n");
+          exit (EXIT_FAILURE);
+	}
 
-        modem.samples_per_sec = header.nsamplespersec;
-	modem.samples_per_sec = modem.samples_per_sec;
-	modem.bits_per_sample = header.wbitspersample;
- 	modem.num_channels = header.nchannels;
+	err = fread (&chunk, (size_t)8, (size_t)1, fp);
+
+	if (strncmp(chunk.id, "LIST", 4) == 0) {
+	  err = fseek (fp, (long)chunk.datasize, SEEK_CUR);
+	  err = fread (&chunk, (size_t)8, (size_t)1, fp);
+	}
+
+	if (strncmp(chunk.id, "fmt ", 4) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("WAV file error: Found \"%4.4s\" where \"fmt \" was expected.\n", chunk.id);
+	  exit(1);
+	}
+	if (chunk.datasize != 16 && chunk.datasize != 18) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("WAV file error: Need fmt chunk datasize of 16 or 18.  Found %d.\n", chunk.datasize);
+	  exit(1);
+	}
+
+        err = fread (&format, (size_t)chunk.datasize, (size_t)1, fp);	
+
+	err = fread (&wav_data, (size_t)8, (size_t)1, fp);
+
+	if (strncmp(wav_data.data, "data", 4) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("WAV file error: Found \"%4.4s\" where \"data\" was expected.\n", wav_data.data);
+	  exit(1);
+	}
+
+	assert (format.nchannels == 1 || format.nchannels == 2);
+	assert (format.wbitspersample == 8 || format.wbitspersample == 16);
+
+        my_audio_config.adev[0].samples_per_sec = format.nsamplespersec;
+	my_audio_config.adev[0].bits_per_sample = format.wbitspersample;
+ 	my_audio_config.adev[0].num_channels = format.nchannels;
+
+	my_audio_config.achan[0].valid = 1;
+	if (format.nchannels == 2) my_audio_config.achan[1].valid = 1;
 
 	text_color_set(DW_COLOR_INFO);
-	printf ("%d samples per second\n", modem.samples_per_sec);
-	printf ("%d bits per sample\n", modem.bits_per_sample);
-	printf ("%d audio channels\n", modem.num_channels);
-	printf ("%d audio bytes in file\n", (int)(header.datasize));
+	dw_printf ("%d samples per second\n", my_audio_config.adev[0].samples_per_sec);
+	dw_printf ("%d bits per sample\n", my_audio_config.adev[0].bits_per_sample);
+	dw_printf ("%d audio channels\n", my_audio_config.adev[0].num_channels);
+	dw_printf ("%d audio bytes in file\n", (int)(wav_data.datasize));
+	dw_printf ("Fix Bits level = %d\n", my_audio_config.achan[0].fix_bits);
 
 		
 /*
  * Initialize the AFSK demodulator and HDLC decoder.
  */
-	multi_modem_init (&modem);
+	multi_modem_init (&my_audio_config);
 
 
 	e_o_f = 0;
@@ -361,13 +453,13 @@ int main (int argc, char *argv[])
           int audio_sample;
           int c;
 
-          for (c=0; c<modem.num_channels; c++)
+          for (c=0; c<my_audio_config.adev[0].num_channels; c++)
           {
 
             /* This reads either 1 or 2 bytes depending on */
             /* bits per sample.  */
 
-            audio_sample = demod_get_sample ();
+            audio_sample = demod_get_sample (ACHAN2ADEV(c));
 
             if (audio_sample >= 256 * 256)
               e_o_f = 1;
@@ -386,8 +478,28 @@ int main (int argc, char *argv[])
 
 	}
 	text_color_set(DW_COLOR_INFO);
-	printf ("\n\n");
-	printf ("%d packets decoded in %d seconds.\n", packets_decoded, (int)(time(NULL) - start_time));
+	dw_printf ("\n\n");
+
+#if EXPERIMENT_G
+
+	for (j=0; j<MAX_SUBCHANS; j++) {
+	  float db = 20.0 * log10f(space_gain[j]);
+	  dw_printf ("%+.1f dB, %d\n", db, count[j]);
+	}
+#endif
+#if EXPERIMENT_H
+
+	for (j=0; j<MAX_SUBCHANS; j++) {
+	  dw_printf ("%d\n", count[j]);
+	}
+#endif
+	dw_printf ("%d packets decoded in %d seconds.\n", packets_decoded, (int)(time(NULL) - start_time));
+
+	if (packets_decoded < error_if_less_than) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\n * * * TEST FAILED to achieve minimum of %d * * * \n", error_if_less_than);
+	  exit (1);
+	}
 
 	exit (0);
 }
@@ -397,13 +509,23 @@ int main (int argc, char *argv[])
  * Simulate sample from the audio device.
  */
 
-int audio_get (void)
+int audio_get (int a)
 {
 	int ch;
 
-	ch = getc(fp);
+	if (wav_data.datasize <= 0) {
+	  e_o_f = 1;
+	  return (-1);
+	}
 
-	if (ch < 0) e_o_f = 1;
+	ch = getc(fp);
+	wav_data.datasize--;
+
+	if (ch < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unexpected end of file.\n");
+	  e_o_f = 1;
+	}
 
 	return (ch);
 }
@@ -418,7 +540,7 @@ int audio_get (void)
 void rdq_append (rrbb_t rrbb)
 {
 	int chan;
-	int alevel;
+	alevel_t alevel;
 	int subchan;
 
 
@@ -427,6 +549,7 @@ void rdq_append (rrbb_t rrbb)
 	alevel = rrbb_get_audio_level(rrbb);
 
 	hdlc_rec2_try_to_fix_later (rrbb, chan, subchan, alevel);
+	rrbb_delete (rrbb);
 }
 
 
@@ -434,18 +557,15 @@ void rdq_append (rrbb_t rrbb)
  * This is called when we have a good frame.
  */
 
-void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, retry_t retries, char *spectrum)  
+void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)  
 {	
 	
-	//int err;
-	//char *p;
 	char stemp[500];
 	unsigned char *pinfo;
 	int info_len;
 	int h;
 	char heard[20];
-	//packet_t pp;
-
+	char alevel_text[32];
 
 	packets_decoded++;
 
@@ -456,42 +576,133 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, int alevel, ret
 
 	/* Print so we can see what is going on. */
 
+//TODO: quiet option - suppress packet printing, only the count at the end.
+
 #if 1
 	/* Display audio input level. */
-        /* Who are we hearing?   Original station or digipeater. */
+        /* Who are we hearing?   Original station or digipeater? */
 
-	h = ax25_get_heard(pp);
-        ax25_get_addr_with_ssid(pp, h, heard);
+	if (ax25_get_num_addr(pp) == 0) {
+	  /* Not AX.25. No station to display below. */
+	  h = -1;
+	  strcpy (heard, "");
+	}
+	else {
+	  h = ax25_get_heard(pp);
+          ax25_get_addr_with_ssid(pp, h, heard);
+	}
 
 	text_color_set(DW_COLOR_DEBUG);
-	printf ("\n");
-	printf("DECODED[%d] ", packets_decoded );
+	dw_printf ("\n");
+	dw_printf("DECODED[%d] ", packets_decoded );
 	if (h != AX25_SOURCE) {
-	  printf ("Digipeater ");
+	  dw_printf ("Digipeater ");
 	}
-	printf ("%s audio level = %d   [%s]   %s\n", heard, alevel, retry_text[(int)retries], spectrum);
+	ax25_alevel_to_text (alevel, alevel_text);
 
+	if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
+	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
+	}
+	else {
+	  dw_printf ("%s audio level = %s   [%s]   %s\n", heard, alevel_text, retry_text[(int)retries], spectrum);
+	}
 
 #endif
 
+#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
+	int j;
+
+	for (j=0; j<MAX_SUBCHANS; j++) {
+	  if (spectrum[j] == '|') {
+	    count[j]++;
+	  }
+	}
+#endif
+
+
 // Display non-APRS packets in a different color.
+
+// TODO: display subchannel if appropriate.
 
 	if (ax25_is_aprs(pp)) {
 	  text_color_set(DW_COLOR_REC);
-	  printf ("[%d] ", chan);
+	  dw_printf ("[%d] ", chan);
 	}
 	else {
 	  text_color_set(DW_COLOR_DEBUG);
-	  printf ("[%d] ", chan);
+	  dw_printf ("[%d] ", chan);
 	}
 
-	printf ("%s", stemp);			/* stations followed by : */
+	dw_printf ("%s", stemp);			/* stations followed by : */
 	ax25_safe_print ((char *)pinfo, info_len, 0);
-	printf ("\n");
+	dw_printf ("\n");
 
 	ax25_delete (pp);
 
 } /* end app_process_rec_packet */
+
+
+void ptt_set (int ot, int chan, int ptt_signal)
+{
+	return;
+}
+
+
+static void usage (void) {
+
+	text_color_set(DW_COLOR_ERROR);
+
+	dw_printf ("\n");
+	dw_printf ("atest is a test application which decodes AX.25 frames from an audio\n");
+	dw_printf ("recording.  This provides an easy way to test Dire Wolf decoding\n");
+	dw_printf ("performance much quicker than normal real-time.   \n"); 
+	dw_printf ("\n");
+	dw_printf ("usage:\n");
+	dw_printf ("\n");
+	dw_printf ("        atest [ options ] wav-file-in\n");
+	dw_printf ("\n");
+	dw_printf ("        -B n   Bits/second  for data.  Proper modem automatically selected for speed.\n");
+	dw_printf ("               300 baud uses 1600/1800 Hz AFSK.\n");
+	dw_printf ("               1200 (default) baud uses 1200/2200 Hz AFSK.\n");
+	dw_printf ("               9600 baud uses K9NG/G2RUH standard.\n");
+	dw_printf ("\n");
+	dw_printf ("        -D n   Divide audio sample rate by n.\n");
+	dw_printf ("\n");
+	dw_printf ("        -F n   Amount of effort to try fixing frames with an invalid CRC.  \n");
+	dw_printf ("               0 (default) = consider only correct frames.  \n");
+	dw_printf ("               1 = Try to fix only a single bit.  \n");
+	dw_printf ("               more = Try modifying more bits to get a good CRC.\n");
+	dw_printf ("\n");
+	dw_printf ("        -P m   Select  the  demodulator  type such as A, B, C, D (default for 300 baud),\n");
+	dw_printf ("               E (default for 1200 baud), F, A+, B+, C+, D+, E+, F+.\n");
+	dw_printf ("\n");
+	dw_printf ("        wav-file-in is a WAV format audio file.\n");
+	dw_printf ("\n");
+	dw_printf ("Examples:\n");
+	dw_printf ("\n");
+	dw_printf ("        gen_packets -o test1.wav\n");
+	dw_printf ("        atest test1.wav\n");
+	dw_printf ("\n");
+	dw_printf ("        gen_packets -B 300 -o test3.wav\n");
+	dw_printf ("        atest -B 300 test3.wav\n");
+	dw_printf ("\n");
+	dw_printf ("        gen_packets -B 9600 -o test9.wav\n");
+	dw_printf ("        atest -B 9600 test9.wav\n");
+	dw_printf ("\n");
+	dw_printf ("              This generates and decodes 3 test files with 1200, 300, and 9600\n");
+	dw_printf ("              bits per second.\n");
+	dw_printf ("\n");
+	dw_printf ("        atest 02_Track_2.wav\n");
+	dw_printf ("        atest -P C+ 02_Track_2.wav\n");
+	dw_printf ("        atest -F 1 02_Track_2.wav\n");
+	dw_printf ("        atest -P C+ -F 1 02_Track_2.wav\n");
+	dw_printf ("\n");
+	dw_printf ("              Try  different combinations of options to find the best decoding\n");
+	dw_printf ("              performance.\n");
+
+	exit (1);
+}
+
 
 
 /* end atest.c */

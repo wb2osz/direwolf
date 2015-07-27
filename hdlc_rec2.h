@@ -3,24 +3,12 @@
 #define HDLC_REC2_H 1
 
 
-#include "ax25_pad.h"	/* for packet_t */
+#include "ax25_pad.h"	/* for packet_t, alevel_t */
 #include "rrbb.h"
+#include "audio.h"		/* for struct audio_s */
 
-typedef enum retry_e {
-		RETRY_NONE=0,
-		RETRY_SWAP_SINGLE=1,
-		RETRY_SWAP_DOUBLE=2,
-		RETRY_SWAP_TRIPLE=3,
-		RETRY_REMOVE_SINGLE=4,
-		RETRY_REMOVE_DOUBLE=5,
-		RETRY_REMOVE_TRIPLE=6,
-		RETRY_INSERT_SINGLE=7,
-		RETRY_INSERT_DOUBLE=8,
-		RETRY_SWAP_TWO_SEP=9,
-		RETRY_SWAP_MANY=10,
-		RETRY_REMOVE_MANY=11,
-		RETRY_REMOVE_TWO_SEP=12,
-		RETRY_MAX = 13}  retry_t;
+
+
 
 typedef enum retry_mode_e {
 		RETRY_MODE_CONTIGUOUS=0,
@@ -72,16 +60,19 @@ static const char * retry_text[] = {
 		"TWO_SEP",
 		"MANY",
 		"REMOVE_MANY",
-		"REMOVE_SEP"};
+		"REMOVE_SEP",
+		"PASSALL" };
 #endif
 
-void hdlc_rec2_block (rrbb_t block, retry_t fix_bits);
+void hdlc_rec2_init (struct audio_s *audio_config_p);
 
-void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel);
+void hdlc_rec2_block (rrbb_t block);
+
+int hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, alevel_t alevel);
 
 /* Provided by the top level application to process a complete frame. */
 
-void app_process_rec_packet (int chan, int subchan, packet_t pp, int level, retry_t retries, char *spectrum);
+void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t level, retry_t retries, char *spectrum);
 
 
 #endif

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -40,11 +40,14 @@
 #include "gen_tone.h"
 #include "textcolor.h"
 
+#include "fsk_demod_state.h"	/* for MAX_FILTER_SIZE which might be overly generous for here. */
+				/* but safe if we use same size as for receive. */
+#include "dsp.h"
 
 
 // Properties of the digitized sound stream & modem.
 
-static struct audio_s modem;
+static struct audio_s *save_audio_config_p;
 
 /*
  * 8 bit samples are unsigned bytes in range of 0 .. 255.
@@ -57,7 +60,9 @@ static struct audio_s modem;
 
 #define TICKS_PER_CYCLE ( 256.0 * 256.0 * 256.0 * 256.0 )
 
-static int ticks_per_sample;		/* same for all channels. */
+static int ticks_per_sample[MAX_CHANS];	/* Same for both channels of same soundcard */
+					/* because they have same sample rate */
+					/* but less confusing to have for each channel. */
 
 static int ticks_per_bit[MAX_CHANS];
 static int f1_change_per_sample[MAX_CHANS];
@@ -76,6 +81,61 @@ static int bit_len_acc[MAX_CHANS];	// To accumulate fractional samples per bit.
 static int lfsr[MAX_CHANS];		// Shift register for scrambler.
 
 
+/*
+ * The K9NG/G3RUH output originally took a very simple and lazy approach.
+ * We simply generated a square wave with + or - the desired amplitude.
+ * This has a couple undesirable properties.
+ *
+ *	- Transmitting a square wave would splatter into adjacent
+ *	   channels of the transmitter doesn't limit the bandwidth.
+ *
+ *	- The usual sample rate of 44100 is not a multiple of the 
+ *	   baud rate so jitter would be added to the zero crossings.
+ *
+ * Starting in version 1.2, we try to overcome these issues by using
+ * a higher sample rate, low pass filtering, and down sampling.
+ *
+ * What sort of low pass filter would be appropriate?  Intuitively,
+ * we would expect a cutoff frequency somewhere between baud/2 and baud.
+ * The current values were found with a small amount of trial and 
+ * error for best results.  Future improvement is certainly possible.
+ */
+
+/* 
+ * For low pass filtering of 9600 baud data. 
+ */
+
+/* Add sample to buffer and shift the rest down. */
+// TODO:  Can we have one copy of these in dsp.h?
+
+static inline void push_sample (float val, float *buff, int size)
+{
+	memmove(buff+1,buff,(size-1)*sizeof(float));
+	buff[0] = val; 
+}
+
+
+/* FIR filter kernel. */
+
+static inline float convolve (const float *data, const float *filter, int filter_size)
+{
+	  float sum = 0;
+	  int j;
+
+	  for (j=0; j<filter_size; j++) {
+	    sum += filter[j] * data[j];
+	  }
+	  return (sum);
+}
+
+static int lp_filter_size[MAX_CHANS];
+static float raw[MAX_CHANS][MAX_FILTER_SIZE] __attribute__((aligned(16)));
+static float lp_filter[MAX_CHANS][MAX_FILTER_SIZE] __attribute__((aligned(16)));
+static int resample[MAX_CHANS];
+
+#define UPSAMPLE 2
+
+
 /*------------------------------------------------------------------
  *
  * Name:        gen_tone_init
@@ -83,7 +143,7 @@ static int lfsr[MAX_CHANS];		// Shift register for scrambler.
  * Purpose:     Initialize for AFSK tone generation which might
  *		be used for RTTY or amateur packet radio.
  *
- * Inputs:      pp		- Pointer to modem parameter structure, modem_s.
+ * Inputs:      audio_config_p		- Pointer to modem parameter structure, modem_s.
  *
  *				The fields we care about are:
  *
@@ -106,33 +166,41 @@ static int lfsr[MAX_CHANS];		// Shift register for scrambler.
 static int amp16bit;	/* for 9600 baud */
 
 
-int gen_tone_init (struct audio_s *pp, int amp)  
+int gen_tone_init (struct audio_s *audio_config_p, int amp)  
 {
 	int j;
 	int chan = 0;
+	
 /* 
  * Save away modem parameters for later use. 
  */
 
-	memcpy (&modem, pp, sizeof(struct audio_s));
+	save_audio_config_p = audio_config_p;
+	
 
 	amp16bit = (32767 * amp) / 100;
 
-	ticks_per_sample = (int) ((TICKS_PER_CYCLE / (double)modem.samples_per_sec ) + 0.5);
 
-	for (chan = 0; chan < modem.num_channels; chan++) {
+	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	  ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)modem.baud[chan] ) + 0.5);
+	  if (audio_config_p->achan[chan].valid) {
 
-	  f1_change_per_sample[chan] = (int) (((double)modem.mark_freq[chan] * TICKS_PER_CYCLE / (double)modem.samples_per_sec ) + 0.5);
+	    int a = ACHAN2ADEV(chan);
 
-	  f2_change_per_sample[chan] = (int) (((double)modem.space_freq[chan] * TICKS_PER_CYCLE / (double)modem.samples_per_sec ) + 0.5);
+	    ticks_per_sample[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
 
-	  tone_phase[chan] = 0;
+	    ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->achan[chan].baud ) + 0.5);
+
+	    f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].mark_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+
+	    f2_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].space_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+
+	    tone_phase[chan] = 0;
 				
-	  bit_len_acc[chan] = 0;
+	    bit_len_acc[chan] = 0;
 
-	  lfsr[chan] = 0;
+	    lfsr[chan] = 0;
+	  }
 	}
 
         for (j=0; j<256; j++) {
@@ -148,6 +216,55 @@ int gen_tone_init (struct audio_s *pp, int amp)
 	
 	  sine_table[j] = s;
         }
+
+
+/*
+ * Low pass filter for 9600 baud. 
+ */
+
+	for (chan = 0; chan < MAX_CHANS; chan++) {
+
+	  if (audio_config_p->achan[chan].valid && 
+		(audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE 
+		  ||  audio_config_p->achan[chan].modem_type == MODEM_BASEBAND)) {
+
+	    int a = ACHAN2ADEV(chan);
+	    int samples_per_sec;		/* Might be scaled up! */
+	    int baud;
+
+	    /* These numbers were by trial and error.  Need more investigation here. */
+
+	    float filter_len_bits =  88 * 9600.0 / (44100.0 * 2.0);
+						/* Filter length in number of data bits. */	
+	
+	    float lpf_baud = 0.8;		/* Lowpass cutoff freq as fraction of baud rate */
+
+	    float fc;				/* Cutoff frequency as fraction of sampling frequency. */
+
+
+	    samples_per_sec = audio_config_p->adev[a].samples_per_sec * UPSAMPLE;		
+	    baud = audio_config_p->achan[chan].baud;
+
+	    ticks_per_sample[chan] = (int) ((TICKS_PER_CYCLE / (double)samples_per_sec ) + 0.5);
+	    ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)baud ) + 0.5);
+
+	    lp_filter_size[chan] = (int) (( filter_len_bits * (float)samples_per_sec / baud) + 0.5);
+
+	    if (lp_filter_size[chan] < 10 || lp_filter_size[chan] > MAX_FILTER_SIZE) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("gen_tone_init: INTERNAL ERROR, chan %d, lp_filter_size %d\n", chan, lp_filter_size[chan]);
+	      lp_filter_size[chan] = MAX_FILTER_SIZE / 2;
+	    }
+
+	    fc = (float)baud * lpf_baud / (float)samples_per_sec;
+
+	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("gen_tone_init: chan %d, call gen_lowpass(fc=%.2f, , size=%d, )\n", chan, fc, lp_filter_size[chan]);
+
+	    gen_lowpass (fc, lp_filter[chan], lp_filter_size[chan], BP_WINDOW_HAMMING);
+
+	  }
+	}
 
 	return (0);
 
@@ -171,11 +288,14 @@ int gen_tone_init (struct audio_s *pp, int amp)
  *
  *--------------------------------------------------------------------*/
 
+static void put_sample (int chan, int a, int sam);
+
 void tone_gen_put_bit (int chan, int dat)
 {
-	int cps = dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
-	unsigned short sam = 0;
-	int x;
+	int a = ACHAN2ADEV(chan);	/* device for channel. */
+
+
+	assert (save_audio_config_p->achan[chan].valid);
 
 
         if (dat < 0) { 
@@ -184,7 +304,9 @@ void tone_gen_put_bit (int chan, int dat)
 	  dat = 0; 
 	} 
 
-	if (modem.modem_type[chan] == SCRAMBLE) {
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE) {
+	  int x;
+
 	  x = (dat ^ (lfsr[chan] >> 16) ^ (lfsr[chan] >> 11)) & 1;
 	  lfsr[chan] = (lfsr[chan] << 1) | (x & 1);
 	  dat = x;
@@ -192,56 +314,86 @@ void tone_gen_put_bit (int chan, int dat)
 	  
 	do {
 
-	  if (modem.modem_type[chan] == AFSK) {
-	    tone_phase[chan] += cps;
+	  if (save_audio_config_p->achan[chan].modem_type == MODEM_AFSK) {
+	    int sam;
+
+	    tone_phase[chan] += dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
             sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
+	    put_sample (chan, a, sam);
 	  }
   	  else {
-	    // TODO: Might want to low pass filter this.
-	    sam = dat ? amp16bit : (-amp16bit);
-	  }
+	    
+	    float fsam = dat ? amp16bit : (-amp16bit);
 
-          /* Ship out an audio sample. */
+	    /* version 1.2 - added a low pass filter instead of square wave out. */
 
-	  assert (modem.num_channels == 1 || modem.num_channels == 2);
+	    push_sample (fsam, raw[chan], lp_filter_size[chan]);
+	    
+	    resample[chan]++;
+	    if (resample[chan] >= UPSAMPLE) {
+	      int sam; 
 
-	  /* Generalize to allow 8 bits someday? */
-
-	  assert (modem.bits_per_sample == 16);
-
-
-	  if (modem.num_channels == 1)
-	  {
-            audio_put (sam & 0xff);
-            audio_put ((sam >> 8) & 0xff);
- 	  }
-	  else if (modem.num_channels == 2)
-	  {
-	    if (chan == 1)
-	    {
-              audio_put (0);		// silent left
-              audio_put (0);
-	    }
-
-            audio_put (sam & 0xff);
-            audio_put ((sam >> 8) & 0xff);
-            //byte_count += 2;
-
-	    if (chan == 0)
-	    {
-              audio_put (0);		// silent right
-              audio_put (0);
+	      sam = (int) convolve (raw[chan], lp_filter[chan], lp_filter_size[chan]);
+	      resample[chan] = 0;
+	      put_sample (chan, a, sam);
 	    }
 	  }
 
 	  /* Enough for the bit time? */
 
-	  bit_len_acc[chan] += ticks_per_sample;
+	  bit_len_acc[chan] += ticks_per_sample[chan];
 
         } while (bit_len_acc[chan] < ticks_per_bit[chan]);
 
 	bit_len_acc[chan] -= ticks_per_bit[chan];
 }
+
+
+static void put_sample (int chan, int a, int sam) {
+
+        /* Ship out an audio sample. */
+
+	assert (save_audio_config_p->adev[a].num_channels == 1 || save_audio_config_p->adev[a].num_channels == 2);
+
+	/* Generalize to allow 8 bits someday? */
+
+	assert (save_audio_config_p->adev[a].bits_per_sample == 16);
+
+	if (sam < -32767) sam = -32767;
+	else if (sam > 32767) sam = 32767;
+
+	if (save_audio_config_p->adev[a].num_channels == 1) {
+
+	  /* Mono */
+
+          audio_put (a, sam & 0xff);
+          audio_put (a, (sam >> 8) & 0xff);
+ 	}
+	else {
+
+	  if (chan == ADEVFIRSTCHAN(a)) {
+	  
+	    /* Stereo, left channel. */
+
+            audio_put (a, sam & 0xff);
+            audio_put (a, (sam >> 8) & 0xff);
+ 
+            audio_put (a, 0);		
+            audio_put (a, 0);
+	  }
+	  else { 
+
+	    /* Stereo, right channel. */
+	  
+            audio_put (a, 0);		
+            audio_put (a, 0);
+
+            audio_put (a, sam & 0xff);
+            audio_put (a, (sam >> 8) & 0xff);
+	  }
+	}
+}
+
 
 
 /*-------------------------------------------------------------------
@@ -268,26 +420,26 @@ int main ()
 	int chan1 = 0;
 	int chan2 = 1;
 	int r;
-	struct audio_s audio_param;
+	struct audio_s my_audio_config;
 
 
 /* to sound card */
 /* one channel.  2 times:  one second of each tone. */
 
-	memset (&audio_param, 0, sizeof(audio_param));
-	strcpy (audio_param.adevice_in, DEFAULT_ADEVICE);
-	strcpy (audio_param.adevice_out, DEFAULT_ADEVICE);
+	memset (&my_audio_config, 0, sizeof(my_audio_config));
+	strcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE);
+	strcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE);
 
-	audio_open (&audio_param);
-	gen_tone_init (&audio_param, 100);
+	audio_open (&my_audio_config);
+	gen_tone_init (&my_audio_config, 100);
 
 	for (r=0; r<2; r++) {
 
-	  for (n=0; n<audio_param.baud[0] * 2 ; n++) {
+	  for (n=0; n<my_audio_config.baud[0] * 2 ; n++) {
  	    tone_gen_put_bit ( chan1, 1 );
 	  }
 
-	  for (n=0; n<audio_param.baud[0] * 2 ; n++) {
+	  for (n=0; n<my_audio_config.baud[0] * 2 ; n++) {
  	    tone_gen_put_bit ( chan1, 0 );
 	  }
 	}
@@ -296,29 +448,29 @@ int main ()
 
 /* Now try stereo. */
 
-	memset (&audio_param, 0, sizeof(audio_param));
-	strcpy (audio_param.adevice_in, DEFAULT_ADEVICE);
-	strcpy (audio_param.adevice_out, DEFAULT_ADEVICE);
-	audio_param.num_channels = 2;
+	memset (&my_audio_config, 0, sizeof(my_audio_config));
+	strcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE);
+	strcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE);
+	my_audio_config.adev[0].num_channels = 2;
 
-	audio_open (&audio_param);
-	gen_tone_init (&audio_param, 100);
+	audio_open (&my_audio_config);
+	gen_tone_init (&my_audio_config, 100);
 
 	for (r=0; r<4; r++) {
 
-	  for (n=0; n<audio_param.baud[0] * 2 ; n++) {
+	  for (n=0; n<my_audio_config.baud[0] * 2 ; n++) {
  	    tone_gen_put_bit ( chan1, 1 );
 	  }
 
-	  for (n=0; n<audio_param.baud[0] * 2 ; n++) {
+	  for (n=0; n<my_audio_config.baud[0] * 2 ; n++) {
  	    tone_gen_put_bit ( chan1, 0 );
 	  }
 
-	  for (n=0; n<audio_param.baud[0] * 2 ; n++) {
+	  for (n=0; n<my_audio_config.baud[0] * 2 ; n++) {
  	    tone_gen_put_bit ( chan2, 1 );
 	  }
 
-	  for (n=0; n<audio_param.baud[0] * 2 ; n++) {
+	  for (n=0; n<my_audio_config.baud[0] * 2 ; n++) {
  	    tone_gen_put_bit ( chan2, 0 );
 	  }
 	}

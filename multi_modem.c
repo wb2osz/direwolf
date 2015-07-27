@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
-
 
 
 /*------------------------------------------------------------------
@@ -88,11 +87,12 @@
 #include "demod.h"
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
+#include "dlq.h"
 
 
 // Properties of the radio channels.
 
-static struct audio_s modem;
+static struct audio_s          *save_audio_config_p;
 
 
 // Candidates for further processing.
@@ -100,7 +100,7 @@ static struct audio_s modem;
 static struct {
 
 	packet_t packet_p;
-	int alevel;
+	alevel_t alevel;
 	retry_t retries;
 	int age;
 	unsigned int crc;
@@ -139,23 +139,32 @@ static void pick_best_candidate (int chan);
  *
  *------------------------------------------------------------------------------*/
 
-void multi_modem_init (struct audio_s *pmodem) 
+void multi_modem_init (struct audio_s *pa) 
 {
 	int chan;
 
+
 /*
- * Save parameters for later use.
+ * Save audio configuration for later use.
  */
-	memcpy (&modem, pmodem, sizeof(modem));
+
+	save_audio_config_p = pa;
 
 	memset (candidate, 0, sizeof(candidate));
 
-	demod_init (pmodem);
-	hdlc_rec_init (pmodem);
+	demod_init (save_audio_config_p);
+	hdlc_rec_init (save_audio_config_p);
 
-	for (chan=0; chan<modem.num_channels; chan++) {
-	  process_age[chan] = PROCESS_AFTER_BITS * modem.samples_per_sec / modem.baud[chan];
-	  crc_queue_of_last_to_app[chan] = NULL;
+	for (chan=0; chan<MAX_CHANS; chan++) {
+	  if (save_audio_config_p->achan[chan].valid) { 
+	    if (save_audio_config_p->achan[chan].baud <= 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Internal error, chan=%d, %s, %d\n", chan, __FILE__, __LINE__);
+	      save_audio_config_p->achan[chan].baud = DEFAULT_BAUD;
+	    }
+	    process_age[chan] = PROCESS_AFTER_BITS * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].baud;
+	    crc_queue_of_last_to_app[chan] = NULL;
+	  }
 	}
 
 }
@@ -163,7 +172,7 @@ void multi_modem_init (struct audio_s *pmodem)
 //Add a crc to the end of the queue and returns the numbers of CRC stored in the queue
 int crc_queue_append (unsigned int crc, unsigned int chan) {
 	crc_t plast;
-	crc_t plast1;
+//	crc_t plast1;
 	crc_t pnext;
 	crc_t new_crc;
 	
@@ -204,8 +213,8 @@ int crc_queue_append (unsigned int crc, unsigned int chan) {
 unsigned int crc_queue_remove (unsigned int chan) {
 
 	unsigned int res;
-	crc_t plast;
-	crc_t pnext;
+//	crc_t plast;
+//	crc_t pnext;
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf("In crc_queue_remove\n");
@@ -258,6 +267,20 @@ unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) {
  * Inputs:	chan	- Radio channel number
  *
  *		audio_sample 
+ *
+ * Description:	In earlier versions we always had a one-to-one mapping with
+ *		demodulators and HDLC decoders.
+ *		This was added so we could have multiple modems running in
+ *		parallel with different mark/space tones to compensate for 
+ *		mistuning of HF SSB signals.
+ * 		It was also possible to run multiple filters, for the same
+ *		tones, in parallel (e.g. ABC).
+ *
+ * Version 1.2:	Let's try something new for an experiment.
+ *		We will have a single mark/space demodulator but multiple
+ *		slicers, using different levels, each with its own HDLC decoder.
+ *		We now have a separate variable, num_demod, which could be 1
+ *		while num_subchan is larger.
  *		
  *------------------------------------------------------------------------------*/
 
@@ -265,10 +288,19 @@ unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) {
 __attribute__((hot))
 void multi_modem_process_sample (int chan, int audio_sample) 
 {
+	int d;
 	int subchan;
 
-	for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
-	  demod_process_sample(chan, subchan, audio_sample);
+	/* Formerly one loop. */
+	/* 1.2: We can feed one demodulator but end up with multiple outputs. */
+
+
+	for (d = 0; d < save_audio_config_p->achan[chan].num_demod; d++) {
+
+	  demod_process_sample(chan, d, audio_sample);
+	}
+
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
 
 	  if (candidate[chan][subchan].packet_p != NULL) {
 	    candidate[chan][subchan].age++;
@@ -276,8 +308,7 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	      pick_best_candidate (chan);
 	    }
 	  }  
-	}
-}
+	}}
 
 
 
@@ -383,7 +414,7 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	than one.
 */
 
-void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, int flen, int alevel, retry_t retries)  
+void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries)  
 {	
 	packet_t pp;
 
@@ -397,11 +428,12 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
 	  return;	/* oops!  why would it fail? */
 	}
 
+
 /*
- * If single modem, push it thru and forget about all this foolishness.
+ * If single modem/deocder, push it thru and forget about all this foolishness.
  */
-	if (modem.num_subchan[chan] == 1) {
-	  app_process_rec_packet (chan, subchan, pp, alevel, retries, "");
+	if (save_audio_config_p->achan[chan].num_subchan == 1) {
+	  dlq_append (DLQ_REC_FRAME, chan, subchan, pp, alevel, retries, "");
 	  return;
 	}
 
@@ -419,7 +451,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
 	  int dropped = 0;
 
 	  memset (spectrum, 0, sizeof(spectrum));
-	  memset (spectrum, '_', (size_t)modem.num_subchan[chan]);
+	  memset (spectrum, '_', (size_t)save_audio_config_p->achan[chan].num_subchan);
 	  spectrum[subchan] = '.';
 
 	  mycrc = ax25_m_m_crc(pp);
@@ -446,7 +478,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
 #if DEBUG
 	  dw_printf ("Send the best one along.\n");
 #endif
-	  app_process_rec_packet (chan, subchan, pp, alevel, retries, spectrum);
+	  dlq_append (DLQ_REC_FRAME, chan, subchan, pp, alevel, retries, spectrum);
 	  if (crc_queue_append(mycrc, chan) > MAX_STORED_CRC)
 	    crc_queue_remove(chan);
 	  return;
@@ -497,7 +529,7 @@ static void pick_best_candidate (int chan)
 
 	memset (spectrum, 0, sizeof(spectrum));
 
-	for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
 
 	  /* Build the spectrum display. */
 
@@ -520,7 +552,7 @@ static void pick_best_candidate (int chan)
 
 	  /* Bump it up slightly if others nearby have the same CRC. */
 	  
-	  for (k = 0; k < modem.num_subchan[chan]; k++) {
+	  for (k = 0; k < save_audio_config_p->achan[chan].num_subchan; k++) {
 	    if (k != subchan && candidate[chan][k].packet_p != NULL) {
 	      if (candidate[chan][k].crc == candidate[chan][subchan].crc) {
 	        candidate[chan][subchan].score += (MAX_SUBCHANS+1) - abs(subchan-k);
@@ -532,7 +564,7 @@ static void pick_best_candidate (int chan)
 	best_subchan = 0;
 	best_score = 0;
 
-	for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
 	  if (candidate[chan][subchan].packet_p != NULL) {
 	    if (candidate[chan][subchan].score > best_score) {
 	       best_score = candidate[chan][subchan].score;
@@ -545,7 +577,7 @@ static void pick_best_candidate (int chan)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n%s\n", spectrum);
 
-	for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
 
 	  if (candidate[chan][subchan].packet_p == NULL) {
 	    dw_printf ("%d.%d: ptr=%p\n", chan, subchan,
@@ -566,7 +598,47 @@ static void pick_best_candidate (int chan)
 /*
  * send the best one along.
  */
-	app_process_rec_packet (chan, best_subchan, 
+
+#if 1		// v1.2 dev F, Reverse original order.  Delete rejects THEN process the best one.
+
+
+	/* Delete those not chosen. */
+
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
+	  if (subchan != best_subchan && candidate[chan][subchan].packet_p != NULL) {
+	    ax25_delete (candidate[chan][subchan].packet_p);
+	    candidate[chan][subchan].packet_p = NULL;
+	  }
+	}
+
+	/* Pass along one. */
+
+	dlq_append (DLQ_REC_FRAME, chan, best_subchan, 
+		candidate[chan][best_subchan].packet_p, 
+		candidate[chan][best_subchan].alevel, 
+		(int)(candidate[chan][best_subchan].retries), 
+		spectrum);
+	if (crc_queue_append(candidate[chan][best_subchan].crc, chan) > MAX_STORED_CRC)
+	    crc_queue_remove(chan);
+
+	/* Someone else owns it now and will delete it later. */
+	candidate[chan][best_subchan].packet_p = NULL;
+
+	/* Clear in preparation for next time. */
+
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
+
+	  candidate[chan][subchan].alevel.rec = 0;
+	  candidate[chan][subchan].alevel.mark = 0;
+	  candidate[chan][subchan].alevel.space = 0;
+
+	  candidate[chan][subchan].retries = 0;
+	  candidate[chan][subchan].age = 0;
+	  candidate[chan][subchan].crc = 0;
+	}
+#else
+
+	dlq_append (DLQ_REC_FRAME, chan, best_subchan, 
 		candidate[chan][best_subchan].packet_p, 
 		candidate[chan][best_subchan].alevel, 
 		(int)(candidate[chan][best_subchan].retries), 
@@ -578,16 +650,23 @@ static void pick_best_candidate (int chan)
 
 	/* Clear out in preparation for next time. */
 
-	for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
+	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
 	  if (candidate[chan][subchan].packet_p != NULL) {
 	    ax25_delete (candidate[chan][subchan].packet_p);
 	    candidate[chan][subchan].packet_p = NULL;
 	  }
-	  candidate[chan][subchan].alevel = 0;
+
+	  candidate[chan][subchan].alevel.rec = 0;
+	  candidate[chan][subchan].alevel.mark = 0;
+	  candidate[chan][subchan].alevel.space = 0;
+
 	  candidate[chan][subchan].retries = 0;
 	  candidate[chan][subchan].age = 0;
 	  candidate[chan][subchan].crc = 0;
 	}
+
+#endif
+
 }
 
 

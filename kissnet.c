@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011-2014  John Langner, WB2OSZ
+//    Copyright (C) 2011-2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -105,6 +105,11 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#ifdef __OpenBSD__
+#include <errno.h>
+#else
+#include <sys/errno.h>
+#endif
 #endif
 
 #include <unistd.h>
@@ -133,8 +138,6 @@ static int client_sock;		/* File descriptor for socket for */
 				/* Set to -1 if not connected. */
 				/* (Don't use SOCKET type because it is unsigned.) */
 
-static int num_channels;	/* Number of radio ports. */
-
 
 static void * connect_listen_thread (void *arg);
 static void * kissnet_listen_thread (void *arg);
@@ -160,6 +163,8 @@ void kiss_net_set_debug (int n)
  * Inputs:	mc->kiss_port	- TCP port for server.
  *				  Main program has default of 8000 but allows
  *				  an alternative to be specified on the command line
+ *
+ *				0 means disable.  New in version 1.2.
  *
  * Outputs:	
  *
@@ -192,8 +197,13 @@ void kissnet_init (struct misc_config_s *mc)
 	memset (&kf, 0, sizeof(kf));
 	
 	client_sock = -1;
-	num_channels = mc->num_channels;
 
+	if (kiss_port == 0) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Disabled KISS network client port.\n");
+	  return;
+	}
+	
 /*
  * This waits for a client to connect and sets client_sock.
  */
@@ -315,7 +325,9 @@ static void * connect_listen_thread (void *arg)
 	err = bind( listen_sock, ai->ai_addr, (int)ai->ai_addrlen);
 	if (err == SOCKET_ERROR) {
 	  text_color_set(DW_COLOR_ERROR);
-          dw_printf("Bind failed with error: %d\n", WSAGetLastError());
+          dw_printf("Bind failed with error: %d\n", WSAGetLastError());		// TODO: provide corresponding text.
+	  dw_printf("Some other application is probably already using port %s.\n", kiss_port_str);
+	  dw_printf("Try using a different port number with KISSPORT in the configuration file.\n");
           freeaddrinfo(ai);
           closesocket(listen_sock);
           WSACleanup();
@@ -362,7 +374,9 @@ static void * connect_listen_thread (void *arg)
 
  	}
 
-#else
+
+#else		/* End of Windows case, now Linux. */
+
 
     	struct sockaddr_in sockaddr; /* Internet socket address stuct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
@@ -387,7 +401,10 @@ static void * connect_listen_thread (void *arg)
 
         if (bind(listen_sock,(struct sockaddr*)&sockaddr,sizeof(sockaddr))  == -1) {
 	  text_color_set(DW_COLOR_ERROR);
-    	  perror ("connect_listen_thread: Bind failed");
+          dw_printf("Bind failed with error: %d\n", errno);	
+          dw_printf("%s\n", strerror(errno));
+	  dw_printf("Some other application is probably already using port %d.\n", kiss_port);
+	  dw_printf("Try using a different port number with KISSPORT in the configuration file.\n");
           return (NULL);
 	}
 

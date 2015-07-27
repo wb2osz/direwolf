@@ -1,12 +1,12 @@
 
-// Remove next line to eliminate annoying debug messages every 100 seconds.
+// Remove next line to eliminate annoying/useful (depending on who you ask) debug messages every 100 seconds.
 #define STATISTICS 1
 
 
 // 
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -57,6 +57,9 @@
  *		Release 1.1:  Gabor Berczi provided fixes for the OSS code
  *		which had fallen into decay.
  *		
+ * Major Revisions: 	
+ *
+ *		1.2 - Add ability to use more than one audio device. 
  *
  *---------------------------------------------------------------*/
 
@@ -93,45 +96,73 @@
 #include "direwolf.h"
 #include "audio.h"
 #include "textcolor.h"
+#include "dtime_now.h"
+#include "demod.h"		/* for alevel_t & demod_get_audio_level() */
 
+
+/* Audio configuration. */
+
+static struct audio_s          *save_audio_config_p;
+
+
+/* Current state for each of the audio devices. */
+
+static struct adev_s {
 
 #if USE_ALSA
-static snd_pcm_t *audio_in_handle = NULL;
-static snd_pcm_t *audio_out_handle = NULL;
+	snd_pcm_t *audio_in_handle;
+	snd_pcm_t *audio_out_handle;
 
-static int bytes_per_frame;	/* number of bytes for a sample from all channels. */
-				/* e.g. 4 for stereo 16 bit. */
+	int bytes_per_frame;		/* number of bytes for a sample from all channels. */
+					/* e.g. 4 for stereo 16 bit. */
 
-static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *name, char *dir);
-
-//static void alsa_select_device (char *pick_dev, int direction, char *result);
 #else
-
-static int set_oss_params (int fd, struct audio_s *pa);
-static int oss_audio_device_fd = -1;	/* Single device, both directions. */
+	oss_audio_device_fd;		/* Single device, both directions. */
 
 #endif
 
-static int inbuf_size_in_bytes = 0;	/* number of bytes allocated */
-static unsigned char *inbuf_ptr = NULL;
-static int inbuf_len = 0;		/* number byte of actual data available. */
-static int inbuf_next = 0;		/* index of next to remove. */
+	int inbuf_size_in_bytes;	/* number of bytes allocated */
+	unsigned char *inbuf_ptr;
+	int inbuf_len;			/* number byte of actual data available. */
+	int inbuf_next;			/* index of next to remove. */
 
-static int outbuf_size_in_bytes = 0;
-static unsigned char *outbuf_ptr = NULL;
-static int outbuf_len = 0;
+	int outbuf_size_in_bytes;
+	unsigned char *outbuf_ptr;
+	int outbuf_len;
 
-#define ONE_BUF_TIME 40
-		
-static enum audio_in_type_e audio_in_type;
+	enum audio_in_type_e g_audio_in_type;
 
-// UDP socket used for receiving data
+	int udp_sock;			/* UDP socket for receiving data */
 
-static int udp_sock;
+} adev[MAX_ADEVS];
+
+
+// Originally 40.  Version 1.2, try 10 for lower latency.
+
+#define ONE_BUF_TIME 10
+
+
+#if USE_ALSA
+static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *name, char *dir);
+//static void alsa_select_device (char *pick_dev, int direction, char *result);
+#else
+static int set_oss_params (int fd, struct audio_s *pa);
+#endif
 
 
 #define roundup1k(n) (((n) + 0x3ff) & ~0x3ff)
-#define calcbufsize(rate,chans,bits) roundup1k( ( (rate)*(chans)*(bits) / 8 * ONE_BUF_TIME)/1000  )
+
+static int calcbufsize(int rate, int chans, int bits)
+{
+	int size1 = (rate * chans * bits  / 8 * ONE_BUF_TIME) / 1000;
+	int size2 = roundup1k(size1);
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("audio_open: calcbufsize (rate=%d, chans=%d, bits=%d) calc size=%d, round up to %d\n",
+		rate, chans, bits, size1, size2);
+#endif
+	return (size2);
+}
 
 
 /*------------------------------------------------------------------
@@ -179,104 +210,122 @@ static int udp_sock;
  *				than what the user specified.
  *              
  * Returns:     0 for success, -1 for failure.
- *		
+ *	
+ *
  *----------------------------------------------------------------*/
 
 int audio_open (struct audio_s *pa)
 {
 	int err;
 	int chan;
-
+	int a;
 	char audio_in_name[30];
 	char audio_out_name[30];
 
-#if USE_ALSA
 
-	assert (audio_in_handle == NULL);
-	assert (audio_out_handle == NULL);
+	save_audio_config_p = pa;
 
-#else
+	memset (adev, 0, sizeof(adev));
 
-	assert (oss_audio_device_fd == -1);
+	for (a=0; a<MAX_ADEVS; a++) {
+#ifndef USE_ALSA
+	  adev[a].oss_audio_device_fd = -1;
 #endif
+	  adev[a].udp_sock = -1;
+	}
+
 
 /*
  * Fill in defaults for any missing values.
  */
-	if (pa -> num_channels == 0)
-	  pa -> num_channels = DEFAULT_NUM_CHANNELS;
 
-	if (pa -> samples_per_sec == 0)
-	  pa -> samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
+	for (a=0; a<MAX_ADEVS; a++) {
 
-	if (pa -> bits_per_sample == 0)
-	  pa -> bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
+	  if (pa->adev[a].num_channels == 0)
+	    pa->adev[a].num_channels = DEFAULT_NUM_CHANNELS;
 
-	for (chan=0; chan<MAX_CHANS; chan++) {
-	  if (pa -> mark_freq[chan] == 0)
-	    pa -> mark_freq[chan] = DEFAULT_MARK_FREQ;
+	  if (pa->adev[a].samples_per_sec == 0)
+	    pa->adev[a].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
 
-	  if (pa -> space_freq[chan] == 0)
-	    pa -> space_freq[chan] = DEFAULT_SPACE_FREQ;
+	  if (pa->adev[a].bits_per_sample == 0)
+	    pa->adev[a].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 
-	  if (pa -> baud[chan] == 0)
-	    pa -> baud[chan] = DEFAULT_BAUD;
+	  for (chan=0; chan<MAX_CHANS; chan++) {
+	    if (pa->achan[chan].mark_freq == 0)
+	      pa->achan[chan].mark_freq = DEFAULT_MARK_FREQ;
 
-	  if (pa->num_subchan[chan] == 0)
-	    pa->num_subchan[chan] = 1;
+	    if (pa->achan[chan].space_freq == 0)
+	      pa->achan[chan].space_freq = DEFAULT_SPACE_FREQ;
+
+	    if (pa->achan[chan].baud == 0)
+	      pa->achan[chan].baud = DEFAULT_BAUD;
+
+	    if (pa->achan[chan].num_subchan == 0)
+	      pa->achan[chan].num_subchan = 1;
+	  }
 	}
 
 /*
- * Open audio device.
+ * Open audio device(s).
  */
 
-	udp_sock = -1;
+    	for (a=0; a<MAX_ADEVS; a++) {
+         if (pa->adev[a].defined) {
 
-	inbuf_size_in_bytes = 0;
-	inbuf_ptr = NULL;
-	inbuf_len = 0;
-	inbuf_next = 0;
+	    adev[a].inbuf_size_in_bytes = 0;
+	    adev[a].inbuf_ptr = NULL;
+	    adev[a].inbuf_len = 0;
+	    adev[a].inbuf_next = 0;
 
-	outbuf_size_in_bytes = 0;
-	outbuf_ptr = NULL;
-	outbuf_len = 0;
+	    adev[a].outbuf_size_in_bytes = 0;
+	    adev[a].outbuf_ptr = NULL;
+	    adev[a].outbuf_len = 0;
 
 /*
  * Determine the type of audio input.
  */
 
-	audio_in_type = AUDIO_IN_TYPE_SOUNDCARD; 	
+	    adev[a].g_audio_in_type = AUDIO_IN_TYPE_SOUNDCARD; 	
 
-	if (strcasecmp(pa->adevice_in, "stdin") == 0 || strcmp(pa->adevice_in, "-") == 0) {
-	  audio_in_type = AUDIO_IN_TYPE_STDIN;
-	  /* Change - to stdin for readability. */
-	  strcpy (pa->adevice_in, "stdin");
-	}
-	if (strncasecmp(pa->adevice_in, "udp:", 4) == 0) {
-	  audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
-	  /* Supply default port if none specified. */
-	  if (strcasecmp(pa->adevice_in,"udp") == 0 ||
-	    strcasecmp(pa->adevice_in,"udp:") == 0) {
-	    sprintf (pa->adevice_in, "udp:%d", DEFAULT_UDP_AUDIO_PORT);
-	  }
-	} 
+	    if (strcasecmp(pa->adev[a].adevice_in, "stdin") == 0 || strcmp(pa->adev[a].adevice_in, "-") == 0) {
+	      adev[a].g_audio_in_type = AUDIO_IN_TYPE_STDIN;
+	      /* Change "-" to stdin for readability. */
+	      strcpy (pa->adev[a].adevice_in, "stdin");
+	    }
+	    if (strncasecmp(pa->adev[a].adevice_in, "udp:", 4) == 0) {
+	      adev[a].g_audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
+	      /* Supply default port if none specified. */
+	      if (strcasecmp(pa->adev[a].adevice_in,"udp") == 0 ||
+	        strcasecmp(pa->adev[a].adevice_in,"udp:") == 0) {
+	        sprintf (pa->adev[a].adevice_in, "udp:%d", DEFAULT_UDP_AUDIO_PORT);
+	      }
+	    } 
 
 /* Let user know what is going on. */
 
-	/* If not specified, the device names should be "default". */
+	    /* If not specified, the device names should be "default". */
 
-	strcpy (audio_in_name, pa->adevice_in);
-	strcpy (audio_out_name, pa->adevice_out);
+	    strcpy (audio_in_name, pa->adev[a].adevice_in);
+	    strcpy (audio_out_name, pa->adev[a].adevice_out);
 
-        text_color_set(DW_COLOR_INFO);
+	    char ctemp[40];
 
-	if (strcmp(audio_in_name,audio_out_name) == 0) {
-          dw_printf ("Audio device for both receive and transmit: %s\n", audio_in_name);
-	}
-	else {
-          dw_printf ("Audio input device for receive: %s\n", audio_in_name);
-          dw_printf ("Audio out device for transmit: %s\n", audio_out_name);
-	}
+	    if (pa->adev[a].num_channels == 2) {
+	      sprintf (ctemp, " (channels %d & %d)", ADEVFIRSTCHAN(a), ADEVFIRSTCHAN(a)+1);
+	    }
+	    else {
+	      sprintf (ctemp, " (channel %d)", ADEVFIRSTCHAN(a));
+	    }
+
+            text_color_set(DW_COLOR_INFO);
+
+	    if (strcmp(audio_in_name,audio_out_name) == 0) {
+              dw_printf ("Audio device for both receive and transmit: %s %s\n", audio_in_name, ctemp);
+	    }
+	    else {
+              dw_printf ("Audio input device for receive: %s %s\n", audio_in_name, ctemp);
+              dw_printf ("Audio out device for transmit: %s %s\n", audio_out_name, ctemp);
+	    }
 
 /*
  * Now attempt actual opens.
@@ -285,127 +334,132 @@ int audio_open (struct audio_s *pa)
 /*
  * Input device.
  */
-	switch (audio_in_type) {
+
+	    switch (adev[a].g_audio_in_type) {
 
 /*
  * Soundcard - ALSA.
  */
-	  case AUDIO_IN_TYPE_SOUNDCARD:
+	      case AUDIO_IN_TYPE_SOUNDCARD:
 #if USE_ALSA
-	    err = snd_pcm_open (&audio_in_handle, audio_in_name, SND_PCM_STREAM_CAPTURE, 0);
-	    if (err < 0) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Could not open audio device %s for input\n%s\n", 
+	        err = snd_pcm_open (&(adev[a].audio_in_handle), audio_in_name, SND_PCM_STREAM_CAPTURE, 0);
+	        if (err < 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Could not open audio device %s for input\n%s\n", 
 	  		audio_in_name, snd_strerror(err));
-	      return (-1);
-	    }
+	          return (-1);
+	        }
 
-	    inbuf_size_in_bytes = set_alsa_params (audio_in_handle, pa, audio_in_name, "input");
-	    break;
+	        adev[a].inbuf_size_in_bytes = set_alsa_params (a, adev[a].audio_in_handle, pa, audio_in_name, "input");
+	    
 #else // OSS
-	oss_audio_device_fd = open (pa->adevice_in, O_RDWR);
+	        oss_audio_device_fd = open (pa->adev[a].adevice_in, O_RDWR);
 
-	if (oss_audio_device_fd < 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("%s:\n", pa->adevice_in);
-//	  sprintf (message, "Could not open audio device %s", pa->adevice_in);
-//	  perror (message);
-	  return (-1);
-	}
+	        if (oss_audio_device_fd < 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("%s:\n", pa->adev[a].adevice_in);
+//	          sprintf (message, "Could not open audio device %s", pa->adev[a].adevice_in);
+//	          perror (message);
+	          return (-1);
+	        }
 
-	outbuf_size_in_bytes = inbuf_size_in_bytes = set_oss_params (oss_audio_device_fd, pa);
+	        adev[a].outbuf_size_in_bytes = adev[a].inbuf_size_in_bytes = set_oss_params (oss_audio_device_fd, pa);
 
-	if (inbuf_size_in_bytes <= 0 || outbuf_size_in_bytes <= 0) {
-	  return (-1);
-	}
+	        if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
+	          return (-1);
+	        }
 #endif
-
+	        break;
 /*
  * UDP.
  */
-	  case AUDIO_IN_TYPE_SDR_UDP:
+	      case AUDIO_IN_TYPE_SDR_UDP:
 
-	    //Create socket and bind socket
+	        //Create socket and bind socket
 	    
-	    {
-	      struct sockaddr_in si_me;
-	      int slen=sizeof(si_me);
-	      int data_size = 0;
+	        {
+	          struct sockaddr_in si_me;
+	          int slen=sizeof(si_me);
+	          int data_size = 0;
 
-	      //Create UDP Socket
-	      if ((udp_sock=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Couldn't create socket, errno %d\n", errno);
-	        return -1;
-	      }
+	          //Create UDP Socket
+	          if ((adev[a].udp_sock=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Couldn't create socket, errno %d\n", errno);
+	            return -1;
+	          }
 
-	      memset((char *) &si_me, 0, sizeof(si_me));
-	      si_me.sin_family = AF_INET;   
-	      si_me.sin_port = htons((short)atoi(audio_in_name+4));
-	      si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+	          memset((char *) &si_me, 0, sizeof(si_me));
+	          si_me.sin_family = AF_INET;   
+	          si_me.sin_port = htons((short)atoi(audio_in_name+4));
+	          si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	      //Bind to the socket
-	      if (bind(udp_sock, (const struct sockaddr *) &si_me, sizeof(si_me))==-1) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Couldn't bind socket, errno %d\n", errno);
-	        return -1;
-	      }
-	    }
-	    inbuf_size_in_bytes = SDR_UDP_BUF_MAXLEN; 
+	          //Bind to the socket
+	          if (bind(adev[a].udp_sock, (const struct sockaddr *) &si_me, sizeof(si_me))==-1) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Couldn't bind socket, errno %d\n", errno);
+	            return -1;
+	          }
+	        }
+	        adev[a].inbuf_size_in_bytes = SDR_UDP_BUF_MAXLEN; 
 	
-	    break;
+	        break;
 
 /* 
  * stdin.
  */
-   	  case AUDIO_IN_TYPE_STDIN:
+   	      case AUDIO_IN_TYPE_STDIN:
 
-	    /* Do we need to adjust any properties of stdin? */
+	        /* Do we need to adjust any properties of stdin? */
 
-	    inbuf_size_in_bytes = 1024; 
-	
-	    break;
+	        adev[a].inbuf_size_in_bytes = 1024; 
+	    
+	        break;
 
-	  default:
+	      default:
 
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Internal error, invalid audio_in_type\n");
-	    return (-1);
-  	}
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Internal error, invalid audio_in_type\n");
+	        return (-1);
+  	    }
 
 /*
  * Output device.  Only "soundcard" is supported at this time. 
  */
 
 #if USE_ALSA
-	err = snd_pcm_open (&audio_out_handle, audio_out_name, SND_PCM_STREAM_PLAYBACK, 0);
+	    err = snd_pcm_open (&(adev[a].audio_out_handle), audio_out_name, SND_PCM_STREAM_PLAYBACK, 0);
 
-	if (err < 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Could not open audio device %s for output\n%s\n", 
+	    if (err < 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Could not open audio device %s for output\n%s\n", 
 			audio_out_name, snd_strerror(err));
-	  return (-1);
-	}
+	      return (-1);
+	    }
 
-	outbuf_size_in_bytes = set_alsa_params (audio_out_handle, pa, audio_out_name, "output");
+	    adev[a].outbuf_size_in_bytes = set_alsa_params (a, adev[a].audio_out_handle, pa, audio_out_name, "output");
 
-	if (inbuf_size_in_bytes <= 0 || outbuf_size_in_bytes <= 0) {
-	  return (-1);
-	}
+	    if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
+	      return (-1);
+	    }
 
 #endif
 
 /*
  * Finally allocate buffer for each direction.
  */
-	inbuf_ptr = malloc(inbuf_size_in_bytes);
-	assert (inbuf_ptr  != NULL);
-	inbuf_len = 0;
-	inbuf_next = 0;
+	    adev[a].inbuf_ptr = malloc(adev[a].inbuf_size_in_bytes);
+	    assert (adev[a].inbuf_ptr  != NULL);
+	    adev[a].inbuf_len = 0;
+	    adev[a].inbuf_next = 0;
 
-	outbuf_ptr = malloc(outbuf_size_in_bytes);
-	assert (outbuf_ptr  != NULL);
-	outbuf_len = 0;
+	    adev[a].outbuf_ptr = malloc(adev[a].outbuf_size_in_bytes);
+	    assert (adev[a].outbuf_ptr  != NULL);
+	    adev[a].outbuf_len = 0;
+
+          } /* end of audio device defined */
+
+        } /* end of for each audio device */
 	
 	return (0);
 
@@ -423,16 +477,16 @@ int audio_open (struct audio_s *pa)
  */
 /* 
  * Terminology:
- *   Sample	- for one channel.	e.g. 2 bytes for 16 bit.
+ *   Sample	- for one channel.		e.g. 2 bytes for 16 bit.
  *   Frame	- one sample for all channels.  e.g. 4 bytes for 16 bit stereo
  *   Period	- size of one transfer.
  */
 
-static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname, char *inout)
+static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *devname, char *inout)
 {
-
+	
 	snd_pcm_hw_params_t *hw_params;
-	snd_pcm_uframes_t fpp; 		/* Frames per period. */
+	snd_pcm_uframes_t fpp; 			/* Frames per period. */
 
 	unsigned int val;
 
@@ -476,7 +530,7 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 
 
 	err = snd_pcm_hw_params_set_format (handle, hw_params,
- 		pa->bits_per_sample == 8 ? SND_PCM_FORMAT_U8 : SND_PCM_FORMAT_S16_LE);
+ 		pa->adev[a].bits_per_sample == 8 ? SND_PCM_FORMAT_U8 : SND_PCM_FORMAT_S16_LE);
 	if (err < 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not set bits per sample.\n%s\n", 
@@ -488,7 +542,7 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 	/* Number of audio channels. */
 
 
-	err = snd_pcm_hw_params_set_channels (handle, hw_params, pa->num_channels);
+	err = snd_pcm_hw_params_set_channels (handle, hw_params, pa->adev[a].num_channels);
 	if (err < 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not set number of audio channels.\n%s\n", 
@@ -500,7 +554,7 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 	/* Audio sample rate. */
 
 
-	val = pa->samples_per_sec;
+	val = pa->adev[a].samples_per_sec;
 
 	dir = 0;
 
@@ -514,31 +568,54 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 	  return (-1);
 	}
 
-	if (val != pa->samples_per_sec) {
+	if (val != pa->adev[a].samples_per_sec) {
 
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Asked for %d samples/sec but got %d.\n",
 
-				pa->samples_per_sec, val);
+				pa->adev[a].samples_per_sec, val);
 	  dw_printf ("for %s %s.\n", devname, inout);
 
-	  pa->samples_per_sec = val;
+	  pa->adev[a].samples_per_sec = val;
 
 	}
-
-	/* Guessing around 20 reads/sec might be good. */
+	
+	/* Original: */
+	/* Guessed around 20 reads/sec might be good. */
 	/* Period too long = too much latency. */
-	/* Period too short = too much overhead of many small transfers. */
+	/* Period too short = more overhead of many small transfers. */
 
-	fpp = pa->samples_per_sec / 20;
+	/* fpp = pa->adev[a].samples_per_sec / 20; */
+
+	/* The suggested period size was 2205 frames.  */
+	/* I thought the later "...set_period_size_near" might adjust it to be */
+	/* some more optimal nearby value based hardware buffer sizes but */
+	/* that didn't happen.   We ended up with a buffer size of 4410 bytes. */
+
+	/* In version 1.2, let's take a different approach. */
+	/* Reduce the latency and round up to a multiple of 1 Kbyte. */
+	
+	/* For the typical case of 44100 sample rate, 1 channel, 16 bits, we calculate */
+	/* a buffer size of 882 and round it up to 1k.  This results in 512 frames per period. */
+	/* A period comes out to be about 80 periods per second or about 12.5 mSec each. */
+
+	buf_size_in_bytes = calcbufsize(pa->adev[a].samples_per_sec, pa->adev[a].num_channels, pa->adev[a].bits_per_sample);
+
+#if __arm__
+	/* Ugly hack for RPi. */
+	/* Reducing buffer size is fine for input but not so good for output. */
+	
+	if (*inout == 'o') {
+	  buf_size_in_bytes = buf_size_in_bytes * 4;
+	}
+#endif
+
+	fpp = buf_size_in_bytes / (pa->adev[a].num_channels * pa->adev[a].bits_per_sample / 8);
 
 #if DEBUG
-
 	text_color_set(DW_COLOR_DEBUG);
 
-
 	dw_printf ("suggest period size of %d frames\n", (int)fpp);
-
 #endif
 	dir = 0;
 	err = snd_pcm_hw_params_set_period_size_near (handle, hw_params, &fpp, &dir);
@@ -550,8 +627,6 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 	  return (-1);
 	}
 
-
-
 	err = snd_pcm_hw_params (handle, hw_params);
 	if (err < 0) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -559,7 +634,6 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 	  dw_printf ("for %s %s.\n", devname, inout);
 	  return (-1);
 	}
-
 
 	/* Driver might not like our suggested period size */
 	/* and might have another idea. */
@@ -578,16 +652,15 @@ static int set_alsa_params (snd_pcm_t *handle, struct audio_s *pa, char *devname
 
 	/* The read and write use units of frames, not bytes. */
 
-	bytes_per_frame = snd_pcm_frames_to_bytes (handle, 1);
-	assert (bytes_per_frame == pa->num_channels * pa->bits_per_sample / 8);
+	adev[a].bytes_per_frame = snd_pcm_frames_to_bytes (handle, 1);
 
+	assert (adev[a].bytes_per_frame == pa->adev[a].num_channels * pa->adev[a].bits_per_sample / 8);
 
-	buf_size_in_bytes = fpp * bytes_per_frame;
-
+	buf_size_in_bytes = fpp * adev[a].bytes_per_frame;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("audio buffer size = %d (bytes per frame) x %d (frames per period) = %d \n", bytes_per_frame, (int)fpp, buf_size_in_bytes);
+	dw_printf ("audio buffer size = %d (bytes per frame) x %d (frames per period) = %d \n", adev[a].bytes_per_frame, (int)fpp, buf_size_in_bytes);
 #endif
 
 	return (buf_size_in_bytes);
@@ -614,33 +687,33 @@ static int set_oss_params (int fd, struct audio_s *pa)
 	int ossbuf_size_in_bytes;
 
 
-	err = ioctl (fd, SNDCTL_DSP_CHANNELS, &(pa->num_channels));
+	err = ioctl (fd, SNDCTL_DSP_CHANNELS, &(pa->adev[a].num_channels));
    	if (err == -1) {
 	  text_color_set(DW_COLOR_ERROR);
     	  perror("Not able to set audio device number of channels");
  	  return (-1);
 	}
 
-        asked_for = pa->samples_per_sec;
+        asked_for = pa->adev[a].samples_per_sec;
 
-	err = ioctl (fd, SNDCTL_DSP_SPEED, &(pa->samples_per_sec));
+	err = ioctl (fd, SNDCTL_DSP_SPEED, &(pa->adev[a].samples_per_sec));
    	if (err == -1) {
 	  text_color_set(DW_COLOR_ERROR);
     	  perror("Not able to set audio device sample rate");
  	  return (-1);
 	}
 
-	if (pa->samples_per_sec != asked_for) {
+	if (pa->adev[a].samples_per_sec != asked_for) {
 	  text_color_set(DW_COLOR_INFO);
           dw_printf ("Asked for %d samples/sec but actually using %d.\n",
-		asked_for, pa->samples_per_sec);
+		asked_for, pa->adev[a].samples_per_sec);
 	}
 
 	/* This is actually a bit mask but it happens that */
 	/* 0x8 is unsigned 8 bit samples and */
 	/* 0x10 is signed 16 bit little endian. */
 
-	err = ioctl (fd, SNDCTL_DSP_SETFMT, &(pa->bits_per_sample));
+	err = ioctl (fd, SNDCTL_DSP_SETFMT, &(pa->adev[a].bits_per_sample));
    	if (err == -1) {
 	  text_color_set(DW_COLOR_ERROR);
     	  perror("Not able to set audio device sample size");
@@ -687,6 +760,9 @@ static int set_oss_params (int fd, struct audio_s *pa)
  *	5568 for 11025 Hz 16 bit stereo
  *     11072 for 44100 Hz 16 bit mono
  *
+ * This was long ago under different conditions.
+ * Should study this again some day.
+ */
  * Your milage may vary.
  */
 	err = ioctl (fd, SNDCTL_DSP_GETBLKSIZE, &ossbuf_size_in_bytes);
@@ -706,7 +782,7 @@ static int set_oss_params (int fd, struct audio_s *pa)
  * respond quickly.
  */
 
-	ossbuf_size_in_bytes = calcbufsize(pa->samples_per_sec, pa->num_channels, pa->bits_per_sample);
+	ossbuf_size_in_bytes = calcbufsize(pa->adev[a].samples_per_sec, pa->adev[a].num_channels, pa->adev[a].bits_per_sample);
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -731,6 +807,8 @@ static int set_oss_params (int fd, struct audio_s *pa)
  *
  * Purpose:     Get one byte from the audio device.
  *
+ * Inputs:	a	- Our number for audio device.
+ *
  * Returns:     0 - 255 for a valid sample.
  *              -1 for any type of error.
  *
@@ -744,7 +822,7 @@ static int set_oss_params (int fd, struct audio_s *pa)
 // Use hot attribute for all functions called for every audio sample.
 
 __attribute__((hot))
-int audio_get (void)
+int audio_get (int a)
 {
 	int n;
 	int retries = 0;
@@ -752,11 +830,11 @@ int audio_get (void)
 #if STATISTICS
 	/* Gather numbers for read from audio device. */
 
-	static int duration = 100;	/* report every 100 seconds. */
-	static time_t last_time = 0;
-	time_t this_time;
-	static int sample_count;
-	static int error_count;
+#define duration 100			/* report every 100 seconds. */
+	static time_t last_time[MAX_ADEVS];
+	time_t this_time[MAX_ADEVS];
+	static int sample_count[MAX_ADEVS];
+	static int error_count[MAX_ADEVS];
 #endif
 
 #if DEBUGx
@@ -766,54 +844,102 @@ int audio_get (void)
 
 #endif
 
-	assert (inbuf_size_in_bytes >= 100 && inbuf_size_in_bytes <= 32768);
+	assert (adev[a].inbuf_size_in_bytes >= 100 && adev[a].inbuf_size_in_bytes <= 32768);
 
 	  
-#if USE_ALSA
 
-	switch (audio_in_type) {
+	switch (adev[a].g_audio_in_type) {
 
 /*
  * Soundcard - ALSA 
  */
 	  case AUDIO_IN_TYPE_SOUNDCARD:
 
-	    while (inbuf_next >= inbuf_len) {
 
-	      assert (audio_in_handle != NULL);
+#if USE_ALSA
+
+
+	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
+
+	      assert (adev[a].audio_in_handle != NULL);
 #if DEBUGx
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("audio_get(): readi asking for %d frames\n", inbuf_size_in_bytes / bytes_per_frame);	
+	      dw_printf ("audio_get(): readi asking for %d frames\n", adev[a].inbuf_size_in_bytes / adev[a].bytes_per_frame);	
 #endif
-	      n = snd_pcm_readi (audio_in_handle, inbuf_ptr, inbuf_size_in_bytes / bytes_per_frame);
+	      n = snd_pcm_readi (adev[a].audio_in_handle, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes / adev[a].bytes_per_frame);
 
 #if DEBUGx	  
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("audio_get(): readi asked for %d and got %d frames\n",
-		inbuf_size_in_bytes / bytes_per_frame, n);	
+		adev[a].inbuf_size_in_bytes / adev[a].bytes_per_frame, n);	
 #endif
 
 #if STATISTICS
-	      if (last_time == 0) {
-	        last_time = time(NULL);
-	        sample_count = 0;
-	        error_count = 0;
+
+// TODO1.2: add audio level information to windows version.  Common function?
+// TODO1.2: add quiet option to suppress this.
+
+/*
+ * Print information about the sample rate as a debugging aid.
+ * I've never seen an issue with Windows or x86 Linux but the Raspberry Pi
+ * has a very troublesome audio input system where many samples got lost.
+ * Occasional lines like this would immediately identify the issue.
+ *
+ *	Past 100 seconds, 4409856 audio samples processed, 0 errors.
+ *
+ * That's a little hard to read.  Maybe we'd be better off with an average
+ * and fewer digits like this:    44.1 k
+ *
+ * While we are at it we can also print the current audio level(s) providing 
+ * more clues if nothing is being decoded.
+ */
+
+	      if (last_time[a] == 0) {
+	        last_time[a] = time(NULL);
+	        sample_count[a] = 0;
+	        error_count[a] = 0;
 	      }
 	      else {
 	        if (n > 0) {
-	           sample_count += n;
+	           sample_count[a] += n;
 	        }
 	        else {
-	           error_count++;
+	           error_count[a]++;
 	        }
-	        this_time = time(NULL);
-	        if (this_time >= last_time + duration) {
+	        this_time[a] = time(NULL);
+	        if (this_time[a] >= last_time[a] + duration) {
+
+#if 1	/* Try this for version 1.2 and see how people react. */
+
+		  float ave_rate = (sample_count[a] / 1000.0) / duration;
+
 	          text_color_set(DW_COLOR_DEBUG);
-	          dw_printf ("\nPast %d seconds, %d audio samples processed, %d errors.\n\n", 
-			duration, sample_count, error_count);
-	          last_time = this_time;
-	          sample_count = 0;
-	          error_count = 0;
+
+	          if (save_audio_config_p->adev[a].num_channels > 1) {
+		    int ch0 = ADEVFIRSTCHAN(a);
+		    alevel_t alevel0 = demod_get_audio_level(a,ch0);
+		    int ch1 = ADEVFIRSTCHAN(a) + 1;
+		    alevel_t alevel1 = demod_get_audio_level(a,ch1);
+
+	            dw_printf ("\nADEVICE%d: Sample rate approx. %.1f k, %d errors, receive audio levels CH%d %d, CH%d %d\n\n", 
+			a, ave_rate, error_count[a], ch0, alevel0.rec, ch1, alevel1.rec);
+	          }
+	          else {
+		    int ch0 = ADEVFIRSTCHAN(a);
+		    alevel_t alevel0 = demod_get_audio_level(a,ch0);
+
+	            dw_printf ("\nADEVICE%d: Sample rate approx. %.1f k, %d errors, receive audio level CH%d %d\n\n", 
+			a, ave_rate, error_count[a], ch0, alevel0.rec);
+	          }
+
+#else
+	          text_color_set(DW_COLOR_DEBUG);
+	          dw_printf ("\nADEVICE%d: Past %d seconds, %d audio samples processed, %d errors.\n\n", 
+			a, duration, sample_count[a], error_count[a]);
+#endif 
+	          last_time[a] = this_time[a];
+	          sample_count[a] = 0;
+	          error_count[a] = 0;
 	        }      
 	      }
 #endif
@@ -822,8 +948,8 @@ int audio_get (void)
 
 	        /* Success */
 
-	        inbuf_len = n * bytes_per_frame;		/* convert to number of bytes */
-	        inbuf_next = 0;
+	        adev[a].inbuf_len = n * adev[a].bytes_per_frame;		/* convert to number of bytes */
+	        adev[a].inbuf_next = 0;
 	      }
 	      else if (n == 0) {
 
@@ -834,8 +960,8 @@ int audio_get (void)
 	        dw_printf ("Audio input got zero bytes: %s\n", snd_strerror(n));
 	        SLEEP_MS(10);
 
-	        inbuf_len = 0;
-	        inbuf_next = 0;
+	        adev[a].inbuf_len = 0;
+	        adev[a].inbuf_next = 0;
 	      }
 	      else {
 	        /* Error */
@@ -845,12 +971,12 @@ int audio_get (void)
 		// Audio input device error: Unknown error
 
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Audio input device error: %s\n", snd_strerror(n));
+	        dw_printf ("Audio input device %d error: %s\n", a, snd_strerror(n));
 
 	        /* Try to recover a few times and eventually give up. */
 	        if (++retries > 10) {
-	          inbuf_len = 0;
-	          inbuf_next = 0;
+	          adev[a].inbuf_len = 0;
+	          adev[a].inbuf_next = 0;
 	          return (-1);
 	        }
 
@@ -858,7 +984,7 @@ int audio_get (void)
 
 	          /* EPIPE means overrun */
 
-	          snd_pcm_recover (audio_in_handle, n, 1);
+	          snd_pcm_recover (adev[a].audio_in_handle, n, 1);
 
 	        } 
 	        else {
@@ -868,10 +994,36 @@ int audio_get (void)
 	          /* when the Update Manager decides to run. */
 
 	          SLEEP_MS (250);
-	          snd_pcm_recover (audio_in_handle, n, 1);
+	          snd_pcm_recover (adev[a].audio_in_handle, n, 1);
 	        }
 	      }
 	    }
+
+
+#else	/* end ALSA, begin OSS */
+
+	    /* Fixed in 1.2.  This was formerly outside of the switch */
+	    /* so the OSS version did not process stdin or UDP. */
+
+	    while (adev[a]..g_audio_in_type == AUDIO_IN_TYPE_SOUNDCARD && adev[a].inbuf_next >= adev[a].inbuf_len) {
+	      assert (oss_audio_device_fd > 0);
+	      n = read (oss_audio_device_fd, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes);
+	      //text_color_set(DW_COLOR_DEBUG);
+	      // dw_printf ("audio_get(): read %d returns %d\n", adev[a].inbuf_size_in_bytes, n);	
+	      if (n < 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        perror("Can't read from audio device");
+	        adev[a].inbuf_len = 0;
+	        adev[a].inbuf_next = 0;
+	        return (-1);
+	      }
+	      adev[a].inbuf_len = n;
+	      adev[a].inbuf_next = 0;
+	    }
+
+#endif	/* USE_ALSA */
+
+
 	    break;
 
 /* 
@@ -880,21 +1032,21 @@ int audio_get (void)
 
 	  case AUDIO_IN_TYPE_SDR_UDP:
 
-	    while (inbuf_next >= inbuf_len) {
+	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
 	      int ch, res,i;
 
-              assert (udp_sock > 0);
-	      res = recv(udp_sock, inbuf_ptr, inbuf_size_in_bytes, 0);
+              assert (adev[a].udp_sock > 0);
+	      res = recv(adev[a].udp_sock, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes, 0);
 	      if (res < 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Can't read from udp socket, res=%d", res);
-	        inbuf_len = 0;
-	        inbuf_next = 0;
+	        adev[a].inbuf_len = 0;
+	        adev[a].inbuf_next = 0;
 	        return (-1);
 	      }
 	    
-	      inbuf_len = res;
-	      inbuf_next = 0;
+	      adev[a].inbuf_len = res;
+	      adev[a].inbuf_next = 0;
 	    }
 	    break;
 
@@ -903,49 +1055,26 @@ int audio_get (void)
  */
 	  case AUDIO_IN_TYPE_STDIN:
 
-	    while (inbuf_next >= inbuf_len) {
+	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
 	      int ch, res,i;
 
-	      res = read(STDIN_FILENO, inbuf_ptr, (size_t)inbuf_size_in_bytes);
+	      res = read(STDIN_FILENO, adev[a].inbuf_ptr, (size_t)adev[a].inbuf_size_in_bytes);
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf ("\nEnd of file on stdin.  Exiting.\n");
 	        exit (0);
 	      }
 	    
-	      inbuf_len = res;
-	      inbuf_next = 0;
+	      adev[a].inbuf_len = res;
+	      adev[a].inbuf_next = 0;
 	    }
 
 	    break;
 	}
 
 
-
-#else	/* end ALSA, begin OSS */
-
-	while (audio_in_type == AUDIO_IN_TYPE_SOUNDCARD && inbuf_next >= inbuf_len) {
-	  assert (oss_audio_device_fd > 0);
-	  n = read (oss_audio_device_fd, inbuf_ptr, inbuf_size_in_bytes);
-	  //text_color_set(DW_COLOR_DEBUG);
-	  // dw_printf ("audio_get(): read %d returns %d\n", inbuf_size_in_bytes, n);	
-	  if (n < 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    perror("Can't read from audio device");
-	    inbuf_len = 0;
-	    inbuf_next = 0;
-	    return (-1);
-	  }
-	  inbuf_len = n;
-	  inbuf_next = 0;
-	}
-
-#endif	/* USE_ALSA */
-
-
-
-	if (inbuf_next < inbuf_len)
-	  n = inbuf_ptr[inbuf_next++];
+	if (adev[a].inbuf_next < adev[a].inbuf_len)
+	  n = adev[a].inbuf_ptr[adev[a].inbuf_next++];
 	//No data to read, avoid reading outside buffer
 	else
 	  n = 0;
@@ -969,7 +1098,9 @@ int audio_get (void)
  *
  * Purpose:     Send one byte to the audio device.
  *
- * Inputs:	c	- One byte in range of 0 - 255.
+ * Inputs:	a
+ *
+ *		c	- One byte in range of 0 - 255.
  *
  * Returns:     Normally non-negative.
  *              -1 for any type of error.
@@ -982,15 +1113,15 @@ int audio_get (void)
  *
  *----------------------------------------------------------------*/
 
-int audio_put (int c)
+int audio_put (int a, int c)
 {
 	/* Should never be full at this point. */
-	assert (outbuf_len < outbuf_size_in_bytes);
+	assert (adev[a].outbuf_len < adev[a].outbuf_size_in_bytes);
 
-	outbuf_ptr[outbuf_len++] = c;
+	adev[a].outbuf_ptr[adev[a].outbuf_len++] = c;
 
-	if (outbuf_len == outbuf_size_in_bytes) {
-	  return (audio_flush());
+	if (adev[a].outbuf_len == adev[a].outbuf_size_in_bytes) {
+	  return (audio_flush(a));
 	}
 
 	return (0);
@@ -1012,7 +1143,7 @@ int audio_put (int c)
  *
  *----------------------------------------------------------------*/
 
-int audio_flush (void)
+int audio_flush (int a)
 {
 #if USE_ALSA
 	int k;
@@ -1020,7 +1151,7 @@ int audio_flush (void)
 	int retries = 10;
 	snd_pcm_status_t *status;
 
-	assert (audio_out_handle != NULL);
+	assert (adev[a].audio_out_handle != NULL);
 
 
 /*
@@ -1035,7 +1166,7 @@ int audio_flush (void)
 
 	snd_pcm_status_alloca(&status);
 
-	k = snd_pcm_status (audio_out_handle, status);
+	k = snd_pcm_status (adev[a].audio_out_handle, status);
 	if (k != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio output get status error.\n%s\n", snd_strerror(k));
@@ -1046,7 +1177,7 @@ int audio_flush (void)
 	  //text_color_set(DW_COLOR_DEBUG);
 	  //dw_printf ("Audio output state = %d.  Try to start.\n", k);
 
-	  k = snd_pcm_prepare (audio_out_handle);
+	  k = snd_pcm_prepare (adev[a].audio_out_handle);
 
 	  if (k != 0) {
 	    text_color_set(DW_COLOR_ERROR);
@@ -1055,15 +1186,15 @@ int audio_flush (void)
 	}
 
 
-	psound = outbuf_ptr;
+	psound = adev[a].outbuf_ptr;
 
 	while (retries-- > 0) {
 
-	  k = snd_pcm_writei (audio_out_handle, psound, outbuf_len / bytes_per_frame);	
-#if DEBUG
+	  k = snd_pcm_writei (adev[a].audio_out_handle, psound, adev[a].outbuf_len / adev[a].bytes_per_frame);	
+#if DEBUGx
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("audio_flush(): snd_pcm_writei %d frames returns %d\n",
-				outbuf_len / bytes_per_frame, k);
+				adev[a].outbuf_len / adev[a].bytes_per_frame, k);
 	  fflush (stdout);	
 #endif
 	  if (k == -EPIPE) {
@@ -1072,7 +1203,7 @@ int audio_flush (void)
 
 	    /* No problemo.  Recover and go around again. */
 
-	    snd_pcm_recover (audio_out_handle, k, 1);
+	    snd_pcm_recover (adev[a].audio_out_handle, k, 1);
 	  }
  	  else if (k < 0) {
 	    text_color_set(DW_COLOR_ERROR);
@@ -1081,21 +1212,21 @@ int audio_flush (void)
 	    /* Some other error condition. */
 	    /* Try again. What do we have to lose? */
 
-	    snd_pcm_recover (audio_out_handle, k, 1);
+	    snd_pcm_recover (adev[a].audio_out_handle, k, 1);
 	  }
- 	  else if (k != outbuf_len / bytes_per_frame) {
+ 	  else if (k != adev[a].outbuf_len / adev[a].bytes_per_frame) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Audio write took %d frames rather than %d.\n",
- 			k, outbuf_len / bytes_per_frame);
+ 			k, adev[a].outbuf_len / adev[a].bytes_per_frame);
 	
 	    /* Go around again with the rest of it. */
 
-	    psound += k * bytes_per_frame;
-	    outbuf_len -= k * bytes_per_frame;
+	    psound += k * adev[a].bytes_per_frame;
+	    adev[a].outbuf_len -= k * adev[a].bytes_per_frame;
 	  }
 	  else {
 	    /* Success! */
-	    outbuf_len = 0;
+	    adev[a].outbuf_len = 0;
 	    return (0);
 	  }
 	}
@@ -1103,7 +1234,7 @@ int audio_flush (void)
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("Audio write error retry count exceeded.\n");
 
-	outbuf_len = 0;
+	adev[a].outbuf_len = 0;
 	return (-1);
 
 #else		/* OSS */
@@ -1112,13 +1243,13 @@ int audio_flush (void)
 	unsigned char *ptr;	
 	int len;
 
-	ptr = outbuf_ptr;
-	len = outbuf_len;
+	ptr = adev[a].outbuf_ptr;
+	len = adev[a].outbuf_len;
 
 	while (len > 0) {
 	  assert (oss_audio_device_fd > 0);
 	  k = write (oss_audio_device_fd, ptr, len);	
-#if DEBUG
+#if DEBUGx
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("audio_flush(): write %d returns %d\n", len, k);
 	  fflush (stdout);	
@@ -1126,7 +1257,7 @@ int audio_flush (void)
 	  if (k < 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    perror("Can't write to audio device");
-	    outbuf_len = 0;
+	    adev[a].outbuf_len = 0;
 	    return (-1);
 	  }
 	  if (k < len) {
@@ -1137,7 +1268,7 @@ int audio_flush (void)
 	  len -= k;
 	}
 
-	outbuf_len = 0;
+	adev[a].outbuf_len = 0;
 	return (0);
 #endif
 
@@ -1148,27 +1279,24 @@ int audio_flush (void)
  *
  * Name:        audio_wait
  *
- * Purpose:     Wait until all the queued up audio out has been played.
+ * Purpose:	Finish up audio output before turning PTT off.
  *
- * Inputs:	duration	- hint at number of milliseconds to wait.
+ * Inputs:	a		- Index for audio device (not channel!)
  *
- * Returns:     Normally non-negative.
- *              -1 for any type of error.
+ * Returns:     None.
  *
- * Description:	In our particular application, we would want to make sure
- *		that the entire packet has been sent out before turning
- *		off the transmitter PTT control.
+ * Description:	Flush out any partially filled audio output buffer.
+ *		Wait until all the queued up audio out has been played.
+ *		Take any other necessary actions to stop audio output.
  *
  * In an ideal world:
  * 
  *		We would like to ask the hardware when all the queued
  *		up sound has actually come out the speaker.
- *		There is an OSS system call for this but it doesn't work
- *		on Cygwin.  The application crashes at a later time.
  *
- *		Haven't yet verified correct operation with ALSA.
- * 
  * In reality:
+ *
+ * 		This has been found to be less than reliable in practice.
  *
  *		Caller does the following:
  *
@@ -1176,67 +1304,48 @@ int audio_flush (void)
  *		(2) Calculate how long it will take to transmit the 
  *			frame including TXDELAY, frame (including 
  *			"flags", data, FCS and bit stuffing), and TXTAIL.
- *		(3) Add (1) and (2) resulting in when PTT should be turned off.
- *		(4) Take difference between current time and PPT off time
- *			and provide this as the additional delay required.
+ *		(3) Call this function, which might or might not wait long enough.
+ *		(4) Add (1) and (2) resulting in when PTT should be turned off.
+ *		(5) Take difference between current time and desired PPT off time
+ *			and wait for additoinal time if required.
  *
  *----------------------------------------------------------------*/
 
-int audio_wait (int duration)
+void audio_wait (int a)
 {	
-	int err = 0;
 
-	audio_flush ();
-#if DEBUGx
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("audio_wait(): before sync, fd=%d\n", oss_audio_device_fd);	
-#endif
+	audio_flush (a);
 
 #if USE_ALSA
-
-	//double t_enter, t_leave;
-	//int drain_ms;
-
-	//t_enter = dtime_now();
 
 	/* For playback, this should wait for all pending frames */
 	/* to be played and then stop. */
 
-	snd_pcm_drain (audio_out_handle);
-
-	//t_leave = dtime_now();
-	//drain_ms = (int)((t_leave - t_enter) * 1000.);
-
-	//text_color_set(DW_COLOR_DEBUG);
-	//dw_printf ("audio_wait():  suggested delay = %d ms, actual = %d\n",
-	//		duration, drain_ms);
+	snd_pcm_drain (adev[a].audio_out_handle);
 
 	/*
- 	 * Experimentation reveals that snd_pcm_drain doesn't
-	 * actually wait.  It returns immediately. 
-	 * However it does serve a useful purpose of stopping
-	 * the playback after all the queued up data is used.
+	 * When this was first implemented, I observed:
  	 *
-	 * Keep the sleep delay so PTT is not turned off too soon.
+ 	 * 	"Experimentation reveals that snd_pcm_drain doesn't
+	 * 	 actually wait.  It returns immediately. 
+	 * 	 However it does serve a useful purpose of stopping
+	 * 	 the playback after all the queued up data is used."
+ 	 *
+	 *
+	 * Now that I take a closer look at the transmit timing, for
+ 	 * version 1.2, it seems that snd_pcm_drain DOES wait until all
+	 * all pending frames have been played.  
+	 * Either way, the caller will now compensate for it.
  	 */
-
-	if (duration > 0) {
-	  SLEEP_MS (duration);
-	}
 
 #else
 
 	assert (oss_audio_device_fd > 0);
 
-
-	// This causes a crash later on Cygwin.
-	// Haven't tried it on Linux yet.
+	// This caused a crash later on Cygwin.
+	// Haven't tried it on other (non-Linux) Unix yet.
 
 	// err = ioctl (oss_audio_device_fd, SNDCTL_DSP_SYNC, NULL);
-
-	if (duration > 0) {
-	  SLEEP_MS (duration);
-	}
 
 #endif
 
@@ -1245,8 +1354,6 @@ int audio_wait (int duration)
 	dw_printf ("audio_wait(): after sync, status=%d\n", err);	
 #endif
 
-	return (err);
-
 } /* end audio_wait */
 
 
@@ -1254,7 +1361,7 @@ int audio_wait (int duration)
  *
  * Name:        audio_close
  *
- * Purpose:     Close the audio device.
+ * Purpose:     Close the audio device(s).
  *
  * Returns:     Normally non-negative.
  *              -1 for any type of error.
@@ -1265,36 +1372,42 @@ int audio_wait (int duration)
 int audio_close (void)
 {
 	int err = 0;
+	int a;
+
+	for (a = 0; a < MAX_ADEVS; a++) {
 
 #if USE_ALSA
-	assert (audio_in_handle != NULL);
-	assert (audio_out_handle != NULL);
+	  if (adev[a].audio_in_handle != NULL && adev[a].audio_out_handle != NULL) {
 
-	audio_wait (0);
+	    audio_wait (a);
 
-	snd_pcm_close (audio_in_handle);
-	snd_pcm_close (audio_out_handle);
-
+	    snd_pcm_close (adev[a].audio_in_handle);
+	    snd_pcm_close (adev[a].audio_out_handle);
+	
 #else
-	assert (oss_audio_device_fd > 0);
 
-	audio_wait (0);
+	  if  (oss_audio_device_fd > 0) {
+  
+	    audio_wait (a);
 
-	close (oss_audio_device_fd);
+	    close (oss_audio_device_fd);
 
-	oss_audio_device_fd = -1;
+	    oss_audio_device_fd = -1;
 #endif
-	free (inbuf_ptr);
-	free (outbuf_ptr);
 
-	inbuf_size_in_bytes = 0;
-	inbuf_ptr = NULL;
-	inbuf_len = 0;
-	inbuf_next = 0;
+	    free (adev[a].inbuf_ptr);
+	    free (adev[a].outbuf_ptr);
 
-	outbuf_size_in_bytes = 0;
-	outbuf_ptr = NULL;
-	outbuf_len = 0;
+	    adev[a].inbuf_size_in_bytes = 0;
+	    adev[a].inbuf_ptr = NULL;
+	    adev[a].inbuf_len = 0;
+	    adev[a].inbuf_next = 0;
+
+	    adev[a].outbuf_size_in_bytes = 0;
+	    adev[a].outbuf_ptr = NULL;
+	    adev[a].outbuf_len = 0;
+	  }
+	}
 
 	return (err);
 

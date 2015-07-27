@@ -106,6 +106,24 @@ void text_color_set (dw_color_t c)
 
 /*-------------------------------------------------------------------
  *
+ * Name:        kiss_frame_init 
+ *
+ * Purpose:     Save information about valid channels for later error checking.
+ *
+ * Inputs:      pa		- Address of structure of type audio_s.
+ *
+ *-----------------------------------------------------------------*/
+
+static struct audio_s *save_audio_config_p;
+
+void kiss_frame_init (struct audio_s *pa)
+{
+	save_audio_config_p = pa;
+}
+
+
+/*-------------------------------------------------------------------
+ *
  * Name:        kiss_encapsulate 
  *
  * Purpose:     Ecapsulate a frame into KISS format.
@@ -267,9 +285,7 @@ static int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
  *
  * Outputs:	kf	- Current state is updated.
  *
- * Returns:	TRUE when a complete frame is ready for processing.
-		// TODO: void later
- *
+ * Returns:	none.
  *
  *-----------------------------------------------------------------*/
 
@@ -433,6 +449,7 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 	int port;
 	int cmd;
 	packet_t pp;
+	alevel_t alevel;
 
 	port = (kiss_msg[0] >> 4) & 0xf;
 	cmd = kiss_msg[0] & 0xf;
@@ -452,22 +469,24 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 		 kiss_msg[16] == 0xcd) {
 	        
 	      if (debug) {
-	         text_color_set(DW_COLOR_ERROR);
-	         dw_printf ("Special case - Drop packets which appear to be in error.\n");
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Special case - Drop packets which appear to be in error.\n");
 	      }
 	      return;
 	    }
+	
+	    /* Verify that the port (channel) number is valid. */
 
-	    // Should really check if single or dual channel mode.
-	    // Do more thoroughly in 1.2.
-
-	    if (port != 0 && port != 1) {
+	    if (port < 0 || port >= MAX_CHANS || ! save_audio_config_p->achan[port].valid) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Invalid channel %d from KISS client app.\n", port);
+	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", port);
+              text_color_set(DW_COLOR_DEBUG);
+	      kiss_debug_print (FROM_CLIENT, NULL, kiss_msg, kiss_len);
 	      return;
 	    }
-	
-	    pp = ax25_from_frame (kiss_msg+1, kiss_len-1, -1);
+
+	    memset (&alevel, 0xff, sizeof(alevel));
+	    pp = ax25_from_frame (kiss_msg+1, kiss_len-1, alevel);
 	    if (pp == NULL) {
 	       text_color_set(DW_COLOR_ERROR);
 	       dw_printf ("ERROR - Invalid KISS data frame from client app.\n");
@@ -493,7 +512,7 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
         case 1:				/* TXDELAY */
 
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set TXDELAY = %d, port %d\n", kiss_msg[1], port);
+	  dw_printf ("KISS protocol set TXDELAY = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
 	  xmit_set_txdelay (port, kiss_msg[1]);
 	  break;
 
@@ -507,14 +526,14 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
         case 3:				/* SlotTime */
 
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set SlotTime = %d, port %d\n", kiss_msg[1], port);
+	  dw_printf ("KISS protocol set SlotTime = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
 	  xmit_set_slottime (port, kiss_msg[1]);
 	  break;
 
         case 4:				/* TXtail */
 
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set TXtail = %d, port %d\n", kiss_msg[1], port);
+	  dw_printf ("KISS protocol set TXtail = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
 	  xmit_set_txtail (port, kiss_msg[1]);
 	  break;
 

@@ -1,0 +1,64 @@
+.TH TEXT2TT 1
+
+.SH NAME
+text2tt \- Convert text to Touch Tone representation 
+
+
+.SH SYNOPSIS
+.B text2tt 
+.I text ... 
+.P
+
+
+.SH DESCRIPTION
+\fBtext2tt\fR  converts text to the Touch Tone sequence used by APRStt.  There are two types 
+of encoding:
+.RS
+.HP 
+.BR "Multi-Press"  " - Used for comments."
+.RS
+.P
+Letters are represented by one or more presses of the same key depending on their order listed on the button.  e.g.  Press 5 key once for J, twice for K, thrice for L.
+.P
+To specify a digit use the number of letters listed on the button plus one.  e.g.  Press 5 key four times to get digit 5.  When two characters in a row use the same key, use the "A" key as a separator.
+.RE
+.P
+.BR "Two-Key"  " - Used for callsigns."
+.RS
+.P
+Digits are represented by a single key press.
+.P
+Letters (or space) are represented by the corresponding key followed by A, B, C, or D depending on the order of the letter in the order listed.
+.RE
+.RE
+.P
+This application will convert using both methods.
+
+
+.SH OPTIONS
+.TP
+None.
+
+
+.SH EXAMPLES
+.P
+.B text2tt abcdefg 0123
+.P
+.PD 0
+.P
+Push buttons for multi-press method:
+.P
+"2A22A2223A33A33340A00122223333"
+.P
+Push buttons for two-key method:
+.P
+"2A2B2C3A3B3C4A0A0123"
+.PD
+.P
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

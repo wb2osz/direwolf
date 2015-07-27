@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -173,7 +173,7 @@ void log_init (char *path)
  *
  *------------------------------------------------------------------*/
 
-void log_write (int chan, decode_aprs_t *A, packet_t pp, int alevel, retry_t retries)
+void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_t retries)
 {
 	time_t now; 		// make 'now' a parameter so we can process historical data ???
 	char fname[20];
@@ -256,6 +256,8 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, int alevel, retry_t ret
 	  char sstatus[40];
 	  char stelemetry[200];
 	  char scomment[256];
+	  char alevel_text[32];
+
 
 
 	  // Microsoft doesn't recognize %T as equivalent to %H:%M:%S
@@ -286,6 +288,9 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, int alevel, retry_t ret
 	      strcat (heard, "?");
 	    }
 	  }
+
+	  ax25_alevel_to_text (alevel, alevel_text);
+
 
 	  // Might need to quote anything that could contain comma or quote.
 
@@ -319,13 +324,14 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, int alevel, retry_t ret
 	  strcpy (stone, "");  if (A->g_tone   != G_UNKNOWN) sprintf (stone, "%.1f", A->g_tone);
 	                       if (A->g_dcs    != G_UNKNOWN) sprintf (stone, "D%03o", A->g_dcs);
 
-	  fprintf (g_log_fp, "%d,%d,%s,%s,%s,%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", 
+	  fprintf (g_log_fp, "%d,%d,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", 
 			chan, (int)now, itime, 
-			A->g_src, heard, alevel, (int)retries, sdti,
+			A->g_src, heard, alevel_text, (int)retries, sdti,
 			sname, ssymbol,
 			slat, slon, sspd, scse, salt, 
 			sfreq, soffs, stone, 
 			smfr, sstatus, stelemetry, scomment);
+
 	  fflush (g_log_fp);
 	}
 

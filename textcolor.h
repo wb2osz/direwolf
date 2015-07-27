@@ -7,6 +7,10 @@
  *
  *--------------------------------------------------------------------*/
 
+
+#ifndef TEXTCOLOR_H
+#define TEXTCOLOR_H 1
+
 enum dw_color_e { 	DW_COLOR_INFO,		/* black */
 			DW_COLOR_ERROR,		/* red */
 			DW_COLOR_REC,		/* green */
@@ -51,3 +55,4 @@ int dw_printf (const char *fmt, ...)
 				__attribute__((format(printf,1,2)));		/* gnu C lib. */
 #endif
 
+#endif

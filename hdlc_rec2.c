@@ -1,6 +1,6 @@
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -43,6 +43,39 @@
  *		I took "swap" out of the user-visible messages but left the 
  *		rest of the source code as provided.
  *
+ * Test results:	We intentionally use the worst demodulator so there
+ *			is more opportunity to try to fix the frames.
+ *
+ *		atest -P A -F n 02_Track_2.wav
+ *
+ *		n   	description	frames	sec
+ *		--  	----------- 	------	---
+ *		0	no attempt	963	40	error-free frames
+ *		1	invert 1	979	41	16 more
+ *		2	invert 2	982	42	3 more
+ *		3	invert 3	982	42	no change
+ *		4	remove 1	982	43	no change
+ *		5	remove 2	982	43	no change
+ *		6	remove 3	982	43	no change
+ *		7	insert 1	982	45	no change
+ *		8	insert 2	982	47	no change
+ *		9	invert two sep	993	178	11 more, some visually obvious errors.
+ *		10	invert many?	993	190	no change
+ *		11	remove many	995	190	2 more, need to investigate in detail.		
+ *		12	remove two sep	995	201	no change
+ *
+ * Observations:	The "insert" and "remove" techniques had no benefit.  I would not expect them to.
+ *			We have a phase locked loop that attempts to track any slight variations in the 
+ *			timing so we sample near the middle of the bit interval.  Bits can get corrupted 
+ *			by noise but not disappear or just appear.  That would be a gap in the timing.	
+ *			These should probably be removed in a future version.
+ *
+ *	
+ * Version 1.2:	Now works for 9600 baud.
+ *		This was more complicated due to the data scrambling.
+ *		It was necessary to retain more initial state information after
+ *		the start flag octet.
+ *
  *******************************************************************************/
 
 #include <stdio.h>
@@ -59,9 +92,19 @@
 #include "rrbb.h"
 #include "rdq.h"
 #include "multi_modem.h"
+#include "dtime_now.h"
+#include "demod_9600.h"		/* for descramble() */
+#include "audio.h"		/* for struct audio_s */
+//#include "ax25_pad.h"		/* for AX25_MAX_ADDR_LEN */
+
+
 //#define DEBUG 1
 //#define DEBUGx 1
 //#define DEBUG_LATER 1
+
+/* Audio configuration. */
+
+static struct audio_s          *save_audio_config_p;
 
 
 /* 
@@ -87,6 +130,11 @@ struct hdlc_state_s {
 					/* we can look for transitions. */
 					/* Should be only 0 or 1. */
 
+	int is_scrambled;		/* Set for 9600 baud. */
+	int lfsr;			/* Descrambler shift register for 9600 baud. */
+	int prev_descram;		/* Previous unscrambled for 9600 baud. */
+
+
 	unsigned char pat_det; 		/* 8 bit pattern detector shift register. */
 					/* See below for more details. */
 
@@ -104,15 +152,49 @@ struct hdlc_state_s {
 
 };
 
-#define MAX_RETRY_SWAP_BITS 24		/* Maximum number of contiguous bits to swap */
+#define MAX_RETRY_SWAP_BITS 24			/* Maximum number of contiguous bits to swap */
 #define MAX_RETRY_REMOVE_SEPARATED_BITS 24	/* Maximum number of contiguous bits to remove */
 
-static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_conf_t retry_conf);
-static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel, retry_t fix_bits);
-static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped);
-#if DEBUG_LATER
-static double dtime_now (void);
-#endif
+static int try_decode (rrbb_t block, int chan, int subchan, alevel_t alevel, retry_conf_t retry_conf, int passall);
+static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, alevel_t alevel);
+static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped, enum sanity_e sanity_test);
+
+
+/***********************************************************************************
+ *
+ * Name:	hdlc_rec2_init
+ *
+ * Purpose:	Initialization.   
+ *
+ * Inputs:	p_audio_config	 - Pointer to configuration settings.
+ *				   This is what we care about for each channel.
+ *
+ *	   			enum retry_e fix_bits;	
+ *					Level of effort to recover from 
+ *					a bad FCS on the frame. 
+ *					0 = no effort 
+ *					1 = try fixing a single bit 
+ *					2... = more techniques... 
+ *
+ *	    			enum sanity_e sanity_test;
+ *					Sanity test to apply when finding a good 
+ *					CRC after changing one or more bits. 
+ *					Must look like APRS, AX.25, or anything. 
+ *
+ *	    			int passall;		
+ *					Allow thru even with bad CRC after exhausting
+ *					all fixup attempts.
+ *
+ * Description:	Save pointer to configuration for later use.
+ *
+ ***********************************************************************************/
+
+void hdlc_rec2_init (struct audio_s *p_audio_config)
+{
+	save_audio_config_p = p_audio_config;
+}
+
+
 
 /***********************************************************************************
  *
@@ -121,7 +203,6 @@ static double dtime_now (void);
  * Purpose:	Extract HDLC frame from a stream of bits.
  *
  * Inputs:	block 		- Handle for bit array.
- *		fix_bits	- Level of effort to recover frames with bad FCS.
  *
  * Description:	The other (original) hdlc decoder took one bit at a time
  *		right out of the demodulator.
@@ -132,21 +213,18 @@ static double dtime_now (void);
  *		This allows us to try decoding the same received data more
  *		than once.
  *
- * Bugs:	This does not work for 9600 baud, more accurately when
- *		the transmitted bits are scrambled.
- *
- *		Currently we unscramble the bits as they come from the 
- *		receiver.  Instead we need to save the original received
- *		bits and apply the descrambling after flipping the bits.
+ * Version 1.2:	Now works properly for G3RUH type scrambling.
  *
  ***********************************************************************************/
 
 
-void hdlc_rec2_block (rrbb_t block, retry_t fix_bits)
+void hdlc_rec2_block (rrbb_t block)
 {
 	int chan = rrbb_get_chan(block);
 	int subchan = rrbb_get_subchan(block);
-	int alevel = rrbb_get_audio_level(block);
+	alevel_t alevel = rrbb_get_audio_level(block);
+	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
+	int passall = save_audio_config_p->achan[chan].passall;
 	int ok;
 	int n;
 
@@ -155,38 +233,14 @@ void hdlc_rec2_block (rrbb_t block, retry_t fix_bits)
 	dw_printf ("\n--- try to decode ---\n");
 #endif
 
-#if SLICENDICE
-/*
- * Unfinished experiment.  Get back to this again someday.
- * The demodulator output is (should be) roughly in the range of -1 to 1.
- * Formerly we sliced it at 0 and saved only a single bit for the sample.
- * Now we save the sample so we can try adjusting the slicing point.
- *
- * First time thru, set the slicing point to 0.
- */
-
-	for (n = 0; n < 1 ; n++) {
-
-	  rrbb_set_slice_val (block, n);
-
-	  ok = try_decode (block, chan, subchan, alevel, RETRY_NONE, -1, -1, -1);
-
-	  if (ok) {
-//#if DEBUG
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Got it with no errors. Slice val = %d \n", n);
-//#endif
-	    rrbb_delete (block);
-	    return;
-	  }
-	}
-	rrbb_set_slice_val (block, 0);
-
-#else /* not SLICENDICE */
 	/* Create an empty retry configuration */
 	retry_conf_t retry_cfg;
 
-	/* By default we don't try to alter any bits */
+/* 
+ * For our first attempt we don't try to alter any bits.
+ * Still let it thru if passall AND no retries are desired.
+ */
+
 	retry_cfg.type = RETRY_TYPE_NONE;
 	retry_cfg.mode = RETRY_MODE_CONTIGUOUS;
 	retry_cfg.retry = RETRY_NONE;
@@ -195,7 +249,7 @@ void hdlc_rec2_block (rrbb_t block, retry_t fix_bits)
 	/* Prepare the decoded bits in an array for faster processing 
 	 *(at cost of memory but 1 or 2 kbytes is nothing compared to processing time ) */
 	rrbb_compute_bits(block);
-	ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	ok = try_decode (block, chan, subchan, alevel, retry_cfg, passall & (fix_bits == RETRY_NONE));
 
 	if (ok) {
 #if DEBUG
@@ -205,31 +259,80 @@ void hdlc_rec2_block (rrbb_t block, retry_t fix_bits)
 	 rrbb_delete (block);
 	 return;
 	}
-#endif
-	
-	if (try_to_fix_quick_now (block, chan, subchan, alevel, fix_bits)) {
+
+/*
+ * Not successful with frame in orginal form.
+ * Try the quick techniques with time proportional to the frame length.
+ */	
+	if (try_to_fix_quick_now (block, chan, subchan, alevel)) {
 	  rrbb_delete (block);
 	  return;
 	}
 
 /*
- * Put in queue for retrying later at lower priority.
+ * Not successful with the quick fix up attempts.
+ * Do we want to try the more aggressive techniques where processing
+ * time is proportional to the square of length?
+ * Rather than doing it now, we throw it in a queue for processing
+ * by a different thread.
  */
 
-	if (fix_bits < RETRY_SWAP_TWO_SEP) {
+	if (fix_bits >= RETRY_SWAP_TWO_SEP) {
+	  rdq_append (block);
+	}
+	else if (passall) {
+	  /* Exhausted all desired fix up attempts. */
+	  /* Let thru even with bad CRC.  Of course, it still */
+	  /* needs to be a minimum number of whole octets. */
+	  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 1);
+	  rrbb_delete (block);
+	}
+	else {  
 	  rrbb_delete (block); 
-	  return;
 	}
 
-	rdq_append (block);
-
-}
+} /* end hdlc_rec2_block */
 
 
-static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel, retry_t fix_bits)
+/***********************************************************************************
+ *
+ * Name:	try_to_fix_quick_now
+ *
+ * Purpose:	Attempt some quick fixups that don't take very long.
+ *
+ * Inputs:	block	- Stream of bits that might be a frame.
+ *		chan	- Radio channel from which it was received.
+ *		subchan	- Which demodulator when more than one per channel.
+ *		alevel	- Audio level for later reporting.
+ *
+ * Global In:	configuration fix_bits - Maximum level of fix up to attempt.
+ *
+ *				RETRY_NONE (0)	- Don't try any.
+ *				RETRY_SWAP_SINGLE (1)  - Try inverting single bits.
+ *				etc.
+ *
+ *		configuration passall - Let it thru with bad CRC after exhausting
+ *				all fixup attempts.
+ *
+ *
+ * Returns:	1 for success.  "try_decode" has passed the result along to the 
+ *				processing step.
+ *		0 for failure.  Caller might continue with more aggressive attempts.
+ *
+ * Description:	Some of the attempted fix up techniques are quick.
+ *		We will attempt them immediately after receiving the frame.
+ *		Others, that take time order N**2, will be done in a later section.
+ *
+ * Version 1.2:	Now works properly for G3RUH type scrambling.
+ *
+ ***********************************************************************************/
+
+static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, alevel_t alevel)
 {
 	int ok;
 	int len, i,j;
+	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
+	int passall = save_audio_config_p->achan[chan].passall;
 
 
 	len = rrbb_get_len(block);
@@ -241,7 +344,10 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
  * Try fixing one bit.   
  */
 	if (fix_bits < RETRY_SWAP_SINGLE) {
-	  return 0;
+
+	  /* Stop before single bit fix up. */
+
+	  return 0;	/* failure. */
 	}
 	/* Try to swap one bit */
 	retry_cfg.type = RETRY_TYPE_SWAP;
@@ -251,7 +357,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 	for (i=0; i<len; i++) {
 	  /* Set the index of the bit to swap */
 	  retry_cfg.u_bits.contig.bit_idx = i;
-	  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	  if (ok) {
 #if DEBUG
 	    text_color_set(DW_COLOR_ERROR);
@@ -274,7 +380,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 
 	for (i=0; i<len-1; i++) {
 	  retry_cfg.u_bits.contig.bit_idx = i;
-	  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	  if (ok) {
 #if DEBUG
 	    text_color_set(DW_COLOR_ERROR);
@@ -296,7 +402,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 
 	for (i=0; i<len-2; i++) {
 	  retry_cfg.u_bits.contig.bit_idx = i;
-	  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	  if (ok) {
 #if DEBUG
 	    text_color_set(DW_COLOR_ERROR);
@@ -319,7 +425,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 
 		for (i=0; i<len; i++) {
 		  retry_cfg.u_bits.contig.bit_idx = i;
-		  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+		  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 		  if (ok) {
 #if DEBUG
 		    text_color_set(DW_COLOR_ERROR);
@@ -345,7 +451,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 
 		for (i=0; i<len-1; i++) {
 	  	  retry_cfg.u_bits.contig.bit_idx = i;
-		  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+		  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 		  if (ok) {
 #if DEBUG
 		    text_color_set(DW_COLOR_ERROR);
@@ -370,7 +476,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 
 		for (i=0; i<len-2; i++) {
 	  	  retry_cfg.u_bits.contig.bit_idx = i;
-		  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+		  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 		  if (ok) {
 #if DEBUG
 		    text_color_set(DW_COLOR_ERROR);
@@ -398,10 +504,10 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 		for (i=0; i<len; i++) {
 	  	  retry_cfg.u_bits.contig.bit_idx = i;
 		  retry_cfg.insert_value=0;
-		  ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+		  ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 		  if (!ok) {
 		    retry_cfg.insert_value=1;
-		    ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+		    ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 		  }
 		  if (ok) {
 #if DEBUG
@@ -430,7 +536,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 	  	  retry_cfg.u_bits.contig.bit_idx = i;
 		  for (j=0;j<4;j++) {
 		    retry_cfg.insert_value=j;
-		    ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+		    ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 
 		    if (ok) {
 #if DEBUG
@@ -444,20 +550,53 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int alevel
 	return 0;
 }
 
-void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel)
+
+/***********************************************************************************
+ *
+ * Name:	hdlc_rec2_try_to_fix_later
+ *
+ * Purpose:	Attempt some more time-consuming techniques.
+ *		Rather than trying these immediately, the information is
+ *		put into a queue and processed by another thread.
+ *
+ * Inputs:	block	- Stream of bits that might be a frame.
+ *		chan	- Radio channel from which it was received.
+ *		subchan	- Which demodulator when more than one per channel.
+ *		alevel	- Audio level for later reporting.
+ *
+ * Global In:	configuration fix_bits - Maximum level of fix up to attempt.
+ *
+ *				RETRY_NONE (0)	- Don't try any.
+ *				RETRY_SWAP_SINGLE (1)  - Try inverting single bits.
+ *				etc.
+ *
+ *		configuration passall - Let it thru with bad CRC after exhausting
+ *				all fixup attempts.
+ *
+ *
+ * Returns:	1 for success.  "try_decode" has passed the result along to the 
+ *				processing step.
+ *		0 for failure.  Caller might try again if "passall" option specified.
+ *
+ ***********************************************************************************/
+
+
+int hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, alevel_t alevel)
 {
 	int ok;
 	int len, i, j;
-	retry_t fix_bits;
+	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
+	int passall = save_audio_config_p->achan[chan].passall;
 #if DEBUG_LATER
 	double tstart, tend;
 #endif
 	retry_conf_t retry_cfg;
 	len = rrbb_get_len(block);
-	fix_bits = rrbb_get_fix_bits (block);
+
+	
 
 	if (fix_bits < RETRY_SWAP_TWO_SEP) {
-	  return ;
+	  goto failure;  
 	}
 
 
@@ -485,7 +624,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 	  ok = 0;
 	  for (j=i+2; j<len; j++) {
 	    retry_cfg.u_bits.sep.bit_idx_b = j;
-	    ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	    ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	    if (ok) {
 	      break;
 	    }
@@ -496,7 +635,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("*** Success by flipping TWO SEPARATED bits %d and %d of %d \n", i, j, len);
 #endif
-	    return;
+	    return (1);
 	  }
 	}
 #if DEBUG_LATER
@@ -506,7 +645,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 #endif
 
 	if (fix_bits < RETRY_SWAP_MANY) {
-	  return ;
+	  goto failure;
 	}
 	/* Try to swap many contiguous bits */
 	retry_cfg.mode = RETRY_MODE_CONTIGUOUS; 
@@ -523,13 +662,13 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 	    retry_cfg.u_bits.contig.bit_idx = i;
 	    retry_cfg.u_bits.contig.nr_bits = j;
 //	    dw_printf ("*** Trying swapping %d bits starting at %d of %d ***\n", j,i, len);
-	    ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	    ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	    if (ok) {
 #if DEBUG
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("*** Success by swapping %d bits starting at %d of %d ***\n", j,i, len);
 #endif
-	      return ;
+	      return (1);
 	    }
 	  }
 	}
@@ -540,7 +679,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 #endif
 
 	if (fix_bits < RETRY_REMOVE_MANY) {
-	  return ;
+	  goto failure;
 	}
 
 
@@ -561,13 +700,13 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 #ifdef DEBUG
 	    dw_printf ("*** Trying removing %d bits starting at %d of %d ***\n", j,i, len);
 #endif
-	    ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	    ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	    if (ok) {
 #if DEBUG
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("*** Success by removing %d bits starting at %d of %d ***\n", j,i, len);
 #endif
-	      return ;
+	      return (1);
 	    }
 	  }
 	}
@@ -578,7 +717,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 #endif
 
 	if (fix_bits < RETRY_REMOVE_TWO_SEP) {
-	  return ;
+	  goto failure;
 	}
 
 /*
@@ -600,7 +739,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 	  ok = 0;
 	  for (j=i+2; j<len && j - i < MAX_RETRY_REMOVE_SEPARATED_BITS; j++) {
 	    retry_cfg.u_bits.sep.bit_idx_b = j;
-	    ok = try_decode (block, chan, subchan, alevel, retry_cfg);
+	    ok = try_decode (block, chan, subchan, alevel, retry_cfg, 0);
 	    if (ok) {
 	      break;
 	    }
@@ -611,7 +750,7 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("*** Success by removing TWO SEPARATED bits %d and %d of %d \n", i, j, len);
 #endif
-	    return;
+	    return (1);
 	  }
 	}
 #if DEBUG_LATER
@@ -619,10 +758,36 @@ void hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int alevel
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("*** No luck removing TWO SEPARATED bits of %d *** %.3f sec.\n", len, tend-tstart);
 #endif
-	return;
-}
-/* Check if the specified index of bit has been modified with the current type of configuration
- * Provide a specific implementation for contiguous mode to optimize number of tests done in the loop */
+
+failure:
+
+/*
+ * All fix up attempts have failed.  
+ * Should we pass it along anyhow with a bad CRC?
+ * Note that we still need a minimum number of whole octets.
+ */
+	if (passall) {
+
+	  retry_cfg.type = RETRY_TYPE_NONE;
+	  retry_cfg.mode = RETRY_MODE_CONTIGUOUS;
+	   retry_cfg.retry = RETRY_NONE;
+	  retry_cfg.u_bits.contig.nr_bits = 0;
+	  retry_cfg.u_bits.contig.bit_idx = 0;
+	
+	  ok = try_decode (block, chan, subchan, alevel, retry_cfg, passall);
+	  return (ok);
+	}
+
+	return (0);
+
+}  /* end hdlc_rec2_try_to_fix_later */
+
+
+/* 
+ * Check if the specified index of bit has been modified with the current type of configuration
+ * Provide a specific implementation for contiguous mode to optimize number of tests done in the loop 
+ */
+
 inline static char is_contig_bit_modified(int bit_idx, retry_conf_t retry_conf) {
 	  int cont_bit_idx = retry_conf.u_bits.contig.bit_idx;
 	  int cont_nr_bits = retry_conf.u_bits.contig.nr_bits;
@@ -632,8 +797,12 @@ inline static char is_contig_bit_modified(int bit_idx, retry_conf_t retry_conf) 
 	  else 
 		return 0;
 }
-/* Check  if the specified index of bit has been modified with the current type of configuration in separated bit index mode
- * Provide a specific implementation for separated mode to optimize number of tests done in the loop */
+
+/* 
+ * Check  if the specified index of bit has been modified with the current type of configuration in separated bit index mode
+ * Provide a specific implementation for separated mode to optimize number of tests done in the loop 
+ */
+
 inline static char is_sep_bit_modified(int bit_idx, retry_conf_t retry_conf) {
 	  if (bit_idx == retry_conf.u_bits.sep.bit_idx_a || 
 	      bit_idx == retry_conf.u_bits.sep.bit_idx_b ||
@@ -643,13 +812,70 @@ inline static char is_sep_bit_modified(int bit_idx, retry_conf_t retry_conf) {
 	    return 0;
 }
 
-/* Get the bit value from a precalculated array to optimize access time in the loop */
+/* 
+ * Get the bit value from a precalculated array to optimize access time in the loop 
+ */
+
 inline static unsigned int get_bit (const rrbb_t b,const unsigned int ind)
 {
 	return b->computed_data[ind];
 }
 
-static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_conf_t retry_conf)
+/***********************************************************************************
+ *
+ * Name:	try_decode
+ *
+ * Purpose:	   
+ *
+ * Inputs:	block		- Bit string that was collected between "flag" patterns.
+ *
+ *		chan, subchan	- where it came from.
+ *
+ *		alevel		- audio level for later reporting.
+ *
+ *		retry_conf	- Controls changes that will be attempted to get a good CRC.
+ *
+ *	   			retry:	
+ *					Level of effort to recover from A bad FCS on the frame. 
+ *				                RETRY_NONE=0,
+ *				                RETRY_SWAP_SINGLE=1,
+ *				                RETRY_SWAP_DOUBLE=2,
+ *		                                RETRY_SWAP_TRIPLE=3,
+ *		                                RETRY_REMOVE_SINGLE=4,
+ *		                                RETRY_REMOVE_DOUBLE=5,
+ *		                                RETRY_REMOVE_TRIPLE=6,
+ *		                                RETRY_INSERT_SINGLE=7,
+ *		                                RETRY_INSERT_DOUBLE=8,
+ *		                                RETRY_SWAP_TWO_SEP=9,
+ *		                                RETRY_SWAP_MANY=10,
+ *		                                RETRY_REMOVE_MANY=11,
+ *		                                RETRY_REMOVE_TWO_SEP=12,
+ *
+ *	    			mode:	RETRY_MODE_CONTIGUOUS - change adjacent bits.
+ *						contig.bit_idx - first bit position
+ *						contig.nr_bits - number of bits
+ *
+ *				        RETRY_MODE_SEPARATED  - change bits not next to each other.
+ *						sep.bit_idx_a - bit positions
+ *						sep.bit_idx_b - bit positions
+ *						sep.bit_idx_c - bit positions
+ *
+ *				type:	RETRY_TYPE_NONE	- Make no changes.
+ *					RETRY_TYPE_SWAP - Try inverting.
+ *					RETRY_TYPE_REMOVE - Try removing.
+ *					RETRY_TYPE_INSERT - Try inserting.
+ *					
+ *		passall		- All it thru even with bad CRC.
+ *				  Valid only when no changes make.  i.e.
+ *					retry == RETRY_NONE, type == RETRY_TYPE_NONE
+ *
+ * Returns:	1 = successfully extracted something.
+ *		0 = failure.
+ *
+ ***********************************************************************************/
+
+
+static int try_decode (rrbb_t block, int chan, int subchan, alevel_t alevel, retry_conf_t retry_conf, int passall)
 {
 	struct hdlc_state_s H;	
 	int blen;			/* Block length in bits. */
@@ -661,6 +887,9 @@ static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_co
 	int retry_conf_retry = retry_conf.retry;
 
 
+	H.is_scrambled = rrbb_get_is_scrambled (block);
+	H.prev_descram = rrbb_get_prev_descram (block);
+	H.lfsr = rrbb_get_descram_state (block);
 	H.prev_raw = get_bit (block, 0);	  /* Actually last bit of the */
 					/* opening flag so we can derive the */
 					/* first data bit.  */
@@ -669,8 +898,9 @@ static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_co
 	/* This is the last bit of the "flag" pattern. */
 	/* If it was corrupted we wouldn't have detected */
 	/* the start of frame. */
-	if (retry_conf.mode == RETRY_MODE_CONTIGUOUS && is_contig_bit_modified(0, retry_conf) ||
-	    retry_conf.mode == RETRY_MODE_SEPARATED && is_sep_bit_modified(0, retry_conf)) {
+
+	if ((retry_conf.mode == RETRY_MODE_CONTIGUOUS && is_contig_bit_modified(0, retry_conf)) ||
+	    (retry_conf.mode == RETRY_MODE_SEPARATED && is_sep_bit_modified(0, retry_conf))) {
 	  H.prev_raw = ! H.prev_raw;
 	}
 
@@ -747,7 +977,26 @@ static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_co
  *   A '1' bit is represented by no change.
  *   Note: this code can be factorized with the raw != H.prev_raw code at the cost of processing time 
  */
-	    if (raw == H.prev_raw) {
+
+	    int dbit ;
+
+	    if (H.is_scrambled) {
+	      int descram;
+
+	      descram = descramble(raw, &(H.lfsr));
+
+	      dbit = (descram == H.prev_descram);
+	      H.prev_descram = descram;
+	      H.prev_raw = raw;
+	    }
+	    else {
+
+	      dbit = (raw == H.prev_raw);
+	      H.prev_raw = raw;
+	    }
+
+	    if (dbit) {
+
 	      H.pat_det |= 0x80;
 	      /* Valid data will never have 7 one bits in a row: exit. */
 	      if (H.pat_det == 0xfe) {
@@ -760,7 +1009,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_co
 	      H.oacc >>= 1;
 	      H.oacc |= 0x80;
 	    } else {
-	      H.prev_raw = raw;
+	      
 	      /* The special pattern 01111110 indicates beginning and ending of a frame: exit. */
 	      if (H.pat_det == 0x7e) {
 #if DEBUGx
@@ -838,19 +1087,33 @@ static int try_decode (rrbb_t block, int chan, int subchan, int alevel, retry_co
 
 	  expected_fcs = fcs_calc (H.frame_buf, H.frame_len - 2);
 
-	  if (actual_fcs == expected_fcs && sanity_check (H.frame_buf, H.frame_len - 2, retry_conf.retry)) {
+	  if (actual_fcs == expected_fcs && 
+			sanity_check (H.frame_buf, H.frame_len - 2, retry_conf.retry, save_audio_config_p->achan[chan].sanity_test)) {
 
-	
 	      // TODO: Shouldn't be necessary to pass chan, subchan, alevel into
 	      // try_decode because we can obtain them from block.
 	      // Let's make sure that assumption is good...
 
 	      assert (rrbb_get_chan(block) == chan);
 	      assert (rrbb_get_subchan(block) == subchan);
-	      assert (rrbb_get_audio_level(block) == alevel);
 
 	      multi_modem_process_rec_frame (chan, subchan, H.frame_buf, H.frame_len - 2, alevel, retry_conf.retry);   /* len-2 to remove FCS. */
 	      return 1;		/* success */
+
+	  } else if (passall) {
+	    if (retry_conf_retry == RETRY_NONE && retry_conf_type == RETRY_TYPE_NONE) {
+
+	      //text_color_set(DW_COLOR_ERROR);
+	      //dw_printf ("ATTEMPTING PASSALL PROCESSING\n");
+  
+	      multi_modem_process_rec_frame (chan, subchan, H.frame_buf, H.frame_len - 2, alevel, RETRY_MAX);   /* len-2 to remove FCS. */
+	      return 1;		/* success */
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("try_decode: internal error passall = %d, retry_conf_retry = %d, retry_conf_type = %d\n", 
+				passall, retry_conf_retry, retry_conf_type);
+	    }
 	  } else {
 
               goto failure;
@@ -895,11 +1158,37 @@ end:
 } /* end try_decode */
 
 
-/*
- * Try to weed out bogus packets from initially failed FCS matches.
- */
 
-static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped)
+/***********************************************************************************
+ *
+ * Name:	sanity_check
+ *
+ * Purpose:	Try to weed out bogus packets from initially failed FCS matches.
+ *
+ * Inputs:	buf
+ *
+ *		blen
+ *
+ *		bits_flipped
+ *
+ *		sanity		How much sanity checking to perform:
+ *					SANITY_APRS - Looks like APRS.  See User Guide,
+ *						section that discusses bad apples.
+ *					SANITY_AX25 - Has valid AX.25 address part.
+ *						No checking of the rest.  Useful for 
+ *						connected mode packet.
+ *					SANITY_NONE - No checking.  Would be suitable
+ *						only if using frames that don't conform
+ *						to AX.25 standard.
+ *
+ * Returns:	1 if it passes the sanity test.
+ *
+ * Description:	
+ *
+ ***********************************************************************************/
+
+
+static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped, enum sanity_e sanity_test)
 {
 	int alen;		/* Length of address part. */
 	int j;
@@ -913,10 +1202,14 @@ static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped)
 	  return 1;
 	}
 
-#if DEBUGx
-	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("sanity_check: address part length = %d\n", alen);
-#endif
+
+/*
+ * If using frames that do not conform to AX.25, it might be
+ * desirable to skip the sanity check entirely.
+ */
+	if (sanity_test == SANITY_NONE) {
+	  return (1);
+	}
 
 /*
  * Address part must be a multiple of 7. 
@@ -932,7 +1225,7 @@ static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped)
 	if (alen % 7 != 0) {
 #if DEBUGx
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("sanity_check: FAILED.  Address part not multiple of 7.\n");
+	  dw_printf ("sanity_check: FAILED.  Address part length %d not multiple of 7.\n", alen);
 #endif
 	  return 0;
 	}
@@ -980,14 +1273,22 @@ static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped)
 	  }
 	}
 
+
+/*
+ * That's good enough for the AX.25 sanity check.
+ * Continue below for additional APRS checking.
+ */
+	if (sanity_test == SANITY_AX25) {
+	  return (1);
+	}
+
 /*
  * The next two bytes should be 0x03 and 0xf0 for APRS.
- * Checking that would mean precluding use for other types of packet operation.
- *
- * The next section is also assumes APRS and might discard good data
- * for other protocols.   
  */
 
+	if (buf[alen] != 0x03 || buf[alen+1] != 0xf0) {
+	  return (0);
+	}
 
 /*
  * Finally, look for bogus characters in the information part.
@@ -1024,6 +1325,7 @@ static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped)
 			|| ch == 0x0d
 			|| ch == 0x80
 			|| ch == 0x9f
+			|| ch == 0xc2
 			|| ch == 0xb0
 			|| ch == 0xf8) ) {
 #if DEBUGx
@@ -1040,38 +1342,4 @@ static int sanity_check (unsigned char *buf, int blen, retry_t bits_flipped)
 
 /* end hdlc_rec2.c */
 
-
-
-
-// TODO:  Also in xmit.c.  Move to some common location.
-
-
-/* Current time in seconds but more resolution than time(). */
-
-/* We don't care what date a 0 value represents because we */
-/* only use this to calculate elapsed time. */
-
-
-
-static double dtime_now (void)
-{
-#if __WIN32__
-	/* 64 bit integer is number of 100 nanosecond intervals from Jan 1, 1601. */
-
-	FILETIME ft;
-	
-	GetSystemTimeAsFileTime (&ft);
-
-	return ((( (double)ft.dwHighDateTime * (256. * 256. * 256. * 256.) + 
-			(double)ft.dwLowDateTime ) / 10000000.) - 11644473600.);
-#else
-	/* tv_sec is seconds from Jan 1, 1970. */
-
-	struct timespec ts;
-
-	clock_gettime (CLOCK_REALTIME, &ts);
-
-	return (ts.tv_sec + ts.tv_nsec / 1000000000.);
-#endif
-}
 

@@ -4,11 +4,6 @@
 #define RRBB_H
 
 
-/* Try something new in version 1.0 */
-/* Get back to this later.  Disable for now. */
-
-//#define SLICENDICE 1
-
 typedef short slice_t;
 
 
@@ -35,22 +30,16 @@ typedef struct rrbb_s {
 	struct rrbb_s* nextp;	/* Next pointer to maintain a queue. */
 	int chan;		/* Radio channel from which it was received. */
 	int subchan;		/* Which modem when more than one per channel. */
-	int audio_level;	/* Received audio level at time of frame capture. */
+	alevel_t alevel;	/* Received audio level at time of frame capture. */
 	unsigned int len;	/* Current number of samples in array. */
-	int fix_bits;		/* Level of effort to recover from */
-				/* a bad FCS on the frame. */
-
 
 	int is_scrambled;	/* Is data scrambled G3RUH / K9NG style? */
 	int descram_state;	/* Descrambler state before first data bit of frame. */
+	int prev_descram;	/* Previous descrambled bit. */
 
-#if SLICENDICE
-	slice_t slice_val;
-	slice_t data[MAX_NUM_BITS];
-#else
 	unsigned int data[(MAX_NUM_BITS+SOI-1)/SOI];
 	unsigned int computed_data[MAX_NUM_BITS];
-#endif
+
 	int magic2;
 } *rrbb_t;
 
@@ -64,23 +53,17 @@ typedef void *rrbb_t;
 
 
 
-rrbb_t rrbb_new (int chan, int subchan, int is_scrambled, int descram_state);
+rrbb_t rrbb_new (int chan, int subchan, int is_scrambled, int descram_state, int prev_descram);
 
-void rrbb_clear (rrbb_t b, int is_scrambled, int descram_state);
+void rrbb_clear (rrbb_t b, int is_scrambled, int descram_state, int prev_descram);
 
-#if SLICENDICE
-void rrbb2_append_bit (rrbb_t b, float val);
-#else
+
 void rrbb_append_bit (rrbb_t b, int val);
-#endif
+
 
 void rrbb_chop8 (rrbb_t b);
 
 int rrbb_get_len (rrbb_t b);
-
-#if SLICENDICE
-void rrbb_set_slice_val (rrbb_t b, slice_t slice_val);
-#endif
 
 int rrbb_get_bit (rrbb_t b, unsigned int ind);
 unsigned int rrbb_get_computed_bit (rrbb_t b, unsigned int ind);
@@ -91,21 +74,17 @@ int rrbb_compute_bits (rrbb_t b);
 void rrbb_delete (rrbb_t b);
 
 void rrbb_set_nextp (rrbb_t b, rrbb_t np);
-
 rrbb_t rrbb_get_nextp (rrbb_t b);
 
 int rrbb_get_chan (rrbb_t b);
 int rrbb_get_subchan (rrbb_t b);
 
-void rrbb_set_audio_level (rrbb_t b, int a);
-
-int rrbb_get_audio_level (rrbb_t b);
+void rrbb_set_audio_level (rrbb_t b, alevel_t alevel);
+alevel_t rrbb_get_audio_level (rrbb_t b);
 
 int rrbb_get_is_scrambled (rrbb_t b);
-
 int rrbb_get_descram_state (rrbb_t b);
+int rrbb_get_prev_descram (rrbb_t b);
 
-int rrbb_get_fix_bits(rrbb_t b);
-void rrbb_set_fix_bits(rrbb_t b, int fix_bits);
 
 #endif

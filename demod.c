@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -65,7 +65,8 @@
 
 // Properties of the radio channels.
 
-static struct audio_s modem;
+static struct audio_s          *save_audio_config_p;
+
 
 // Current state of all the decoders.
 
@@ -84,7 +85,7 @@ static int sample_count[MAX_CHANS][MAX_SUBCHANS];
  *
  * Purpose:     Initialize the demodulator(s) used for reception.
  *
- * Inputs:      pa		- Pointer to modem_s structure with
+ * Inputs:      pa		- Pointer to audio_s structure with
  *				  various parameters for the modem(s).
  *
  * Returns:     0 for success, -1 for failure.
@@ -99,172 +100,447 @@ int demod_init (struct audio_s *pa)
 {
 	int j;
 	int chan;		/* Loop index over number of radio channels. */
-	int subchan;		/* for each modem for channel. */
 	char profile;
-	//float fc;
-
-	struct demodulator_state_s *D;
+	
 
 
 /*
- * Save parameters for later use.
+ * Save audio configuration for later use.
  */
-	memcpy (&modem, pa, sizeof(modem));
 
-	for (chan = 0; chan < modem.num_channels; chan++) {
+	save_audio_config_p = pa;
 
-	  assert (chan >= 0 && chan < MAX_CHANS);
+	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	  switch (modem.modem_type[chan]) {
+	 if (save_audio_config_p->achan[chan].valid) {
 
-	    case AFSK:
+	  char *p;
+	  char just_letters[16];
+	  int num_letters;
+	  int have_plus;
+
+	  switch (save_audio_config_p->achan[chan].modem_type) {
+
+	    case MODEM_OFF:
+	      break;
+
+	    case MODEM_AFSK:
+
+/*
+ * Tear apart the profile and put it back together in a normalized form:
+ *	- At least one letter, supply suitable default if necessary.
+ *	- Upper case only.
+ *	- Any plus will be at the end.
+ */
+	      num_letters = 0;
+	      just_letters[num_letters] = '\0';
+	      have_plus = 0;
+	      for (p = save_audio_config_p->achan[chan].profiles; *p != '\0'; p++) {
+
+	        if (islower(*p)) {
+	          just_letters[num_letters] = toupper(*p);
+	          num_letters++;
+	          just_letters[num_letters] = '\0';
+	        }
+
+	        else if (isupper(*p)) {
+	          just_letters[num_letters] = *p;
+	          num_letters++;
+	          just_letters[num_letters] = '\0';
+	        }
+
+	        else if (*p == '+') {
+	          have_plus = 1;
+	          if (p[1] != '\0') {
+		    text_color_set(DW_COLOR_ERROR);
+		    dw_printf ("Channel %d: + option must appear at end of demodulator types \"%s\" \n", 
+					chan, save_audio_config_p->achan[chan].profiles);
+		  }	    
+	        }
+
+	        else if (*p == '-') {
+	          have_plus = -1;
+	          if (p[1] != '\0') {
+		    text_color_set(DW_COLOR_ERROR);
+		    dw_printf ("Channel %d: - option must appear at end of demodulator types \"%s\" \n", 
+					chan, save_audio_config_p->achan[chan].profiles);
+		  }	
+    
+	        } else {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Channel %d: Demodulator types \"%s\" can contain only letters and + - characters.\n", 
+					chan, save_audio_config_p->achan[chan].profiles);
+	        }
+	      }
+
+	      assert (num_letters == strlen(just_letters));
+
 /*
  * Pick a good default demodulator if none specified. 
  */
-	      if (strlen(modem.profiles[chan]) == 0) {
+	      if (num_letters == 0) {
 
-	        if (modem.baud[chan] < 600) {
+	        if (save_audio_config_p->achan[chan].baud < 600) {
 
 	          /* This has been optimized for 300 baud. */
 
-	          strcpy (modem.profiles[chan], "D");
-		  if (modem.samples_per_sec > 40000) {
-		    modem.decimate[chan] = 3;
-		  }
+	          strcpy (just_letters, "D");
+
 	        }
 	        else {
 #if __arm__
 	          /* We probably don't have a lot of CPU power available. */
+	          /* Previously we would use F if possible otherwise fall back to A. */
+#if 0
+	          if (save_audio_config_p->achan[chan].baud == FFF_BAUD &&
+		      save_audio_config_p->achan[chan].mark_freq == FFF_MARK_FREQ && 
+		      save_audio_config_p->achan[chan].space_freq == FFF_SPACE_FREQ &&
+		      save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec == FFF_SAMPLES_PER_SEC) {
 
-	          if (modem.baud[chan] == FFF_BAUD &&
-		      modem.mark_freq[chan] == FFF_MARK_FREQ && 
-		      modem.space_freq[chan] == FFF_SPACE_FREQ &&
-		      modem.samples_per_sec == FFF_SAMPLES_PER_SEC) {
-
-	            modem.profiles[chan][0] = FFF_PROFILE;
-	            modem.profiles[chan][1] = '\0';
+	            just_letters[0] = FFF_PROFILE;
+	            just_letters[1] = '\0';
 	          }
 	          else {
-	            strcpy (modem.profiles[chan], "A");
+	            strcpy (just_letters, "A");
 	          }
 #else
-	          strcpy (modem.profiles[chan], "C");
+	          /* In version 1.2, new default is E+ /3. */
+	          strcpy (just_letters, "E");			// version 1.2 now E.
+	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
+								// If not explicitly turned off.
+	          if (save_audio_config_p->achan[chan].decimate == 0) {
+	            save_audio_config_p->achan[chan].decimate = 3;
+	          }
+#endif
+
+#else
+	          strcpy (just_letters, "E");			// version 1.2 changed C to E.
+	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
+								// If not explicitly turned off.
 #endif
 	        }
+	        num_letters = 1;
 	      }
 
-	      if (modem.decimate[chan] == 0) modem.decimate[chan] = 1;
+	      assert (num_letters == strlen(just_letters));
+
+/*
+ * Put it back together again.
+ */
+
+		/* At this point, have_plus can have 3 values: */
+		/* 	1 = turned on, either explicitly or by applied default */
+		/*	-1 = explicitly turned off.  change to 0 here so it is false. */
+		/* 	0 = off by default. */
+
+	      if (have_plus == -1) have_plus = 0;
+
+	      strcpy (save_audio_config_p->achan[chan].profiles, just_letters);
+	      
+	      assert (strlen(save_audio_config_p->achan[chan].profiles) >= 1);
+
+	      if (have_plus) {
+	        strcat (save_audio_config_p->achan[chan].profiles, "+");
+	      }
+
+	      /* These can be increased later for the multi-frequency case. */
+
+	      save_audio_config_p->achan[chan].num_subchan = num_letters;
+	      save_audio_config_p->achan[chan].num_demod = num_letters;		
+	   
+
+/*
+ * Some error checking - Can use only one of these:
+ *
+ *	- Multiple letters.
+ *	- New + multi-slicer.
+ *	- Multiple frequencies.
+ */
+
+	      if (have_plus && num_letters > 1) {
+
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Channel %d: Demodulator + option can't be combined with multiple letters.\n", chan);
+
+	          strcpy (save_audio_config_p->achan[chan].profiles, "C+");	// Reduce to one letter.
+		  num_letters = 1;
+	          save_audio_config_p->achan[chan].num_demod = 1;
+	          save_audio_config_p->achan[chan].num_subchan = 1;	// Will be set higher later.
+	          save_audio_config_p->achan[chan].num_freq = 1;
+	      }
+
+	      if (have_plus && save_audio_config_p->achan[chan].num_freq > 1) {
+
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Channel %d: Demodulator + option can't be combined with multiple frequencies.\n", chan);
+
+	          save_audio_config_p->achan[chan].num_demod = 1;
+	          save_audio_config_p->achan[chan].num_subchan = 1;	// Will be set higher later.
+	          save_audio_config_p->achan[chan].num_freq = 1;
+	      }
+
+	      if (num_letters > 1 && save_audio_config_p->achan[chan].num_freq > 1) {
+
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Channel %d: Multiple demodulator types can't be combined with multiple frequencies.\n", chan);
+
+	          save_audio_config_p->achan[chan].profiles[1] = '\0';
+		  num_letters = 1;
+	      }
+
+	      if (save_audio_config_p->achan[chan].decimate == 0) {
+	        save_audio_config_p->achan[chan].decimate = 1;
+		if (strchr (just_letters, 'D') != NULL && save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
+		  save_audio_config_p->achan[chan].decimate = 3;
+		}
+	      }
 
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("Channel %d: %d baud, AFSK %d & %d Hz, %s, %d sample rate",
-		    chan, modem.baud[chan], 
-		    modem.mark_freq[chan], modem.space_freq[chan],
-		    modem.profiles[chan],
-		    modem.samples_per_sec);
-	      if (modem.decimate[chan] != 1) 
-	        dw_printf (" / %d", modem.decimate[chan]);
+		    chan, save_audio_config_p->achan[chan].baud, 
+		    save_audio_config_p->achan[chan].mark_freq, save_audio_config_p->achan[chan].space_freq,
+		    save_audio_config_p->achan[chan].profiles,
+		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec);
+	      if (save_audio_config_p->achan[chan].decimate != 1) 
+	        dw_printf (" / %d", save_audio_config_p->achan[chan].decimate);
+	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF) 
+	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");
 
-	      if (strlen(modem.profiles[chan]) > 1) {
 
-/*
- * Multiple profiles, usually for 1200 baud.
+/* 
+ * Initialize the demodulator(s).
+ *
+ * We have 3 cases to consider.
  */
-	        assert (modem.num_subchan[chan] == strlen(modem.profiles[chan]));
+
+
+	      if (num_letters > 1) {
+	        int d;
+
+/*	
+ * Multiple letters, usually for 1200 baud.
+ * Each one corresponds to a demodulator and subchannel.
+ *
+ * An interesting experiment but probably not too useful.
+ * Can't have multiple frequency pairs or the + option.
+ */
+
+	        save_audio_config_p->achan[chan].num_subchan = num_letters;
+	        save_audio_config_p->achan[chan].num_demod = num_letters;
+		
+
+		if (save_audio_config_p->achan[chan].num_demod != num_letters) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_demod(%d) != strlen(\"%s\")\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_demod, save_audio_config_p->achan[chan].profiles);
+		}
+
+	        if (save_audio_config_p->achan[chan].num_freq != 1) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_freq(%d) != 1\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq);
+		}
 	  
-	        for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
+	        for (d = 0; d < save_audio_config_p->achan[chan].num_demod; d++) {
 
 	          int mark, space;
-	          assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-	          D = &demodulator_state[chan][subchan];
+	          assert (d >= 0 && d < MAX_SUBCHANS);
 
-	          profile = modem.profiles[chan][subchan];
-	          mark = modem.mark_freq[chan];
-	          space = modem.space_freq[chan];
+	          struct demodulator_state_s *D;
+	          D = &demodulator_state[chan][d];
 
-	          if (modem.num_subchan[chan] != 1) {
+	          profile = save_audio_config_p->achan[chan].profiles[d];
+	          mark = save_audio_config_p->achan[chan].mark_freq;
+	          space = save_audio_config_p->achan[chan].space_freq;
+
+	          if (save_audio_config_p->achan[chan].num_demod != 1) {
 	            text_color_set(DW_COLOR_DEBUG);
-	            dw_printf ("        %d.%d: %c %d & %d\n", chan, subchan, profile, mark, space);
+	            dw_printf ("        %d.%d: %c %d & %d\n", chan, d, profile, mark, space);
 	          }
       
-	          demod_afsk_init (modem.samples_per_sec / modem.decimate[chan], modem.baud[chan],
-			    mark, space,
+	          demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
+			    save_audio_config_p->achan[chan].baud,
+		            mark, 
+	                    space,
 			    profile,
 			    D);
+
+	          /* For siginal level reporting, we want a longer term view. */
+		  // TODO: Should probably move this into the init functions.
+
+	          D->quick_attack = D->agc_fast_attack * 0.2;
+	          D->sluggish_decay = D->agc_slow_decay * 0.2;
 	        }
 	      }
-	      else {
+	      else if (have_plus) {
+	       
 /*
- * Possibly multiple frequency pairs.
+ * PLUS - which implies we have only one letter and one frequency pair.
+ *
+ * One demodulator feeds multiple slicers, each a subchannel.
  */
-	  
-	        assert (modem.num_freq[chan] == modem.num_subchan[chan]);
-	        assert (strlen(modem.profiles[chan]) == 1);
 
-	        for (subchan = 0; subchan < modem.num_freq[chan]; subchan++) {
+	        if (num_letters != 1) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, strlen(\"%s\") != 1\n",
+				__FILE__, __LINE__, chan, just_letters);
+		}
+
+	        if (save_audio_config_p->achan[chan].num_freq != 1) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_freq(%d) != 1\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq);
+		}
+
+	        if (save_audio_config_p->achan[chan].num_demod != save_audio_config_p->achan[chan].num_demod) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_freq(%d) != num_demod(%d)\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq, save_audio_config_p->achan[chan].num_demod);
+		}
+	  
+
+	        struct demodulator_state_s *D;
+	        D = &demodulator_state[chan][0];
+
+		/* I'm not happy about putting this hack here. */
+		/* This belongs in demod_afsk_init but it doesn't have access to the audio config. */
+
+	        save_audio_config_p->achan[chan].num_demod = 1;
+	        save_audio_config_p->achan[chan].num_subchan = MAX_SUBCHANS;
+     
+	        demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
+			save_audio_config_p->achan[chan].baud,
+			save_audio_config_p->achan[chan].mark_freq, 
+	                save_audio_config_p->achan[chan].space_freq,
+			save_audio_config_p->achan[chan].profiles[0],
+			D);
+
+		/* I'm not happy about putting this hack here. */
+		/* should pass in as a parameter rather than adding on later. */
+
+		D->num_slicers = MAX_SUBCHANS;
+
+	        /* For siginal level reporting, we want a longer term view. */
+
+	        D->quick_attack = D->agc_fast_attack * 0.2;
+	        D->sluggish_decay = D->agc_slow_decay * 0.2;
+	      }	
+	      else {
+	        int d;
+/*
+ * One letter.
+ * Can be combined with multiple frequencies.
+ */
+
+	        if (num_letters != 1) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, strlen(\"%s\") != 1\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].profiles);
+		}
+
+	        save_audio_config_p->achan[chan].num_demod = save_audio_config_p->achan[chan].num_freq;
+	        save_audio_config_p->achan[chan].num_subchan = save_audio_config_p->achan[chan].num_freq;
+
+	        for (d = 0; d < save_audio_config_p->achan[chan].num_freq; d++) {
 
 	          int mark, space, k;
-	          assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-	          D = &demodulator_state[chan][subchan];
+	          assert (d >= 0 && d < MAX_SUBCHANS);
 
-	          profile = modem.profiles[chan][0];
+	          struct demodulator_state_s *D;
+	          D = &demodulator_state[chan][d];
 
-	          k = subchan * modem.offset[chan] - ((modem.num_subchan[chan] - 1) * modem.offset[chan]) / 2;
-	          mark = modem.mark_freq[chan] + k;
-	          space = modem.space_freq[chan] + k;
+	          profile = save_audio_config_p->achan[chan].profiles[0];
 
-	          if (modem.num_subchan[chan] != 1) {
+	          k = d * save_audio_config_p->achan[chan].offset - ((save_audio_config_p->achan[chan].num_freq - 1) * save_audio_config_p->achan[chan].offset) / 2;
+	          mark = save_audio_config_p->achan[chan].mark_freq + k;
+	          space = save_audio_config_p->achan[chan].space_freq + k;
+
+	          if (save_audio_config_p->achan[chan].num_freq != 1) {
 	            text_color_set(DW_COLOR_DEBUG);
-	            dw_printf ("        %d.%d: %c %d & %d\n", chan, subchan, profile, mark, space);
+	            dw_printf ("        %d.%d: %c %d & %d\n", chan, d, profile, mark, space);
 	          }
       
-	          demod_afsk_init (modem.samples_per_sec / modem.decimate[chan], modem.baud[chan],
+	          demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
+			save_audio_config_p->achan[chan].baud,
 			mark, space,
 			profile,
 			D);
 
-	        } 	  /* for subchan */
+	          /* For siginal level reporting, we want a longer term view. */
+
+	          D->quick_attack = D->agc_fast_attack * 0.2;
+	          D->sluggish_decay = D->agc_slow_decay * 0.2;
+
+	        } 	  /* for each freq pair */
 	      }	
 	      break;
 
-	    default:	
+//TODO: how about MODEM_OFF case?
+
+	    case MODEM_BASEBAND:
+	    case MODEM_SCRAMBLE:
+	    default:	/* Not AFSK */
+	      {
+
+	      if (strcmp(save_audio_config_p->achan[chan].profiles, "") == 0) {
+
+		/* Apply default if not set earlier. */
+		/* Not sure if it should be on for ARM too. */
+		/* Need to take a look at CPU usage and performance difference. */
+
+#ifndef __arm__
+	        strcpy (save_audio_config_p->achan[chan].profiles, "+");
+#endif
+	      }
 
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("Channel %d: %d baud, %d sample rate x %d.\n",
-		    chan, modem.baud[chan], 
-		    modem.samples_per_sec, UPSAMPLE);
+	      dw_printf ("Channel %d: %d baud, K9NG/G3RUH, %s, %d sample rate x %d",
+		    chan, save_audio_config_p->achan[chan].baud, 
+		    save_audio_config_p->achan[chan].profiles,
+		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, UPSAMPLE);
+	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF) 
+	        dw_printf (", DTMF decoder enabled");
+	      dw_printf (".\n");
+	      
+	      struct demodulator_state_s *D;
+	      D = &demodulator_state[chan][0];	// first subchannel
 
-	      subchan = 0;
-	      D = &demodulator_state[chan][subchan];
+	      save_audio_config_p->achan[chan].num_subchan = 1;
+	      save_audio_config_p->achan[chan].num_demod = 1;		
 
-	      demod_9600_init (UPSAMPLE * modem.samples_per_sec, modem.baud[chan], D);
+	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
 
+		/* I'm not happy about putting this hack here. */
+		/* This belongs in demod_9600_init but it doesn't have access to the audio config. */
+
+	        save_audio_config_p->achan[chan].num_demod = 1;
+	        save_audio_config_p->achan[chan].num_subchan = MAX_SUBCHANS;
+     	      }
+	        
+	      demod_9600_init (UPSAMPLE * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
+
+	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
+
+		/* I'm not happy about putting this hack here. */
+		/* should pass in as a parameter rather than adding on later. */
+
+		D->num_slicers = MAX_SUBCHANS;
+	      }
+
+	      /* For siginal level reporting, we want a longer term view. */
+
+	      D->quick_attack = D->agc_fast_attack * 0.2;
+	      D->sluggish_decay = D->agc_slow_decay * 0.2;
+	      }
 	      break;
 
 	  }  /* switch on modulation type. */
     
-	}     /* for chan ... */
+	 }  /* if channel number is valid */
 
+	}  /* for chan ... */
 
-
-	for (chan=0; chan<MAX_CHANS; chan++) 
-	{
-	  for (subchan = 0; subchan < modem.num_subchan[chan]; subchan++) {
-	    struct demodulator_state_s *D;
-
-	    assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-	    sample_sum[chan][subchan] = 0;
-	    sample_count[chan][subchan] = subchan;	/* stagger */
-
-	    D = &demodulator_state[chan][subchan];
-
-/* For collecting input signal level. */
-
-	    D->lev_period = modem.samples_per_sec * 0.100;  // Samples in 0.100 seconds.
-
-	  }
-	}
 
         return (0);
 
@@ -276,12 +552,14 @@ int demod_init (struct audio_s *pa)
  *
  * Name:        demod_get_sample
  *
- * Purpose:     Get one audio sample fromt the sound input source.
+ * Purpose:     Get one audio sample fromt the specified sound input source.
+ *
+ * Inputs:	a	- Index for audio device.  0 = first.
  *
  * Returns:     -32768 .. 32767 for a valid audio sample.
  *              256*256 for end of file or other error.
  *
- * Global In:	modem.bits_per_sample - So we know whether to 
+ * Global In:	save_audio_config_p->adev[ACHAN2ADEV(chan)].bits_per_sample - So we know whether to 
  *			read 1 or 2 bytes from audio stream.
  *
  * Description:	Grab 1 or two btyes depending on data source.
@@ -296,18 +574,18 @@ int demod_init (struct audio_s *pa)
 
 
 __attribute__((hot))
-int demod_get_sample (void)
+int demod_get_sample (int a)		
 {
 	int x1, x2;
 	signed short sam;	/* short to force sign extention. */
 
 
-	assert (modem.bits_per_sample == 8 || modem.bits_per_sample == 16);
+	assert (save_audio_config_p->adev[a].bits_per_sample == 8 || save_audio_config_p->adev[a].bits_per_sample == 16);
 
 
-	if (modem.bits_per_sample == 8) {
+	if (save_audio_config_p->adev[a].bits_per_sample == 8) {
 
-	  x1 = audio_get();	
+	  x1 = audio_get(a);				
 	  if (x1 < 0) return(FSK_READ_ERR);
 
 	  assert (x1 >= 0 && x1 <= 255);
@@ -318,10 +596,10 @@ int demod_get_sample (void)
 
 	}
 	else {
-	  x1 = audio_get();	/* lower byte first */
+	  x1 = audio_get(a);	/* lower byte first */
 	  if (x1 < 0) return(FSK_READ_ERR);
 
-	  x2 = audio_get();
+	  x2 = audio_get(a);
 	  if (x2 < 0) return(FSK_READ_ERR);
 
 	  assert (x1 >= 0 && x1 <= 255);
@@ -394,51 +672,57 @@ void demod_process_sample (int chan, int subchan, int sam)
 	D = &demodulator_state[chan][subchan];
 
 
-#if 1	/* TODO:  common level detection. */
+	/* Scale to nice number, actually -2.0 to +2.0 for extra headroom */
 
-	/* Scale to nice number, TODO: range -1.0 to +1.0, not 2. */
-
-	fsam = sam / 16384.0;
+	fsam = sam / 16384.0f;
 
 /*
  * Accumulate measure of the input signal level.
  */
-	abs_fsam = fsam >= 0 ? fsam : -fsam;
-               
-	if (abs_fsam > D->lev_peak_acc) {
-	  D->lev_peak_acc = abs_fsam;
+
+
+/*
+ * Version 1.2: Try new approach to capturing the amplitude.
+ * This is same as the later AGC without the normalization step.
+ * We want decay to be substantially slower to get a longer
+ * range idea of the received audio.
+ */
+
+	if (fsam >= D->alevel_rec_peak) {
+	  D->alevel_rec_peak = fsam * D->quick_attack + D->alevel_rec_peak * (1.0f - D->quick_attack);
 	}
-	D->lev_sum_acc += abs_fsam;
-
-	D->lev_count++;
-	if (D->lev_count >= D->lev_period) {
-	  D->lev_prev_peak = D->lev_last_peak;
-          D->lev_last_peak = D->lev_peak_acc;
-          D->lev_peak_acc = 0;
-
-          D->lev_prev_ave = D->lev_last_ave;
-   	  D->lev_last_ave = D->lev_sum_acc / D->lev_count;
-	  D->lev_sum_acc = 0;
-
-	  D->lev_count = 0;
+	else {
+	  D->alevel_rec_peak = fsam * D->sluggish_decay + D->alevel_rec_peak * (1.0f - D->sluggish_decay);
 	}
 
-#endif
+	if (fsam <= D->alevel_rec_valley) {
+	  D->alevel_rec_valley = fsam * D->quick_attack + D->alevel_rec_valley * (1.0f - D->quick_attack);
+	}
+	else  {   
+	  D->alevel_rec_valley = fsam * D->sluggish_decay + D->alevel_rec_valley * (1.0f - D->sluggish_decay);
+	}
+
 
 /*
  * Select decoder based on modulation type.
  */
 
-	switch (modem.modem_type[chan]) {
+	switch (save_audio_config_p->achan[chan].modem_type) {
 
-	  case AFSK:
+	  case MODEM_OFF:
 
-	    if (modem.decimate[chan] > 1) {
+	    // Might have channel only listening to DTMF for APRStt gateway.
+	    // Don't waste CPU time running a demodulator here.
+	    break;
+
+	  case MODEM_AFSK:
+
+	    if (save_audio_config_p->achan[chan].decimate > 1) {
 
 	      sample_sum[chan][subchan] += sam;
 	      sample_count[chan][subchan]++;
-	      if (sample_count[chan][subchan] >= modem.decimate[chan]) {
-  	        demod_afsk_process_sample (chan, subchan, sample_sum[chan][subchan] / modem.decimate[chan], D);
+	      if (sample_count[chan][subchan] >= save_audio_config_p->achan[chan].decimate) {
+  	        demod_afsk_process_sample (chan, subchan, sample_sum[chan][subchan] / save_audio_config_p->achan[chan].decimate, D);
 	        sample_sum[chan][subchan] = 0;
 	        sample_count[chan][subchan] = 0;
 	      }
@@ -448,6 +732,8 @@ void demod_process_sample (int chan, int subchan, int sam)
 	    }
 	    break;
 
+	  case MODEM_BASEBAND:
+	  case MODEM_SCRAMBLE:
 	  default:
 
 #define ZEROSTUFF 1
@@ -501,69 +787,67 @@ void demod_process_sample (int chan, int subchan, int sam)
 
 
 
-/*-------------------------------------------------------------------
- *
- * Name:        fsk_demod_print_agc
- *
- * Purpose:     Print information about input signal amplitude.
- *		This will be useful for adjusting transmitter audio levels.
- *		We also want to avoid having an input level so high
- *		that the A/D converter "clips" the signal.
- *
- *
- * Inputs:	chan	- Audio channel.  0 for left, 1 for right.
- *
- * Returns:	None 
- *
- * Descripion:	Not sure what to use for final form.
- *		For now display the AGC peaks for both tones.
- *		This will be called at the end of a frame.
- *
- * Future:	Come up with a sensible scale and add command line option.
- *		Probably makes more sense to return a single number
- *		and let the caller print it.
- *		Just an experiment for now.
- *
- *--------------------------------------------------------------------*/
-
-#if 0
-void demod_print_agc (int chan, int subchan)
-{
-
-	struct demodulator_state_s *D;
 
 
-	assert (chan >= 0 && chan < MAX_CHANS);
-	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-	D = &demodulator_state[chan][subchan];
-
-	dw_printf ("%d\n", (int)((D->lev_last_peak + D->lev_prev_peak)*50));
-
-
-
-	//dw_printf ("Peak= %.2f, %.2f Ave= %.2f, %.2f AGC M= %.2f / %.2f S= %.2f / %.2f\n", 
-	//	D->lev_last_peak, D->lev_prev_peak, D->lev_last_ave, D->lev_prev_ave,
-	//	D->m_peak, D->m_valley, D->s_peak, D->s_valley);
-
-}
-#endif
-
+/* Doesn't seem right.  Need to revisit this. */
 /* Resulting scale is 0 to almost 100. */
 /* Cranking up the input level produces no more than 97 or 98. */
 /* We currently produce a message when this goes over 90. */
 
-int demod_get_audio_level (int chan, int subchan) 
+alevel_t demod_get_audio_level (int chan, int subchan) 
 {
 	struct demodulator_state_s *D;
-
+	alevel_t alevel;
+	int pk;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
+	/* We have to consider two different cases here. */
+	/* N demodulators, each with own slicer and HDLC decoder. */
+	/* Single demodulator, multiple slicers each with own HDLC decoder. */
+
+	if (demodulator_state[chan][0].num_slicers > 1) {
+	  subchan = 0;
+	}
+
 	D = &demodulator_state[chan][subchan];
 
-	return ( (int) ((D->lev_last_peak + D->lev_prev_peak) * 50 ) );
+	// Take half of peak-to-peak for received audio level.
+
+	alevel.rec = (int) (( D->alevel_rec_peak - D->alevel_rec_valley ) * 50.0f + 0.5f);
+
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_AFSK) {
+
+	  /* For AFSK, we have mark and space amplitudes. */
+
+	  alevel.mark = (int) ((D->alevel_mark_peak ) * 100.0f + 0.5f);
+	  alevel.space = (int) ((D->alevel_space_peak ) * 100.0f + 0.5f);
+
+	  //alevel.ms_ratio = D->alevel_mark_peak / D->alevel_space_peak;	// TODO: remove after temp test
+	}
+	else {
+
+#if 1	
+	  /* Display the + and - peaks.  */
+	  /* Normally we'd expect them to be about the same. */
+	  /* However, with SDR, or other DC coupling, we could have an offset. */
+
+	  alevel.mark = (int) ((D->alevel_mark_peak) * 200.0f  + 0.5f);
+	  alevel.space = (int) ((D->alevel_space_peak) * 200.0f - 0.5f);
+
+
+#else
+	  /* Here we have + and - peaks after filtering. */
+	  /* Take half of the peak to peak. */
+	  /* The "5/6" factor worked out right for the current low pass filter. */
+	  /* Will it need to be different if the filter is tweaked? */
+
+	  alevel.mark = (int) ((D->alevel_mark_peak - D->alevel_space_peak) * 100.0f * 5.0f/6.0f + 0.5f);
+	  alevel.space = -1;		/* to print one number inside of ( ) */
+#endif
+	}
+	return (alevel);
 }
 
 

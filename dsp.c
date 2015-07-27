@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -16,8 +16,6 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
-
-
 
 
 /*------------------------------------------------------------------
@@ -163,7 +161,7 @@ void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype
         }
 
 /*
- * Normalize lowpass for unity gain.
+ * Normalize lowpass for unity gain at DC.
  */
 	G = 0;
         for (j=0; j<filter_size; j++) {
@@ -200,6 +198,7 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
 	int j;
 	float w;
 	float G;
+	float center = 0.5 * (filter_size - 1);
 
 
 #if DEBUG1
@@ -212,11 +211,8 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
 	assert (filter_size >= 3 && filter_size <= MAX_FILTER_SIZE);
 
         for (j=0; j<filter_size; j++) {
-	  float center;
 	  float sinc;
 	  float shape;
-
-	  center = 0.5 * (filter_size - 1);
 
 	  if (j - center == 0) {
 	    sinc = 2 * (f2 - f1);
@@ -235,8 +231,7 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
         }
 
 /*
- * Normalize bandpass for unity gain.
- * TODO:  This is not right.  
+ * Normalize bandpass for unity gain in middle of passband.
  * Can't use same technique as for lowpass.
  * Instead compute gain in middle of passband.
  * See http://dsp.stackexchange.com/questions/4693/fir-filter-gain
@@ -244,8 +239,12 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
 	w = 2 * M_PI * (f1 + f2) / 2;
 	G = 0;
         for (j=0; j<filter_size; j++) {
-	  G += bp_filter[j];	// TBD
+	  G += 2 * bp_filter[j] * cos((j-center)*w);  // is this correct?
 	}
+
+#if DEBUG1
+	dw_printf ("Before normalizing, G=%.3f\n", G);
+#endif
         for (j=0; j<filter_size; j++) {
 	  bp_filter[j] = bp_filter[j] / G;
 	}

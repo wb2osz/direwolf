@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -31,7 +31,9 @@ static void send_control (int, int);
 static void send_data (int, int);
 static void send_bit (int, int);
 
-static int number_of_bits_sent;
+
+
+static int number_of_bits_sent[MAX_CHANS];
 
 
 
@@ -74,7 +76,7 @@ int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
 	int j, fcs;
 	
 
-	number_of_bits_sent = 0;
+	number_of_bits_sent[chan] = 0;
 
 
 #if DEBUG
@@ -97,7 +99,7 @@ int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
 
 	send_control (chan, 0x7e);	/* End frame */
 
-	return (number_of_bits_sent);
+	return (number_of_bits_sent[chan]);
 }
 
 
@@ -133,7 +135,7 @@ int hdlc_send_flags (int chan, int nflags, int finish)
 	int j;
 	
 
-	number_of_bits_sent = 0;
+	number_of_bits_sent[chan] = 0;
 
 
 #if DEBUG
@@ -152,10 +154,10 @@ int hdlc_send_flags (int chan, int nflags, int finish)
 /* Push out the final partial buffer! */
 
 	if (finish) {
-	  audio_flush();
+	  audio_flush(ACHAN2ADEV(chan));
 	}
 
-	return (number_of_bits_sent);
+	return (number_of_bits_sent[chan]);
 }
 
 
@@ -209,7 +211,7 @@ static void send_bit (int chan, int b)
 
 	tone_gen_put_bit (chan, output);
 
-	number_of_bits_sent++;
+	number_of_bits_sent[chan]++;
 }
 
 /* end hdlc_send.c */

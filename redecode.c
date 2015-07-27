@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
-
 
 
 /*------------------------------------------------------------------
@@ -65,7 +64,9 @@
 #include "ptt.h"
 
 
+/* Audio configuration for the fix_bits / passall optiions. */
 
+static struct audio_s          *save_audio_config_p;
 
 
 
@@ -95,10 +96,9 @@ static void * redecode_thread (void *arg);
  *--------------------------------------------------------------------*/
 
 
-
-void redecode_init (void)
+void redecode_init (struct audio_s *p_audio_config)
 {
-	//int j;
+
 #if __WIN32__
 	HANDLE redecode_th;
 #else
@@ -112,6 +112,7 @@ void redecode_init (void)
 	dw_printf ("redecode_init ( ... )\n");
 #endif
 
+	save_audio_config_p = p_audio_config;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -180,12 +181,6 @@ static unsigned redecode_thread (void *arg)
 static void * redecode_thread (void *arg)
 #endif
 {
-	rrbb_t block;
-	int blen;
-	int chan, subchan;
-	int alevel;
-
-
 #if __WIN32__
 	HANDLE tid = GetCurrentThread();
 	//int tp;
@@ -199,6 +194,7 @@ static void * redecode_thread (void *arg)
 #endif
 
 	while (1) {
+	  rrbb_t block;
 
 	  rdq_wait_while_empty ();
 #if DEBUG
@@ -207,7 +203,6 @@ static void * redecode_thread (void *arg)
 #endif
 	  
 	  block = rdq_remove ();
-
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
@@ -218,16 +213,21 @@ static void * redecode_thread (void *arg)
 
 	  if (block != NULL) {
 
-	    chan = rrbb_get_chan(block);
-	    subchan = rrbb_get_subchan(block);
-	    alevel = rrbb_get_audio_level(block);
-	    blen = rrbb_get_len(block);
+	    int chan = rrbb_get_chan(block);
+	    int subchan = rrbb_get_subchan(block);
+	    int blen = rrbb_get_len(block);
+	    alevel_t alevel = rrbb_get_audio_level(block);
+	    //retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
+	    //int passall = save_audio_config_p->achan[chan].passall;
+
+	    int ok;
+
 #if DEBUG
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("redecode_thread: begin processing %p, from channel %d, blen=%d\n", block, chan, blen);
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("redecode_thread: begin processing %p, from channel %d, blen=%d\n", block, chan, blen);
 #endif
 
-	    hdlc_rec2_try_to_fix_later (block, chan, subchan, alevel);
+	    ok = hdlc_rec2_try_to_fix_later (block, chan, subchan, alevel);
 
 #if DEBUG
 	    text_color_set(DW_COLOR_DEBUG);

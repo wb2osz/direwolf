@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -44,22 +44,24 @@
 
 
 
-static rrbb_t queue_head = NULL;			/* Head of linked list for queue. */
+static rrbb_t queue_head = NULL;		/* Head of linked list for queue. */
 static int rdq_len = 0;
 #define RDQ_UNDERRUN_THRESHOLD 30 /* A warning will be emitted if there are still this number of packets to decode in the queue and we try to add another one */
-#if __WIN32__
 
-static CRITICAL_SECTION rdq_cs;			/* Critical section for updating queues. */
+
+
+static dw_mutex_t rdq_mutex;			/* Critical section for updating queues. */
+
+
+#if __WIN32__
 
 static HANDLE wake_up_event;			/* Notify try decode again thread when queue not empty. */
 
 #else
 
-static pthread_mutex_t rdq_mutex;		/* Critical section for updating queues. */
-
 static pthread_cond_t wake_up_cond;		/* Notify try decode again thread when queue not empty. */
 
-static pthread_mutex_t wake_up_mutex;		/* Required by cond_wait. */
+static dw_mutex_t wake_up_mutex;		/* Required by cond_wait. */
 
 #endif
 
@@ -94,17 +96,11 @@ void rdq_init (void)
 	dw_printf ("rdq_init: pthread_mutex_init...\n");
 #endif
 
+	dw_mutex_init (&rdq_mutex);
+
 #if __WIN32__
-	InitializeCriticalSection (&rdq_cs);
 #else
-	err = pthread_mutex_init (&wake_up_mutex, NULL);
-	err = pthread_mutex_init (&rdq_mutex, NULL);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_init: pthread_mutex_init err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
+	dw_mutex_init (&wake_up_mutex);
 #endif
 
 
@@ -179,17 +175,9 @@ void rdq_append (rrbb_t rrbb)
 	dw_printf ("rdq_append (rrbb=%p)\n", rrbb);
 	dw_printf ("rdq_append: enter critical section\n");
 #endif
-#if __WIN32__
-	EnterCriticalSection (&rdq_cs);
-#else
-	err = pthread_mutex_lock (&rdq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_append: pthread_mutex_lock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+
+
+	dw_mutex_lock (&rdq_mutex);
 
 	//was_empty = 1;
 	//if (queue_head != NULL) {
@@ -211,17 +199,8 @@ void rdq_append (rrbb_t rrbb)
 	  dw_printf ("Too many packets to decode (%d) in the queue, decrease the FIX_BITS value\n", rdq_len);
 	}
 
-#if __WIN32__ 
-	LeaveCriticalSection (&rdq_cs);
-#else
-	err = pthread_mutex_unlock (&rdq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_append: pthread_mutex_unlock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_unlock (&rdq_mutex);
+
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("rdq_append: left critical section\n");
@@ -231,13 +210,7 @@ void rdq_append (rrbb_t rrbb)
 #if __WIN32__
 	SetEvent (wake_up_event);
 #else
-	err = pthread_mutex_lock (&wake_up_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_append: pthread_mutex_lock wu err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
+	dw_mutex_lock (&wake_up_mutex);
 
 	err = pthread_cond_signal (&wake_up_cond);
 	if (err != 0) {
@@ -247,13 +220,7 @@ void rdq_append (rrbb_t rrbb)
 	  exit (1);
 	}
 
-	err = pthread_mutex_unlock (&wake_up_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_append: pthread_mutex_unlock wu err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
+	dw_mutex_unlock (&wake_up_mutex);
 #endif
 
 }
@@ -284,17 +251,7 @@ void rdq_wait_while_empty (void)
 	dw_printf ("rdq_wait_while_empty () : enter critical section\n");
 #endif
 
-#if __WIN32__
-	EnterCriticalSection (&rdq_cs);
-#else
-	err = pthread_mutex_lock (&rdq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_wait_while_empty: pthread_mutex_lock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_lock (&rdq_mutex);
 
 #if DEBUG
 	//text_color_set(DW_COLOR_DEBUG);
@@ -304,18 +261,8 @@ void rdq_wait_while_empty (void)
         if (queue_head != NULL)
 	       is_empty = 0;
 
+	dw_mutex_unlock (&rdq_mutex);
 
-#if __WIN32__
-	LeaveCriticalSection (&rdq_cs);
-#else
-	err = pthread_mutex_unlock (&rdq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_wait_while_empty: pthread_mutex_unlock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("rdq_wait_while_empty () : left critical section\n");
@@ -342,16 +289,9 @@ void rdq_wait_while_empty (void)
 #endif
 
 #else
-	  err = pthread_mutex_lock (&wake_up_mutex);
-	  if (err != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("rdq_wait_while_empty: pthread_mutex_lock wu err=%d", err);
-	    perror ("");
-	    exit (1);
-	  }
+	  dw_mutex_lock (&wake_up_mutex);
 
 	  err = pthread_cond_wait (&wake_up_cond, &wake_up_mutex);
-
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
@@ -365,13 +305,7 @@ void rdq_wait_while_empty (void)
 	    exit (1);
 	  }
 
-	  err = pthread_mutex_unlock (&wake_up_mutex);
-	  if (err != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("rdq_wait_while_empty: pthread_mutex_unlock wu err=%d", err);
-	    perror ("");
-	    exit (1);
-	  }
+	  dw_mutex_unlock (&wake_up_mutex);
 
 #endif
 	}
@@ -412,17 +346,8 @@ rrbb_t rdq_remove (void)
 	dw_printf ("rdq_remove() enter critical section\n");
 #endif
 
-#if __WIN32__
-	EnterCriticalSection (&rdq_cs);
-#else
-	err = pthread_mutex_lock (&rdq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_remove: pthread_mutex_lock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_lock (&rdq_mutex);
+
         rdq_len--;
 #if DEBUG
 	dw_printf ("-rdq_len: %d\n", rdq_len);
@@ -436,26 +361,14 @@ rrbb_t rdq_remove (void)
 	  queue_head = rrbb_get_nextp(result_p);
 	  rrbb_set_nextp (result_p, NULL);
 	}
-	 
-#if __WIN32__
-	LeaveCriticalSection (&rdq_cs);
-#else
-	err = pthread_mutex_unlock (&rdq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("rdq_remove: pthread_mutex_unlock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
 
+	dw_mutex_unlock (&rdq_mutex);
+	 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("rdq_remove() leave critical section, returns %p\n", result_p);
 #endif
 	return (result_p);
 }
-
-
 
 /* end rdq.c */

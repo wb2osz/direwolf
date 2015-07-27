@@ -73,6 +73,7 @@
 struct packet_s {
 
 	int magic1;		/* for error checking. */
+	int seq;		/* unique sequence number for debugging. */
 
 #define MAGIC 0x41583235
 
@@ -150,7 +151,7 @@ typedef struct packet_s *packet_t;
  * "modulo 128 operation" is in effect.  Unfortunately, it seems
  * this can be determined only by examining the XID frames and 
  * keeping this information for each connection.
- * We can assume 1 for our purposes.
+ * We can assume 1 for our current purposes.
  */
 
 static inline int ax25_get_control_offset (packet_t this_p) 
@@ -161,8 +162,9 @@ static inline int ax25_get_control_offset (packet_t this_p)
 
 static inline int ax25_get_num_control (packet_t this_p)
 {
-	return (1);
+	return (1);	// TODO: always be 1 for U frame.  More complicated for I and S.
 }
+
 
 
 /*
@@ -196,14 +198,15 @@ static int ax25_get_num_pid (packet_t this_p)
 
 
 /*
- * APRS always has an Information field with at least one octet for the
- * Data Type Indicator.  AX.25 has this for only 5 frame types depending
- * on the control field.
+ * AX.25 has info field for 5 frame types depending on the control field.
+ *
  *	xxxx xxx0	I
- *	000x 0011	UI
+ *	000x 0011	UI		(which includes APRS)
  *	101x 1111	XID
  *	111x 0011	TEST
  *	100x 0111	FRMR
+ *
+ * APRS always has an Information field with at least one octet for the Data Type Indicator.  
  */
 
 static inline int ax25_get_info_offset (packet_t this_p) 
@@ -228,20 +231,81 @@ static int ax25_get_num_info (packet_t this_p)
 #endif
 
 
+typedef enum ax25_modulo_e { modulo_8 = 8, modulo_128 = 128 } ax25_modulo_t;
+
+typedef enum ax25_frame_type_e {
+
+	frame_type_I,		// Information
+	frame_type_RR,		// Receive Ready - System Ready To Receive
+	frame_type_RNR,		// Receive Not Ready - TNC Buffer Full
+	frame_type_REJ,		// Reject Frame - Out of Sequence or Duplicate
+	frame_type_SREJ,	// Selective Reject - Request single frame repeat
+	frame_type_SABME,	// Set Async Balanced Mode, Extended
+	frame_type_SABM,	// Set Async Balanced Mode
+	frame_type_DISC,	// Disconnect
+	frame_type_DM,		// Disconnect Mode
+	frame_type_UA,		// Unnumbered Acknowledge
+	frame_type_FRMR,	// Frame Reject
+	frame_type_UI,		// Unnumbered Information
+	frame_type_XID,		// Exchange Identification
+	frame_type_TEST,	// Test
+	frame_type_U,		// other Unnumbered, not used by AX.25.
+	frame_not_AX25		// Could not get control byte from frame.
+
+} ax25_frame_type_t;
+	
+
+/* 
+ * Originally this was a single number. 
+ * Let's try something new in version 1.2.
+ * Also collect AGC values from the mark and space filters.
+ */
+
+typedef struct alevel_s {
+
+	int rec;
+	int mark;
+	int space;
+	//float ms_ratio;	// TODO: take out after temporary investigation.
+} alevel_t;
+
+
+#define AX25MEMDEBUG 1
 
 
 
-//static packet_t ax25_new (void);
+#if AX25MEMDEBUG	// to investigate a memory leak problem
+
+
+extern void ax25memdebug_set(void);
+extern int ax25memdebug_get (void);
+extern int ax25memdebug_seq (packet_t this_p);
+
+
+extern packet_t ax25_from_text_debug (char *monitor, int strict, char *src_file, int src_line);
+#define ax25_from_text(m,s) ax25_from_text_debug(m,s,__FILE__,__LINE__)
+
+extern packet_t ax25_from_frame_debug (unsigned char *data, int len, alevel_t alevel, char *src_file, int src_line);
+#define ax25_from_frame(d,l,a) ax25_from_frame_debug(d,l,a,__FILE__,__LINE__);
+
+extern packet_t ax25_dup_debug (packet_t copy_from, char *src_file, int src_line);
+#define ax25_dup(p) ax25_dup_debug(p,__FILE__,__LINE__);
+
+extern void ax25_delete_debug (packet_t pp, char *src_file, int src_line);
+#define ax25_delete(p) ax25_delete_debug(p,__FILE__,__LINE__);
+
+#else
+
+extern packet_t ax25_from_text (char *monitor, int strict);
+
+extern packet_t ax25_from_frame (unsigned char *data, int len, alevel_t alevel);
+
+extern packet_t ax25_dup (packet_t copy_from);
 
 extern void ax25_delete (packet_t pp);
 
-extern void ax25_clear (packet_t pp);
+#endif
 
-extern packet_t ax25_from_text (char *, int strict);
-
-extern packet_t ax25_from_frame (unsigned char *data, int len, int alevel);
-
-extern packet_t ax25_dup (packet_t copy_from);
 
 extern int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, int *out_heard);
 
@@ -279,11 +343,14 @@ extern void ax25_format_addrs (packet_t pp, char *);
 
 extern int ax25_pack (packet_t pp, unsigned char result[AX25_MAX_PACKET_LEN]);
 
+extern ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *desc, int *pf, int *nr, int *ns); 
+
 extern void ax25_hex_dump (packet_t this_p);
 
 extern int ax25_is_aprs (packet_t pp);
 
 extern int ax25_get_control (packet_t this_p); 
+extern int ax25_get_c2 (packet_t this_p); 
 
 extern int ax25_get_pid (packet_t this_p);
 
@@ -292,6 +359,8 @@ extern unsigned short ax25_dedupe_crc (packet_t pp);
 extern unsigned short ax25_m_m_crc (packet_t pp);
 
 extern void ax25_safe_print (char *, int, int ascii_only);
+
+extern int ax25_alevel_to_text (alevel_t alevel, char *text);
 
 
 #endif /* AX25_PAD_H */

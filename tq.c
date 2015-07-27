@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@
  *		Another thread waits until the channel is clear and then removes
  *		packets from the queue and transmits them.
  *
+ * Revisions:	1.2 - Enhance for multiple audio devices.
+ *
  *---------------------------------------------------------------*/
 
 #include <stdio.h>
@@ -48,30 +50,28 @@
 
 
 
-static int tq_num_channels;			/* Set once during intialization and */
-						/* should not change after that. */
 
 static packet_t queue_head[MAX_CHANS][TQ_NUM_PRIO];	/* Head of linked list for each queue. */
 
+
+static dw_mutex_t tq_mutex;				/* Critical section for updating queues. */
+							/* Just one for all queues. */
+
 #if __WIN32__
 
-static CRITICAL_SECTION tq_cs;			/* Critical section for updating queues. */
-
-static HANDLE wake_up_event;			/* Notify transmit thread when queue not empty. */
+static HANDLE wake_up_event[MAX_CHANS];			/* Notify transmit thread when queue not empty. */
 
 #else
 
-static pthread_mutex_t tq_mutex;		/* Critical section for updating queues. */
+static pthread_cond_t wake_up_cond[MAX_CHANS];		/* Notify transmit thread when queue not empty. */
 
-static pthread_cond_t wake_up_cond;			/* Notify transmit thread when queue not empty. */
+static pthread_mutex_t wake_up_mutex[MAX_CHANS];	/* Required by cond_wait. */
 
-static pthread_mutex_t wake_up_mutex;		/* Required by cond_wait. */
-
-static int xmit_thread_is_waiting = 0;
+static int xmit_thread_is_waiting[MAX_CHANS];
 
 #endif
 
-static int tq_is_empty (void);
+static int tq_is_empty (int chan);
 
 
 /*-------------------------------------------------------------------
@@ -80,7 +80,7 @@ static int tq_is_empty (void);
  *
  * Purpose:     Initialize the transmit queue.
  *
- * Inputs:	nchan		- Number of communication channels.
+ * Inputs:	audio_config_p	- Audio device configuration.
  *
  * Outputs:	
  *
@@ -104,23 +104,25 @@ static int tq_is_empty (void);
  *			(determined by PERSIST & SLOTTIME) to help avoid
  *			collisions.	
  *
- *		If more than one audio channel is being used, a separate
- *		pair of transmit queues is used for each channel.
+ *		Each audio channel has its own queue.
  *	
  *--------------------------------------------------------------------*/
 
 
-void tq_init (int nchan)
+static struct audio_s *save_audio_config_p;
+
+
+
+void tq_init (struct audio_s *audio_config_p)
 {
 	int c, p;
-	int err;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_init ( %d )\n", nchan);
 #endif
-	tq_num_channels = nchan;
-	assert (tq_num_channels >= 1 && tq_num_channels <= MAX_CHANS);
+
+	save_audio_config_p = audio_config_p;
 
 	for (c=0; c<MAX_CHANS; c++) {
 	  for (p=0; p<TQ_NUM_PRIO; p++) {
@@ -128,61 +130,54 @@ void tq_init (int nchan)
 	  }
 	}
 
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_init: pthread_mutex_init...\n");
-#endif
+/*
+ * Mutex to coordinate access to the queue.
+ */
 
-#if __WIN32__
-	InitializeCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_init (&wake_up_mutex, NULL);
-	err = pthread_mutex_init (&tq_mutex, NULL);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_init: pthread_mutex_init err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_init(&tq_mutex);
 
-
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_init: pthread_cond_init...\n");
-#endif
+/*
+ * Windows and Linux have different wake up methods.
+ * Put a wrapper around this someday to hide the details.
+ */
 
 #if __WIN32__
 
-	wake_up_event = CreateEvent (NULL, 0, 0, NULL);
+	for (c = 0; c < MAX_CHANS; c++) {
 
-	if (wake_up_event == NULL) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_init: pthread_cond_init: can't create transmit wake up event");
-	  exit (1);
+	  if (audio_config_p->achan[c].valid) {
+
+	    wake_up_event[c] = CreateEvent (NULL, 0, 0, NULL);
+
+	    if (wake_up_event[c] == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("tq_init: CreateEvent: can't create transmit wake up event, c=%d", c);
+	      exit (1);
+	    }	
+	  }
 	}
 
 #else
-	err = pthread_cond_init (&wake_up_cond, NULL);
+	int err;
 
+	for (c = 0; c < MAX_CHANS; c++) {
 
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_init: pthread_cond_init returns %d\n", err);
-#endif
+	  xmit_thread_is_waiting[c] = 0;
 
+	  if (audio_config_p->achan[c].valid) {
+	    err = pthread_cond_init (&(wake_up_cond[c]), NULL);
+	    if (err != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("tq_init: pthread_cond_init c=%d err=%d", c, err);
+	      perror ("");
+	      exit (1);
+	    }
 
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_init: pthread_cond_init err=%d", err);
-	  perror ("");
-	  exit (1);
+	    dw_mutex_init(&(wake_up_mutex[c]));
+	  }
 	}
 
-	xmit_thread_is_waiting = 0;
 #endif
-
 
 } /* end tq_init */
 
@@ -207,6 +202,9 @@ void tq_init (int nchan)
  * Description:	Add packet to end of linked list.
  *		Signal the transmit thread if the queue was formerly empty.
  *
+ *		Note that we have a transmit thread each audio channel.
+ *		Two channels can share one audio output device.
+ *
  * IMPORTANT!	Don't make an further references to the packet object after
  *		giving it to tq_append.
  *
@@ -214,31 +212,63 @@ void tq_init (int nchan)
 
 void tq_append (int chan, int prio, packet_t pp)
 {
-//	int was_empty;
-//	int c, p;
 	packet_t plast;
 	packet_t pnext;
-	int err;
+	//int a = ACHAN2ADEV(chan);		/* Audio device for channel. */
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_append (chan=%d, prio=%d, pp=%p)\n", chan, prio, pp);
 #endif
-	assert (tq_num_channels >= 1 && tq_num_channels <= MAX_CHANS);
+
+
+
+	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (prio >= 0 && prio < TQ_NUM_PRIO);
 
-	if (chan < 0 || chan >= tq_num_channels) {
+#if AX25MEMDEBUG
+
+	if (ax25memdebug_get()) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("tq_append (chan=%d, prio=%d, seq=%d)\n", chan, prio, ax25memdebug_seq(pp));
+	}
+#endif
+
+	if ( ! save_audio_config_p->achan[chan].valid) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR - Request to transmit on radio channel %d.\n", chan);
+	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
 	  ax25_delete(pp);
 	  return;
 	}
 
-/* Is transmit queue out of control? */
+/* 
+ * Is transmit queue out of control? 
+ *
+ * There is no technical reason to limit the transmit packet queue length, it just seemed like a good 
+ * warning that something wasn’t right.
+ * When this was written, I was mostly concerned about APRS where packets would only be sent 
+ * occasionally and they can be discarded if they can’t be sent out in a reasonable amount of time.
+ *
+ * If a large file is being sent, with TCP/IP, it is perfectly reasonable to have a large number 
+ * of packets waiting for transmission.
+ *
+ * Ideally, the application should be able to throttle the transmissions so the queue doesn't get too long.
+ * If using the KISS interface, there is no way to get this information from the TNC back to the client app.
+ * The AGW network interface does have a command ‘y’ to query about the number of frames waiting for transmission.
+ * This was implemented in version 1.2.
+ *
+ * I'd rather not take out the queue length check because it is a useful sanity check for something going wrong.
+ * Maybe the check should be performed only for APRS packets.  
+ * The check would allow an unlimited number of other types.
+ *
+ * Limit was 20.  Changed to 100 in version 1.2 as a workaround.
+ *
+ * Implementing the 6PACK protocol is probably the proper solution.
+ */
 
-	if (tq_count(chan,prio) > 20) {
+	if (ax25_is_aprs(pp) && tq_count(chan,prio) > 100) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Transmit packet queue is too long.  Discarding transmit request.\n");
+	  dw_printf ("Transmit packet queue for channel %d is too long.  Discarding packet.\n", chan);
 	  dw_printf ("Perhaps the channel is so busy there is no opportunity to send.\n");
 	  ax25_delete(pp);
 	  return;
@@ -248,17 +278,8 @@ void tq_append (int chan, int prio, packet_t pp)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_append: enter critical section\n");
 #endif
-#if __WIN32__
-	EnterCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_lock (&tq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_append: pthread_mutex_lock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+
+	dw_mutex_lock (&tq_mutex);
 
 //	was_empty = 1;
 //	for (c=0; c<tq_num_channels; c++) {
@@ -279,18 +300,9 @@ void tq_append (int chan, int prio, packet_t pp)
 	  ax25_set_nextp (plast, pp);
 	}
 
+	dw_mutex_unlock (&tq_mutex);
 
-#if __WIN32__ 
-	LeaveCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_unlock (&tq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_append: pthread_mutex_unlock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_append: left critical section\n");
@@ -298,19 +310,14 @@ void tq_append (int chan, int prio, packet_t pp)
 #endif
 
 #if __WIN32__
-	SetEvent (wake_up_event);
+	SetEvent (wake_up_event[chan]);
 #else
-	if (xmit_thread_is_waiting) {
+	if (xmit_thread_is_waiting[chan]) {
+	  int err;
 
-	  err = pthread_mutex_lock (&wake_up_mutex);
-	  if (err != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("tq_append: pthread_mutex_lock wu err=%d", err);
-	    perror ("");
-	    exit (1);
-	  }
+	  dw_mutex_lock (&(wake_up_mutex[chan]));
 
-	  err = pthread_cond_signal (&wake_up_cond);
+	  err = pthread_cond_signal (&(wake_up_cond[chan]));
 	  if (err != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("tq_append: pthread_cond_signal err=%d", err);
@@ -318,13 +325,7 @@ void tq_append (int chan, int prio, packet_t pp)
 	    exit (1);
 	  }
 
-	  err = pthread_mutex_unlock (&wake_up_mutex);
-	  if (err != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("tq_append: pthread_mutex_unlock wu err=%d", err);
-	    perror ("");
-	    exit (1);
-	  }
+	  dw_mutex_unlock (&(wake_up_mutex[chan]));
 	}
 #endif
 
@@ -338,72 +339,54 @@ void tq_append (int chan, int prio, packet_t pp)
  * Purpose:     Sleep while the transmit queue is empty rather than
  *		polling periodically.
  *
- * Inputs:	None.
+ * Inputs:	chan	- Audio device number.  
+ *
+ * Description:	We have one transmit thread for each audio device.
+ *		This handles 1 or 2 channels.
  *		
  *--------------------------------------------------------------------*/
 
 
-void tq_wait_while_empty (void)
+void tq_wait_while_empty (int chan)
 {
 	int is_empty;
-	//int c, p;
-	int err;
+
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_wait_while_empty () : enter critical section\n");
+	dw_printf ("tq_wait_while_empty (%d) : enter critical section\n", chan);
 #endif
-	assert (tq_num_channels >= 1 && tq_num_channels <= MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_CHANS);
 
-
-#if __WIN32__
-	EnterCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_lock (&tq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_wait_while_empty: pthread_mutex_lock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_lock (&tq_mutex);
 
 #if DEBUG
 	//text_color_set(DW_COLOR_DEBUG);
-	//dw_printf ("tq_wait_while_empty (): after pthread_mutex_lock\n");
+	//dw_printf ("tq_wait_while_empty (%d): after pthread_mutex_lock\n", chan);
 #endif
-	is_empty = tq_is_empty();
+	is_empty = tq_is_empty(chan);
 
-#if __WIN32__
-	LeaveCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_unlock (&tq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_wait_while_empty: pthread_mutex_unlock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_unlock (&tq_mutex);
+
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_wait_while_empty () : left critical section\n");
+	dw_printf ("tq_wait_while_empty (%d) : left critical section\n", chan);
 #endif
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_wait_while_empty (): is_empty = %d\n", is_empty);
+	dw_printf ("tq_wait_while_empty (%d): is_empty = %d\n", chan, is_empty);
 #endif
 
 	if (is_empty) {
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("tq_wait_while_empty (): SLEEP - about to call cond wait\n");
+	  dw_printf ("tq_wait_while_empty (%d): SLEEP - about to call cond wait\n", chan);
 #endif
 
 
 #if __WIN32__
-	  WaitForSingleObject (wake_up_event, INFINITE);
+	  WaitForSingleObject (wake_up_event[chan], INFINITE);
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
@@ -411,45 +394,33 @@ void tq_wait_while_empty (void)
 #endif
 
 #else
-	  err = pthread_mutex_lock (&wake_up_mutex);
-	  if (err != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("tq_wait_while_empty: pthread_mutex_lock wu err=%d", err);
-	    perror ("");
-	    exit (1);
-	  }
+	  dw_mutex_lock (&(wake_up_mutex[chan]));
 
-	  xmit_thread_is_waiting = 1;
-	  err = pthread_cond_wait (&wake_up_cond, &wake_up_mutex);
-	  xmit_thread_is_waiting = 0;
+	  xmit_thread_is_waiting[chan] = 1;
+	  int err;
+	  err = pthread_cond_wait (&(wake_up_cond[chan]), &(wake_up_mutex[chan]));
+	  xmit_thread_is_waiting[chan] = 0;
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("tq_wait_while_empty (): WOKE UP - returned from cond wait, err = %d\n", err);
+	  dw_printf ("tq_wait_while_empty (%d): WOKE UP - returned from cond wait, err = %d\n", chan, err);
 #endif
 
 	  if (err != 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("tq_wait_while_empty: pthread_cond_wait err=%d", err);
+	    dw_printf ("tq_wait_while_empty (%d): pthread_cond_wait err=%d", chan, err);
 	    perror ("");
 	    exit (1);
 	  }
 
-	  err = pthread_mutex_unlock (&wake_up_mutex);
-	  if (err != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("tq_wait_while_empty: pthread_mutex_unlock wu err=%d", err);
-	    perror ("");
-	    exit (1);
-	  }
-
+	  dw_mutex_unlock (&(wake_up_mutex[chan]));
 #endif
 	}
 
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_wait_while_empty () returns\n");
+	dw_printf ("tq_wait_while_empty (%d) returns\n", chan);
 #endif
 
 }
@@ -474,24 +445,13 @@ packet_t tq_remove (int chan, int prio)
 {
 
 	packet_t result_p;
-	int err;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_remove(%d,%d) enter critical section\n", chan, prio);
 #endif
 
-#if __WIN32__
-	EnterCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_lock (&tq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_remove: pthread_mutex_lock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_lock (&tq_mutex);
 
 	if (queue_head[chan][prio] == NULL) {
 
@@ -504,21 +464,19 @@ packet_t tq_remove (int chan, int prio)
 	  ax25_set_nextp (result_p, NULL);
 	}
 	 
-#if __WIN32__
-	LeaveCriticalSection (&tq_cs);
-#else
-	err = pthread_mutex_unlock (&tq_mutex);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("tq_remove: pthread_mutex_unlock err=%d", err);
-	  perror ("");
-	  exit (1);
-	}
-#endif
+	dw_mutex_unlock (&tq_mutex);
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_remove(%d,%d) leave critical section, returns %p\n", chan, prio, result_p);
+#endif
+
+#if AX25MEMDEBUG
+
+	if (ax25memdebug_get() && result_p != NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("tq_remove (chan=%d, prio=%d)  seq=%d\n", chan, prio, ax25memdebug_seq(result_p));
+	}
 #endif
 	return (result_p);
 }
@@ -528,29 +486,29 @@ packet_t tq_remove (int chan, int prio)
  *
  * Name:        tq_is_empty
  *
- * Purpose:     Test queue is empty.
- *
- * Inputs:	None - this applies to all channels and priorities.
+ * Purpose:     Test if queues for specified channel are empty.
+ *		
+ * Inputs:	chan		Channel 
  *
  * Returns:	True if nothing in the queue.	
  *
  *--------------------------------------------------------------------*/
 
-static int tq_is_empty (void)
+static int tq_is_empty (int chan)
 {
-	int c, p;
+	int p;
+	
+	assert (chan >= 0 && chan < MAX_CHANS);
 
 
-	for (c=0; c<tq_num_channels; c++) {
-	  for (p=0; p<TQ_NUM_PRIO; p++) {
+	for (p=0; p<TQ_NUM_PRIO; p++) {
 
-	    assert (c >= 0 && c < MAX_CHANS);
-	    assert (p >= 0 && p < TQ_NUM_PRIO);
+	  assert (p >= 0 && p < TQ_NUM_PRIO);
 
-	    if (queue_head[c][p] != NULL)
-	       return (0);
-	  }
+	  if (queue_head[chan][p] != NULL)
+	     return (0);
 	}
+
 	return (1);
 
 } /* end tq_is_empty */

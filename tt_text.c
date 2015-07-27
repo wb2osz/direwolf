@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -71,11 +71,28 @@
  *
  * Note that letters can occur in callsigns and comments.
  * Everywhere else they are simply digits.
+ *
+ *
+ *   * New fixed length callsign format
+ *
+ *
+ * 	The "QIKcom-2" project adds a new format where callsigns are represented by
+ * 	a fixed length string of only digits.  The first 6 digits are the buttons corresponding
+ * 	to the letters.  The last 4 take a little calculation.  Example:
+ *
+ *		W B 4 A P R	original.
+ *		9 2 4 2 7 7	corresponding button.
+ *		1 2 0 1 1 2	character position on key.  0 for the digit.
+ *
+ * 	Treat the last line as a base 4 number.
+ * 	Convert it to base 10 and we get 1558 for the last four digits.
  */
 
 /*
  * Everything is based on this table.
  * Changing it will change everything.
+ * In other words, don't mess with it.  
+ * The world will come crumbling down.
  */
 
 static const char translate[10][4] = {
@@ -92,6 +109,52 @@ static const char translate[10][4] = {
 	/* 8 */	{	'T',	'U',	'V',	 0  },
 	/* 9 */	{	'W',	'X',	'Y',	'Z' } };
 
+
+/*
+ * This is for the new 10 character fixed length callsigns for APRStt 3.
+ * Notice that it uses an old keypad layout with Q & Z on the 1 button.
+ * The TH-D72A and all telephones that I could find all have 
+ * four letters each on the 7 and 9 buttons.
+ * This inconsistency is sure to cause confusion but the 6+4 scheme won't
+ * be possible with more than 4 characters assigned to one button.
+ * 4**6-1 = 4096 which fits in 4 decimal digits.
+ * 5**6-1 = 15624 would not fit.
+ *
+ * The column is a two bit code packed into the last 4 digits.
+ */
+
+static const char call10encoding[10][4] = {
+		/*	 0	 1	 2	 3  */
+		/*	---	---	---	--- */
+	/* 0 */	{	'0',	' ',	 0,	 0   },
+	/* 1 */	{	'1',	'Q',	'Z',	 0   },
+	/* 2 */	{	'2',	'A',	'B',	'C'  },
+	/* 3 */	{	'3',	'D',	'E',	'F'  },
+	/* 4 */	{	'4',	'G',	'H',	'I'  },
+	/* 5 */	{	'5',	'J',	'K',	'L'  },
+	/* 6 */	{	'6',	'M',	'N',	'O'  },
+	/* 7 */	{	'7',	'P',	'R',	'S'  },
+	/* 8 */	{	'8',	'T',	'U',	'V'  },
+	/* 9 */	{	'9',	'W',	'X',	'Y'  } };
+
+
+/*
+ * 4 digit gridsquares to cover "99.99% of the world's population."
+ */
+
+static const char grid[10][10][3] =      
+     {  { "AP", "BP", "AO", "BO", "CO", "DO", "EO", "FO", "GO", "OJ" },		// 0 - Canada
+        { "CN", "DN", "EN", "FN", "GN", "CM", "DM", "EM", "FM", "OI" },		// 1 - USA
+        { "DL", "EL", "FL", "DK", "EK", "FK", "EJ", "FJ", "GJ", "PI" },		// 2 - C. America
+        { "FI", "GI", "HI", "FH", "GH", "HH", "FG", "GG", "FF", "GF" },		// 3 - S. America
+        { "JP", "IO", "JO", "KO", "IN", "JN", "KN", "IM", "JM", "KM" },		// 4 - Europe
+        { "LO", "MO", "NO", "OO", "PO", "QO", "RO", "LN", "MN", "NN" },		// 5 - Russia
+        { "ON", "PN", "QN", "OM", "PM", "QM", "OL", "PL", "OK", "PK" },		// 6 - Japan, China
+        { "LM", "MM", "NM", "LL", "ML", "NL", "LK", "MK", "NK", "LJ" },		// 7 - India
+        { "PH", "QH", "OG", "PG", "QG", "OF", "PF", "QF", "RF", "RE" },		// 8 - Aus / NZ
+        { "IL", "IK", "IJ", "JJ", "JI", "JH", "JG", "KG", "JF", "KF" }  };	// 9 - Africa
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -100,6 +163,7 @@ static const char translate[10][4] = {
 #include <stdarg.h>
 
 #include "textcolor.h"
+#include "tt_text.h"
 
 
 #if defined(ENC_MAIN) || defined(DEC_MAIN)
@@ -306,6 +370,217 @@ int tt_text_to_two_key (char *text, int quiet, char *buttons)
 
 /*------------------------------------------------------------------
  *
+ * Name:        tt_text_to_call10
+ *
+ * Purpose:     Convert text to the 10 character callsign format.
+ *
+ * Inputs:      text	- Input string.
+ *			  Should contain from 1 to 6 letters and digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	buttons	- Sequence of buttons to press.
+ *			  Should be exactly 10 unless error.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_text_to_call10 (char *text, int quiet, char *buttons) 
+{
+	char *t;
+	char *b;
+	char c;
+	int packed;		/* two bits per character */
+	int row, col;
+	int errors = 0;
+	int found;
+	char padded[8];
+	char stemp[8];
+
+
+	strcpy (buttons, "");
+
+/* Quick validity check. */
+	
+	if (strlen(text) < 1 || strlen(text) > 6) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Text to callsign 6+4: Callsign \"%s\" not between 1 and 6 characters.\n", text);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+	for (t = text; *t != '\0'; t++) {
+
+	  if (! isalnum(*t)) {
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("Text to callsign 6+4: Callsign \"%s\" can contain only letters and digits.\n", text);
+	    }
+	    errors++;
+	    return (errors);
+	  }
+   	}
+
+/* Append spaces if less than 6 characters. */
+
+	strcpy (padded, text);
+	while (strlen(padded) < 6) {
+	  strcat (padded, " ");
+	}
+
+	b = buttons;
+	packed = 0;
+
+	for (t = padded; *t != '\0'; t++) {
+	
+	  c = *t;
+	  if (islower(c)) {
+	      c = toupper(c);
+	  }
+
+/* Search in the translation table. */
+
+	  found = 0;
+
+	  for (row=0; row<10 && ! found; row++) {
+	    for (col=0; col<4 && ! found; col++) {
+	      if (c == call10encoding[row][col]) {
+	        *b++ = '0' + row;
+	        *b = '\0';
+	        packed = packed * 4 + col;  /* base 4 to binary */
+	        found = 1;
+	      }
+	    }
+	  }
+
+	  if (! found) {
+	    /* Earlier check should have caught any character not in translation table. */
+	    errors++;
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Text to callsign 6+4: INTERNAL ERROR 0x%02x.  Should not be here.\n", c);
+	  }
+	}
+
+/* Binary to decimal for the columns. */
+
+	sprintf (stemp, "%04d", packed);
+	strcat (buttons, stemp);
+
+	return (errors);          
+
+} /* end tt_text_to_call10 */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_text_to_gridsquare
+ *
+ * Purpose:     Convert Gridsquare to 4 digit DTMF representation.
+ *
+ * Inputs:      text	- Input string.
+ *			  Should be two letters (A thru R) and two digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	buttons	- Sequence of buttons to press.
+ *			  Should be 4 digits unless error.
+ *
+ * Returns:     Number of errors detected.
+ *
+ * Example:	"FM19" is converted to "1819."
+ *		"AA00" is converted to empty string and error return code.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_text_to_gridsquare (char *text, int quiet, char *buttons) 
+{
+
+	int row, col;
+	int errors = 0;
+	int found;
+	char uc[3];
+
+
+	strcpy (buttons, "");
+
+/* Quick validity check. */
+	
+	if (strlen(text) < 1 || strlen(text) > 4) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Gridsquare to DTMF: Gridsquare \"%s\" must be 4 characters.\n", text);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+/* Changing to upper case makes things easier later. */
+
+	uc[0] = islower(text[0]) ? toupper(text[0]) : text[0];
+	uc[1] = islower(text[1]) ? toupper(text[1]) : text[1];
+	uc[2] = '\0';
+
+	if (uc[0] < 'A' || uc[0] > 'R' || uc[1] < 'A' || uc[1] > 'R') {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Gridsquare to DTMF: First two characters \"%s\" must be letters in range of A to R.\n", text);
+	  }
+	  errors++;
+	  return (errors);
+	}
+
+	if (! isdigit(text[2]) || ! isdigit(text[3])) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Gridsquare to DTMF: Last two characters \"%s\" must digits.\n", text);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+
+/* Search in the translation table. */
+
+	found = 0;
+
+	for (row=0; row<10 && ! found; row++) {
+	  for (col=0; col<10 && ! found; col++) {
+	    if (strcmp(uc,grid[row][col]) == 0) {
+	      buttons[0] = row + '0';
+	      buttons[1] = col + '0';
+	      buttons[2] = text[2];
+	      buttons[3] = text[3];
+	      buttons[4] = '\0';
+	      found = 1;
+	    }
+	  }
+	}
+
+	if (! found) {
+	  /* Sorry, Greenland, and half of Africa, and ... */
+	  errors++;
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Gridsquare to DTMF: Sorry, your location can't be converted to DTMF.\n");
+	  }
+	}
+
+	return (errors);          
+
+} /* end tt_text_to_gridsquare */
+
+
+
+/*------------------------------------------------------------------
+ *
  * Name:        tt_multipress_to_text
  *
  * Purpose:     Convert the multi-press representation to text.
@@ -427,7 +702,6 @@ int tt_two_key_to_text (char *buttons, int quiet, char *text)
 	char c;
 	int row, col;
 	int errors = 0;
-	int n;
 
 	*t = '\0';
 	
@@ -489,6 +763,163 @@ int tt_two_key_to_text (char *buttons, int quiet, char *text)
 	return (errors);          
 
 } /* end tt_two_key_to_text */
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_call10_to_text
+ *
+ * Purpose:     Convert the 10 digit callsign representation to text.
+ *
+ * Inputs:      buttons	- Input string.
+ *			  Should contain only ten digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	text	- Converted to callsign with upper case letters and digits.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_call10_to_text (char *buttons, int quiet, char *text) 
+{
+	char *b;
+	char *t;
+	char c;
+	int packed;		/* from last 4 digits */
+	int row, col;
+	int errors = 0;
+	int k;
+
+	t = text;
+	*t = '\0';	/* result */
+
+/* Validity check. */
+
+	if (strlen(buttons) != 10) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Callsign 6+4 to text: Encoded Callsign \"%s\" must be exactly 10 digits.\n", buttons);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+	for (b = buttons; *b != '\0'; b++) {
+
+	  if (! isdigit(*b)) {
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("Callsign 6+4 to text: Encoded Callsign \"%s\" can contain only digits.\n", buttons);
+	    }
+	    errors++;
+	    return (errors);
+	  }
+   	}
+
+	packed = atoi(buttons+6);
+
+	for (k = 0; k < 6; k++) {
+	  c = buttons[k];
+
+	  row = c - '0';
+	  col = (packed >> ((5 - k) *2)) & 3;
+
+	  if (row < 0 || row > 9 || col < 0 || col > 3) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Callsign 6+4 to text: INTERNAL ERROR %d %d.  Should not be here.\n", row, col);
+	    errors++;
+	    row = 0;
+	    col = 1;
+	  }
+
+	  if (call10encoding[row][col] != 0) {
+	    *t++ = call10encoding[row][col];
+	    *t = '\0';
+	  }
+	  else {
+	    errors++;
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("Callsign 6+4 to text: Invalid combination: button %d, position %d.\n", row, col);
+	    }
+	  }
+	}
+
+/* Trim any trailing spaces. */
+
+	k = strlen(text) - 1;		/* should be 6 - 1 = 5 */
+
+	while (k >= 0 && text[k] == ' ') {
+	  text[k] = '\0';
+	  k--;
+	}
+
+	return (errors);          
+
+} /* end tt_call10_to_text */
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_gridsquare_to_text
+ *
+ * Purpose:     Convert the 4 digit DTMF gridsquare to normal 2 letters and 2 digits.
+ *
+ * Inputs:      buttons	- Input string.
+ *			  Should contain 4 digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	text	- Converted to gridsquare with upper case letters and digits.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_gridsquare_to_text (char *buttons, int quiet, char *text) 
+{
+	char *b;
+	int row, col;
+	int errors = 0;
+
+	strcpy (text, "");
+
+/* Validity check. */
+
+	if (strlen(buttons) != 4) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("DTMF to Gridsquare: Input \"%s\" must be exactly 4 digits.\n", buttons);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+	for (b = buttons; *b != '\0'; b++) {
+
+	  if (! isdigit(*b)) {
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("DTMF to Gridsquare: Input \"%s\" can contain only digits.\n", buttons);
+	    }
+	    errors++;
+	    return (errors);
+	  }
+   	}
+
+	row = buttons[0] - '0';
+	col = buttons[1] - '0';
+
+	strcpy (text, grid[row][col]);
+	strcat (text, buttons+2);
+
+	return (errors);          
+
+} /* end tt_gridsquare_to_text */
 
 
 /*------------------------------------------------------------------
@@ -598,14 +1029,24 @@ int main (int argc, char *argv[])
 	dw_printf ("Push buttons for multi-press method:\n");
 	n = tt_text_to_multipress (text, 0, buttons);
 	cs = checksum (buttons);
-
 	dw_printf ("\"%s\"    checksum for call = %d\n", buttons, cs);
 
 	dw_printf ("Push buttons for two-key method:\n");
 	n = tt_text_to_two_key (text, 0, buttons);
 	cs = checksum (buttons);
-
 	dw_printf ("\"%s\"    checksum for call = %d\n", buttons, cs);
+
+	n = tt_text_to_call10 (text, 1, buttons);
+	if (n == 0) {
+	  dw_printf ("Push buttons for fixed length 10 digit callsign:\n");
+	  dw_printf ("\"%s\"\n", buttons);
+	}
+
+	n = tt_text_to_gridsquare (text, 1, buttons);
+	if (n == 0) {
+	  dw_printf ("Push buttons for gridsquare:\n");
+	  dw_printf ("\"%s\"\n", buttons);
+	}
 
 	return(0);
 
@@ -664,6 +1105,18 @@ int main (int argc, char *argv[])
 	dw_printf ("Decoded text from two-key method:\n");
 	n = tt_two_key_to_text (buttons, 0, text);
 	dw_printf ("\"%s\"\n", text);
+
+	n = tt_call10_to_text (buttons, 1, text);
+	if (n == 0) {
+	  dw_printf ("Decoded callsign from 10 digit method:\n");
+	  dw_printf ("\"%s\"\n", text);
+	}
+
+	n = tt_gridsquare_to_text (buttons, 1, text);
+	if (n == 0) {
+	  dw_printf ("Decoded gridsquare from 4 DTMF digits:\n");
+	  dw_printf ("\"%s\"\n", text);
+	}
 
 	return(0);
 

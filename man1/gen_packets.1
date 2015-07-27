@@ -1,0 +1,112 @@
+.TH GEN_PACKETS  1
+
+.SH NAME
+gen_packets \- Generate audio file for AX.25 frames.
+
+
+.SH SYNOPSIS
+.B gen_packets -o 
+.I wav-file-out 
+[ \fIoptions\fR ] [ \fItext-file\fR | - ]
+.RS
+.P
+\fIwav-file-out\fR is the result.  The -o option is required.
+.P
+\fItext-file\fR may contain AX.25 packets in the standard monitoring format.  Use "-" to read from stdin.  If not specified, a default builtin message will be used.
+.RE
+
+.SH DESCRIPTION
+\fBgen_packets\fR is a test application which converts text to AX.25 audio for testing packet decoders.
+
+It is very flexible allowing a wide range of audio sample rates, data speeds, and AFSK tones.  It will even generate the scrambled signals commonly used for 9600 baud operation.
+
+
+.SH OPTIONS
+
+.TP
+.BI  "-a " "n"
+Signal amplitude in range of 0 - 200%.  Default 50.  Note that 100% is corresponds to signal peaks of +/- 16383 so we have plenty of headroom to avoid saturation.
+
+.TP
+.BI  "-b " "n"
+Bits / second for data.  Default is 1200.
+
+.TP
+.BI  "-B " "n"
+Bits / second for data.  Proper modem selected for 300, 1200, 9600.
+
+.TP
+.BI  "-g"
+Scrambled baseband rather than AFSK.
+
+.TP
+.BI  "-m " "n"
+Mark frequency.  Default is 1200.
+
+.TP
+.BI  "-s " "n"
+Space frequency.  Default is 2200.
+
+.TP
+.BI  "-r " "n"
+Audio sample Rate.  Default is 44100.
+
+.TP
+.BI  "-n " "n"
+Generate specified number of frames with increasing noise.  (For built-in message only.)
+
+.TP
+.BI  "-o " "file"
+Send output to .wav file.
+
+.TP
+.B  "-8"
+8 bit audio rather than 16.
+
+.TP
+.B  "-2"
+2 channels of audio rather than 1.
+
+
+.SH EXAMPLES
+.P
+.B gen_packets -o x.wav
+.P
+.RS
+With all defaults, a built-in test message is generated
+with standard Bell 202 tones used for packet radio on ordinary
+VHF FM transceivers.
+.RE
+.P
+.B gen_packets -o x.wav -g -b 9600
+.PD 0
+.P
+.PD
+.B gen_packets -o x.wav -B 9600
+.P
+.RS
+Both of these are equivalent.  "-B 9600" automatically selects scrambled baseband rather than AFSK.
+.RE
+.P
+.B gen_packets -o x.wav -m 1600 -s 1800 -b 300
+.PD 0
+.P
+.PD
+.B gen_packets -o x.wav -B 300
+.P
+.RS
+Both of these generate 200 Hz shift, 300 baud, suitable for HF SSB transceiver.
+.RE
+.P
+.B echo -n "WB2OSZ>WORLD:Hello, world!" | gen_packets -a 25 -o x.wav -
+.P
+.RS
+Read message from stdin and put quarter volume sound into the file x.wav.
+.RE
+.P
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

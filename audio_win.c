@@ -1,11 +1,13 @@
 
-#define DEBUGUDP 1
+//#define DEBUGUDP 1
+//#define DEBUG 1
 
+#define STATISTICS 1
 
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -24,17 +26,20 @@
 
 /*------------------------------------------------------------------
  *
- * Module:      audio.c
+ * Module:      audio_win.c
  *
  * Purpose:   	Interface to audio device commonly called a "sound card" for
  *		historical reasons.		
- *
  *
  *		This version uses the native Windows sound interface.
  *
  * Credits:	Fabrice FAURE contributed Linux code for the SDR UDP interface.
  *
  *		Discussion here:  http://gqrx.dk/doc/streaming-audio-over-udp
+ *
+ * Major revisions:
+ *
+ *		1.2 - Add ability to use more than one audio device.
  *
  *---------------------------------------------------------------*/
 
@@ -65,7 +70,13 @@
 #include "audio.h"
 #include "textcolor.h"
 #include "ptt.h"
+#include "demod.h"		/* for alevel_t & demod_get_audio_level() */
 
+
+
+/* Audio configuration. */
+
+static struct audio_s          *save_audio_config_p;
 
 
 /* 
@@ -75,27 +86,57 @@
  * many little transfers.
  */
 
+/*
+ * Originally, we had an abitrary buf time of 40 mS.
+ *
+ * For mono, the buffer size was rounded up from 3528 to 4k so
+ * it was really about 50 mS per buffer or about 20 per second.
+ * For stereo, the buffer size was rounded up from 7056 to 7k so
+ * it was really about 43.7 mS per buffer or about 23 per second.
+ * 
+ * In version 1.2, let's try changing it to 10 to reduce the latency.
+ * For mono, the buffer size was rounded up from 882 to 1k so it
+ * was really about 12.5 mS per buffer or about 80 per second.
+ */
+
 #define TOTAL_BUF_TIME 1000	
-#define ONE_BUF_TIME 40
+#define ONE_BUF_TIME 10
 		
 #define NUM_IN_BUF ((TOTAL_BUF_TIME)/(ONE_BUF_TIME))
 #define NUM_OUT_BUF ((TOTAL_BUF_TIME)/(ONE_BUF_TIME))
 
-static enum audio_in_type_e audio_in_type;
+
+#define roundup1k(n) (((n) + 0x3ff) & ~0x3ff)
+
+static int calcbufsize(int rate, int chans, int bits)
+{
+	int size1 = (rate * chans * bits  / 8 * ONE_BUF_TIME) / 1000;
+	int size2 = roundup1k(size1);
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("audio_open: calcbufsize (rate=%d, chans=%d, bits=%d) calc size=%d, round up to %d\n",
+		rate, chans, bits, size1, size2);
+#endif
+	return (size2);
+}
+
+
+/* Information for each audio stream (soundcard, stdin, or UDP) */
+
+static struct adev_s {
+
+	enum audio_in_type_e g_audio_in_type;	
 
 /*
  * UDP socket for receiving audio stream.
  * Buffer, length, and pointer for UDP or stdin.
  */
 
-static SOCKET udp_sock;
-static char stream_data[SDR_UDP_BUF_MAXLEN];
-static int stream_len;
-static int stream_next;
-
-
-#define roundup1k(n) (((n) + 0x3ff) & ~0x3ff)
-#define calcbufsize(rate,chans,bits) roundup1k( ( (rate)*(chans)*(bits) / 8 * ONE_BUF_TIME)/1000  )
+	
+	SOCKET udp_sock;
+	char stream_data[SDR_UDP_BUF_MAXLEN];
+	int stream_len;
+	int stream_next;
 
 
 /* For sound output. */
@@ -105,86 +146,22 @@ static int stream_next;
 #define DWU_PLAYING 2		/* Was given to sound system for playing. */
 #define DWU_DONE 3		/* Sound system is done with it. */
 
-static HWAVEOUT audio_out_handle = 0;
+	HWAVEOUT audio_out_handle;
 
-static volatile WAVEHDR out_wavehdr[NUM_OUT_BUF];
-static int out_current;		/* index to above. */
-static int outbuf_size;
+	volatile WAVEHDR out_wavehdr[NUM_OUT_BUF];
+	int out_current;		/* index to above. */
+	int outbuf_size;
 
 
 /* For sound input. */
 /* In this case dwUser is index of next available byte to remove. */
 
-static HWAVEIN  audio_in_handle = 0;
-static WAVEHDR in_wavehdr[NUM_IN_BUF];
-static volatile WAVEHDR *in_headp;	/* head of queue to process. */
-static CRITICAL_SECTION in_cs;
+	HWAVEIN  audio_in_handle;
+	WAVEHDR in_wavehdr[NUM_IN_BUF];
+	volatile WAVEHDR *in_headp;	/* head of queue to process. */
+	CRITICAL_SECTION in_cs;
 
-
-
-
-
-
-
-/*------------------------------------------------------------------
- *
- * Name:        print_capabilities
- *
- * Purpose:     Display capabilities of the available audio devices.
- *
- * Example:
- * 
- *
- *   Available audio input devices for receive (*=selected):
- *     0: Microphone (Realtek High Defini  mono: 11 22 44 96  stereo: 11 22 44 96
- *     1: Microphone (Bluetooth SCO Audio  mono: 11 22 44 96  stereo: 11 22 44 96
- *     2: Microphone (Bluetooth AV Audio)  mono: 11 22 44 96  stereo: 11 22 44 96
- *     3: Microphone (USB PnP Sound Devic  mono: 11 22 44 96  stereo: 11 22 44 96
- *   Available audio output devices for transmit (*=selected):
- *     0: Speakers (Realtek High Definiti  mono: 11 22 44 96  stereo: 11 22 44 96
- *     1: Speakers (Bluetooth SCO Audio)   mono: 11 22 44 96  stereo: 11 22 44 96
- *     2: Realtek Digital Output (Realtek  mono: 11 22 44 96  stereo: 11 22 44 96
- *     3: Realtek Digital Output(Optical)  mono: 11 22 44 96  stereo: 11 22 44 96
- *     4: Speakers (Bluetooth AV Audio)    mono: 11 22 44 96  stereo: 11 22 44 96
- *     5: Speakers (USB PnP Sound Device)  mono: 11 22 44 96  stereo: 11 22 44 96	
- *
- *
- * History:	Removed in version 0.9.
- *
- * Post Mortem discussion:
- *
- *		It turns out to be quite bogus and perhaps deceiving.
- *
- *		The chip (http://www.szlnst.com/Uploadfiles/HS100.pdf) in the cheap 
- *		USB Audio device is physically capable of only 44.1 and 48 KHz
- *		sampling rates.  Input is mono only.  Output is stereo only.
- *		There is discussion of this in the Raspberry Pi document.
- *
- *		Here, it looks like it has much more general capabilities.
- *		It seems the audio system puts some virtual layer on top of
- *		it to provide resampling for different rates and silent 
- *		right channel for stereo input.
- *
- *		
- *----------------------------------------------------------------*/
-
-#if 0
-static void print_capabilities (DWORD formats) 
-{
-	dw_printf ("  mono:");
-	dw_printf ("%s", (formats & WAVE_FORMAT_1M16) ? " 11" : "   ");
-	dw_printf ("%s", (formats & WAVE_FORMAT_2M16) ? " 22" : "   ");
-	dw_printf ("%s", (formats & WAVE_FORMAT_4M16) ? " 44" : "   ");
-	dw_printf ("%s", (formats & WAVE_FORMAT_96M16) ? " 96" : "   ");
-
-	dw_printf ("  stereo:");
-	dw_printf ("%s", (formats & WAVE_FORMAT_1S16) ? " 11" : "   ");
-	dw_printf ("%s", (formats & WAVE_FORMAT_2S16) ? " 22" : "   ");
-	dw_printf ("%s", (formats & WAVE_FORMAT_4S16) ? " 44" : "   ");
-	dw_printf ("%s", (formats & WAVE_FORMAT_96S16) ? " 96" : "   ");
-}
-#endif
-
+} adev[MAX_ADEVS];
 
 
 /*------------------------------------------------------------------
@@ -242,160 +219,223 @@ static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD instance, DW
 
 int audio_open (struct audio_s *pa)
 {
+	int a;
+
 	int err;
 	int chan;
 	int n;
-	int in_dev_no;
-	int out_dev_no;
+	int in_dev_no[MAX_ADEVS];
+	int out_dev_no[MAX_ADEVS];
 
-	WAVEFORMATEX wf;
 
 	int num_devices;
 	WAVEINCAPS wic;
 	WAVEOUTCAPS woc;
 
-	assert (audio_in_handle == 0);
-	assert (audio_out_handle == 0);
+	save_audio_config_p = pa;
+
+
+    	for (a=0; a<MAX_ADEVS; a++) {
+      	  if (pa->adev[a].defined) {
+
+            struct adev_s *A = &(adev[a]);
+
+	    assert (A->audio_in_handle == 0);
+	    assert (A->audio_out_handle == 0);
+
+	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("pa->adev[a].adevice_in = '%s'\n",  pa->adev[a].adevice_in);
+	    //dw_printf ("pa->adev[a].adevice_out = '%s'\n", pa->adev[a].adevice_out);
 
 
 /*
  * Fill in defaults for any missing values.
  */
-	if (pa -> num_channels == 0)
-	  pa -> num_channels = DEFAULT_NUM_CHANNELS;
+	    if (pa -> adev[a].num_channels == 0)
+	      pa -> adev[a].num_channels = DEFAULT_NUM_CHANNELS;
 
-	if (pa -> samples_per_sec == 0)
-	  pa -> samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
+	    if (pa -> adev[a].samples_per_sec == 0)
+	      pa -> adev[a].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
 
-	if (pa -> bits_per_sample == 0)
-	  pa -> bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
+	    if (pa -> adev[a].bits_per_sample == 0)
+	      pa -> adev[a].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 
-	for (chan=0; chan<MAX_CHANS; chan++) {
-	  if (pa -> mark_freq[chan] == 0)
-	    pa -> mark_freq[chan] = DEFAULT_MARK_FREQ;
+	    A->g_audio_in_type = AUDIO_IN_TYPE_SOUNDCARD;
 
-	  if (pa -> space_freq[chan] == 0)
-	    pa -> space_freq[chan] = DEFAULT_SPACE_FREQ;
+	    for (chan=0; chan<MAX_CHANS; chan++) {
+	      if (pa -> achan[chan].mark_freq == 0)
+	        pa -> achan[chan].mark_freq = DEFAULT_MARK_FREQ;
 
-	  if (pa -> baud[chan] == 0)
-	    pa -> baud[chan] = DEFAULT_BAUD;
+	      if (pa -> achan[chan].space_freq == 0)
+	        pa -> achan[chan].space_freq = DEFAULT_SPACE_FREQ;
 
-	  if (pa->num_subchan[chan] == 0)
-	    pa->num_subchan[chan] = 1;
-	}
+	      if (pa -> achan[chan].baud == 0)
+	        pa -> achan[chan].baud = DEFAULT_BAUD;
 
-	wf.wFormatTag = WAVE_FORMAT_PCM;
-	wf.nChannels = pa -> num_channels; 
-	wf.nSamplesPerSec = pa -> samples_per_sec;
-	wf.wBitsPerSample = pa -> bits_per_sample;
-	wf.nBlockAlign = (wf.wBitsPerSample / 8) * wf.nChannels;
-	wf.nAvgBytesPerSec = wf.nBlockAlign * wf.nSamplesPerSec;
-	wf.cbSize = 0;
-
-	outbuf_size = calcbufsize(wf.nSamplesPerSec,wf.nChannels,wf.wBitsPerSample);
+	      if (pa->achan[chan].num_subchan == 0)
+	        pa->achan[chan].num_subchan = 1;
+	    }
 
 
-	udp_sock = INVALID_SOCKET;
+	    A->udp_sock = INVALID_SOCKET;
 
-	in_dev_no = WAVE_MAPPER;	/* = -1 */
-	out_dev_no = WAVE_MAPPER;
+	    in_dev_no[a] = WAVE_MAPPER;	/* = -1 */
+	    out_dev_no[a] = WAVE_MAPPER;
 
 /*
  * Determine the type of audio input and select device.
+ * This can be soundcard, UDP stream, or stdin.
  */
 	
-	if (strcasecmp(pa->adevice_in, "stdin") == 0 || strcmp(pa->adevice_in, "-") == 0) {
-	  audio_in_type = AUDIO_IN_TYPE_STDIN;
-	  /* Change - to stdin for readability. */
-	  strcpy (pa->adevice_in, "stdin");
-	}
-	else if (strncasecmp(pa->adevice_in, "udp:", 4) == 0) {
-	  audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
-	  /* Supply default port if none specified. */
-	  if (strcasecmp(pa->adevice_in,"udp") == 0 ||
-	    strcasecmp(pa->adevice_in,"udp:") == 0) {
-	    sprintf (pa->adevice_in, "udp:%d", DEFAULT_UDP_AUDIO_PORT);
-	  }
-	} 
-	else {
-	  audio_in_type = AUDIO_IN_TYPE_SOUNDCARD; 	
+	    if (strcasecmp(pa->adev[a].adevice_in, "stdin") == 0 || strcmp(pa->adev[a].adevice_in, "-") == 0) {
+	      A->g_audio_in_type = AUDIO_IN_TYPE_STDIN;
+	      /* Change - to stdin for readability. */
+	      strcpy (pa->adev[a].adevice_in, "stdin");
+	    }
+	    else if (strncasecmp(pa->adev[a].adevice_in, "udp:", 4) == 0) {
+	      A->g_audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
+	      /* Supply default port if none specified. */
+	      if (strcasecmp(pa->adev[a].adevice_in,"udp") == 0 ||
+	        strcasecmp(pa->adev[a].adevice_in,"udp:") == 0) {
+	        sprintf (pa->adev[a].adevice_in, "udp:%d", DEFAULT_UDP_AUDIO_PORT);
+	      }
+	    } 
+	    else {
+	      A->g_audio_in_type = AUDIO_IN_TYPE_SOUNDCARD; 	
 
-	  /* Does config file have a number?  */
-	  /* If so, it is an index into list of devices. */
+	      /* Does config file have a number?  */
+	      /* If so, it is an index into list of devices. */
 
-	  if (strlen(pa->adevice_in) == 1 && isdigit(pa->adevice_in[0])) {
-	    in_dev_no = atoi(pa->adevice_in);
-	  }
+	      if (strlen(pa->adev[a].adevice_in) == 1 && isdigit(pa->adev[a].adevice_in[0])) {
+	        in_dev_no[a] = atoi(pa->adev[a].adevice_in);
+	      }
 
-	  /* Otherwise, does it have search string? */
+	      /* Otherwise, does it have search string? */
 
-	  if (in_dev_no == WAVE_MAPPER && strlen(pa->adevice_in) >= 1) {
-	    num_devices = waveInGetNumDevs();
-	    for (n=0 ; n<num_devices && in_dev_no == WAVE_MAPPER ; n++) {
-	      if ( ! waveInGetDevCaps(n, &wic, sizeof(WAVEINCAPS))) {
-	        if (strstr(wic.szPname, pa->adevice_in) != NULL) {
-	          in_dev_no = n;
+	      if (in_dev_no[a] == WAVE_MAPPER && strlen(pa->adev[a].adevice_in) >= 1) {
+	        num_devices = waveInGetNumDevs();
+	        for (n=0 ; n<num_devices && in_dev_no[a] == WAVE_MAPPER ; n++) {
+	          if ( ! waveInGetDevCaps(n, &wic, sizeof(WAVEINCAPS))) {
+	            if (strstr(wic.szPname, pa->adev[a].adevice_in) != NULL) {
+	              in_dev_no[a] = n;
+	            }
+	          }
+	        }
+	        if (in_dev_no[a] == WAVE_MAPPER) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("\"%s\" doesn't match any of the input devices.\n", pa->adev[a].adevice_in);
 	        }
 	      }
-	    }
-	    if (in_dev_no == WAVE_MAPPER) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\"%s\" doesn't match any of the input devices.\n", pa->adevice_in);
-	    }
-	  }
- 	}
+ 	    }
 
 /*
  * Select output device.
+ * Only soundcard at this point.
+ * Purhaps we'd like to add UDP for an SDR transmitter.
  */
-	if (strlen(pa->adevice_out) == 1 && isdigit(pa->adevice_out[0])) {
-	  out_dev_no = atoi(pa->adevice_out);
-	}
+	    if (strlen(pa->adev[a].adevice_out) == 1 && isdigit(pa->adev[a].adevice_out[0])) {
+	      out_dev_no[a] = atoi(pa->adev[a].adevice_out);
+	    }
 
-	if (out_dev_no == WAVE_MAPPER && strlen(pa->adevice_out) >= 1) {
-	  num_devices = waveOutGetNumDevs();
-	  for (n=0 ; n<num_devices && out_dev_no == WAVE_MAPPER ; n++) {
-	    if ( ! waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS))) {
-	      if (strstr(woc.szPname, pa->adevice_out) != NULL) {
-	        out_dev_no = n;
+	    if (out_dev_no[a] == WAVE_MAPPER && strlen(pa->adev[a].adevice_out) >= 1) {
+	      num_devices = waveOutGetNumDevs();
+	      for (n=0 ; n<num_devices && out_dev_no[a] == WAVE_MAPPER ; n++) {
+	        if ( ! waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS))) {
+	          if (strstr(woc.szPname, pa->adev[a].adevice_out) != NULL) {
+	            out_dev_no[a] = n;
+	          }
+	        }
+	      }
+	      if (out_dev_no[a] == WAVE_MAPPER) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\"%s\" doesn't match any of the output devices.\n", pa->adev[a].adevice_out);
 	      }
 	    }
-	  }
-	  if (out_dev_no == WAVE_MAPPER) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\"%s\" doesn't match any of the output devices.\n", pa->adevice_out);
-	  }
-	}
- 
+	  }   /* if defined */
+	}    /* for each device */
+
 
 /*
- * Display what is available and anything selected.
+ * Display the input devices (soundcards) available and what is selected.
  */
+
 	text_color_set(DW_COLOR_INFO);
 	dw_printf ("Available audio input devices for receive (*=selected):\n");
 
 	num_devices = waveInGetNumDevs();
-	if (in_dev_no < -1 || in_dev_no >= num_devices) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Invalid input (receive) audio device number %d.\n", in_dev_no);
-	  in_dev_no = WAVE_MAPPER;
-	}
+
+        for (a=0; a<MAX_ADEVS; a++) {
+          if (pa->adev[a].defined) {
+
+	    if (in_dev_no[a] < -1 || in_dev_no[a] >= num_devices) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Invalid input (receive) audio device number %d.\n", in_dev_no[a]);
+	      in_dev_no[a] = WAVE_MAPPER;
+	    }
+	  }
+        }
+
 	text_color_set(DW_COLOR_INFO);
 	for (n=0; n<num_devices; n++) {
-	  
+
 	  if ( ! waveInGetDevCaps(n, &wic, sizeof(WAVEINCAPS))) {
-	    dw_printf ("%c %d: %s\n", n==in_dev_no ? '*' : ' ', n, wic.szPname);
-	    //dw_printf ("%c %d: %-31s\n", n==in_dev_no ? '*' : ' ', n, wic.szPname);
-	    //print_capabilities (wic.dwFormats);
-	    //dw_printf ("\n");
-	  }
-	}
+	    for (a=0; a<MAX_ADEVS; a++) {
+	      if (pa->adev[a].defined) {
+	        dw_printf (" %c", n==in_dev_no[a] ? '*' : ' ');
 
-	/* Display stdin or udp:port if appropriate. */
+	      }
+	    }
+	    dw_printf ("  %d: %s", n, wic.szPname);
 
-	if (audio_in_type != AUDIO_IN_TYPE_SOUNDCARD) {
-	  dw_printf ("*    %s\n", pa->adevice_in);
-	}
+	    for (a=0; a<MAX_ADEVS; a++) {
+	      if (pa->adev[a].defined && n==in_dev_no[a]) {
+	        if (pa->adev[a].num_channels == 2) {
+	          dw_printf ("   (channels %d & %d)", ADEVFIRSTCHAN(a), ADEVFIRSTCHAN(a)+1);
+	        }
+	        else {
+	          dw_printf ("   (channel %d)", ADEVFIRSTCHAN(a));
+	        }
+	      }
+	    }
+	    dw_printf ("\n");
+ 	  }
+    	}
+
+// Add UDP or stdin to end of device list if used.
+
+    	for (a=0; a<MAX_ADEVS; a++) {
+      	  if (pa->adev[a].defined) {
+
+            struct adev_s *A = &(adev[a]);
+
+	    /* Display stdin or udp:port if appropriate. */   
+
+	    if (A->g_audio_in_type != AUDIO_IN_TYPE_SOUNDCARD) {
+
+	      int aaa;
+	      for (aaa=0; aaa<MAX_ADEVS; aaa++) {
+	        if (pa->adev[aaa].defined) {
+	          dw_printf (" %c", a == aaa ? '*' : ' ');
+
+	        }
+	      }
+	      dw_printf ("  %s                             ", pa->adev[a].adevice_in);	/* should be UDP:nnnn or stdin */
+
+	      if (pa->adev[a].num_channels == 2) {
+	        dw_printf ("   (channels %d & %d)", ADEVFIRSTCHAN(a), ADEVFIRSTCHAN(a)+1);
+	      }
+	      else {
+	        dw_printf ("   (channel %d)", ADEVFIRSTCHAN(a));
+	      }
+	      dw_printf ("\n");
+	    }
+      	  }
+     	}
+
+
+/*
+ * Display the output devices (soundcards) available and what is selected.
+ */
 
 	dw_printf ("Available audio output devices for transmit (*=selected):\n");
 
@@ -405,164 +445,218 @@ int audio_open (struct audio_s *pa)
 	/* Which is the default?  The first one? */
 
 	num_devices = waveOutGetNumDevs();
-	if (out_dev_no < -1 || out_dev_no >= num_devices) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Invalid output (transmit) audio device number %d.\n", out_dev_no);
-	  out_dev_no = WAVE_MAPPER;
-	}
-	text_color_set(DW_COLOR_INFO);
-	for (n=0; n<num_devices; n++) {
-	  
-	  if ( ! waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS))) {
-	    dw_printf ("%c %d: %s\n", n==out_dev_no ? '*' : ' ', n, woc.szPname);
-	    //dw_printf ("%c %d: %-31s\n", n==out_dev_no ? '*' : ' ', n, woc.szPname);
-	    //print_capabilities (woc.dwFormats);
-	    //dw_printf ("\n");
+
+        for (a=0; a<MAX_ADEVS; a++) {
+          if (pa->adev[a].defined) {
+	    if (out_dev_no[a] < -1 || out_dev_no[a] >= num_devices) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Invalid output (transmit) audio device number %d.\n", out_dev_no[a]);
+	      out_dev_no[a] = WAVE_MAPPER;
+	    }
 	  }
 	}
 
-	err = waveOutOpen (&audio_out_handle, out_dev_no, &wf, (DWORD_PTR)out_callback, 0, CALLBACK_FUNCTION);
-	if (err != MMSYSERR_NOERROR) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Could not open audio device for output.\n");
-	  return (-1);
-	}	  
+	text_color_set(DW_COLOR_INFO);
+	for (n=0; n<num_devices; n++) {
+
+	  if ( ! waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS))) {
+	    for (a=0; a<MAX_ADEVS; a++) {
+	      if (pa->adev[a].defined) {
+	        dw_printf (" %c", n==out_dev_no[a] ? '*' : ' ');
+
+	      }
+	    }
+	    dw_printf ("  %d: %s", n, woc.szPname);
+
+	    for (a=0; a<MAX_ADEVS; a++) {
+	      if (pa->adev[a].defined && n==out_dev_no[a]) {
+	        if (pa->adev[a].num_channels == 2) {
+	          dw_printf ("   (channels %d & %d)", ADEVFIRSTCHAN(a), ADEVFIRSTCHAN(a)+1);
+	        }
+	        else {
+	          dw_printf ("   (channel %d)", ADEVFIRSTCHAN(a));
+	        }
+	      }
+	    }
+	    dw_printf ("\n");
+	  }
+	}
+
+
+/*
+ * Open for each audio device input/output pair.
+ */
+
+     	for (a=0; a<MAX_ADEVS; a++) {
+      	  if (pa->adev[a].defined) {
+
+            struct adev_s *A = &(adev[a]);
+
+	     WAVEFORMATEX wf;
+
+	     wf.wFormatTag = WAVE_FORMAT_PCM;
+	     wf.nChannels = pa -> adev[a].num_channels; 
+	     wf.nSamplesPerSec = pa -> adev[a].samples_per_sec;
+	     wf.wBitsPerSample = pa -> adev[a].bits_per_sample;
+	     wf.nBlockAlign = (wf.wBitsPerSample / 8) * wf.nChannels;
+	     wf.nAvgBytesPerSec = wf.nBlockAlign * wf.nSamplesPerSec;
+	     wf.cbSize = 0;
+
+	     A->outbuf_size = calcbufsize(wf.nSamplesPerSec,wf.nChannels,wf.wBitsPerSample);
+
+
+/*
+ * Open the audio output device.
+ * Soundcard is only possibility at this time.
+ */
+
+	     err = waveOutOpen (&(A->audio_out_handle), out_dev_no[a], &wf, (DWORD_PTR)out_callback, a, CALLBACK_FUNCTION);
+	     if (err != MMSYSERR_NOERROR) {
+	       text_color_set(DW_COLOR_ERROR);
+	       dw_printf ("Could not open audio device for output.\n");
+	       return (-1);
+	     }
+	  
 
 /*
  * Set up the output buffers.
  * We use dwUser to indicate it is available for filling.
  */
 
-	memset ((void*)out_wavehdr, 0, sizeof(out_wavehdr));
+	     memset ((void*)(A->out_wavehdr), 0, sizeof(A->out_wavehdr));
 
-	for (n = 0; n < NUM_OUT_BUF; n++) {
-	  out_wavehdr[n].lpData = malloc(outbuf_size);
-	  out_wavehdr[n].dwUser = DWU_FILLING;	
-	  out_wavehdr[n].dwBufferLength = 0;
-	}
-	out_current = 0;			
+	     for (n = 0; n < NUM_OUT_BUF; n++) {
+	       A->out_wavehdr[n].lpData = malloc(A->outbuf_size);
+	       A->out_wavehdr[n].dwUser = DWU_FILLING;	
+	       A->out_wavehdr[n].dwBufferLength = 0;
+	     }
+	     A->out_current = 0;			
 
 	
 /*
  * Open audio input device.
+ * More possibilities here:  soundcard, UDP port, stdin.
  */
 
-	switch (audio_in_type) {
+	     switch (A->g_audio_in_type) {
 
 /*
  * Soundcard.
  */
-	  case AUDIO_IN_TYPE_SOUNDCARD:
+	       case AUDIO_IN_TYPE_SOUNDCARD:
 
-	    InitializeCriticalSection (&in_cs);
+	         InitializeCriticalSection (&(A->in_cs));
 
-	    err = waveInOpen (&audio_in_handle, in_dev_no, &wf, (DWORD_PTR)in_callback, 0, CALLBACK_FUNCTION);
-	    if (err != MMSYSERR_NOERROR) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Could not open audio device for input.\n");
-	      return (-1);
-	    }	  
+	         err = waveInOpen (&(A->audio_in_handle), in_dev_no[a], &wf, (DWORD_PTR)in_callback, a, CALLBACK_FUNCTION);
+	         if (err != MMSYSERR_NOERROR) {
+	           text_color_set(DW_COLOR_ERROR);
+	           dw_printf ("Could not open audio device for input.\n");
+	           return (-1);
+	         }	  
 
 
-	    /*
-	     * Set up the input buffers.
-	     */
+	         /*
+	          * Set up the input buffers.
+	          */
 
-	    memset ((void*)in_wavehdr, 0, sizeof(in_wavehdr));
+	         memset ((void*)(A->in_wavehdr), 0, sizeof(A->in_wavehdr));
 
-	    for (n = 0; n < NUM_OUT_BUF; n++) {
-	      in_wavehdr[n].dwBufferLength = outbuf_size;  /* all the same size */
-	      in_wavehdr[n].lpData = malloc(outbuf_size);
-	    }
-	    in_headp = NULL;			
+	         for (n = 0; n < NUM_OUT_BUF; n++) {
+	           A->in_wavehdr[n].dwBufferLength = A->outbuf_size;  /* all the same size */
+	           A->in_wavehdr[n].lpData = malloc(A->outbuf_size);
+	         }
+	         A->in_headp = NULL;			
 
-	    /*
-	     * Give them to the sound input system.
-	     */
+	         /*
+	          * Give them to the sound input system.
+	          */
 	
-	    for (n = 0; n < NUM_OUT_BUF; n++) {
-	      waveInPrepareHeader(audio_in_handle, &(in_wavehdr[n]), sizeof(WAVEHDR));
-	      waveInAddBuffer(audio_in_handle, &(in_wavehdr[n]), sizeof(WAVEHDR));
-	    }
+	         for (n = 0; n < NUM_OUT_BUF; n++) {
+	           waveInPrepareHeader(A->audio_in_handle, &(A->in_wavehdr[n]), sizeof(WAVEHDR));
+	           waveInAddBuffer(A->audio_in_handle, &(A->in_wavehdr[n]), sizeof(WAVEHDR));
+	         }
 
-	    /*
-	     * Start it up.
-	     * The callback function is called when one is filled.
-	     */
+	         /*
+	          * Start it up.
+	          * The callback function is called when one is filled.
+	          */
 
-	    waveInStart (audio_in_handle);
-	    break;
+	         waveInStart (A->audio_in_handle);
+	         break;
 
 /*
  * UDP.
  */
-	  case AUDIO_IN_TYPE_SDR_UDP:
+	       case AUDIO_IN_TYPE_SDR_UDP:
 
-	    {
-	      WSADATA wsadata;
-	      struct sockaddr_in si_me;
-	      //int slen=sizeof(si_me);
-	      //int data_size = 0;
-	      int err;
+	         {
+	           WSADATA wsadata;
+	           struct sockaddr_in si_me;
+	           //int slen=sizeof(si_me);
+	           //int data_size = 0;
+	           int err;
 
-	      err = WSAStartup (MAKEWORD(2,2), &wsadata);
-	      if (err != 0) {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf("WSAStartup failed: %d\n", err);
-	          return (-1);
-	      }
+	           err = WSAStartup (MAKEWORD(2,2), &wsadata);
+	           if (err != 0) {
+	               text_color_set(DW_COLOR_ERROR);
+	               dw_printf("WSAStartup failed: %d\n", err);
+	               return (-1);
+	           }
 
-	      if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
-	        text_color_set(DW_COLOR_ERROR);
-                dw_printf("Could not find a usable version of Winsock.dll\n");
-                WSACleanup();
-                return (-1);
-	      }
+	           if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
+	             text_color_set(DW_COLOR_ERROR);
+                     dw_printf("Could not find a usable version of Winsock.dll\n");
+                     WSACleanup();
+                     return (-1);
+	           }
 
-	      // Create UDP Socket
+	           // Create UDP Socket
 
-	      udp_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	      if (udp_sock == INVALID_SOCKET) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Couldn't create socket, errno %d\n", WSAGetLastError());
-	        return -1;
-	      }
+	           A->udp_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	           if (A->udp_sock == INVALID_SOCKET) {
+	             text_color_set(DW_COLOR_ERROR);
+	             dw_printf ("Couldn't create socket, errno %d\n", WSAGetLastError());
+	             return -1;
+	           }
 
-	      memset((char *) &si_me, 0, sizeof(si_me));
-	      si_me.sin_family = AF_INET;   
-	      si_me.sin_port = htons((short)atoi(pa->adevice_in + 4));
-	      si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+	           memset((char *) &si_me, 0, sizeof(si_me));
+	           si_me.sin_family = AF_INET;   
+	           si_me.sin_port = htons((short)atoi(pa->adev[a].adevice_in + 4));
+	           si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	      // Bind to the socket
+	           // Bind to the socket
 
-	      if (bind(udp_sock, (SOCKADDR *) &si_me, sizeof(si_me)) != 0) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Couldn't bind socket, errno %d\n", WSAGetLastError());
-	        return -1;
-	      }
-	      stream_next= 0;
-	      stream_len = 0;
-	    }
+	           if (bind(A->udp_sock, (SOCKADDR *) &si_me, sizeof(si_me)) != 0) {
+	             text_color_set(DW_COLOR_ERROR);
+	             dw_printf ("Couldn't bind socket, errno %d\n", WSAGetLastError());
+	             return -1;
+	           }
+	           A->stream_next= 0;
+	           A->stream_len = 0;
+	         }
 
-	    break;
+	         break;
 
 /* 
  * stdin.
  */
-   	  case AUDIO_IN_TYPE_STDIN:
+   	       case AUDIO_IN_TYPE_STDIN:
 
-  	    setmode (STDIN_FILENO, _O_BINARY);
-	    stream_next= 0;
-	    stream_len = 0;
+  	         setmode (STDIN_FILENO, _O_BINARY);
+	         A->stream_next= 0;
+	         A->stream_len = 0;
 
-	    break;
+	         break;
 
-	  default:
+	       default:
 
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Internal error, invalid audio_in_type\n");
-	    return (-1);
-  	}
+	         text_color_set(DW_COLOR_ERROR);
+	         dw_printf ("Internal error, invalid audio_in_type\n");
+	         return (-1);
+  	     }
+
+	  }
+    	}
 
 	return (0);
 
@@ -576,6 +670,15 @@ int audio_open (struct audio_s *pa)
 
 static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD instance, DWORD param1, DWORD param2)
 {
+
+	int a = instance;
+
+//dw_printf ("in_callback, handle = %d, a = %d\n", (int)handle, a);
+
+	assert (a >= 0 && a < MAX_ADEVS);
+	struct adev_s *A = &(adev[a]);
+
+
 	if (msg == WIM_DATA) {
 	
 	  WAVEHDR *p = (WAVEHDR*)param1;
@@ -583,13 +686,13 @@ static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD instance, DWOR
 	  p->dwUser = -1;		/* needs to be unprepared. */
 	  p->lpNext = NULL;
 
-	  EnterCriticalSection (&in_cs);
+	  EnterCriticalSection (&(A->in_cs));
 
-	  if (in_headp == NULL) {
-	    in_headp = p;		/* first one in list */
+	  if (A->in_headp == NULL) {
+	    A->in_headp = p;		/* first one in list */
 	  }
 	  else {
-	    WAVEHDR *last = (WAVEHDR*)in_headp;
+	    WAVEHDR *last = (WAVEHDR*)(A->in_headp);
 
 	    while (last->lpNext != NULL) {
 	      last = last->lpNext;
@@ -597,7 +700,7 @@ static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD instance, DWOR
 	    last->lpNext = p;		/* append to last one */
 	  }
 
-	  LeaveCriticalSection (&in_cs);
+	  LeaveCriticalSection (&(A->in_cs));
 	}
 }
 
@@ -625,6 +728,9 @@ static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD instance, DW
  *
  * Purpose:     Get one byte from the audio device.
  *
+ *
+ * Inputs:	a	- Audio soundcard number.
+ *
  * Returns:     0 - 255 for a valid sample.
  *              -1 for any type of error.
  *
@@ -638,23 +744,29 @@ static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD instance, DW
 // Use hot attribute for all functions called for every audio sample.
 
 __attribute__((hot))
-int audio_get (void)
+int audio_get (int a)
 {
+	struct adev_s *A;
+ 
 	WAVEHDR *p;
 	int n;
 	int sample;
 
-#if DEBUGUDP
-	/* Gather numbers for read from UDP stream. */
+        A = &(adev[a]); 
 
-	static int duration = 100;	/* report every 100 seconds. */
-	static time_t last_time = 0;
-	time_t this_time;
-	static int sample_count;
-	static int error_count;
+#if defined(DEBUGUDP) || defined(STATISTICS)
+	
+	/* Gather numbers for read from UDP stream. */
+	/* Gather numbers for read from audio device. */
+
+#define duration 100			/* report every 100 seconds. */
+	static time_t last_time[MAX_ADEVS];
+	time_t this_time[MAX_ADEVS];
+	static int sample_count[MAX_ADEVS];
+	static int error_count[MAX_ADEVS];
 #endif
 
-	switch (audio_in_type) {
+	switch (A->g_audio_in_type) {
 
 /*
  * Soundcard.
@@ -669,20 +781,24 @@ int audio_get (void)
 	       */
 	      int timeout = 25;
 
-	      while (in_headp == NULL) {
-	        SLEEP_MS (ONE_BUF_TIME / 5);
+	      while (A->in_headp == NULL) {
+	        //SLEEP_MS (ONE_BUF_TIME / 5);
+	        SLEEP_MS (ONE_BUF_TIME);
 	        timeout--;
 	        if (timeout <= 0) {
 	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Audio input failure.\n");
+
+// TODO1.2: Need more details.  Can we keep going?
+
+	          dw_printf ("Timeout waiting for input from audio device %d.\n", a);
 	          return (-1);
 	        }
 	      }
 
-	      p = (WAVEHDR*)in_headp;		/* no need to be volatile at this point */
+	      p = (WAVEHDR*)(A->in_headp);		/* no need to be volatile at this point */
 
 	      if (p->dwUser == -1) {
-	        waveInUnprepareHeader(audio_in_handle, p, sizeof(WAVEHDR));
+	        waveInUnprepareHeader(A->audio_in_handle, p, sizeof(WAVEHDR));
 	        p->dwUser = 0;	/* Index for next byte. */
 	      }
 
@@ -700,13 +816,13 @@ int audio_get (void)
 	       * Buffer is all used up.  Give it back to sound input system.
 	       */
 
-	      EnterCriticalSection (&in_cs);
-	      in_headp = p->lpNext;
-	      LeaveCriticalSection (&in_cs);
+	      EnterCriticalSection (&(A->in_cs));
+	      A->in_headp = p->lpNext;
+	      LeaveCriticalSection (&(A->in_cs));
 
 	      p->dwFlags = 0;
-	      waveInPrepareHeader(audio_in_handle, p, sizeof(WAVEHDR));
-	      waveInAddBuffer(audio_in_handle, p, sizeof(WAVEHDR));	  
+	      waveInPrepareHeader(A->audio_in_handle, p, sizeof(WAVEHDR));
+	      waveInAddBuffer(A->audio_in_handle, p, sizeof(WAVEHDR));	  
 	    }
 	    break;
 /*
@@ -714,49 +830,52 @@ int audio_get (void)
  */
 	  case AUDIO_IN_TYPE_SDR_UDP:
 
-	    while (stream_next >= stream_len) {
+	    while (A->stream_next >= A->stream_len) {
 	      int res;
 
-              assert (udp_sock > 0);
+              assert (A->udp_sock > 0);
 
-	      res = recv (udp_sock, stream_data, SDR_UDP_BUF_MAXLEN, 0);
+	      res = recv (A->udp_sock, A->stream_data, SDR_UDP_BUF_MAXLEN, 0);
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Can't read from udp socket, errno %d", WSAGetLastError());
-	        stream_len = 0;
-	        stream_next = 0;
+	        A->stream_len = 0;
+	        A->stream_next = 0;
 	        return (-1);
 	      } 
 
 #if DEBUGUDP
-	      if (last_time == 0) {
-	        last_time = time(NULL);
-	        sample_count = 0;
-	        error_count = 0;
+
+// TODO: We should collect audio statistics like this for all types of input.  Move to common function.
+
+	      if (last_time[a] == 0) {
+	        last_time[a] = time(NULL);
+	        sample_count[a] = 0;
+	        error_count[a] = 0;
 	      }
 	      else {
 	        if (res > 0) {
-	           sample_count += res/2;
+	           sample_count[a] += res/2;
 	        }
 	        else {
-	           error_count++;
+	           error_count[a]++;
 	        }
-	        this_time = time(NULL);
-	        if (this_time >= last_time + duration) {
+	        this_time[a] = time(NULL);
+	        if (this_time[a] >= last_time + duration) {
 	          text_color_set(DW_COLOR_DEBUG);
-	          dw_printf ("\nPast %d seconds, %d audio samples processed, %d errors.\n\n", 
-			duration, sample_count, error_count);
-	          last_time = this_time;
-	          sample_count = 0;
-	          error_count = 0;
+	          dw_printf ("\ADEVICE%d: Past %d seconds, %d UDP audio samples processed, %d errors.\n\n", 
+			a, duration, sample_count[a], error_count[a]);
+	          last_time[a] = this_time[a];
+	          sample_count[a] = 0;
+	          error_count[a] = 0;
 	        }      
 	      }
 #endif
-	      stream_len = res;
-	      stream_next = 0;
+	      A->stream_len = res;
+	      A->stream_next = 0;
 	    }
-	    sample = stream_data[stream_next] & 0xff;
-	    stream_next++;
+	    sample = A->stream_data[A->stream_next] & 0xff;
+	    A->stream_next++;
 	    return (sample);
 	    break;
 /* 
@@ -764,20 +883,20 @@ int audio_get (void)
  */
    	  case AUDIO_IN_TYPE_STDIN:
 
-	    while (stream_next >= stream_len) {
+	    while (A->stream_next >= A->stream_len) {
 	      int res;
 
-	      res = read(STDIN_FILENO, stream_data, 1024);
+	      res = read(STDIN_FILENO, A->stream_data, 1024);
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf ("\nEnd of file on stdin.  Exiting.\n");
 	        exit (0);
 	      }
 	    
-	      stream_len = res;
-	      stream_next = 0;
+	      A->stream_len = res;
+	      A->stream_next = 0;
 	    }
-	    return (stream_data[stream_next++] & 0xff);
+	    return (A->stream_data[A->stream_next++] & 0xff);
 	    break;
   	}
 
@@ -792,7 +911,9 @@ int audio_get (void)
  *
  * Purpose:     Send one byte to the audio device.
  *
- * Inputs:	c	- One byte in range of 0 - 255.
+ * Inputs:	a	- Index for audio device.
+ *
+ *		c	- One byte in range of 0 - 255.
  *
  *
  * Global In:	out_current	- index of output buffer currenly being filled.
@@ -808,9 +929,12 @@ int audio_get (void)
  *
  *----------------------------------------------------------------*/
 
-int audio_put (int c)
+int audio_put (int a, int c)
 {
 	WAVEHDR *p;
+
+	struct adev_s *A;
+	A = &(adev[a]); 
 	
 /* 
  * Wait if no buffers are available.
@@ -818,7 +942,7 @@ int audio_put (int c)
  */
 
 	int timeout = 10;
-	while ( out_wavehdr[out_current].dwUser == DWU_PLAYING) {
+	while ( A->out_wavehdr[A->out_current].dwUser == DWU_PLAYING) {
 	  SLEEP_MS (ONE_BUF_TIME);
 	  timeout--;
 	  if (timeout <= 0) {
@@ -829,10 +953,10 @@ int audio_put (int c)
 	  }
 	}
 
-	p = (LPWAVEHDR)(&(out_wavehdr[out_current]));
+	p = (LPWAVEHDR)(&(A->out_wavehdr[A->out_current]));
 
 	if (p->dwUser == DWU_DONE) {
-	  waveOutUnprepareHeader (audio_out_handle, p, sizeof(WAVEHDR));
+	  waveOutUnprepareHeader (A->audio_out_handle, p, sizeof(WAVEHDR));
 	  p->dwBufferLength = 0;
 	  p->dwUser = DWU_FILLING;
 	}
@@ -840,12 +964,12 @@ int audio_put (int c)
 	/* Should never be full at this point. */
 
 	assert (p->dwBufferLength >= 0);
-	assert (p->dwBufferLength < outbuf_size);
+	assert (p->dwBufferLength < A->outbuf_size);
 
 	p->lpData[p->dwBufferLength++] = c;
 
-	if (p->dwBufferLength == outbuf_size) {
-	  return (audio_flush());
+	if (p->dwBufferLength == A->outbuf_size) {
+	  return (audio_flush(a));
 	}
 
 	return (0);
@@ -859,6 +983,8 @@ int audio_put (int c)
  *
  * Purpose:     Send current buffer to the audio output system.
  *
+ * Inputs:	a	- Index for audio device.
+ *
  * Returns:     Normally non-negative.
  *              -1 for any type of error.
  *
@@ -867,21 +993,23 @@ int audio_put (int c)
  *
  *----------------------------------------------------------------*/
 
-int audio_flush (void)
+int audio_flush (int a)
 {
 	WAVEHDR *p;
 	MMRESULT e;
+	struct adev_s *A;
+
+	A = &(adev[a]); 
 	
-	
-	p = (LPWAVEHDR)(&(out_wavehdr[out_current]));
+	p = (LPWAVEHDR)(&(A->out_wavehdr[A->out_current]));
 
 	if (p->dwUser == DWU_FILLING && p->dwBufferLength > 0) {
 
 	  p->dwUser = DWU_PLAYING;
 
-	  waveOutPrepareHeader(audio_out_handle, p, sizeof(WAVEHDR));
+	  waveOutPrepareHeader(A->audio_out_handle, p, sizeof(WAVEHDR));
 
-	  e = waveOutWrite(audio_out_handle, p, sizeof(WAVEHDR));
+	  e = waveOutWrite(A->audio_out_handle, p, sizeof(WAVEHDR));
 	  if (e != MMSYSERR_NOERROR) {
 	    text_color_set (DW_COLOR_ERROR);
 	    dw_printf ("audio out write error %d\n", e);
@@ -892,7 +1020,7 @@ int audio_flush (void)
 	    p->dwUser = DWU_DONE;
 	    return (-1);
 	  }
-	  out_current = (out_current + 1) % NUM_OUT_BUF;
+	  A->out_current = (A->out_current + 1) % NUM_OUT_BUF;
 	}
 	return (0);
 
@@ -903,33 +1031,24 @@ int audio_flush (void)
  *
  * Name:        audio_wait
  *
- * Purpose:     Wait until all the queued up audio out has been played.
+ * Purpose:	Finish up audio output before turning PTT off.
  *
- * Inputs:	duration	- hint at number of milliseconds to wait.
+ * Inputs:	a		- Index for audio device (not channel!)
  *
- * Returns:     Normally non-negative.
- *              -1 for any type of error.
+ * Returns:     None.
  *
- * Description:	In our particular application, we want to make sure
- *		that the entire packet has been sent out before turning
- *		off the transmitter PTT control.
+ * Description:	Flush out any partially filled audio output buffer.
+ *		Wait until all the queued up audio out has been played.
+ *		Take any other necessary actions to stop audio output.
  *
  * In an ideal world:
  * 
  *		We would like to ask the hardware when all the queued
  *		up sound has actually come out the speaker.
  *
- *		The original implementation (on Cygwin) tried using:
- *		
- *			ioctl (audio_device_fd, SNDCTL_DSP_SYNC, NULL);
- *
- *		but this caused the application to crash at a later time.
- *
- *		This might be revisited someday for the Windows version, 
- *		but for now, we continue to use the work-around because it
- *		works fine.
- * 
  * In reality:
+ *
+ * 		This has been found to be less than reliable in practice.
  *
  *		Caller does the following:
  *
@@ -937,33 +1056,17 @@ int audio_flush (void)
  *		(2) Calculate how long it will take to transmit the 
  *			frame including TXDELAY, frame (including 
  *			"flags", data, FCS and bit stuffing), and TXTAIL.
- *		(3) Add (1) and (2) resulting in when PTT should be turned off.
- *		(4) Take difference between current time and PPT off time
- *			and provide this as the additional delay required.
+ *		(3) Call this function, which might or might not wait long enough.
+ *		(4) Add (1) and (2) resulting in when PTT should be turned off.
+ *		(5) Take difference between current time and desired PPT off time
+ *			and wait for additoinal time if required.
  *
  *----------------------------------------------------------------*/
 
-int audio_wait (int duration)
+void audio_wait (int a)
 {	
-	int err = 0;
 
-	audio_flush ();
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("audio_wait(): before sync, fd=%d\n", audio_device_fd);	
-#endif
-
-
-	if (duration > 0) {
-	  SLEEP_MS (duration);
-	}
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("audio_wait(): after sync, status=%d\n", err);	
-#endif
-
-	return (err);
+	audio_flush (a);
 
 } /* end audio_wait */
 
@@ -972,7 +1075,8 @@ int audio_wait (int duration)
  *
  * Name:        audio_close
  *
- * Purpose:     Close the audio device.
+ *
+ * Purpose:     Close all of the audio devices.
  *
  * Returns:     Normally non-negative.
  *              -1 for any type of error.
@@ -986,55 +1090,66 @@ int audio_close (void)
 
 	int n;
 
+	int a;
 
-	assert (audio_in_handle != 0);
-	assert (audio_out_handle != 0);
+    	for (a=0; a<MAX_ADEVS; a++) {
+      	  if (save_audio_config_p->adev[a].defined) {
 
-	audio_wait (0);
+            struct adev_s *A = &(adev[a]);
+
+	    assert (A->audio_in_handle != 0);
+	    assert (A->audio_out_handle != 0);
+
+	    audio_wait (a);
 
 /* Shutdown audio input. */
 
-	waveInReset(audio_in_handle); 
-	waveInStop(audio_in_handle);
-	waveInClose(audio_in_handle);
-	audio_in_handle = 0;
+	    waveInReset(A->audio_in_handle); 
+	    waveInStop(A->audio_in_handle);
+	    waveInClose(A->audio_in_handle);
+	    A->audio_in_handle = 0;
 
-	for (n = 0; n < NUM_IN_BUF; n++) {
+	    for (n = 0; n < NUM_IN_BUF; n++) {
 
-	  waveInUnprepareHeader (audio_in_handle, (LPWAVEHDR)(&(in_wavehdr[n])), sizeof(WAVEHDR));
-	  in_wavehdr[n].dwFlags = 0;
-	  free (in_wavehdr[n].lpData);
- 	  in_wavehdr[n].lpData = NULL;
-	}
+	      waveInUnprepareHeader (A->audio_in_handle, (LPWAVEHDR)(&(A->in_wavehdr[n])), sizeof(WAVEHDR));
+	      A->in_wavehdr[n].dwFlags = 0;
+	      free (A->in_wavehdr[n].lpData);
+ 	      A->in_wavehdr[n].lpData = NULL;
+	    }
 
-	DeleteCriticalSection (&in_cs);
+	    DeleteCriticalSection (&(A->in_cs));
 
 
 /* Make sure all output buffers have been played then free them. */
 
-	for (n = 0; n < NUM_OUT_BUF; n++) {
-	  if (out_wavehdr[n].dwUser == DWU_PLAYING) {
+	    for (n = 0; n < NUM_OUT_BUF; n++) {
+	      if (A->out_wavehdr[n].dwUser == DWU_PLAYING) {
 
-	    int timeout = 2 * NUM_OUT_BUF;
-	    while (out_wavehdr[n].dwUser == DWU_PLAYING) {
-	      SLEEP_MS (ONE_BUF_TIME);
-	      timeout--;
-	      if (timeout <= 0) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Audio output failure on close.\n");
+	        int timeout = 2 * NUM_OUT_BUF;
+	        while (A->out_wavehdr[n].dwUser == DWU_PLAYING) {
+	          SLEEP_MS (ONE_BUF_TIME);
+	          timeout--;
+	          if (timeout <= 0) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Audio output failure on close.\n");
+	          }
+	        }
+
+	        waveOutUnprepareHeader (A->audio_out_handle, (LPWAVEHDR)(&(A->out_wavehdr[n])), sizeof(WAVEHDR));
+
+	        A->out_wavehdr[n].dwUser = DWU_DONE;
 	      }
+	      free (A->out_wavehdr[n].lpData);
+ 	      A->out_wavehdr[n].lpData = NULL;
 	    }
 
-	    waveOutUnprepareHeader (audio_out_handle, (LPWAVEHDR)(&(out_wavehdr[n])), sizeof(WAVEHDR));
+	    waveOutClose (A->audio_out_handle);
+	    A->audio_out_handle = 0;
 
-	    out_wavehdr[n].dwUser = DWU_DONE;
-	  }
-	  free (out_wavehdr[n].lpData);
- 	  out_wavehdr[n].lpData = NULL;
-	}
+          }  /* if device configured */
+        }  /* for each device. */
 
-	waveOutClose (audio_out_handle);
-	audio_out_handle = 0;
+        /* Not right.  always returns 0 but at this point, doesn't matter. */
 
 	return (err);
 

@@ -10,6 +10,7 @@
  * Different copy is required for each channel & subchannel being processed concurrently.
  */
 
+// TODO1.2:  change prefix from BP_ to DSP_
 
 typedef enum bp_window_e { BP_WINDOW_TRUNCATED, 
 				BP_WINDOW_COSINE, 
@@ -17,11 +18,15 @@ typedef enum bp_window_e { BP_WINDOW_TRUNCATED,
 				BP_WINDOW_BLACKMAN,
 				BP_WINDOW_FLATTOP } bp_window_t;
 
+
 struct demodulator_state_s
 {
 /*
  * These are set once during initialization.
  */
+
+	char profile;			// 'A', 'B', etc.	Upper case.
+					// Only needed to see if we are using 'F' to take fast path.
 
 #define TICKS_PER_PLL_CYCLE ( 256.0 * 256.0 * 256.0 * 256.0 )
 
@@ -37,15 +42,19 @@ struct demodulator_state_s
 #define MAX_FILTER_SIZE 320		/* 304 is needed for profile C, 300 baud & 44100. */
 
 /*
- * FIR filter length relative to one bit time.
- * Use same for both bandpass and lowpass.
+ * Filter length for Mark & Space in bit times.
+ * e.g.  1 means 1/1200 second for 1200 baud.
  */
-	float filter_len_bits;
+	float ms_filter_len_bits;
 
 /* 
- * Window type for the mark/space filters.
+ * Window type for the various filters.
  */
-	bp_window_t bp_window;
+	
+	bp_window_t pre_window;
+	bp_window_t ms_window;
+	bp_window_t lp_window;
+
 
 /*
  * Alternate Low pass filters.
@@ -53,18 +62,38 @@ struct demodulator_state_s
  * Second is frequency as ratio to baud rate for FIR.
  */
 	int lpf_use_fir;		/* 0 for IIR, 1 for FIR. */
-	float lpf_iir;
-	float lpf_baud;
+
+	float lpf_iir;			/* Only if using IIR. */
+
+	float lpf_baud;			/* Cutoff frequency as fraction of baud. */
+					/* Intuitively we'd expect this to be somewhere */
+					/* in the range of 0.5 to 1. */
+					/* In practice, it turned out a little larger */
+					/* for profiles B, C, D. */
+
+	float lp_filter_len_bits;  	/* Length in number of bit times. */
+
+	int lp_filter_size;		/* Size of Low Pass filter, in audio samples. */
+					/* Previously it was always the same as the M/S */
+					/* filters but in version 1.2 it's now independent. */
 
 /*
  * Automatic gain control.  Fast attack and slow decay factors.
  */
 	float agc_fast_attack;
 	float agc_slow_decay;
+
+/*
+ * Use a longer term view for reporting signal levels.
+ */
+	float quick_attack;
+	float sluggish_decay;
+
 /*
  * Hysteresis before final demodulator 0 / 1 decision.		
  */
 	float hysteresis;
+	int num_slicers;		/* >1 for multiple slicers. */
 
 /* 
  * Phase Locked Loop (PLL) inertia.
@@ -87,6 +116,10 @@ struct demodulator_state_s
 				/* lower = min(1600,1800) - 0.5 * 300 = 1450 */
 				/* upper = max(1600,1800) + 0.5 * 300 = 1950 */
 
+	float pre_filter_len_bits;  /* Length in number of bit times. */
+
+	int pre_filter_size;	/* Size of pre filter, in audio samples. */									
+
 	float pre_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
 /*
@@ -102,17 +135,22 @@ struct demodulator_state_s
 /*
  * The rest are continuously updated.
  */
-	signed int data_clock_pll;		// PLL for data clock recovery.
-						// It is incremented by pll_step_per_sample
-						// for each audio sample.
-
-	signed int prev_d_c_pll;		// Previous value of above, before
-						// incrementing, to detect overflows.
 
 /*
  * Most recent raw audio samples, before/after prefiltering.
  */
 	float raw_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+/*
+ * Use half of the AGC code to get a measure of input audio amplitude.
+ * These use "quick" attack and "sluggish" decay while the 
+ * AGC uses "fast" attack and "slow" decay.
+ */
+
+	float alevel_rec_peak;
+	float alevel_rec_valley;
+	float alevel_mark_peak;
+	float alevel_space_peak;
 
 /*
  * Input to the mark/space detector.
@@ -126,8 +164,6 @@ struct demodulator_state_s
  * Kernel for the lowpass filters.
  */
 
-	int lp_filter_size;
-
 	float m_amp_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 	float s_amp_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
@@ -138,43 +174,51 @@ struct demodulator_state_s
 	float m_valley, s_valley;
 	float m_amp_prev, s_amp_prev;
 
+/*
+ * For the PLL and data bit timing.
+ * starting in version 1.2 we can have multiple slicers for one demodulator.
+ * Each slicer has its own PLL and HDLC decoder.
+ */
+
+#if 1
+	struct {
+
+		signed int data_clock_pll;		// PLL for data clock recovery.
+							// It is incremented by pll_step_per_sample
+							// for each audio sample.
+
+		signed int prev_d_c_pll;		// Previous value of above, before
+							// incrementing, to detect overflows.
+
+		int prev_demod_data;			// Previous data bit detected.
+							// Used to look for transitions.
+
+		/* This is used only for "9600" baud data. */
+
+		int lfsr;				// Descrambler shift register.
+
+	} slicer [MAX_SUBCHANS];
+
+#else
+	signed int data_clock_pll;		// PLL for data clock recovery.
+						// It is incremented by pll_step_per_sample
+						// for each audio sample.
+
+	signed int prev_d_c_pll;		// Previous value of above, before
+						// incrementing, to detect overflows.
+
 	int prev_demod_data;			// Previous data bit detected.
 						// Used to look for transitions.
+#endif
 
 
-/* These are used only for "9600" baud data. */
-
-	int lfsr;				// Descrambler shift register.
-
-
-/* 
- * Finally, try to come up with some sort of measure of the audio input level. 
- * Let's try gathering both the peak and average of the 
- * absolute value of the input signal over some period such as 100 mS.
- * 
- */
-	int lev_period;				// How many samples go into one measure.
-
-	int lev_count;				// Number accumulated so far.
-
-	float lev_peak_acc;			// Highest peak so far.
-
-	float lev_sum_acc;			// Accumulated sum so far.
-
-/*
- * These will be updated every 'lev_period' samples:
- */
-	float lev_last_peak;
-	float lev_last_ave;
-	float lev_prev_peak;
-	float lev_prev_ave;
 
 /* 
  * Special for Rino decoder only.
  * One for each possible signal polarity.
  */
 
-#if 1
+#if 0
 
 	struct gr_state_s {
 

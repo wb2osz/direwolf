@@ -1,13 +1,16 @@
-APRS TO-CALL VERSION NUMBERS                            02 Sep 2014
+APRS TO-CALL VERSION NUMBERS                            27 Apr 2015
 -------------------------------------------------------------------
                                                              WB4APR
-
-02 Sep 14 added APSTMx for W7QO's Balloon trackers
-21 Aug 14 added APSMSx for Paul Defrusne's SMS gateway
-11 Aug 14 added APCWP8 for John GM7HHB, WinphoneAPRS
-18 Dec 13 added APZWKR for GM1WKR NetSked application
-22 Oct 13 added APFIxx for APRS.FI OH7LZB, Hessu
-23 Aug 13 added APOxxx for OSCAR satellites for AMSAT-LU by LU9DO
+27 Apr 15 added APZMAJ for Martyn M1MAJ DeLorme inReach Tracker
+21 Apr 15 added APB2MF & APR2MF DL2MF - MF2APRS Radiosonde   
+06 Apr 15 added APAVT5 SainSonic AP510 - a 1watt tracker 
+13 Mar 14 added APECAN Pecan Pico APRS Balloon Tracker
+02 Sep 14 added APSTMx W7QO's Balloon trackers
+21 Aug 14 added APSMSx Paul Defrusne's SMS gateway
+11 Aug 14 added APCWP8 John GM7HHB, WinphoneAPRS
+18 Dec 13 added APZWKR GM1WKR NetSked application
+22 Oct 13 added APFIxx APRS.FI OH7LZB, Hessu
+23 Aug 13 added APOxxx OSCAR satellites for AMSAT-LU by LU9DO
 22 Feb 13 added APNWxx SQ3FYK.com & SQ3PLX http://microsat.com.pl/
             and APMIxx SQ3PLX http://microsat.com.pl/
 29 Jan 13 added APICxx for HA9MCQ Pic IGate
@@ -39,6 +42,7 @@ a TOCALL number series:
 
  APn  3rd digit is a number
       AP1WWX  TAPR T-238+ WX station
+      AP1MAJ  Martyn M1MAJ DeLorme inReach Tracker
       AP4Rxy  APRS4R software interface
       APnnnD  Painter Engineering uSmartDigi D-Gate DSTAR Gateway
       APnnnU  Painter Engineering uSmartDigi Digipeater
@@ -50,8 +54,10 @@ a TOCALL number series:
       APAHxx  AHub
       APAND1  APRSdroid (replaced by APDRxx
       APAMxx  Altus Metrum GPS trackers
+      APAVT5  SainSonic AP510 which is a 1watt tracker
       APAWxx  AGWPE 
  APB  APBxxx  Beacons or Rabbit TCPIP micros?
+      APB2MF  DL2MF - MF2APRS Radiosonde for balloons
       APBLxx  BigRedBee BeeLine  
       APBLO   MOdel Rocketry K7RKT
       APBPQx  John G8BPQ Digipeater/IGate 
@@ -77,6 +83,7 @@ a TOCALL number series:
       APDUxx  U2APRS by JA7UDE
       APDWxx  DireWolf, WB2OSZ
  APE  APExxx  Telemetry devices
+      APECAN  Pecan Pico APRS Balloon Tracker
       APERXQ  Experimental tracker by PE1RXQ
  APF  APFxxx  Firenet
       APFGxx  Flood Gage (KP4DJT)
@@ -126,6 +133,7 @@ a TOCALL number series:
  APP  APPTxx  KetaiTracker by  JF6LZE, Takeki (msg capable)
  APQ  APQxxx  Earthquake data
  APR  APR8xx  APRSdos versions 800+
+      APR2MF  DL2MF - MF2APRS Radiosonde WX reporting
       APRDxx  APRSdata, APRSdr
       APRGxx  aprsg igate software, OH2GVE
       APRHH2  HamHud 2
@@ -173,6 +181,7 @@ a TOCALL number series:
       APYTxx  for YagTracker
  APZ  APZxxx  Experimental
       APZ0xx  Xastir (old versions. See APX)
+      APZMAJ  Martyn M1MAJ DeLorme inReach Tracker
       APZMDR  for HaMDR trackers - hessu * hes.iki.fi]
       APZPAD  Smart Palm 
       APZTKP  TrackPoint, Nick N0LP (Balloon tracking)

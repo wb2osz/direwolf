@@ -1,0 +1,91 @@
+.TH ATEST  1
+
+.SH NAME
+atest \- Decode AX.25 frames from an audio file.
+
+
+.SH SYNOPSIS
+.B atest  
+[ \fIoptions\fR ] 
+.I wav-file-in
+.RS
+.P
+\fIwav-file-in\fR is a WAV format audio file.
+.P
+.RE
+
+.SH DESCRIPTION
+\fBatest\fR is a test application which decodes AX.25 frames from an audio recording.  This provides an easy way to test Dire Wolf decoding performance much quicker than normal real-time. 
+
+
+
+.SH OPTIONS
+
+.TP
+.BI  "-B " "n"
+Bits / second for data.  Proper modem selected for 300, 1200, 9600.
+300 baud uses 1600/1800 Hz AFSK.
+1200 (default) baud uses 1200/2200 Hz AFSK.
+9600 baud uses K9NG/G2RUH standard.
+
+.TP
+.BI  "-D " "n"
+Divide audio sample rate by n.
+
+.TP
+.BI  "-F " "n"
+Amount of effort to try fixing frames with an invalid CRC.
+0 (default) = consider only correct frames.
+1 = Try to fix only a single bit.
+more = Try modifying more bits to get a good CRC.
+
+.TP
+.BI  "-P " "m"
+Select the demodulator type such as A, B, C, D (default for 300 baud), E (default for 1200 baud), F, A+, B+, C+, D+, E+, F+.
+
+
+
+.SH EXAMPLES
+.P
+.PD 0
+.B gen_packets -o test1.wav
+.P
+.B atest test1.wav 
+.PD
+.P
+.PD 0
+.B gen_packets -B 300 -o test3.wav
+.P
+.B atest -B 300 test3.wav 
+.PD
+.P
+.PD 0
+.B gen_packets -B 9600 -o test9.wav
+.P
+.B atest  -B 9600 test9.wav 
+.PD
+.P
+.RS
+This generates and decodes 3 test files with 1200, 300, and 9600 bits per second.
+.RE
+.P
+.PD 0
+.B atest 02_Track_2.wav
+.P
+.B atest -P C+ 02_Track_2.wav
+.P
+.B atest -F 1 02_Track_2.wav
+.P
+.B atest -P C+ -F 1 02_Track_2.wav
+.PD
+.P
+.RS
+Try different combinations of options to find the best decoding performance.
+.RE
+.P
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

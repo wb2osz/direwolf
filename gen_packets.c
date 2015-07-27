@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -22,14 +22,41 @@
  *
  * Name:	gen_packets.c
  *
- * Purpose:	Test program for generating AFSK AX.25 frames.
+ * Purpose:	Test program for generating AX.25 frames.
  *
  * Description:	Given messages are converted to audio and written 
  *		to a .WAV type audio file.
  *
+ * Bugs:	Most options are implemented for only one audio channel.
  *
- * Bugs:	Most options not implemented for second audio channel.
+ * Examples:	Different speeds:
  *
+ *			gen_packets -o z1.wav
+ *			atest z1.wav
+ *
+ *			gen_packets -B 300 -o z3.wav
+ *			atest -B 300 z3.wav
+ *
+ *			gen_packets -B 9600 -o z9.wav
+ *			atest -B 300 z9.wav
+ *
+ *		User-defined content:
+ *
+ *			echo "WB2OSZ>APDW12:This is a test" | gen_packets -o z.wav -
+ *			atest z.wav
+ *
+ *			echo "WB2OSZ>APDW12:Test line 1" >  z.txt
+ *			echo "WB2OSZ>APDW12:Test line 2" >> z.txt
+ *			echo "WB2OSZ>APDW12:Test line 3" >> z.txt
+ *			gen_packets -o z.wav z.txt
+ *			atest z.wav
+ *
+ *		With artificial noise added:
+ *
+ *			gen_packets -n 100 -o z2.wav
+ *			atest z2.wav
+ *
+ *		
  *------------------------------------------------------------------*/
 
 
@@ -55,283 +82,271 @@ static int audio_file_close (void);
 static int g_add_noise = 0;
 static float g_noise_level = 0;
 
+static struct audio_s modem;
+
+
+static void send_packet (char *str)
+{
+    	packet_t pp;
+    	unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
+    	int flen;
+	int c;
+
+	pp = ax25_from_text (str, 1);
+	flen = ax25_pack (pp, fbuf);
+	for (c=0; c<modem.adev[0].num_channels; c++)
+	{
+	   hdlc_send_flags (c, 8, 0);
+	   hdlc_send_frame (c, fbuf, flen);
+	   hdlc_send_flags (c, 2, 1);
+	}
+	ax25_delete (pp);
+}
+
 
 
 int main(int argc, char **argv)
 {
-    int c;
-    int digit_optind = 0;
-    int err;
-    unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
-    int flen;
-    int packet_count = 0;
-    int i;
-    int chan;
+	int c;
+	int digit_optind = 0;
+	int err;
+	int packet_count = 0;
+	int i;
+	int chan;
 
 /*
  * Set up default values for the modem.
  */
-        struct audio_s modem;
 
-        modem.num_channels = DEFAULT_NUM_CHANNELS;              /* -2 stereo */
-        modem.samples_per_sec = DEFAULT_SAMPLES_PER_SEC;        /* -r option */
-        modem.bits_per_sample = DEFAULT_BITS_PER_SAMPLE;        /* -8 for 8 instead of 16 bits */
+	memset (&modem, 0, sizeof(modem));
+
+	modem.adev[0].defined = 1;
+        modem.adev[0].num_channels = DEFAULT_NUM_CHANNELS;              /* -2 stereo */
+        modem.adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;        /* -r option */
+        modem.adev[0].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;        /* -8 for 8 instead of 16 bits */
         
 	for (chan = 0; chan < MAX_CHANS; chan++) {
-	  modem.modem_type[chan] = AFSK;				/* change with -g */
-	  modem.mark_freq[chan] = DEFAULT_MARK_FREQ;                    /* -m option */
-          modem.space_freq[chan] = DEFAULT_SPACE_FREQ;                  /* -s option */
-          modem.baud[chan] = DEFAULT_BAUD;                              /* -b option */
+	  modem.achan[chan].modem_type = MODEM_AFSK;			/* change with -g */
+	  modem.achan[chan].mark_freq = DEFAULT_MARK_FREQ;              /* -m option */
+          modem.achan[chan].space_freq = DEFAULT_SPACE_FREQ;            /* -s option */
+          modem.achan[chan].baud = DEFAULT_BAUD;                        /* -b option */
 	}
+
+	modem.achan[0].valid = 1;
+
 
 /*
  * Set up other default values.
  */
-    int amplitude = 50;			/* -a option */
-    int leading_zeros = 12;		/* -z option */
-    char output_file[256];		/* -o option */
-    FILE *input_fp = NULL;		/* File or NULL for built-in message */
+	int amplitude = 50;		/* -a option */
+					/* 100% is actually half of the digital signal range so */
+					/* we have some headroom for adding noise, etc. */
 
-    packet_t pp;
+	int leading_zeros = 12;		/* -z option TODO: not implemented, should replace with txdelay frames. */
+	char output_file[256];		/* -o option */
+	FILE *input_fp = NULL;		/* File or NULL for built-in message */
 
+	strcpy (output_file, "");
 
-    strcpy (output_file, "");
+/*
+ * Parse the command line options.
+ */
 
-
-    while (1) {
-        int this_option_optind = optind ? optind : 1;
-        int option_index = 0;
-        static struct option long_options[] = {
+	while (1) {
+          int this_option_optind = optind ? optind : 1;
+          int option_index = 0;
+          static struct option long_options[] = {
             {"future1", 1, 0, 0},
             {"future2", 0, 0, 0},
             {"future3", 1, 0, 'c'},
             {0, 0, 0, 0}
-        };
+          };
 
-	/* ':' following option character means arg is required. */
+	  /* ':' following option character means arg is required. */
 
-        c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82",
+          c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82",
                         long_options, &option_index);
-        if (c == -1)
+          if (c == -1)
             break;
 
-        switch (c) {
+          switch (c) {
 
-          case 0:				/* possible future use */
+            case 0:				/* possible future use */
 
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf("option %s", long_options[option_index].name);
-            if (optarg) {
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf("option %s", long_options[option_index].name);
+              if (optarg) {
                 dw_printf(" with arg %s", optarg);
-            }
-            dw_printf("\n");
-            break;
+              }
+              dw_printf("\n");
+              break;
 
-          case 'b':				/* -b for data Bit rate */
+            case 'b':				/* -b for data Bit rate */
 
-            modem.baud[0] = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Data rate set to %d bits / second.\n", modem.baud[0]);
-            if (modem.baud[0] < 100 || modem.baud[0] > 10000) {
-              text_color_set(DW_COLOR_ERROR); 
-              dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
-              exit (EXIT_FAILURE);
-            }
-            break;
+              modem.achan[0].baud = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
+              if (modem.achan[0].baud < 100 || modem.achan[0].baud > 10000) {
+                text_color_set(DW_COLOR_ERROR); 
+                dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
+                exit (EXIT_FAILURE);
+              }
+              break;
 
-          case 'B':				/* -B for data Bit rate */
+            case 'B':				/* -B for data Bit rate */
 						/*    300 implies 1600/1800 AFSK. */
 						/*    1200 implies 1200/2200 AFSK. */
 						/*    9600 implies scrambled. */
 
-            modem.baud[0] = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Data rate set to %d bits / second.\n", modem.baud[0]);
-            if (modem.baud[0] < 100 || modem.baud[0] > 10000) {
-              text_color_set(DW_COLOR_ERROR); 
-              dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
-              exit (EXIT_FAILURE);
-            }
+              modem.achan[0].baud = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
+              if (modem.achan[0].baud < 100 || modem.achan[0].baud > 10000) {
+                text_color_set(DW_COLOR_ERROR); 
+                dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
+                exit (EXIT_FAILURE);
+              }
 
-	    switch (modem.baud[0]) {
-	      case 300:
-                modem.mark_freq[0] = 1600;
-                modem.space_freq[0] = 1800;
-	        break;
-	      case 1200:
-                modem.mark_freq[0] = 1200;
-                modem.space_freq[0] = 2200;
-	        break;
-	      case 9600:
-                modem.modem_type[0] = SCRAMBLE;
-                text_color_set(DW_COLOR_INFO); 
-                dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
-	        break;
-	    }
-            break;
+	      switch (modem.achan[0].baud) {
+	        case 300:
+                  modem.achan[0].mark_freq = 1600;
+                  modem.achan[0].space_freq = 1800;
+	          break;
+	        case 1200:
+                  modem.achan[0].mark_freq = 1200;
+                  modem.achan[0].space_freq = 2200;
+	          break;
+	        case 9600:
+                  modem.achan[0].modem_type = MODEM_SCRAMBLE;
+                  text_color_set(DW_COLOR_INFO); 
+                  dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
+	          break;
+	      }
+              break;
 
-          case 'g':				/* -g for g3ruh scrambling */
+            case 'g':				/* -g for g3ruh scrambling */
 
-            modem.modem_type[0] = SCRAMBLE;
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
-            break;
+              modem.achan[0].modem_type = MODEM_SCRAMBLE;
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
+              break;
 
-          case 'm':				/* -m for Mark freq */
+            case 'm':				/* -m for Mark freq */
 
-            modem.mark_freq[0] = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Mark frequency set to %d Hz.\n", modem.mark_freq[0]);
-            if (modem.mark_freq[0] < 300 || modem.mark_freq[0] > 3000) {
-              text_color_set(DW_COLOR_ERROR); 
-	      dw_printf ("Use a more reasonable value in range of 300 - 3000.\n");
-              exit (EXIT_FAILURE);
-            }
-            break;
+              modem.achan[0].mark_freq = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Mark frequency set to %d Hz.\n", modem.achan[0].mark_freq);
+              if (modem.achan[0].mark_freq < 300 || modem.achan[0].mark_freq > 3000) {
+                text_color_set(DW_COLOR_ERROR); 
+	        dw_printf ("Use a more reasonable value in range of 300 - 3000.\n");
+                exit (EXIT_FAILURE);
+              }
+              break;
 
-          case 's':				/* -s for Space freq */
+            case 's':				/* -s for Space freq */
 
-            modem.space_freq[0] = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Space frequency set to %d Hz.\n", modem.space_freq[0]);
-            if (modem.space_freq[0] < 300 || modem.space_freq[0] > 3000) {
-              text_color_set(DW_COLOR_ERROR); 
-	      dw_printf ("Use a more reasonable value in range of 300 - 3000.\n");
-              exit (EXIT_FAILURE);
-            }
-            break;
+              modem.achan[0].space_freq = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Space frequency set to %d Hz.\n", modem.achan[0].space_freq);
+              if (modem.achan[0].space_freq < 300 || modem.achan[0].space_freq > 3000) {
+                text_color_set(DW_COLOR_ERROR); 
+	        dw_printf ("Use a more reasonable value in range of 300 - 3000.\n");
+                exit (EXIT_FAILURE);
+              }
+              break;
 
-          case 'n':				/* -n number of packets with increasing noise. */
+            case 'n':				/* -n number of packets with increasing noise. */
 
-	    packet_count = atoi(optarg);
+	      packet_count = atoi(optarg);
 
-	    g_add_noise = 1;
+	      g_add_noise = 1;
 
-            break;
+              break;
 
-          case 'a':				/* -a for amplitude */
+            case 'a':				/* -a for amplitude */
 
-            amplitude = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Amplitude set to %d%%.\n", amplitude);
-            if (amplitude < 0 || amplitude > 100) {
-              text_color_set(DW_COLOR_ERROR); 
-	      dw_printf ("Amplitude must be in range of 0 to 100.\n");
-              exit (EXIT_FAILURE);
-            }
-            break;
+              amplitude = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Amplitude set to %d%%.\n", amplitude);
+              if (amplitude < 0 || amplitude > 200) {
+                text_color_set(DW_COLOR_ERROR); 
+	        dw_printf ("Amplitude must be in range of 0 to 200.\n");
+                exit (EXIT_FAILURE);
+              }
+              break;
 
-          case 'r':				/* -r for audio sample Rate */
+            case 'r':				/* -r for audio sample Rate */
 
-            modem.samples_per_sec = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Audio sample rate set to %d samples / second.\n", modem.samples_per_sec);
-            if (modem.samples_per_sec < MIN_SAMPLES_PER_SEC || modem.samples_per_sec > MAX_SAMPLES_PER_SEC) {
-              text_color_set(DW_COLOR_ERROR); 
-	      dw_printf ("Use a more reasonable audio sample rate in range of %d - %d.\n",
+              modem.adev[0].samples_per_sec = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Audio sample rate set to %d samples / second.\n", modem.adev[0].samples_per_sec);
+              if (modem.adev[0].samples_per_sec < MIN_SAMPLES_PER_SEC || modem.adev[0].samples_per_sec > MAX_SAMPLES_PER_SEC) {
+                text_color_set(DW_COLOR_ERROR); 
+	        dw_printf ("Use a more reasonable audio sample rate in range of %d - %d.\n",
 						MIN_SAMPLES_PER_SEC, MAX_SAMPLES_PER_SEC);
-              exit (EXIT_FAILURE);
-            }
-            break;
+                exit (EXIT_FAILURE);
+              }
+              break;
 
-          case 'z':				/* -z leading zeros before frame flag */
+            case 'z':				/* -z leading zeros before frame flag */
 
-            leading_zeros = atoi(optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Send %d zero bits before frame flag.\n", leading_zeros);
+              leading_zeros = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Send %d zero bits before frame flag.\n", leading_zeros);
 
-	    /* The demodulator needs a few for the clock recovery PLL. */
-	    /* We don't want to be here all day either. */
-            /* We can't translast to time yet because the data bit rate */
-            /* could be changed later. */
+	      /* The demodulator needs a few for the clock recovery PLL. */
+	      /* We don't want to be here all day either. */
+              /* We can't translate to time yet because the data bit rate */
+              /* could be changed later. */
 
-            if (leading_zeros < 8 || leading_zeros > 12000) {
+              if (leading_zeros < 8 || leading_zeros > 12000) {
+                text_color_set(DW_COLOR_ERROR); 
+	        dw_printf ("Use a more reasonable value.\n");
+                exit (EXIT_FAILURE);
+              }
+              break;
+
+            case '8':				/* -8 for 8 bit samples */
+
+              modem.adev[0].bits_per_sample = 8;
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf("8 bits per audio sample rather than 16.\n");
+              break;
+
+            case '2':				/* -2 for 2 channels of sound */
+  
+              modem.adev[0].num_channels = 2;
+	      modem.achan[1].valid = 1;
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf("2 channels of sound rather than 1.\n");
+              break;
+
+            case 'o':				/* -o for Output file */
+
+              strcpy (output_file, optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Output file set to %s\n", output_file);
+              break;
+
+            case '?':
+
+              /* Unknown option message was already printed. */
+              usage (argv);
+              break;
+
+            default:
+
+              /* Should not be here. */
               text_color_set(DW_COLOR_ERROR); 
-	      dw_printf ("Use a more reasonable value.\n");
-              exit (EXIT_FAILURE);
-            }
-            break;
-
-          case '8':				/* -8 for 8 bit samples */
-
-            modem.bits_per_sample = 8;
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf("8 bits per audio sample rather than 16.\n");
-            break;
-
-          case '2':				/* -2 for 2 channels of sound */
-
-            modem.num_channels = 2;
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf("2 channels of sound rather than 1.\n");
-            break;
-
-          case 'o':				/* -o for Output file */
-
-            strcpy (output_file, optarg);
-            text_color_set(DW_COLOR_INFO); 
-            dw_printf ("Output file set to %s\n", output_file);
-            break;
-
-          case '?':
-
-            /* Unknown option message was already printed. */
-            usage (argv);
-            break;
-
-          default:
-
-            /* Should not be here. */
-            text_color_set(DW_COLOR_ERROR); 
-            dw_printf("?? getopt returned character code 0%o ??\n", c);
-            usage (argv);
-        }
-    }
-
-    if (optind < argc) {
-
-	char str[400];
-
-        // dw_printf("non-option ARGV-elements: ");
-        // while (optind < argc)
-            // dw_printf("%s ", argv[optind++]);
-        //dw_printf("\n");
-
-        if (optind < argc - 1) {
-          text_color_set(DW_COLOR_ERROR); 
-	  dw_printf ("Warning: File(s) beyond the first are ignored.\n");
-        }
-
-        if (strcmp(argv[optind], "-") == 0) {
-          text_color_set(DW_COLOR_INFO); 
-          dw_printf ("Reading from stdin ...\n");
-          input_fp = stdin;
-        }
-        else {
-          input_fp = fopen(argv[optind], "r");
-          if (input_fp == NULL) {
-            text_color_set(DW_COLOR_ERROR); 
- 	    dw_printf ("Can't open %s for read.\n", argv[optind]);
-            exit (EXIT_FAILURE);
+              dw_printf("?? getopt returned character code 0%o ??\n", c);
+              usage (argv);
           }
-          text_color_set(DW_COLOR_INFO); 
-          dw_printf ("Reading from %s ...\n", argv[optind]);    
-        }
-
-        while (fgets (str, sizeof(str), input_fp) != NULL) {
-          text_color_set(DW_COLOR_REC); 
-          dw_printf ("%s", str);
 	}
 
-        if (input_fp != stdin) {
-          fclose (input_fp);
-        }
-    }
-    else {
-      text_color_set(DW_COLOR_INFO); 
-      dw_printf ("built in message...\n");
-    }
 
+/*
+ * Open the output file.
+ */
 
         if (strlen(output_file) == 0) {
           text_color_set(DW_COLOR_ERROR); 
@@ -350,12 +365,67 @@ int main(int argc, char **argv)
         }
 
 
-	gen_tone_init (&modem, amplitude);
+	gen_tone_init (&modem, amplitude/2);
 
-        assert (modem.bits_per_sample == 8 || modem.bits_per_sample == 16);
-        assert (modem.num_channels == 1 || modem.num_channels == 2);
-        assert (modem.samples_per_sec >= MIN_SAMPLES_PER_SEC && modem.samples_per_sec <= MAX_SAMPLES_PER_SEC);
+        assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
+        assert (modem.adev[0].num_channels == 1 || modem.adev[0].num_channels == 2);
+        assert (modem.adev[0].samples_per_sec >= MIN_SAMPLES_PER_SEC && modem.adev[0].samples_per_sec <= MAX_SAMPLES_PER_SEC);
 
+/*
+ * Get user packets(s) from file or stdin if specified.
+ * "-n" option is ignored in this case.
+ */
+
+	if (optind < argc) {
+
+	  char str[400];
+
+          // dw_printf("non-option ARGV-elements: ");
+          // while (optind < argc)
+          // dw_printf("%s ", argv[optind++]);
+          //dw_printf("\n");
+
+          if (optind < argc - 1) {
+            text_color_set(DW_COLOR_ERROR); 
+	    dw_printf ("Warning: File(s) beyond the first are ignored.\n");
+          }
+
+          if (strcmp(argv[optind], "-") == 0) {
+            text_color_set(DW_COLOR_INFO); 
+            dw_printf ("Reading from stdin ...\n");
+            input_fp = stdin;
+          }
+          else {
+            input_fp = fopen(argv[optind], "r");
+            if (input_fp == NULL) {
+              text_color_set(DW_COLOR_ERROR); 
+ 	      dw_printf ("Can't open %s for read.\n", argv[optind]);
+              exit (EXIT_FAILURE);
+            }
+            text_color_set(DW_COLOR_INFO); 
+            dw_printf ("Reading from %s ...\n", argv[optind]);    
+          }
+
+          while (fgets (str, sizeof(str), input_fp) != NULL) {
+            text_color_set(DW_COLOR_REC); 
+            dw_printf ("%s", str);
+	    send_packet (str);
+	  }
+
+          if (input_fp != stdin) {
+            fclose (input_fp);
+          }
+
+	  audio_file_close();
+    	  return EXIT_SUCCESS;
+	}
+
+/* 
+ * Otherwise, use the built in packets.
+ */
+      	text_color_set(DW_COLOR_INFO); 
+      	dw_printf ("built in message...\n");
+	
 
 	if (packet_count > 0)  {
 
@@ -368,24 +438,18 @@ int main(int argc, char **argv)
 
 	    char stemp[80];
 	
-	    if (modem.modem_type[0] == SCRAMBLE) {
-	      g_noise_level = 0.33 * (amplitude / 100.0) * ((float)i / packet_count);
+	    if (modem.achan[0].modem_type == MODEM_SCRAMBLE) {
+	      g_noise_level = 0.33 * (amplitude / 200.0) * ((float)i / packet_count);
 	    }
 	    else {
-	      g_noise_level = (amplitude / 100.0) * ((float)i / packet_count);
+		/* About 2/3 should be decoded properly. */
+	      g_noise_level = amplitude *.0023 * ((float)i / packet_count);
 	    }
 
-	    sprintf (stemp, "WB2OSZ-1>APRS,W1AB-9,W1ABC-10,WB1ABC-15:,Hello, world!  %04d", i);
+	    sprintf (stemp, "WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  %04d of %04d", i, packet_count);
 
-	    pp = ax25_from_text (stemp, 1);
-	    flen = ax25_pack (pp, fbuf);
-	    for (c=0; c<modem.num_channels; c++)
-	    {
-	      hdlc_send_flags (c, 8, 0);
-	      hdlc_send_frame (c, fbuf, flen);
-	      hdlc_send_flags (c, 2, 1);
-	    }
-	    ax25_delete (pp);
+	    send_packet (stemp);
+
 	  }
 	}
 	else {
@@ -393,44 +457,11 @@ int main(int argc, char **argv)
 /*
  * Builtin default 4 packets.
  */
-	  pp = ax25_from_text ("WB2OSZ-1>APRS,W1AB-9,W1ABC-10,WB1ABC-15:,Hello, world!", 1);
-	  flen = ax25_pack (pp, fbuf);
-	  for (c=0; c<modem.num_channels; c++)
-	  {
-	      hdlc_send_flags (c, 8, 0);
-	      hdlc_send_frame (c, fbuf, flen);
-	      hdlc_send_flags (c, 2, 1);
-	  }
-	  ax25_delete (pp);
 
-	  hdlc_send_flags (c, 8, 0);
-	
-	  pp = ax25_from_text ("WB2OSZ-1>APRS,W1AB-9*,W1ABC-10,WB1ABC-15:,Hello, world!", 1);
-	  flen = ax25_pack (pp, fbuf);
-	  for (c=0; c<modem.num_channels; c++)
-	  {
-	    hdlc_send_frame (c, fbuf, flen);
-	  }
-	  ax25_delete (pp);
-
-	  pp = ax25_from_text ("WB2OSZ-1>APRS,W1AB-9,W1ABC-10*,WB1ABC-15:,Hello, world!", 1);
-	  flen = ax25_pack (pp, fbuf);
-	  for (c=0; c<modem.num_channels; c++)
-	  {
-	    hdlc_send_frame (c, fbuf, flen);
-	  }
-	  ax25_delete (pp);
-
-	  pp = ax25_from_text ("WB2OSZ-1>APRS,W1AB-9,W1ABC-10,WB1ABC-15*:,Hello, world!", 1);
-	  flen = ax25_pack (pp, fbuf);
-	  for (c=0; c<modem.num_channels; c++)
-	  {
-	    hdlc_send_frame (c, fbuf, flen);
-	  }
-	  ax25_delete (pp);
-
-	  hdlc_send_flags (c, 2, 1);
-
+	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  1 of 4");
+	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  2 of 4");
+	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  3 of 4");
+	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  4 of 4");
 	}
 
 	audio_file_close();
@@ -444,9 +475,9 @@ static void usage (char **argv)
 
 	text_color_set(DW_COLOR_ERROR); 
 	dw_printf ("\n");
-	dw_printf ("Usage: xxx [options] [file]\n");
+	dw_printf ("Usage: gen_packets [options] [file]\n");
 	dw_printf ("Options:\n");
-	dw_printf ("  -a <number>   Signal amplitude in range of 0 - 100%%.  Default 50.\n");
+	dw_printf ("  -a <number>   Signal amplitude in range of 0 - 200%%.  Default 50.\n");
 	dw_printf ("  -b <number>   Bits / second for data.  Default is %d.\n", DEFAULT_BAUD);
 	dw_printf ("  -B <number>   Bits / second for data.  Proper modem selected for 300, 1200, 9600.\n");
 	dw_printf ("  -g            Scrambled baseband rather than AFSK.\n");
@@ -455,34 +486,34 @@ static void usage (char **argv)
 	dw_printf ("  -r <number>   Audio sample Rate.  Default is %d.\n", DEFAULT_SAMPLES_PER_SEC);
 	dw_printf ("  -n <number>   Generate specified number of frames with increasing noise.\n");
 	dw_printf ("  -o <file>     Send output to .wav file.\n");
-	dw_printf ("  -8            8 bit audio rather than 16.\n");
-	dw_printf ("  -2            2 channels of audio rather than 1.\n");
-	dw_printf ("  -z <number>   Number of leading zero bits before frame.\n");
-	dw_printf ("                  Default is 12 which is .01 seconds at 1200 bits/sec.\n");
+//	dw_printf ("  -8            8 bit audio rather than 16.\n");
+//	dw_printf ("  -2            2 channels of audio rather than 1.\n");
+//	dw_printf ("  -z <number>   Number of leading zero bits before frame.\n");
+//	dw_printf ("                  Default is 12 which is .01 seconds at 1200 bits/sec.\n");
 
 	dw_printf ("\n");
 	dw_printf ("An optional file may be specified to provide messages other than\n");
-	dw_printf ("the default built-n message. The format should correspond to ...\n");
-	dw_printf ("blah blah blah.  For example,\n");
-	dw_printf ("    WB2OSZ-1>APDW10,WIDE2-2:!4237.14NS07120.83W#\n");
+	dw_printf ("the default built-in message. The format should correspond to\n");
+	dw_printf ("the standard packet monitoring representation such as,\n\n");
+	dw_printf ("    WB2OSZ-1>APDW12,WIDE2-2:!4237.14NS07120.83W#\n");
 	dw_printf ("\n");
-	dw_printf ("Example:  %s\n", argv[0]);
+	dw_printf ("Example:  gen_packets -o x.wav \n");
 	dw_printf ("\n");
         dw_printf ("    With all defaults, a built-in test message is generated\n");
 	dw_printf ("    with standard Bell 202 tones used for packet radio on ordinary\n");
 	dw_printf ("    VHF FM transceivers.\n");
 	dw_printf ("\n");
-	dw_printf ("Example:  %s -g -b 9600\n", argv[0]);
-	dw_printf ("Shortcut: %s -B 9600\n", argv[0]);
+	dw_printf ("Example:  gen_packets -o x.wav -g -b 9600\n");
+	dw_printf ("Shortcut: gen_packets -o x.wav -B 9600\n");
 	dw_printf ("\n");
         dw_printf ("    9600 baud mode.\n");
 	dw_printf ("\n");
-	dw_printf ("Example:  %s -m 1600 -s 1800 -b 300\n", argv[0]);
-	dw_printf ("Shortcut: %s -B 300\n", argv[0]);
+	dw_printf ("Example:  gen_packets -o x.wav -m 1600 -s 1800 -b 300\n");
+	dw_printf ("Shortcut: gen_packets -o x.wav -B 300\n");
 	dw_printf ("\n");
         dw_printf ("    200 Hz shift, 300 baud, suitable for HF SSB transceiver.\n");
 	dw_printf ("\n");
-	dw_printf ("Example:  echo -n \"WB2OSZ>WORLD:Hello, world!\" | %s -a 25 -o x.wav -\n", argv[0]);
+	dw_printf ("Example:  echo -n \"WB2OSZ>WORLD:Hello, world!\" | gen_packets -a 25 -o x.wav -\n");
 	dw_printf ("\n");
         dw_printf ("    Read message from stdin and put quarter volume sound into the file x.wav.\n");
 
@@ -548,14 +579,14 @@ static int audio_file_open (char *fname, struct audio_s *pa)
 /*
  * Fill in defaults for any missing values.
  */
-	if (pa -> num_channels == 0)
-	  pa -> num_channels = DEFAULT_NUM_CHANNELS;
+	if (pa -> adev[0].num_channels == 0)
+	  pa -> adev[0].num_channels = DEFAULT_NUM_CHANNELS;
 
-	if (pa -> samples_per_sec == 0)
-	  pa -> samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
+	if (pa -> adev[0].samples_per_sec == 0)
+	  pa -> adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
 
-	if (pa -> bits_per_sample == 0)
-	  pa -> bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
+	if (pa -> adev[0].bits_per_sample == 0)
+	  pa -> adev[0].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 
 
 /*
@@ -578,9 +609,9 @@ static int audio_file_open (char *fname, struct audio_s *pa)
         header.fmtsize = 16;			// Always 16.
         header.wformattag = 1;     		// 1 for PCM.
 
-        header.nchannels = pa -> num_channels;   		
-        header.nsamplespersec = pa -> samples_per_sec;    
-        header.wbitspersample = pa -> bits_per_sample;  
+        header.nchannels = pa -> adev[0].num_channels;   		
+        header.nsamplespersec = pa -> adev[0].samples_per_sec;    
+        header.wbitspersample = pa -> adev[0].bits_per_sample;  
 		
         header.nblockalign = header.wbitspersample / 8 * header.nchannels;     
         header.navgbytespersec = header.nblockalign * header.nsamplespersec;   
@@ -628,7 +659,7 @@ static int audio_file_open (char *fname, struct audio_s *pa)
  *----------------------------------------------------------------*/
 
 
-int audio_put (int c)
+int audio_put (int a, int c)
 {
 	static short sample16;
 	int s;
@@ -669,7 +700,7 @@ int audio_put (int c)
 } /* end audio_put */
 
 
-int audio_flush ()
+int audio_flush (int a)
 {
 	return 0;
 }
@@ -693,8 +724,8 @@ static int audio_file_close (void)
 {
 	int n;
 
-        text_color_set(DW_COLOR_DEBUG); 
-	dw_printf ("audio_close()\n");
+        //text_color_set(DW_COLOR_DEBUG); 
+	//dw_printf ("audio_close()\n");
 
 /*
  * Go back and fix up lengths in header.

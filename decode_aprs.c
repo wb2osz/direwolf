@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013,2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -105,12 +105,12 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *, int);
 static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *, int);
 static void aprs_mic_e (decode_aprs_t *A, packet_t, unsigned char *, int);
 //static void aprs_compressed_pos (decode_aprs_t *A, unsigned char *, int);
-static void aprs_message (decode_aprs_t *A, unsigned char *, int);
+static void aprs_message (decode_aprs_t *A, unsigned char *, int, int quiet);
 static void aprs_object (decode_aprs_t *A, unsigned char *, int);
 static void aprs_item (decode_aprs_t *A, unsigned char *, int);
 static void aprs_station_capabilities (decode_aprs_t *A, char *, int);
 static void aprs_status_report (decode_aprs_t *A, char *, int);
-static void aprs_telemetry (decode_aprs_t *A, char *, int);
+static void aprs_telemetry (decode_aprs_t *A, char *, int, int quiet);
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *, int);
 static void aprs_morse_code (decode_aprs_t *A, char *, int);
 static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *, int);
@@ -119,8 +119,8 @@ static void aprs_ultimeter (decode_aprs_t *A, char *, int);
 static void third_party_header (decode_aprs_t *A, char *, int);
 static void decode_position (decode_aprs_t *A, position_t *ppos);
 static void decode_compressed_position (decode_aprs_t *A, compressed_position_t *ppos);
-static double get_latitude_8 (char *p);
-static double get_longitude_9 (char *p);
+static double get_latitude_8 (char *p, int quiet);
+static double get_longitude_9 (char *p, int quiet);
 static time_t get_timestamp (decode_aprs_t *A, char *p);
 static int get_maidenhead (decode_aprs_t *A, char *p);
 static int data_extension_comment (decode_aprs_t *A, char *pdext);
@@ -138,6 +138,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  * Inputs:	pp	- APRS packet object.
  *
+ *		quiet	- Suppress error messages.
+ *
  * Outputs:	A->	g_symbol_table, g_symbol_code,
  *			g_lat, g_lon, 
  *			g_speed, g_course, g_altitude,
@@ -149,7 +151,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *------------------------------------------------------------------*/
 
-void decode_aprs (decode_aprs_t *A, packet_t pp)
+void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 {
 
 	char dest[AX25_MAX_ADDR_LEN];
@@ -160,6 +162,8 @@ void decode_aprs (decode_aprs_t *A, packet_t pp)
   	info_len = ax25_get_info (pp, &pinfo);
 
 	memset (A, 0, sizeof (*A));
+
+	A->g_quiet = quiet;
 
 	sprintf (A->g_msg_type, "Unknown message type %c", *pinfo);
 
@@ -252,7 +256,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp)
 
 	    case ':':		/* Message */
 
-	      aprs_message (A, pinfo, info_len);
+	      aprs_message (A, pinfo, info_len, quiet);
 	      break;
 
 	    case ';':		/* Object */
@@ -274,7 +278,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp)
 	      //break;
 		
 	    case 'T':		/* Telemetry */
-	      aprs_telemetry (A, (char*)pinfo, info_len);
+	      aprs_telemetry (A, (char*)pinfo, info_len, quiet);
 	      break;
 
 	    case '_':		/* Positionless Weather Report */
@@ -435,33 +439,16 @@ void decode_aprs_print (decode_aprs_t *A) {
  * 
  * Any example was checked for each hemihemisphere using
  * http://www.amsat.org/cgi-bin/gridconv
- *
- * Bug: This does not check for invalid values.
  */
 
 	if (strlen(A->g_maidenhead) > 0) {
-	  dw_printf("Grid square = %s, ", A->g_maidenhead);
 
 	  if (A->g_lat == G_UNKNOWN && A->g_lon == G_UNKNOWN) {
-	
-	    A->g_lon = (toupper(A->g_maidenhead[0]) - 'A') * 20 - 180;
-	    A->g_lat = (toupper(A->g_maidenhead[1]) - 'A') * 10 - 90;
 
-	    A->g_lon += (A->g_maidenhead[2] - '0') * 2;
-	    A->g_lat += (A->g_maidenhead[3] - '0');
-
-	    if (strlen(A->g_maidenhead) >=6) {
-	      A->g_lon += (toupper(A->g_maidenhead[4]) - 'A') * 5.0 / 60.0;
-	      A->g_lat += (toupper(A->g_maidenhead[5]) - 'A') * 2.5 / 60.0;
-
-	      A->g_lon += 2.5 / 60.0;	/* Move from corner to center of square */
-	      A->g_lat += 1.25 / 60.0;
-	    }
-	    else {
-	      A->g_lon += 1.0;	/* Move from corner to center of square */
-	      A->g_lat += 0.5;
-	    }
+	    ll_from_grid_square (A->g_maidenhead, &(A->g_lat), &(A->g_lon));
 	  }
+
+	  dw_printf("Grid square = %s, ", A->g_maidenhead);
 	}
 
 	strcpy (stemp, "");
@@ -639,19 +626,23 @@ void decode_aprs_print (decode_aprs_t *A) {
  * 0xf8 is degree in Microsoft code page 437.
  * To be part of a valid UTF-8 sequence, it would need to be followed by 10xxxxxx.
  */
-	  for (j=0; j<n; j++) {
-	    if ((unsigned)A->g_comment[j] == (char)0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Character code 0xb0 is probably an attempt at a degree symbol.\n");
-	      dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");
-	    }	    	
-	  }
-	  for (j=0; j<n; j++) {
-	    if ((unsigned)A->g_comment[j] == (char)0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Character code 0xf8 is probably an attempt at a degree symbol.\n");
-	      dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");	    	
-	    }	
+
+	  if ( ! A->g_quiet) {
+
+	    for (j=0; j<n; j++) {
+	      if ((unsigned)A->g_comment[j] == (char)0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Character code 0xb0 is probably an attempt at a degree symbol.\n");
+	        dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");
+	      }	    	
+	    }
+	    for (j=0; j<n; j++) {
+	      if ((unsigned)A->g_comment[j] == (char)0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Character code 0xf8 is probably an attempt at a degree symbol.\n");
+	        dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");	    	
+	      }	
+	    }
 	  }	
 	}
 }
@@ -890,7 +881,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  *------------------------------------------------------------------*/
 
-static void nmea_checksum (char *sent)
+static void nmea_checksum (decode_aprs_t *A, char *sent)
 {
         char *p;
         char *next;
@@ -906,13 +897,17 @@ static void nmea_checksum (char *sent)
 
         p = strchr (sent, '*');
         if (p == NULL) {
-	  text_color_set (DW_COLOR_INFO);
-          dw_printf("Missing GPS checksum.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set (DW_COLOR_INFO);
+            dw_printf("Missing GPS checksum.\n");
+	  }
           return;
         }
         if (cs != strtoul(p+1, NULL, 16)) {
-	  text_color_set (DW_COLOR_ERROR);
-          dw_printf("GPS checksum error. Expected %02x but found %s.\n", cs, p+1);
+	  if ( ! A->g_quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("GPS checksum error. Expected %02x but found %s.\n", cs, p+1);
+	  }
           return;
         }
         *p = '\0';      // Remove the checksum.
@@ -929,7 +924,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	strncpy (stemp, (char *)info, ilen);
 	stemp[ilen] = '\0';
-	nmea_checksum (stemp);
+	nmea_checksum (A, stemp);
 
 	next = stemp;
 	ptype = strsep(&next, ",");
@@ -1202,7 +1197,7 @@ MIC-E, JEEP, In Service
 
 */
 
-static int mic_e_digit (char c, int mask, int *std_msg, int *cust_msg)
+static int mic_e_digit (decode_aprs_t *A, char c, int mask, int *std_msg, int *cust_msg)
 {
 
  	if (c >= '0' && c <= '9') {
@@ -1237,8 +1232,10 @@ static int mic_e_digit (char c, int mask, int *std_msg, int *cust_msg)
 	  return (0);
 	}
 
-	text_color_set(DW_COLOR_ERROR);
-	dw_printf("Invalid character \"%c\" in MIC-E destination/latitude.\n", c);
+	if ( ! A->g_quiet) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Invalid character \"%c\" in MIC-E destination/latitude.\n", c);
+	}
 
 	return (0);
 }
@@ -1273,12 +1270,12 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
 
-	A->g_lat = mic_e_digit(dest[0], 4, &std_msg, &cust_msg) * 10 + 
-		mic_e_digit(dest[1], 2, &std_msg, &cust_msg) +
-		(mic_e_digit(dest[2], 1, &std_msg, &cust_msg) * 1000 + 
-		 mic_e_digit(dest[3], 0, &std_msg, &cust_msg) * 100 + 
-		 mic_e_digit(dest[4], 0, &std_msg, &cust_msg) * 10 + 
-		 mic_e_digit(dest[5], 0, &std_msg, &cust_msg)) / 6000.0;
+	A->g_lat = mic_e_digit(A, dest[0], 4, &std_msg, &cust_msg) * 10 + 
+		mic_e_digit(A, dest[1], 2, &std_msg, &cust_msg) +
+		(mic_e_digit(A, dest[2], 1, &std_msg, &cust_msg) * 1000 + 
+		 mic_e_digit(A, dest[3], 0, &std_msg, &cust_msg) * 100 + 
+		 mic_e_digit(A, dest[4], 0, &std_msg, &cust_msg) * 10 + 
+		 mic_e_digit(A, dest[5], 0, &std_msg, &cust_msg)) / 6000.0;
 
 
 /* 4th character of desination indicates north / south. */
@@ -1293,8 +1290,10 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	}
 	else 
 	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid MIC-E N/S encoding in 4th character of destination.\n");	  
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid MIC-E N/S encoding in 4th character of destination.\n");	  
+	  }
 	}
 
 
@@ -1312,8 +1311,10 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	else 
 	{
 	  offset = 0;
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid MIC-E Longitude Offset in 5th character of destination.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid MIC-E Longitude Offset in 5th character of destination.\n");
+	  }
 	}
 
 /* First character of information field is longitude in degrees. */
@@ -1342,9 +1343,11 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	}
 	else 
 	{
-	    A->g_lon = G_UNKNOWN;
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid character 0x%02x for MIC-E Longitude Degrees.\n", ch);
+	   A->g_lon = G_UNKNOWN;
+	   if ( ! A->g_quiet) {
+	     text_color_set(DW_COLOR_ERROR);
+	     dw_printf("Invalid character 0x%02x for MIC-E Longitude Degrees.\n", ch);
+	   }
 	}
 
 /* Second character of information field is A->g_longitude minutes. */
@@ -1378,8 +1381,10 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  }
 	  else {
 	    A->g_lon = G_UNKNOWN;
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid character 0x%02x for MIC-E Longitude Minutes.\n", ch);
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Invalid character 0x%02x for MIC-E Longitude Minutes.\n", ch);
+	    }
 	  }
 
 /* Third character of information field is longitude hundredths of minutes. */
@@ -1396,8 +1401,10 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	    }
 	    else {
 	      A->g_lon = G_UNKNOWN;
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Invalid character 0x%02x for MIC-E Longitude hundredths of Minutes.\n", ch);
+	      if ( ! A->g_quiet) { 
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Invalid character 0x%02x for MIC-E Longitude hundredths of Minutes.\n", ch);
+	      }
 	    }
 	  }
 	}
@@ -1425,8 +1432,10 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	}
 	else 
 	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid MIC-E E/W encoding in 6th character of destination.\n");	  
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid MIC-E E/W encoding in 6th character of destination.\n");	  
+	  }
 	}
 
 /* Symbol table and codes like everyone else. */
@@ -1437,8 +1446,10 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	if (A->g_symbol_table != '/' && A->g_symbol_table != '\\' 
 		&& ! isupper(A->g_symbol_table) && ! isdigit(A->g_symbol_table))
 	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid symbol table code not one of / \\ A-Z 0-9\n");	
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid symbol table code not one of / \\ A-Z 0-9\n");	
+	  }
 	  A->g_symbol_table = '/';
 	}
 
@@ -1513,6 +1524,8 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strcpy (A->g_mfr, "Yaesu VX-8G"); pfirst++; plast-=2; }
 	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '$') { strcpy (A->g_mfr, "Yaesu FT1D"); pfirst++; plast-=2; }
 	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '%') { strcpy (A->g_mfr, "Yaesu FTM-400DR"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ')') { strcpy (A->g_mfr, "Yaesu FTM-100D"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '(') { strcpy (A->g_mfr, "Yaesu FT2D"); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strcpy (A->g_mfr, "Byonics TinyTrack3"); pfirst++; plast-=2; }
 	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strcpy (A->g_mfr, "Byonics TinyTrack4"); pfirst++; plast-=2; }
@@ -1556,9 +1569,11 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 	  if ( ! isdigit91(pfirst[0]) || ! isdigit91(pfirst[1]) || ! isdigit91(pfirst[2])) 
 	  {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.\n");
-	    dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude);
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.\n");
+	      dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude);
+	    }
 	    A->g_altitude = G_UNKNOWN;
 	  }
 	  
@@ -1578,6 +1593,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
+ *		quiet	- supress error messages.
  *
  * Outputs:	??? TBD
  *
@@ -1593,7 +1609,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  *------------------------------------------------------------------*/
 
-static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen) 
+static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int quiet) 
 {
 
 	struct aprs_message_s {
@@ -1619,6 +1635,8 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen)
 	  addressee[i--] = '\0';
 	}
 
+	strcpy (A->g_addressee, addressee);
+
 /*
  * Special message formats contain telemetry metadata.
  * It applies to the addressee, not the sender.
@@ -1640,11 +1658,11 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen)
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
 	  sprintf (A->g_msg_type, "Telemetry Equation Coefficents Message for \"%s\"", addressee);
-	  telemetry_coefficents_message (addressee, p->message+5);
+	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
 	else if (strncmp(p->message,"BITS.",5) == 0) {
 	  sprintf (A->g_msg_type, "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
-	  telemetry_bit_sense_message (addressee, p->message+5);
+	  telemetry_bit_sense_message (addressee, p->message+5, quiet);
 	}
 	else {
 	  sprintf (A->g_msg_type, "APRS Message for \"%s\"", addressee);
@@ -1829,8 +1847,10 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	else if (p->name[i] == '_')
 	  strcpy (A->g_msg_type, "Killed Item");
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Item name too long or not followed by ! or _.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Item name too long or not followed by ! or _.\n");
+	  }
 	  strcpy (A->g_msg_type, "Object - invalid live/killed");
 	}
 
@@ -1995,14 +2015,18 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	  if (A->g_symbol_table != '/' && A->g_symbol_table != '\\' 
 		&& ! isupper(A->g_symbol_table) && ! isdigit(A->g_symbol_table))
 	  {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", A->g_symbol_table);	
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", A->g_symbol_table);	
+	    }
 	    A->g_symbol_table = '/';
 	  }
 
 	  if (pm6->space != ' ' && pm6->space != '\0') {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Error: Found '%c' instead of space required after symbol code.\n", pm6->space);	
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Error: Found '%c' instead of space required after symbol code.\n", pm6->space);
+	    }	
 	  }
 
 	  strcpy (A->g_comment, pm6->comment);
@@ -2022,14 +2046,18 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	  if (A->g_symbol_table != '/' && A->g_symbol_table != '\\' 
 		&& ! isupper(A->g_symbol_table) && ! isdigit(A->g_symbol_table))
 	  {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", A->g_symbol_table);	
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Invalid symbol table code '%c' not one of / \\ A-Z 0-9\n", A->g_symbol_table);	
+	    }
 	    A->g_symbol_table = '/';
 	  }
 
 	  if (pm4->space != ' ' && pm4->space != '\0') {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Error: Found '%c' instead of space required after symbol code.\n", pm4->space);	
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Error: Found '%c' instead of space required after symbol code.\n", pm4->space);
+	    }
 	  }
 
 	  strcpy (A->g_comment, pm4->comment);
@@ -2085,6 +2113,7 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
+ *		quiet	- suppress error messages.
  *
  * Outputs:	???
  *
@@ -2097,12 +2126,12 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
  *	
  *------------------------------------------------------------------*/
 
-static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen) 
+static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet) 
 {
 
 	strcpy (A->g_msg_type, "Telemetry");
 
-	telemetry_data_original (A->g_src, info, A->g_telemetry, A->g_comment);
+	telemetry_data_original (A->g_src, info, quiet, A->g_telemetry, A->g_comment);
 
 
 } /* end aprs_telemetry */
@@ -2326,12 +2355,16 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	else if ( A->g_speed == G_UNKNOWN) {
 
 	  if ( ! getwdata (&wp, 'c', 3, &A->g_course)) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Didn't find wind direction in form c999.\n");
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Didn't find wind direction in form c999.\n");
+	    }
 	  }
 	  if ( ! getwdata (&wp, 's', 3, &A->g_speed)) {	/* MPH here */
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Didn't find wind speed in form s999.\n");
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Didn't find wind speed in form s999.\n");
+	    }
 	  }
 	}
 
@@ -2366,8 +2399,10 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	  }
 	}
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Didn't find wind gust in form g999.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Didn't find wind gust in form g999.\n");
+	  }
 	}
 
 	if (getwdata (&wp, 't', 3, &fval)) {
@@ -2378,8 +2413,10 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	  }
 	}
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Didn't find temperature in form t999.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Didn't find temperature in form t999.\n");
+	  }
 	}
 
 /*
@@ -2722,8 +2759,8 @@ static void third_party_header (decode_aprs_t *A, char *info, int ilen)
 static void decode_position (decode_aprs_t *A, position_t *ppos)
 {
 
-	  A->g_lat = get_latitude_8 (ppos->lat);
-	  A->g_lon = get_longitude_9 (ppos->lon);
+	  A->g_lat = get_latitude_8 (ppos->lat, A->g_quiet);
+	  A->g_lon = get_longitude_9 (ppos->lon, A->g_quiet);
 
 	  A->g_symbol_table = ppos->sym_table_id;
 	  A->g_symbol_code = ppos->symbol_code;
@@ -2775,8 +2812,10 @@ static void decode_compressed_position (decode_aprs_t *A, compressed_position_t 
 	}
 	else
  	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in compressed latitude.  Must be in range of '!' to '{'.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in compressed latitude.  Must be in range of '!' to '{'.\n");
+	  }
 	  A->g_lat = G_UNKNOWN;
 	}
 	  
@@ -2786,8 +2825,10 @@ static void decode_compressed_position (decode_aprs_t *A, compressed_position_t 
 	}
 	else 
 	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in compressed longitude.  Must be in range of '!' to '{'.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in compressed longitude.  Must be in range of '!' to '{'.\n");
+	  }
 	  A->g_lon = G_UNKNOWN;
 	}
 
@@ -2801,8 +2842,10 @@ static void decode_compressed_position (decode_aprs_t *A, compressed_position_t 
 	  A->g_symbol_table = pcpos->sym_table_id - 'a' + '0';
 	}
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid symbol table id for compressed position.\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid symbol table id for compressed position.\n");
+	  }
 	  A->g_symbol_table = '/';
 	}
 
@@ -2860,7 +2903,7 @@ static void decode_compressed_position (decode_aprs_t *A, compressed_position_t 
  *
  *------------------------------------------------------------------*/
 
-double get_latitude_8 (char *p)
+double get_latitude_8 (char *p, int quiet)
 {
 	struct lat_s {
 	  unsigned char deg[2];
@@ -2877,16 +2920,20 @@ double get_latitude_8 (char *p)
 	if (isdigit(plat->deg[0]))
 	  result += ((plat->deg[0]) - '0') * 10;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in latitude.  Expected 0-9 for tens of degrees.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in latitude.  Found '%c' when expecting 0-9 for tens of degrees.\n", plat->deg[0]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
 	if (isdigit(plat->deg[1]))
 	  result += ((plat->deg[1]) - '0') * 1;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in latitude.  Expected 0-9 for degrees.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in latitude.  Found '%c' when expecting 0-9 for degrees.\n", plat->deg[1]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -2895,8 +2942,10 @@ double get_latitude_8 (char *p)
 	else if (plat->minn[0] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in latitude.  Expected 0-5 for tens of minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in latitude.  Found '%c' when expecting 0-5 for tens of minutes.\n", plat->minn[0]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -2905,14 +2954,18 @@ double get_latitude_8 (char *p)
 	else if (plat->minn[1] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in latitude.  Expected 0-9 for minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in latitude.  Found '%c' when expecting 0-9 for minutes.\n", plat->minn[1]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
 	if (plat->dot != '.') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Unexpected character \"%c\" found where period expected in latitude.\n", plat->dot);
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Unexpected character \"%c\" found where period expected in latitude.\n", plat->dot);
+	  }
 	  return (G_UNKNOWN);
 	} 
 
@@ -2921,8 +2974,10 @@ double get_latitude_8 (char *p)
 	else if (plat->hmin[0] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in latitude.  Expected 0-9 for tenths of minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in latitude.  Found '%c' when expecting 0-9 for tenths of minutes.\n", plat->hmin[0]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -2931,8 +2986,10 @@ double get_latitude_8 (char *p)
 	else if (plat->hmin[1] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in latitude.  Expected 0-9 for hundredths of minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in latitude.  Found '%c' when expecting 0-9 for hundredths of minutes.\n", plat->hmin[1]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -2942,21 +2999,27 @@ double get_latitude_8 (char *p)
 	  return (result);
         }
         else if (plat->ns == 'n') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Warning: Lower case n found for latitude hemisphere.  Specification requires upper case N or S.\n");	  
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Warning: Lower case n found for latitude hemisphere.  Specification requires upper case N or S.\n");
+	  }	  
 	  return (result);
 	}
 	else if (plat->ns == 'S') {
 	  return ( - result);
 	}
 	else if (plat->ns == 's') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Warning: Lower case s found for latitude hemisphere.  Specification requires upper case N or S.\n");	  
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Warning: Lower case s found for latitude hemisphere.  Specification requires upper case N or S.\n");	
+	  }  
 	  return ( - result);
 	}
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: '%c' found for latitude hemisphere.  Specification requires upper case N or s.\n", plat->ns);	  
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Error: '%c' found for latitude hemisphere.  Specification requires upper case N or s.\n", plat->ns);	 
+	  } 
 	  return (G_UNKNOWN);	
 	}	
 }
@@ -2993,7 +3056,7 @@ double get_latitude_8 (char *p)
  *------------------------------------------------------------------*/
 
 
-double get_longitude_9 (char *p)
+double get_longitude_9 (char *p, int quiet)
 {
 	struct lat_s {
 	  unsigned char deg[3];
@@ -3010,24 +3073,30 @@ double get_longitude_9 (char *p)
 	if (plon->deg[0] == '0' || plon->deg[0] == '1')
 	  result += ((plon->deg[0]) - '0') * 100;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0 or 1 for hundreds of degrees.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0 or 1 for hundreds of degrees.\n", plon->deg[0]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
 	if (isdigit(plon->deg[1]))
 	  result += ((plon->deg[1]) - '0') * 10;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0-9 for tens of degrees.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0-9 for tens of degrees.\n", plon->deg[1]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
 	if (isdigit(plon->deg[2]))
 	  result += ((plon->deg[2]) - '0') * 1;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0-9 for degrees.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0-9 for degrees.\n", plon->deg[2]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -3036,8 +3105,10 @@ double get_longitude_9 (char *p)
 	else if (plon->minn[0] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0-5 for tens of minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0-5 for tens of minutes.\n", plon->minn[0]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -3046,14 +3117,18 @@ double get_longitude_9 (char *p)
 	else if (plon->minn[1] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0-9 for minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0-9 for minutes.\n", plon->minn[1]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
 	if (plon->dot != '.') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Unexpected character \"%c\" found where period expected in longitude.\n", plon->dot);
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Unexpected character \"%c\" found where period expected in longitude.\n", plon->dot);
+	  }
 	  return (G_UNKNOWN);
 	} 
 
@@ -3062,8 +3137,10 @@ double get_longitude_9 (char *p)
 	else if (plon->hmin[0] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0-9 for tenths of minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0-9 for tenths of minutes.\n", plon->hmin[0]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -3072,8 +3149,10 @@ double get_longitude_9 (char *p)
 	else if (plon->hmin[1] == ' ')
 	  ;
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Invalid character in longitude.  Expected 0-9 for hundredths of minutes.\n");
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Invalid character in longitude.  Found '%c' when expecting 0-9 for hundredths of minutes.\n", plon->hmin[1]);
+	  }
 	  return (G_UNKNOWN);
 	}
 
@@ -3083,21 +3162,27 @@ double get_longitude_9 (char *p)
 	  return (result);
         }
         else if (plon->ew == 'e') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Warning: Lower case e found for longitude hemisphere.  Specification requires upper case E or W.\n");	  
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Warning: Lower case e found for longitude hemisphere.  Specification requires upper case E or W.\n");
+	  }	  
 	  return (result);
 	}
 	else if (plon->ew == 'W') {
 	  return ( - result);
 	}
 	else if (plon->ew == 'w') {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Warning: Lower case w found for longitude hemisphere.  Specification requires upper case E or W.\n");	  
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Warning: Lower case w found for longitude hemisphere.  Specification requires upper case E or W.\n");
+	  }	  
 	  return ( - result);
 	}
 	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Error: '%c' found for longitude hemisphere.  Specification requires upper case E or W.\n", plon->ew);	  
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Error: '%c' found for longitude hemisphere.  Specification requires upper case E or W.\n", plon->ew);	
+	  }  
 	  return (G_UNKNOWN);	
 	}		
 }
@@ -3279,8 +3364,10 @@ int get_maidenhead (decode_aprs_t *A, char *p)
 	  /* We have 4 characters matching the rule. */
 
 	  if (islower(p[0]) || islower(p[1])) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");	  
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");
+	    }	  
 	  }
 
 	  if (toupper(p[4]) >= 'A' && toupper(p[4]) <= 'X' &&
@@ -3289,8 +3376,10 @@ int get_maidenhead (decode_aprs_t *A, char *p)
 	    /* We have 6 characters matching the rule. */
 
 	    if (islower(p[4]) || islower(p[5])) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");	  
+	      if ( ! A->g_quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");	
+	      }	  
 	    }
 	  
 	    return 6;
@@ -3584,9 +3673,11 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 #endif
 	  }
 	  else {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Warning: Could not open 'tocalls.txt'.\n");
-	    dw_printf("System types in the destination field will not be decoded.\n");
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Warning: Could not open 'tocalls.txt'.\n");
+	      dw_printf("System types in the destination field will not be decoded.\n");
+	    }
 	  }
 
 	
@@ -3876,9 +3967,11 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  }
 
 	  if (strncmp(smtemp, "MHz", 3) != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Warning: \"%s\" has non-standard capitalization and might not be recognized by some systems.\n", smtemp);
-	    dw_printf("For best compatibility, it should be exactly like this: \"MHz\"  (upper,upper,lower case)\n");
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Warning: \"%s\" has non-standard capitalization and might not be recognized by some systems.\n", smtemp);
+	      dw_printf("For best compatibility, it should be exactly like this: \"MHz\"  (upper,upper,lower case)\n");
+	    }
 	  }
 
 	  strcpy (temp, A->g_comment + match[0].rm_eo);
@@ -3928,9 +4021,11 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	      }
 	    }
 	    if (A->g_tone == G_UNKNOWN) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Bad CTCSS/PL specification: \"%s\"\n", sttemp);
-	      dw_printf("Integer does not correspond to standard tone.\n");
+	      if ( ! A->g_quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Bad CTCSS/PL specification: \"%s\"\n", sttemp);
+	        dw_printf("Integer does not correspond to standard tone.\n");
+	      }
 	    }
 
 	    strcpy (temp, A->g_comment + match[0].rm_eo);
@@ -4141,11 +4236,12 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	      (x >= 420 && x <= 450) ||
 	      (x >= 902 && x <= 928)) { 
 
-	    sprintf (good, "%07.3fMHz", x);
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("\"%s\" in comment looks like a frequency in non-standard format.\n", bad);
-	    dw_printf("For most systems to recognize it, use exactly this form \"%s\" at beginning of comment.\n", good);
-
+	    if ( ! A->g_quiet) {
+	      sprintf (good, "%07.3fMHz", x);
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("\"%s\" in comment looks like a frequency in non-standard format.\n", bad);
+	      dw_printf("For most systems to recognize it, use exactly this form \"%s\" at beginning of comment.\n", good);
+	    }
 	    if (A->g_freq == G_UNKNOWN) {
 	      A->g_freq = x;
 	    }
@@ -4182,11 +4278,12 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  for (i = 0; i < NUM_CTCSS; i++) {
 	    if (strcmp (s_ctcss[i], bad2) == 0) {
 
-              sprintf (good, "T%03d", i_ctcss[i]);
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("\"%s\" in comment looks like it might be a CTCSS tone in non-standard format.\n", bad1);
-	      dw_printf("For most systems to recognize it, use exactly this form \"%s\" at near beginning of comment, after any frequency.\n", good);
-
+	      if ( ! A->g_quiet) {
+                sprintf (good, "T%03d", i_ctcss[i]);
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("\"%s\" in comment looks like it might be a CTCSS tone in non-standard format.\n", bad1);
+	        dw_printf("For most systems to recognize it, use exactly this form \"%s\" at near beginning of comment, after any frequency.\n", good);
+	      }
 	      if (A->g_tone == G_UNKNOWN) {
 	        A->g_tone = atof(bad2);
 	      }
@@ -4196,9 +4293,11 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	}
 
 	if ((A->g_offset == 6000 || A->g_offset == -6000) && A->g_freq >= 144 && A->g_freq <= 148) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("A transmit offset of 6 MHz on the 2 meter band doesn't seem right.\n");
-	  dw_printf("Each unit is 10 kHz so you should probably be using \"-060\" or \"+060\"\n");
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("A transmit offset of 6 MHz on the 2 meter band doesn't seem right.\n");
+	    dw_printf("Each unit is 10 kHz so you should probably be using \"-060\" or \"+060\"\n");
+	  }
 	}
 
 /*
@@ -4255,6 +4354,9 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  *		ax25_from_text recognizes this representation so it can be used
  *		to decode raw data later.
  *
+ * TODO:	To make it more useful,
+ *			- Remove any leading timestamp.
+ *			- Remove any "qA*" and following from the path.
  *
  *------------------------------------------------------------------*/
 
@@ -4334,7 +4436,7 @@ int main (int argc, char *argv[])
 	      decode_aprs_t A;
 
 	      // log directory option someday?
-	      decode_aprs (&A, pp);
+	      decode_aprs (&A, pp, 0);
 
 	      //Print it all out in human readable format.
 

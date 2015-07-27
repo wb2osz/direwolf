@@ -1,0 +1,34 @@
+.TH LL2UTM  1
+
+.SH NAME
+ll2utm \- Convert Latitude and Longitude to UTM coordinates.
+
+
+.SH SYNOPSIS
+.B ll2utm 
+.I latitude longitude 
+.P
+Latitude and longitude are in decimal degrees.  Use negative for south or west.
+
+.SH DESCRIPTION
+\fBll2utm\fR  converts Latitude and Longitude to UTM coordinates.
+
+
+.SH OPTIONS
+.TP
+None.
+
+
+.SH EXAMPLES
+.P
+.B ll2utm 42.619 -71.34717
+.P
+zone = 19T, easting = 307504, northing = 4721177
+.P
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

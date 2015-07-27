@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -43,6 +43,7 @@
 #include <assert.h>
 
 #include "direwolf.h"
+#include "version.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "aprs_tt.h"
@@ -61,7 +62,7 @@
  */
 
 #if TT_MAIN
-#define MAX_TT_USERS 3		
+#define MAX_TT_USERS 3	
 #else
 #define MAX_TT_USERS 100
 #endif
@@ -153,35 +154,18 @@ static void xmit_object_report (int i, double c_lat, double c_long, int ambiguit
  *
  *----------------------------------------------------------------*/
 
-static struct tt_config_s tt_config;
+static struct audio_s *save_audio_config_p;
+
+static struct tt_config_s *save_tt_config_p;
 
 
-void tt_user_init (struct tt_config_s *p)
+void tt_user_init (struct audio_s *p_audio_config, struct tt_config_s *p_tt_config)
 {
 	int i;
 
-#if TT_MAIN
-	/* For unit testing. */
+	save_audio_config_p = p_audio_config;
 
-	memset (&tt_config, 0, sizeof(struct tt_config_s));	
-
-	/* Don't care about the location translation here. */
-
-	tt_config.retain_time = 20;		/* Normally 80 minutes. */
-	tt_config.num_xmits = 3;
-	assert (tt_config.num_xmits <= TT_MAX_XMITS);
-	tt_config.xmit_delay[0] = 3;		/* Before initial transmission. */
-	tt_config.xmit_delay[1] = 5;
-	tt_config.xmit_delay[2] = 5;
-
-	tt_config.corral_lat = 42.61900;
-	tt_config.corral_lon = -71.34717;
-	tt_config.corral_offset = 0.02 / 60;
-	tt_config.corral_ambiguity = 0;
-
-#else
-	memcpy (&tt_config, p, sizeof(struct tt_config_s));
-#endif
+	save_tt_config_p = p_tt_config;
 
 	for (i=0; i<MAX_TT_USERS; i++) {
 	  clear_user (i);
@@ -485,7 +469,7 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, double l
  */
 	tt_user[i].last_heard = time(NULL);
 	tt_user[i].xmits = 0;
-	tt_user[i].next_xmit = tt_user[i].last_heard + tt_config.xmit_delay[0];
+	tt_user[i].next_xmit = tt_user[i].last_heard + save_tt_config_p->xmit_delay[0];
 
 	return (0);	/* Success! */
 
@@ -515,16 +499,16 @@ void tt_user_background (void)
 
 	for (i=0; i<MAX_TT_USERS; i++) {
 	  if (tt_user[i].callsign[0] != '\0') {
-	    if (tt_user[i].xmits < tt_config.num_xmits && tt_user[i].next_xmit <= now) {
+	    if (tt_user[i].xmits < save_tt_config_p->num_xmits && tt_user[i].next_xmit <= now) {
 
-	      xmit_object_report (i, tt_config.corral_lat, tt_config.corral_lon,
-			tt_config.corral_ambiguity, tt_config.corral_offset);	
+	      xmit_object_report (i, save_tt_config_p->corral_lat, save_tt_config_p->corral_lon,
+			save_tt_config_p->corral_ambiguity, save_tt_config_p->corral_offset);	
  
 	      /* Increase count of number times this one was sent. */
 	      tt_user[i].xmits++;
-	      if (tt_user[i].xmits < tt_config.num_xmits) {
+	      if (tt_user[i].xmits < save_tt_config_p->num_xmits) {
 	        /* Schedule next one. */
-	        tt_user[i].next_xmit += tt_config.xmit_delay[tt_user[i].xmits];    
+	        tt_user[i].next_xmit += save_tt_config_p->xmit_delay[tt_user[i].xmits];    
 	      }
 	    }
 	  }
@@ -535,9 +519,9 @@ void tt_user_background (void)
  */
 	for (i=0; i<MAX_TT_USERS; i++) {
 	  if (tt_user[i].callsign[0] != '\0') {
-	    if (tt_user[i].last_heard + tt_config.retain_time < now) {
+	    if (tt_user[i].last_heard + save_tt_config_p->retain_time < now) {
 
-//TODO: remove printf ("debug: purging expired user %d\n", i);
+		 // debug - dw_printf ("debug: purging expired user %d\n", i);
 
 	      clear_user (i);
 	    }
@@ -599,6 +583,7 @@ static void xmit_object_report (int i, double c_lat, double c_long, int ambiguit
 	packet_t pp;
 	unsigned char fbuf[AX25_MAX_PACKET_LEN];
 	int flen;
+	char c4[4];
 
 
 	assert (i >= 0 && i < MAX_TT_USERS);
@@ -649,60 +634,69 @@ static void xmit_object_report (int i, double c_lat, double c_long, int ambiguit
 	info_comment[MAX_COMMENT_LEN] = '\0';
 	
 /*
- * Combine with header from configuration file.  
- *
- * (If APRStt gateway has been configured.)
+ * Packet header is built from mycall (of transmit channel) and software version.
  */
-	if (tt_config.obj_xmit_header[0] != '\0') {
 
-// TODO: Should take the call from radio channel configuration.
-// Application version is compiled in.
-// Config should have only optional via path.
+	strcpy (stemp, save_audio_config_p->achan[save_tt_config_p->obj_xmit_chan].mycall);
+	strcat (stemp, ">");
+	strcat (stemp, APP_TOCALL);
+	c4[0] = '0' + MAJOR_VERSION;
+	c4[1] = '0' + MINOR_VERSION;
+	c4[2] = '\0';
+	strcat (stemp, c4);
 
-	  strcpy (stemp, tt_config.obj_xmit_header);
-	  strcat (stemp, ":");
+/*
+ * Append via path if specified. 
+ */
 
-	  encode_object (object_name, 0, tt_user[i].last_heard, olat, olong, 
+	if (save_tt_config_p->obj_xmit_via[0] != '\0') {
+	  strcat (stemp, ",");
+	  strcat (stemp, save_tt_config_p->obj_xmit_via);
+	}
+
+	strcat (stemp, ":");
+
+	encode_object (object_name, 0, tt_user[i].last_heard, olat, olong, 
 		tt_user[i].overlay, tt_user[i].symbol, 
 		0,0,0,NULL, 0,0,	/* PHGD, C/S */
 		atof(tt_user[i].freq), 0, 0, info_comment, object_info);
 
-	  strcat (stemp, object_info);
+	strcat (stemp, object_info);
 
-	  //text_color_set(DW_COLOR_ERROR);
-	  //printf ("\nDEBUG: %s\n\n", stemp);
+	//text_color_set(DW_COLOR_ERROR);
+	//printf ("\nDEBUG: %s\n\n", stemp);
 
 
 #if TT_MAIN
 
-	  printf ("---> %s\n\n", stemp);
+	printf ("---> %s\n\n", stemp);
 
 #else
 
 /*
  * Convert to packet and append to transmit queue.
  */
-	  pp = ax25_from_text (stemp, 1);
+	pp = ax25_from_text (stemp, 1);
 
-	  flen = ax25_pack (pp, fbuf);
+	flen = ax25_pack (pp, fbuf);
 
 /*
  * Process as if we heard ourself.
  */
-	  // TODO:  We need radio channel where this came from.
-	  // It would make a difference if running two radios
-	  // and they have different station identifiers.
+	// TODO:  We need radio channel where this came from.
+	// It would make a difference if running two radios
+	// and they have different station identifiers.
  
-	  int chan = 0;
-          igate_send_rec_packet (chan, pp);
+	int chan = 0;
+        igate_send_rec_packet (chan, pp);
 
-	  /* Remember it so we don't digipeat our own. */
+	/* Remember it so we don't digipeat our own. */
 
-	  dedupe_remember (pp, tt_config.obj_xmit_chan);
+	dedupe_remember (pp, save_tt_config_p->obj_xmit_chan);
 
-	  tq_append (tt_config.obj_xmit_chan, TQ_PRIO_1_LO, pp);
+	tq_append (save_tt_config_p->obj_xmit_chan, TQ_PRIO_1_LO, pp);
 #endif 
-	}
+	
 }
 
 
@@ -755,23 +749,49 @@ void tt_user_dump (void)
  *
  * Description:	Just a smattering, not an organized test.
  *
- * 		$ rm a.exe ; gcc -DTT_MAIN -Iregex tt_user.c tt_text.c encode_aprs.c latlong.c ; ./a.exe
+ * 		$ rm a.exe ; gcc -DTT_MAIN -Iregex tt_user.c tt_text.c encode_aprs.c latlong.c textcolor.c ; ./a.exe
  *
  *----------------------------------------------------------------*/
 
 
 #if TT_MAIN
 
-void text_color_set ( enum dw_color_e c )
-{
-        return;
-} 
+
+static struct audio_s my_audio_config;
+
+static struct tt_config_s my_tt_config;
+
 
 int main (int argc, char *argv[])
 {
 	int n;
 
-	tt_user_init(NULL);
+/* Fake audio config - All we care about is mycall for constructing object report packet. */
+
+	memset (&my_audio_config, 0, sizeof(my_audio_config));
+
+	strcpy (my_audio_config.achan[0].mycall, "WB2OSZ-15");
+
+/* Fake TT gateway config. */
+
+	memset (&my_tt_config, 0, sizeof(my_tt_config));	
+
+	/* Don't care about the location translation here. */
+
+	my_tt_config.retain_time = 20;		/* Normally 80 minutes. */
+	my_tt_config.num_xmits = 3;
+	assert (my_tt_config.num_xmits <= TT_MAX_XMITS);
+	my_tt_config.xmit_delay[0] = 3;		/* Before initial transmission. */
+	my_tt_config.xmit_delay[1] = 5;
+	my_tt_config.xmit_delay[2] = 5;
+
+	my_tt_config.corral_lat = 42.61900;
+	my_tt_config.corral_lon = -71.34717;
+	my_tt_config.corral_offset = 0.02 / 60;
+	my_tt_config.corral_ambiguity = 0;
+
+
+	tt_user_init(&my_audio_config, &my_tt_config);
 
 	tt_user_heard ("TEST1",  12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
 	SLEEP_SEC (1);

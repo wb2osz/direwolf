@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011 , 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011 , 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -157,12 +157,38 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 
 /*
  * Accumulate statistics.
- * If new_count gets more than a few larger than delete_count plus the size of 
+ * If new_count gets much larger than delete_count plus the size of 
  * the transmit queue we have a memory leak.
  */
 
-static int new_count = 0;
-static int delete_count = 0;
+static volatile int new_count = 0;
+static volatile int delete_count = 0;
+static volatile int last_seq_num = 0;
+
+#if AX25MEMDEBUG
+
+int ax25memdebug = 0;
+
+
+void ax25memdebug_set(void) 
+{
+	ax25memdebug = 1;
+}
+
+int ax25memdebug_get (void)
+{
+	return (ax25memdebug);
+}
+
+int ax25memdebug_seq (packet_t this_p)
+{
+	return (this_p->seq);
+}
+
+
+#endif
+
+
 
 #define CLEAR_LAST_ADDR_FLAG  this_p->frame_data[this_p->num_addr*7-1] &= ~ SSID_LAST_MASK
 #define SET_LAST_ADDR_FLAG  this_p->frame_data[this_p->num_addr*7-1] |= SSID_LAST_MASK
@@ -185,11 +211,12 @@ static packet_t ax25_new (void)
 	struct packet_s *this_p;
 
 
-#if DEBUG
+#if DEBUG 
         text_color_set(DW_COLOR_DEBUG);
         dw_printf ("ax25_new(): before alloc, new=%d, delete=%d\n", new_count, delete_count);
 #endif
 
+	last_seq_num++;
 	new_count++;
 
 /*
@@ -197,11 +224,16 @@ static packet_t ax25_new (void)
  */
 	if (new_count > delete_count + 100) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Memory leak for packet objects.  new=%d, delete=%d\n", new_count, delete_count);
+	  dw_printf ("Report to WB2OSZ - Memory leak for packet objects.  new=%d, delete=%d\n", new_count, delete_count);
+#if AX25MEMDEBUG
+	  // Force on debug option to gather evidence.
+	  ax25memdebug_set();
+#endif
 	}
 
 	this_p = calloc(sizeof (struct packet_s), (size_t)1);
 	this_p->magic1 = MAGIC;
+	this_p->seq = last_seq_num;
 	this_p->magic2 = MAGIC;
 	this_p->num_addr = (-1);
 	return (this_p);
@@ -215,16 +247,33 @@ static packet_t ax25_new (void)
  *
  *------------------------------------------------------------------------------*/
 
+#if AX25MEMDEBUG
+void ax25_delete_debug (packet_t this_p, char *src_file, int src_line)
+#else
 void ax25_delete (packet_t this_p)
+#endif
 {
 #if DEBUG
         text_color_set(DW_COLOR_DEBUG);
         dw_printf ("ax25_delete(): before free, new=%d, delete=%d\n", new_count, delete_count);
 #endif
+
+	delete_count++;
+
+#if AX25MEMDEBUG	
+	if (ax25memdebug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ax25_delete, seq=%d, called from %s %d, new_count=%d, delete_count=%d\n", this_p->seq, src_file, src_line, new_count, delete_count);
+	}
+#endif
+
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
-	memset (this_p, 0, sizeof (struct packet_s));
-	delete_count++;
+	
+	this_p->magic1 = 0;
+	this_p->magic1 = 0;
+
+	//memset (this_p, 0, sizeof (struct packet_s));
 	free (this_p);
 }
 
@@ -255,7 +304,11 @@ void ax25_delete (packet_t this_p)
  *
  *------------------------------------------------------------------------------*/
 
+#if AX25MEMDEBUG
+packet_t ax25_from_text_debug (char *monitor, int strict, char *src_file, int src_line)
+#else
 packet_t ax25_from_text (char *monitor, int strict)
+#endif
 {
 
 /*
@@ -278,8 +331,15 @@ packet_t ax25_from_text (char *monitor, int strict)
 	int ssid_temp, heard_temp;
 	char atemp[AX25_MAX_ADDR_LEN];
 
-	
+
 	packet_t this_p = ax25_new ();
+
+#if AX25MEMDEBUG	
+	if (ax25memdebug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ax25_from_text, seq=%d, called from %s %d\n", this_p->seq, src_file, src_line);
+	}
+#endif
 
 	/* Is it possible to have a nul character (zero byte) in the */
 	/* information field of an AX.25 frame? */
@@ -488,11 +548,13 @@ packet_t ax25_from_text (char *monitor, int strict)
  *
  *------------------------------------------------------------------------------*/
 
-
-packet_t ax25_from_frame (unsigned char *fbuf, int flen, int alevel)
+#if AX25MEMDEBUG
+packet_t ax25_from_frame_debug (unsigned char *fbuf, int flen, alevel_t alevel, char *src_file, int src_line)
+#else
+packet_t ax25_from_frame (unsigned char *fbuf, int flen, alevel_t alevel)
+#endif
 {
 	unsigned char *pf;
-	//int found_last;
 	packet_t this_p;
 
 	int a;
@@ -515,6 +577,7 @@ packet_t ax25_from_frame (unsigned char *fbuf, int flen, int alevel)
  *
  */
 
+
 	if (flen < AX25_MIN_PACKET_LEN || flen > AX25_MAX_PACKET_LEN)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -523,6 +586,13 @@ packet_t ax25_from_frame (unsigned char *fbuf, int flen, int alevel)
 	}
 
 	this_p = ax25_new ();
+
+#if AX25MEMDEBUG	
+	if (ax25memdebug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ax25_from_frame, seq=%d, called from %s %d\n", this_p->seq, src_file, src_line);
+	}
+#endif
 
 /* Copy the whole thing intact. */
 
@@ -553,15 +623,28 @@ packet_t ax25_from_frame (unsigned char *fbuf, int flen, int alevel)
  *------------------------------------------------------------------------------*/
 
 
+#if AX25MEMDEBUG
+packet_t ax25_dup_debug (packet_t copy_from, char *src_file, int src_line)
+#else
 packet_t ax25_dup (packet_t copy_from)
+#endif
 {
-
+	int save_seq;
 	packet_t this_p;
 
 	
 	this_p = ax25_new ();
+	save_seq = this_p->seq;
 
 	memcpy (this_p, copy_from, sizeof (struct packet_s));
+	this_p->seq = save_seq;
+
+#if AX25MEMDEBUG
+	if (ax25memdebug) {	
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ax25_dup, seq=%d, called from %s %d, clone of seq %d\n", this_p->seq, src_file, src_line, copy_from->seq);
+	}
+#endif
 
 	return (this_p);
 
@@ -1480,6 +1563,121 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
 }
 
 
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_frame_type
+ *
+ * Purpose:	Extract the type of frame.
+ *		This is derived from the control byte(s) but
+ *		is an enumerated type for easier handling.
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *		
+ * 		modulo	- We often need to know this because context is
+ *			  required to know if control is 1 or 2 bytes.
+ *
+ * Outputs:	desc	- Text description such as "I frame" or
+ *			  "U frame SABME".   
+ *			  Supply 16 bytes to be safe.
+ *
+ *		pf	- P/F - Poll/Final or -1 if not applicable
+ *
+ *		nr	- N(R) - receive sequence or -1 if not applicable.
+ *
+ *		ns	- N(S) - send sequence or -1 if not applicable.
+ *	
+ * Returns:	Frame type from  enum ax25_frame_type_e.
+ *
+ *------------------------------------------------------------------*/
+
+
+
+ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *desc, int *pf, int *nr, int *ns) 
+{
+	int c;
+
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	strcpy (desc, "????");
+	*pf = -1;
+	*nr = -1;
+	*ns = -1;
+
+	c = ax25_get_control(this_p);
+	if (c < 0) {
+	  strcpy (desc, "Not AX.25");
+	  return (frame_not_AX25);
+	}
+
+	if ((c & 1) == 0) {
+
+// Information
+
+	  if (modulo == modulo_128) {
+	    int c2 = ax25_get_c2 (this_p);	
+	    *ns = (c >> 1) & 0x7f;
+	    *pf = c2 & 1;
+	    *nr = (c2 >> 1) & 0x7f;
+	  }
+	  else {
+	    *ns = (c >> 1) & 7;
+	    *pf = (c >> 4) & 1;
+	    *nr = (c >> 5) & 7;
+	  }
+	  strcpy (desc, "I frame");
+	  return (frame_type_I);
+	}
+	else if ((c & 2) == 0) {
+
+// Supervisory
+
+	  if (modulo == modulo_128) {
+	    int c2 = ax25_get_c2 (this_p);	
+	    *pf = c2 & 1;
+	    *nr = (c2 >> 1) & 0x7f;
+	  }
+	  else {
+	    *pf = (c >> 4) & 1;
+	    *nr = (c >> 5) & 7;
+	  }
+	  
+	  switch ((c >> 2) & 3) {
+	    case 0: strcpy (desc, "S frame RR");   return (frame_type_RR);   break;
+	    case 1: strcpy (desc, "S frame RNR");  return (frame_type_RNR);  break;
+	    case 2: strcpy (desc, "S frame REJ");  return (frame_type_REJ);  break;
+	    case 3: strcpy (desc, "S frame SREJ"); return (frame_type_SREJ); break;
+	 } 
+	}
+	else {
+
+// Unnumbered
+
+	  *pf = (c >> 4) & 1;
+	  
+	  switch (c & 0xef) {
+	
+	    case 0x6f: strcpy (desc, "U frame SABME"); return (frame_type_SABME); break;
+	    case 0x2f: strcpy (desc, "U frame SABM");  return (frame_type_SABM);  break;
+	    case 0x43: strcpy (desc, "U frame DISC");  return (frame_type_DISC);  break;
+	    case 0x0f: strcpy (desc, "U frame DM");    return (frame_type_DM);    break;
+	    case 0x63: strcpy (desc, "U frame UA");    return (frame_type_UA);    break;
+	    case 0x87: strcpy (desc, "U frame FRMR");  return (frame_type_FRMR);  break;
+	    case 0x03: strcpy (desc, "U frame UI");    return (frame_type_UI);    break;
+	    case 0xaf: strcpy (desc, "U frame XID");   return (frame_type_XID);   break;
+	    case 0xe3: strcpy (desc, "U frame TEST");  return (frame_type_TEST);  break;
+	    default:   strcpy (desc, "U frame ???");   return (frame_type_U);     break;
+	  }
+	}
+
+	// Should be unreachable but compiler doesn't realize that.
+	// Suppress "warning: control reaches end of non-void function"
+
+	return (frame_not_AX25);
+
+} /* end ax25_frame_type */
+
 /*------------------------------------------------------------------
  *
  * Function:	ax25_hex_dump
@@ -1518,6 +1716,8 @@ static void hex_dump (unsigned char *p, int len)
 }
 
 /* Text description of control octet. */
+
+// TODO: use ax25_frame_type() instead.
 
 static void ctrl_to_text (int c, char *out)
 {
@@ -1580,7 +1780,7 @@ void ax25_hex_dump (packet_t this_p)
 	  c = fptr[this_p->num_addr*7];
 	  p = fptr[this_p->num_addr*7+1];
 
-	  ctrl_to_text (c, cp_text);
+	  ctrl_to_text (c, cp_text); // TODO: use ax25_frame_type() instead.
 
 	  if ( (c & 0x01) == 0 ||				/* I   xxxx xxx0 */
 	     	c == 0x03 || c == 0x13) {			/* UI  000x 0011 */
@@ -1677,6 +1877,7 @@ int ax25_is_aprs (packet_t this_p)
 /*------------------------------------------------------------------
  *
  * Function:	ax25_get_control
+ 		ax25_get_c2
  *
  * Purpose:	Get Control field from packet.
  *
@@ -1698,6 +1899,18 @@ int ax25_get_control (packet_t this_p)
 	}
 	return (-1);
 }
+
+int ax25_get_c2 (packet_t this_p) 
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	if (this_p->num_addr >= 2) {
+	  return (this_p->frame_data[ax25_get_control_offset(this_p)+1]);
+	}
+	return (-1);
+}
+
 
 /*------------------------------------------------------------------
  *
@@ -1721,6 +1934,9 @@ int ax25_get_pid (packet_t this_p)
 {
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
+
+	// TODO: handle 2 control byte case.
+	// TODO: sanity check: is it I or UI frame?
 
 	if (this_p->num_addr >= 2) {
 	  return (this_p->frame_data[ax25_get_pid_offset(this_p)]);
@@ -1897,10 +2113,69 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 	  len--;
 	}
 
+// TODO1.2: should return string rather printing to remove a race condition.
+
 	dw_printf ("%s", safe_str);
 
 } /* end ax25_safe_print */
 
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_alevel_to_text
+ *
+ * Purpose:	Convert audio level to text representation.
+ *
+ * Inputs:	alevel	- Audio levels collected from demodulator.
+ *
+ * Outputs:	text	- Text representation for presentation to user.  
+ *			  Currently it will look something like this:
+ *
+ *				r(m/s)
+ *
+ *			  With n,m,s corresponding to received, mark, and space.
+ *			  Comma is to be avoided because one place this 
+ *			  ends up is in a CSV format file.
+ *
+ * Returns:	True if something to print.  (currently if alevel.original >= 0)
+ *		False if not.
+ *
+ * Description:	Audio level used to be simple; it was a single number.
+ *		In version 1.2, we start collecting more details.
+ *		At the moment, it includes:
+ *
+ *		- Received level from new method.  
+ *		- Levels from mark & space filters to examine the ratio.
+ *
+ *		We print this in multiple places so put it into a function.
+ *			
+ *------------------------------------------------------------------*/
+
+
+int ax25_alevel_to_text (alevel_t alevel, char *text)
+{
+	if (alevel.rec < 0) {
+	  strcpy (text, "");
+	  return (0);
+	}
+
+// TODO1.2: haven't thought much about non-AFSK cases yet.
+// What should we do for 9600 baud?
+// Possibility: low/high tone for DTMF???
+
+	if (alevel.mark >= 0 &&  alevel.space < 0) {		/* baseband */
+
+	  sprintf (text, "%d(%+d/%+d)", alevel.rec, alevel.mark, alevel.space);
+	}
+	else {		/* AFSK */
+
+	  //sprintf (text, "%d:%d(%d/%d=%05.3f=)", alevel.original, alevel.rec, alevel.mark, alevel.space, alevel.ms_ratio);
+	  sprintf (text, "%d(%d/%d)", alevel.rec, alevel.mark, alevel.space);
+	}
+	return (1);	
+
+} /* end ax25_alevel_to_text */
 
 
 /* end ax25_pad.c */

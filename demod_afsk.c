@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011,2012,2013,2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -52,8 +52,7 @@
 
 #include "direwolf.h"
 #include "audio.h"
-//#include "fsk_demod.h"
-//#include "gen_tone.h"
+
 #include "tune.h"
 #include "fsk_demod_state.h"
 #include "fsk_gen_filter.h"
@@ -80,10 +79,10 @@ static inline float z (float x, float y)
         y = fabsf(y);
 
         if (x > y) {
-          return (x * .941246 + y * .41);
+          return (x * .941246f + y * .41f);
         }
         else {
-          return (y * .941246 + x * .41);
+          return (y * .941246f + x * .41f);
         }
 }
 
@@ -100,15 +99,29 @@ static inline void push_sample (float val, float *buff, int size)
 /* FIR filter kernel. */
 
 __attribute__((hot))
-static inline float convolve (const float *data, const float *filter, int filter_size)
+static inline float convolve (const float *__restrict__ data, const float *__restrict__ filter, int filter_size)
 {
-	  float sum = 0;
-	  int j;
+	float sum = 0.0f;
+	int j;
 
-	  for (j=0; j<filter_size; j++) {
+#if 0
+	//  As suggested here,  http://locklessinc.com/articles/vectorize/
+	//  Unfortunately, older compilers don't recognize it.
+
+	//  Get more information by using -ftree-vectorizer-verbose=5
+
+	float *d = __builtin_assume_aligned(data, 16);
+	float *f = __builtin_assume_aligned(filter, 16);
+
+	for (j=0; j<filter_size; j++) {
+	    sum += f[j] * d[j];
+	}
+#else
+	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
-	  }
-	  return (sum);
+	}
+#endif
+	return (sum);
 }
 
 /* Automatic gain control. */
@@ -118,24 +131,34 @@ __attribute__((hot))
 static inline float agc (float in, float fast_attack, float slow_decay, float *ppeak, float *pvalley)
 {
 	if (in >= *ppeak) {
-	  *ppeak = in * fast_attack + *ppeak * (1. - fast_attack);
+	  *ppeak = in * fast_attack + *ppeak * (1.0f - fast_attack);
 	}
 	else {
-	  *ppeak = in * slow_decay + *ppeak * (1. - slow_decay);
+	  *ppeak = in * slow_decay + *ppeak * (1.0f - slow_decay);
 	}
 
 	if (in <= *pvalley) {
-	  *pvalley = in * fast_attack + *pvalley * (1. - fast_attack);
+	  *pvalley = in * fast_attack + *pvalley * (1.0f - fast_attack);
 	}
 	else  {   
-	  *pvalley = in * slow_decay + *pvalley * (1. - slow_decay);
+	  *pvalley = in * slow_decay + *pvalley * (1.0f - slow_decay);
 	}
 
 	if (*ppeak > *pvalley) {
-	  return ((in - 0.5 * (*ppeak + *pvalley)) / (*ppeak - *pvalley));
+	  return ((in - 0.5f * (*ppeak + *pvalley)) / (*ppeak - *pvalley));
 	}
-	return (0.0);
+	return (0.0f);
 }
+
+
+/*
+ * for multi-slicer experiment.
+ */
+
+#define MIN_G 0.5f
+#define MAX_G 4.0f
+
+/* TODO: static */  float space_gain[MAX_SUBCHANS];
 
 
 
@@ -183,7 +206,8 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	profile = TUNE_PROFILE;
 #endif
 
-	if (toupper(profile) == 'F') {
+
+	if (profile == 'F') {
 
 	  if (baud != DEFAULT_BAUD ||
 	      mark_freq != DEFAULT_MARK_FREQ ||
@@ -198,76 +222,164 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  }
 	}
 
-	if (profile == 'a' || profile == 'A' || profile == 'f' || profile == 'F') {
+	D->profile = profile;		// so we know whether to take fast path later.
+
+	switch (profile) {
+
+	  case 'A':
+	  case 'F':
 
 		/* Original.  52 taps, truncated bandpass, IIR lowpass */
 		/* 'F' is the fast version for low end processors. */
 		/* It is a special case that works only for a particular */
 		/* baud rate, tone pair, and sampling rate. */
 
-	    D->filter_len_bits = 1.415;		/* 52 @ 44100, 1200 */
-	    D->bp_window = BP_WINDOW_TRUNCATED;
+	    D->use_prefilter = 0;		
+
+	    D->ms_filter_len_bits = 1.415;		/* 52 @ 44100, 1200 */
+	    D->ms_window = BP_WINDOW_TRUNCATED;
+
+	    //D->bp_window = BP_WINDOW_TRUNCATED;
+
 	    D->lpf_use_fir = 0;
 	    D->lpf_iir = 0.195;
-	    D->lpf_baud = 0;
+
 	    D->agc_fast_attack = 0.250;		
 	    D->agc_slow_decay = 0.00012;
 	    D->hysteresis = 0.005;
+
 	    D->pll_locked_inertia = 0.700;
 	    D->pll_searching_inertia = 0.580;
-	}
-	else if (profile == 'b' || profile == 'B') {
+	    break;
+
+	  case 'B':
 
 		/* Original bandpass.  Use FIR lowpass instead. */
 
-	    D->filter_len_bits = 1.415;		/* 52 @ 44100, 1200 */
-	    D->bp_window = BP_WINDOW_TRUNCATED;
+	    D->use_prefilter = 0;		
+
+	    D->ms_filter_len_bits = 1.415;		/* 52 @ 44100, 1200 */
+	    D->ms_window = BP_WINDOW_TRUNCATED;
+
+	    //D->bp_window = BP_WINDOW_TRUNCATED;
+
 	    D->lpf_use_fir = 1;
-	    D->lpf_iir = 0;
 	    D->lpf_baud = 1.09;
+	    D->lp_filter_len_bits = D->ms_filter_len_bits;		
+	    D->lp_window = BP_WINDOW_TRUNCATED;
+
 	    D->agc_fast_attack = 0.370;		
 	    D->agc_slow_decay = 0.00014;
 	    D->hysteresis = 0.003;
+
 	    D->pll_locked_inertia = 0.620;
 	    D->pll_searching_inertia = 0.350;
-	}
-	else if (profile == 'c' || profile == 'C') {
+	    break;
+
+	  case 'C':
 
 		/* Cosine window, 76 taps for bandpass, FIR lowpass. */
 
-	    D->filter_len_bits = 2.068;		/* 76 @ 44100, 1200 */
-	    D->bp_window = BP_WINDOW_COSINE;
+	    D->use_prefilter = 0;		
+
+	    D->ms_filter_len_bits = 2.068;		/* 76 @ 44100, 1200 */
+	    D->ms_window = BP_WINDOW_COSINE;
+
+	    //D->bp_window = BP_WINDOW_COSINE;
+
 	    D->lpf_use_fir = 1;
-	    D->lpf_iir = 0;
 	    D->lpf_baud = 1.09;
+	    D->lp_filter_len_bits = D->ms_filter_len_bits;		
+	    D->lp_window = BP_WINDOW_TRUNCATED;
+
 	    D->agc_fast_attack = 0.495;		
 	    D->agc_slow_decay = 0.00022;
 	    D->hysteresis = 0.005;
+
 	    D->pll_locked_inertia = 0.620;
 	    D->pll_searching_inertia = 0.350;
-	}
-	else if (profile == 'd' || profile == 'D') {
+	    break;
+
+	  case 'D':
 
 		/* Prefilter, Cosine window, FIR lowpass. Tweeked for 300 baud. */
 
 	    D->use_prefilter = 1;		/* first, a bandpass filter. */
-	    D->prefilter_baud = 0.87;		/* Cosine window. */
-	    D->filter_len_bits = 1.857;		/* 91 @ 44100/3, 300 */
-	    D->bp_window = BP_WINDOW_COSINE;
+	    D->prefilter_baud = 0.87;		
+	    D->pre_filter_len_bits = 1.857;	
+	    D->pre_window = BP_WINDOW_COSINE;
+
+	    D->ms_filter_len_bits = 1.857;		/* 91 @ 44100/3, 300 */
+	    D->ms_window = BP_WINDOW_COSINE;
+		
+	    //D->bp_window = BP_WINDOW_COSINE;
+
 	    D->lpf_use_fir = 1;
-	    D->lpf_iir = 0;
 	    D->lpf_baud = 1.10;
+	    D->lp_filter_len_bits = D->ms_filter_len_bits;	
+	    D->lp_window = BP_WINDOW_TRUNCATED;
+
 	    D->agc_fast_attack = 0.495;		
 	    D->agc_slow_decay = 0.00022;
 	    D->hysteresis = 0.027;
+
 	    D->pll_locked_inertia = 0.620;
 	    D->pll_searching_inertia = 0.350;
+	    break;
+
+	  case 'E':
+
+		/* 1200 baud - Started out similar to C but add prefilter. */
+		/* Version 1.2 - EXPERIMENTAL - Needs more fine tuning. */
+		/* Enhancements: 					*/
+		/*  + Add prefilter.  Previously used for 300 baud D, but not 1200. */
+		/*  + Prefilter length now independent of M/S filters.	*/
+		/*  + Lowpass filter length now independent of M/S filters.	*/
+		/*  + Allow mixed window types.	*/
+
+	    //D->bp_window = BP_WINDOW_COSINE;	/* The name says BP but it is used for all of them. */
+
+	    D->use_prefilter = 1;		/* first, a bandpass filter. */
+	    D->prefilter_baud = 0.23;		
+	    D->pre_filter_len_bits = 156 * 1200. / 44100.;	
+	    D->pre_window = BP_WINDOW_TRUNCATED;
+
+	    D->ms_filter_len_bits = 74 * 1200. / 44100.;		
+	    D->ms_window = BP_WINDOW_COSINE;
+
+	    D->lpf_use_fir = 1;
+	    D->lpf_baud = 1.18;
+	    D->lp_filter_len_bits = 63 * 1200. / 44100.;		
+	    D->lp_window = BP_WINDOW_TRUNCATED;
+
+	    //D->agc_fast_attack = 0.300;		
+	    //D->agc_slow_decay = 0.000185;
+	    D->agc_fast_attack = 0.820;		
+	    D->agc_slow_decay = 0.000214;
+	    D->hysteresis = 0.01;
+
+	    //D->pll_locked_inertia = 0.57;
+	    //D->pll_searching_inertia = 0.33;
+	    D->pll_locked_inertia = 0.74;
+	    D->pll_searching_inertia = 0.50;
+	    break;
+
+	  default:
+
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Invalid filter profile = %c\n", profile);
+	    exit (1);
 	}
-	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Invalid filter profile = %c\n", profile);
-	  exit (1);
-	}
+
+#ifdef TUNE_PRE_WINDOW
+	D->pre_window = TUNE_PRE_WINDOW;
+#endif
+#ifdef TUNE_MS_WINDOW
+	D->ms_window = TUNE_MS_WINDOW;
+#endif
+#ifdef TUNE_LP_WINDOW
+	D->lp_window = TUNE_LP_WINDOW;
+#endif
 
 
 #if defined(TUNE_AGC_FAST) && defined(TUNE_AGC_SLOW)
@@ -288,6 +400,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	D->prefilter_baud = TUNE_PRE_BAUD;
 #endif
 
+
 /*
  * Calculate constants used for timing.
  * The audio sample rate must be at least a few times the data rate.
@@ -295,24 +408,39 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	D->pll_step_per_sample = (int) round((TICKS_PER_PLL_CYCLE * (double)baud) / ((double)samples_per_sec));
 
-
 /*
- * My initial guess at length of filter was about one bit time.
- * By trial and error, the optimal value was found to somewhat longer.
- * This was optimized for 44,100 sample rate, 1200 baud, 1200/2200 Hz.
- * More experimentation is needed for other situations.
+ * Convert number of bit times to number of taps.
  */
 
-	D->ms_filter_size = (int) round( D->filter_len_bits * (float)samples_per_sec / (float)baud );
+	D->pre_filter_size = (int) round( D->pre_filter_len_bits * (float)samples_per_sec / (float)baud );
+	D->ms_filter_size = (int) round( D->ms_filter_len_bits * (float)samples_per_sec / (float)baud );
+	D->lp_filter_size = (int) round( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud );
 	  	 
 /* Experiment with other sizes. */
 
-#if defined(TUNE_MS_FILTER_SIZE)
+#ifdef TUNE_PRE_FILTER_SIZE
+	D->pre_filter_size = TUNE_PRE_FILTER_SIZE;
+#endif
+#ifdef TUNE_MS_FILTER_SIZE
 	D->ms_filter_size = TUNE_MS_FILTER_SIZE;
 #endif
-	D->lp_filter_size = D->ms_filter_size;
+#ifdef TUNE_LP_FILTER_SIZE
+	D->lp_filter_size = TUNE_LP_FILTER_SIZE;
+#endif
 
+	//assert (D->pre_filter_size >= 4);
 	assert (D->ms_filter_size >= 4);
+	//assert (D->lp_filter_size >= 4);
+
+	if (D->pre_filter_size > MAX_FILTER_SIZE) 
+	{
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Calculated filter size of %d is too large.\n", D->pre_filter_size);
+	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
+	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
+							MAX_FILTER_SIZE);
+	  exit (1);
+	}
 
 	if (D->ms_filter_size > MAX_FILTER_SIZE) 
 	{
@@ -324,11 +452,24 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  exit (1);
 	}
 
+	if (D->lp_filter_size > MAX_FILTER_SIZE) 
+	{
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Calculated filter size of %d is too large.\n", D->pre_filter_size);
+	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
+	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
+							MAX_FILTER_SIZE);
+	  exit (1);
+	}
 
 /* 
- * For narrow AFSK (e.g. 200 Hz shift), it might be beneficial to 
- * have a bandpass filter before the mark/space detector.
- * For now, make it the same number of taps for simplicity.
+ * Optionally apply a bandpass ("pre") filter to attenuate
+ * frequencies outside the range of interest.
+ * This was first used for the "D" profile for 300 baud
+ * which uses narrow shift.  We expect it to have significant
+ * benefit for a narrow shift.
+ * In version 1.2, we will also try it with 1200 baud "E" as
+ * an experiment to see how much it actually helps.
  */
 
 	if (D->use_prefilter) {
@@ -343,14 +484,17 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  f1 = f1 / (float)samples_per_sec;
 	  f2 = f2 / (float)samples_per_sec;
 	  
-	  //gen_bandpass (f1, f2, D->pre_filter, D->ms_filter_size, BP_WINDOW_HAMMING);
-	  //gen_bandpass (f1, f2, D->pre_filter, D->ms_filter_size, BP_WINDOW_BLACKMAN);
-	  gen_bandpass (f1, f2, D->pre_filter, D->ms_filter_size, BP_WINDOW_COSINE);
+	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, BP_WINDOW_HAMMING);
+	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, BP_WINDOW_BLACKMAN);
+	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, BP_WINDOW_COSINE);
+	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, D->bp_window);
+	  gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, D->pre_window);
 	}
 
 /*
  * Filters for detecting mark and space tones.
  */
+
 #if DEBUG1
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("%s:  \n", __FILE__);
@@ -362,6 +506,8 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("Mark\n");
 	  dw_printf ("   j     shape   M sin   M cos \n");
 #endif
+
+	  float Gs = 0, Gc = 0;
 
           for (j=0; j<D->ms_filter_size; j++) {
 	    float am;
@@ -377,15 +523,29 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    center = 0.5 * (D->ms_filter_size - 1);
 	    am = ((float)(j - center) / (float)samples_per_sec) * ((float)mark_freq) * (2 * M_PI);
 
-	    shape = window (D->bp_window, D->ms_filter_size, j);
+	    shape = window (D->ms_window, D->ms_filter_size, j);
 
 	    D->m_sin_table[j] = sin(am) * shape;
   	    D->m_cos_table[j] = cos(am) * shape;
+
+	    Gs += D->m_sin_table[j] * sin(am);
+	    Gc += D->m_cos_table[j] * cos(am);
 
 #if DEBUG1
 	    dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, D->m_sin_table[j], D->m_cos_table[j]) ;
 #endif
           }
+
+
+/* Normalize for unity gain */
+
+#if DEBUG1
+	  dw_printf ("Before normalizing, Gs = %.2f, Gc = %.2f\n", Gs, Gc) ;
+#endif
+          for (j=0; j<D->ms_filter_size; j++) {
+	    D->m_sin_table[j] = D->m_sin_table[j] / Gs;
+	    D->m_cos_table[j] = D->m_cos_table[j] / Gc;
+	  }
 
 
 #if DEBUG1
@@ -394,6 +554,9 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("Space\n");
 	  dw_printf ("   j     shape   S sin   S cos\n");
 #endif
+	  Gs = 0;
+	  Gc = 0;
+
           for (j=0; j<D->ms_filter_size; j++) {
 	    float as;
 	    float center;
@@ -402,10 +565,13 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    center = 0.5 * (D->ms_filter_size - 1);
 	    as = ((float)(j - center) / (float)samples_per_sec) * ((float)space_freq) * (2 * M_PI);
 
-	    shape = window (D->bp_window, D->ms_filter_size, j);
+	    shape = window (D->ms_window, D->ms_filter_size, j);
 
 	    D->s_sin_table[j] = sin(as) * shape;
   	    D->s_cos_table[j] = cos(as) * shape;
+
+	    Gs += D->s_sin_table[j] * sin(as);
+	    Gc += D->s_cos_table[j] * cos(as);
 
 #if DEBUG1
 	    dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, D->s_sin_table[j], D->s_cos_table[j] ) ;
@@ -413,8 +579,15 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
           }
 
 
-/* Do we want to normalize for unity gain? */
+/* Normalize for unity gain */
 
+#if DEBUG1
+	  dw_printf ("Before normalizing, Gs = %.2f, Gc = %.2f\n", Gs, Gc) ;
+#endif
+          for (j=0; j<D->ms_filter_size; j++) {
+	    D->s_sin_table[j] = D->s_sin_table[j] / Gs;
+	    D->s_cos_table[j] = D->s_cos_table[j] / Gc;
+	  }
 
 /*
  * Now the lowpass filter.
@@ -425,7 +598,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	if (D->lpf_use_fir) {
 	  float fc;
 	  fc = baud * D->lpf_baud / (float)samples_per_sec;
-	  gen_lowpass (fc, D->lp_filter, D->lp_filter_size, BP_WINDOW_TRUNCATED);
+	  gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window);
 	}
 
 /*
@@ -476,6 +649,27 @@ failed experiment
 #endif
 #endif
 
+/*
+ * In version 1.2 we try another experiment.
+ * Try using multiple slicing points instead of the traditional AGC.
+ */
+
+	space_gain[0] = MIN_G;
+	float step = powf(10.0, log10f(MAX_G/MIN_G) / (MAX_SUBCHANS-1));
+	for (j=1; j<MAX_SUBCHANS; j++) {
+	  space_gain[j] = space_gain[j-1] * step;
+	}
+
+#ifndef GEN_FFF
+#if 0
+	text_color_set(DW_COLOR_DEBUG);
+	for (j=0; j<MAX_SUBCHANS; j++) {
+	  float db = 20.0 * log10f(space_gain[j]);
+	  dw_printf ("G = %.3f, %+.1f dB\n", space_gain[j], db);
+	}
+#endif
+#endif
+
 }  /* fsk_gen_filter */
 
 
@@ -503,7 +697,7 @@ static void emit_macro (char *name, int size, float *coeff)
 	dw_printf ("#define %s(x) \\\n", name);
 
 	for (i=SPARSE/2; i<size; i+=SPARSE) {
-	  dw_printf ("\t%c (%.6f * x[%d]) \\\n", (i==0 ? ' ' : '+'), coeff[i], i);
+	  dw_printf ("\t%c (%.6ff * x[%d]) \\\n", (i==0 ? ' ' : '+'), coeff[i], i);
 	}
 	dw_printf ("\n");
 }
@@ -518,23 +712,24 @@ int main ()
 	memset (&modem, 0, sizeof(modem));
 	memset (&ds, 0, sizeof(ds));
 
-	modem.num_channels = 1;
-	modem.samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
-	modem.mark_freq[0] = DEFAULT_MARK_FREQ;
-	modem.space_freq[0] = DEFAULT_SPACE_FREQ;
-	modem.baud[0] = DEFAULT_BAUD;
- 	modem.num_subchan[0] = 1;
+	modem.adev[0].num_channels = 1;
+	modem.adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
+	modem.achan[0].mark_freq = DEFAULT_MARK_FREQ;
+	modem.achan[0].space_freq = DEFAULT_SPACE_FREQ;
+	modem.achan[0].baud = DEFAULT_BAUD;
+ 	modem.achan[0].num_demod = 1;
+ 	modem.achan[0].num_subchan = 1;
 
 
-	demod_afsk_init (modem.samples_per_sec, modem.baud[0],
-			modem.mark_freq[0], modem.space_freq[0], fff_profile, &ds);
+	demod_afsk_init (modem.adev[0].samples_per_sec, modem.achan[0].baud,
+			modem.achan[0].mark_freq, modem.achan[0].space_freq, fff_profile, &ds);
 	
 	printf ("/* This is an automatically generated file.  Do not edit. */\n");
 	printf ("\n");
-	printf ("#define FFF_SAMPLES_PER_SEC %d\n", modem.samples_per_sec);
-	printf ("#define FFF_BAUD %d\n", modem.baud[0]);
-	printf ("#define FFF_MARK_FREQ %d\n", modem.mark_freq[0]);
-	printf ("#define FFF_SPACE_FREQ %d\n", modem.space_freq[0]);
+	printf ("#define FFF_SAMPLES_PER_SEC %d\n", modem.adev[0].samples_per_sec);
+	printf ("#define FFF_BAUD %d\n", modem.achan[0].baud);
+	printf ("#define FFF_MARK_FREQ %d\n", modem.achan[0].mark_freq);
+	printf ("#define FFF_SPACE_FREQ %d\n", modem.achan[0].space_freq);
 	printf ("#define FFF_PROFILE '%c'\n", fff_profile);
 	printf ("\n");
 
@@ -595,6 +790,7 @@ int main ()
  *
  *--------------------------------------------------------------------*/
 
+static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
@@ -609,15 +805,13 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	static int seq = 0;			/* for log file name */
 #endif
 
+
 	int j;
 	int demod_data;
 
+
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-
-
-
 
 /* 
  * Filters use last 'filter_size' samples.
@@ -631,32 +825,10 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 	/* Scale to nice number, TODO: range -1.0 to +1.0, not 2. */
 
-	fsam = sam / 16384.0;
+	fsam = sam / 16384.0f;
 
-/*
- * Accumulate measure of the input signal level.
- */
-	abs_fsam = fsam >= 0 ? fsam : -fsam;
- 
-// TODO:  move to common code
-              
-	if (abs_fsam > D->lev_peak_acc) {
-	  D->lev_peak_acc = abs_fsam;
-	}
-	D->lev_sum_acc += abs_fsam;
+	abs_fsam = fsam >= 0.0f ? fsam : -fsam;
 
-	D->lev_count++;
-	if (D->lev_count >= D->lev_period) {
-	  D->lev_prev_peak = D->lev_last_peak;
-          D->lev_last_peak = D->lev_peak_acc;
-          D->lev_peak_acc = 0;
-
-          D->lev_prev_ave = D->lev_last_ave;
-   	  D->lev_last_ave = D->lev_sum_acc / D->lev_count;
-	  D->lev_sum_acc = 0;
-
-	  D->lev_count = 0;
-	}
 
 /*
  * Optional bandpass filter before the mark/space discriminator.
@@ -665,8 +837,8 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	if (D->use_prefilter) {
 	  float cleaner;
 
-	  push_sample (fsam, D->raw_cb, D->ms_filter_size);
-	  cleaner = convolve (D->raw_cb, D->pre_filter, D->ms_filter_size);
+	  push_sample (fsam, D->raw_cb, D->pre_filter_size);
+	  cleaner = convolve (D->raw_cb, D->pre_filter, D->pre_filter_size);
 	  push_sample (cleaner, D->ms_in_cb, D->ms_filter_size);
 	}
 	else {
@@ -687,10 +859,10 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 
 
-// TODO:   How do we test for profile F here?
+// TODO1.2:   is this right or do we need to store profile in the modulator info?
 
-	if (0) {
-	//if (toupper(modem.profiles[chan][subchan]) == toupper(FFF_PROFILE)) {
+	
+	if (D->profile == toupper(FFF_PROFILE)) {
 
 				/* ========== Faster for default values on slower processors. ========== */
 
@@ -748,115 +920,130 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	
 	  /* Original, but faster, IIR. */
 
-	  m_amp = D->lpf_iir * m_amp + (1.0 - D->lpf_iir) * D->m_amp_prev;
+	  m_amp = D->lpf_iir * m_amp + (1.0f - D->lpf_iir) * D->m_amp_prev;
 	  D->m_amp_prev = m_amp;
 
-	  s_amp = D->lpf_iir * s_amp + (1.0 - D->lpf_iir) * D->s_amp_prev;
+	  s_amp = D->lpf_iir * s_amp + (1.0f - D->lpf_iir) * D->s_amp_prev;
 	  D->s_amp_prev = s_amp;
 	}
 
+/*
+ * Version 1.2: Try new approach to capturing the amplitude for display.
+ * This is same as the AGC above without the normalization step.
+ * We want decay to be substantially slower to get a longer
+ * range idea of the received audio.
+ */
+
+	if (m_amp >= D->alevel_mark_peak) {
+	  D->alevel_mark_peak = m_amp * D->quick_attack + D->alevel_mark_peak * (1.0f - D->quick_attack);
+	}
+	else {
+	  D->alevel_mark_peak = m_amp * D->sluggish_decay + D->alevel_mark_peak * (1.0f - D->sluggish_decay);
+	}
+
+	if (s_amp >= D->alevel_space_peak) {
+	  D->alevel_space_peak = s_amp * D->quick_attack + D->alevel_space_peak * (1.0f - D->quick_attack);
+	}
+	else {
+	  D->alevel_space_peak = s_amp * D->sluggish_decay + D->alevel_space_peak * (1.0f - D->sluggish_decay);
+	}
+
+
 /* 
  * Which tone is stronger?
+ *
+ * In an ideal world, simply compare.  In my first naive attempt, that
+ * worked perfectly with perfect signals. In the real world, we don't
+ * have too many perfect signals.
+ *
+ * Here is an excellent explanation:
+ * http://www.febo.com/packet/layer-one/transmit.html
  *
  * Under real conditions, we find that the higher tone has a
  * considerably smaller amplitude due to the passband characteristics
  * of the transmitter and receiver.  To make matters worse, it
  * varies considerably from one station to another.
  *
- * The two filters have different amounts of DC bias.
+ * The two filters also have different amounts of DC bias.
  *
- * Try to compensate for this by normalizing them separately with automatic gain
- * control (AGC). This works by looking at the minimum and maximum outputs
+ * My solution was to apply automatic gain control (AGC) to the mark and space 
+ * levels.  This works by looking at the minimum and maximum outputs
  * for each filter and scaling the results to be roughly in the -0.5 to +0.5 range.
+ * Results were excellent after tweaking the attack and decay times.
+ *
+ * 4X6IZ took a different approach.  See QEX Jul-Aug 2012.
+ *
+ * He ran two different demodulators in parallel.  One of them boosted the higher
+ * frequency tone by 6 dB.  Any duplicates were removed.  This produced similar results.
+ * He also used a bandpass filter before the mark/space filters.  
+ * I haven't tried this combination yet for 1200 baud.
+ *
+ * First, let's take a look at Track 1 of the TNC test CD.  Here the receiver
+ * has a flat response.  We find the mark/space strength ratios very from 0.53 to 1.38
+ * with a median of 0.81.  This in in line with expections because most
+ * transmitters add pre-emphasis to boost the higher audio frequencies.
+ * Track 2 should more closely resemble what comes out of the speaker on a typical
+ * transceiver.  Here we see a ratio from 1.73 to 3.81 with a median of 2.48.
+ * 
+ * This is similar to my observations of local signals, from the speaker.
+ * The amplitude ratio varies from 1.48 to 3.41 with a median of 2.70. 
+ *
+ * Rather than only two filters, let's try slicing the data in more places. 
  */
 
 	/* Fast attack and slow decay. */
 	/* Numbers were obtained by trial and error from actual */
 	/* recorded less-than-optimal signals. */
 
-	/* See agc.c and fsk_demod_agc.h for more information. */
+	/* See fsk_demod_agc.h for more information. */
 
 	m_norm = agc (m_amp, D->agc_fast_attack, D->agc_slow_decay, &(D->m_peak), &(D->m_valley));
 	s_norm = agc (s_amp, D->agc_fast_attack, D->agc_slow_decay, &(D->s_peak), &(D->s_valley));
 
-	/* Demodulator output is difference between response from two filters. */
-	/* AGC should generally keep this around -1 to +1 range. */
+	if (D->num_slicers <= 1) {
 
-	demod_out = m_norm - s_norm;
+	  /* Normal case of one demodulator to one HDLC decoder. */
+	  /* Demodulator output is difference between response from two filters. */
+	  /* AGC should generally keep this around -1 to +1 range. */
 
-/* Try adding some Hysteresis. */
-/* (Not to be confused with Hysteria.) */
+	  demod_out = m_norm - s_norm;
 
-	if (demod_out > D->hysteresis) {
-	  demod_data = 1;
-	}
-	else if (demod_out < (- (D->hysteresis))) {
-	  demod_data = 0;
-	} 
-	else {
-	  demod_data = D->prev_demod_data;
-	}
+	  /* Try adding some Hysteresis. */
+	  /* (Not to be confused with Hysteria.) */
 
-
-/*
- * Finally, a PLL is used to sample near the centers of the data bits.
- *
- * D->data_clock_pll is a SIGNED 32 bit variable.
- * When it overflows from a large positive value to a negative value, we 
- * sample a data bit from the demodulated signal.
- *
- * Ideally, the the demodulated signal transitions should be near
- * zero we we sample mid way between the transitions.
- *
- * Nudge the PLL by removing some small fraction from the value of 
- * data_clock_pll, pushing it closer to zero.
- * 
- * This adjustment will never change the sign so it won't cause
- * any erratic data bit sampling.
- *
- * If we adjust it too quickly, the clock will have too much jitter.
- * If we adjust it too slowly, it will take too long to lock on to a new signal.
- *
- * Be a little more agressive about adjusting the PLL
- * phase when searching for a signal.  Don't change it as much when
- * locked on to a signal.
- *
- * I don't think the optimal value will depend on the audio sample rate
- * because this happens for each transition from the demodulator.
- */
-	D->prev_d_c_pll = D->data_clock_pll;
-	D->data_clock_pll += D->pll_step_per_sample;
-
-	  //text_color_set(DW_COLOR_DEBUG);
-	  // dw_printf ("prev = %lx, new data clock pll = %lx\n" D->prev_d_c_pll, D->data_clock_pll);
-
-	if (D->data_clock_pll < 0 && D->prev_d_c_pll > 0) {
-
-	  /* Overflow. */
-#if SLICENDICE
-	  hdlc_rec_bit_sam (chan, subchan, demod_data, demod_out);
-#else
-	  hdlc_rec_bit (chan, subchan, demod_data, 0, -1);
-#endif
-	}
-
-        if (demod_data != D->prev_demod_data) {
-
-	  // Note:  Test for this demodulator, not overall for channel.
-
-	  if (hdlc_rec_data_detect_1 (chan, subchan)) {
-	    D->data_clock_pll = (int)(D->data_clock_pll * D->pll_locked_inertia);
+	  if (demod_out > D->hysteresis) {
+	    demod_data = 1;
 	  }
+	  else if (demod_out < (- (D->hysteresis))) {
+	    demod_data = 0;
+	  } 
 	  else {
-	    D->data_clock_pll = (int)(D->data_clock_pll * D->pll_searching_inertia);
+	    demod_data = D->slicer[subchan].prev_demod_data;
+	  }
+
+	  nudge_pll (chan, subchan, demod_data, D);
+	}
+	else {
+	  int s;
+
+	  assert (subchan == 0);
+
+	  /* "G" profile with one demodulator and multiple slicers */
+	  /* each feeding its own HDLC decoder. */
+
+	  for (s=0; s<D->num_slicers; s++) {
+	    demod_data = m_amp > s_amp * space_gain[s];
+	    nudge_pll (chan, s, demod_data, D);		
 	  }
 	}
+
+
 
 
 #if DEBUG4
 
 	if (chan == 0) {
-	if (hdlc_rec_data_detect_1 (chan, subchan)) {
+	if (hdlc_rec_gathering (chan, subchan)) {
 	  char fname[30];
 
 	  
@@ -886,87 +1073,71 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 #endif
 
 
+} /* end demod_afsk_process_sample */
+
+
+__attribute__((hot))
+static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D)
+{
+
+/*
+ * Finally, a PLL is used to sample near the centers of the data bits.
+ *
+ * D->data_clock_pll is a SIGNED 32 bit variable.
+ * When it overflows from a large positive value to a negative value, we 
+ * sample a data bit from the demodulated signal.
+ *
+ * Ideally, the the demodulated signal transitions should be near
+ * zero we we sample mid way between the transitions.
+ *
+ * Nudge the PLL by removing some small fraction from the value of 
+ * data_clock_pll, pushing it closer to zero.
+ * 
+ * This adjustment will never change the sign so it won't cause
+ * any erratic data bit sampling.
+ *
+ * If we adjust it too quickly, the clock will have too much jitter.
+ * If we adjust it too slowly, it will take too long to lock on to a new signal.
+ *
+ * Be a little more agressive about adjusting the PLL
+ * phase when searching for a signal.  Don't change it as much when
+ * locked on to a signal.
+ *
+ * I don't think the optimal value will depend on the audio sample rate
+ * because this happens for each transition from the demodulator.
+ */
+	D->slicer[subchan].prev_d_c_pll = D->slicer[subchan].data_clock_pll;
+	D->slicer[subchan].data_clock_pll += D->pll_step_per_sample;
+
+	  //text_color_set(DW_COLOR_DEBUG);
+	  // dw_printf ("prev = %lx, new data clock pll = %lx\n" D->prev_d_c_pll, D->data_clock_pll);
+
+	if (D->slicer[subchan].data_clock_pll < 0 && D->slicer[subchan].prev_d_c_pll > 0) {
+
+	  /* Overflow. */
+
+	  hdlc_rec_bit (chan, subchan, demod_data, 0, -1);
+	}
+
+        if (demod_data != D->slicer[subchan].prev_demod_data) {
+
+	  if (hdlc_rec_gathering (chan, subchan)) {
+	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_locked_inertia);
+	  }
+	  else {
+	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_searching_inertia);
+	  }
+	}
+
 /*
  * Remember demodulator output so we can compare next time.
  */
-	D->prev_demod_data = demod_data;
+	D->slicer[subchan].prev_demod_data = demod_data;
 
+} /* end nudge_pll */
 
-} /* end demod_afsk_process_sample */
 
 #endif   /* GEN_FFF */
 
-
-#if 0
-
-/*-------------------------------------------------------------------
- *
- * Name:        fsk_demod_print_agc
- *
- * Purpose:     Print information about input signal amplitude.
- *		This will be useful for adjusting transmitter audio levels.
- *		We also want to avoid having an input level so high
- *		that the A/D converter "clips" the signal.
- *
- *
- * Inputs:	chan	- Audio channel.  0 for left, 1 for right.
- *
- * Returns:	None 
- *
- * Descripion:	Not sure what to use for final form.
- *		For now display the AGC peaks for both tones.
- *		This will be called at the end of a frame.
- *
- * Future:	Come up with a sensible scale and add command line option.
- *		Probably makes more sense to return a single number
- *		and let the caller print it.
- *		Just an experiment for now.
- *
- *--------------------------------------------------------------------*/
-
-#if 0
-void fsk_demod_print_agc (int chan, int subchan)
-{
-
-	struct demodulator_state_s *D;
-
-
-	assert (chan >= 0 && chan < MAX_CHANS);
-	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-	D = &demodulator_state[chan][subchan];
-
-	dw_printf ("%d\n", (int)((D->lev_last_peak + D->lev_prev_peak)*50));
-
-
-
-	//dw_printf ("Peak= %.2f, %.2f Ave= %.2f, %.2f AGC M= %.2f / %.2f S= %.2f / %.2f\n", 
-	//	D->lev_last_peak, D->lev_prev_peak, D->lev_last_ave, D->lev_prev_ave,
-	//	D->m_peak, D->m_valley, D->s_peak, D->s_valley);
-
-}
-#endif
-
-/* Resulting scale is 0 to almost 100. */
-/* Cranking up the input level produces no more than 97 or 98. */
-/* We currently produce a message when this goes over 90. */
-
-int fsk_demod_get_audio_level (int chan, int subchan) 
-{
-	struct demodulator_state_s *D;
-
-
-	assert (chan >= 0 && chan < MAX_CHANS);
-	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-	D = &demodulator_state[chan][subchan];
-
-	return ( (int) ((D->lev_last_peak + D->lev_prev_peak) * 50 ) );
-}
-
-
-
-
-#endif   /* 0 */
 
 /* end demod_afsk.c */

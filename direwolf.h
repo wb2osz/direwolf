@@ -3,11 +3,41 @@
 #define DIREWOLF_H 1
 
 
+
 /*
- * Maximum number of radio channels.
+ * Previously, we could handle only a single audio device.
+ * This meant we could have only two radio channels.
+ * In version 1.2, we relax this restriction and allow more audio devices.
+ * Three is probably adequate for standard version.
+ * Larger reasonable numbers should also be fine.
  */
 
-#define MAX_CHANS 2
+#define MAX_ADEVS 3			
+
+	
+/*
+ * Maximum number of radio channels.
+ * Note that there could be gaps.
+ * Suppose audio device 0 was in mono mode and audio device 1 was stereo.
+ * The channels available would be:
+ *
+ *	ADevice 0:	channel 0
+ *	ADevice 1:	left = 2, right = 3
+ *
+ * TODO1.2:  Look for any places that have
+ *		for (ch=0; ch<MAX_CHANS; ch++) ...
+ * and make sure they handle undefined channels correctly.
+ */
+
+#define MAX_CHANS ((MAX_ADEVS) * 2)
+
+/*
+ * Get audio device number for given channel.
+ * and first channel for given device.
+ */
+
+#define ACHAN2ADEV(n) ((n)>>1)
+#define ADEVFIRSTCHAN(n) ((n) * 2)
 
 /*
  * Maximum number of modems per channel.
@@ -53,5 +83,79 @@
 #define DW_MPH_TO_METERS_PER_SEC(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.44704)
 
 #define DW_MBAR_TO_INHG(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.0295333727)
+
+
+
+
+#if __WIN32__
+
+typedef CRITICAL_SECTION dw_mutex_t;
+
+#define dw_mutex_init(x) \
+	InitializeCriticalSection (x)
+
+/* This one waits for lock. */
+
+#define dw_mutex_lock(x) \
+	EnterCriticalSection (x) 
+
+/* Returns non-zero if lock was obtained. */
+
+#define dw_mutex_try_lock(x) \
+	TryEnterCriticalSection (x)
+
+#define dw_mutex_unlock(x) \
+	LeaveCriticalSection (x)
+
+
+#else
+
+typedef pthread_mutex_t dw_mutex_t;
+
+#define dw_mutex_init(x) pthread_mutex_init (x, NULL)
+
+/* this one will wait. */
+
+#define dw_mutex_lock(x) \
+	{	\
+	  int err; \
+	  err = pthread_mutex_lock (x); \
+	  if (err != 0) { \
+	    text_color_set(DW_COLOR_ERROR); \
+	    dw_printf ("INTERNAL ERROR %s %d pthread_mutex_lock returned %d", __FILE__, __LINE__, err); \
+	    exit (1); \
+	  } \
+	}
+
+/* This one returns true if lock successful, false if not. */
+/* pthread_mutex_trylock returns 0 for success. */
+
+#define dw_mutex_try_lock(x) \
+	({	\
+	  int err; \
+	  err = pthread_mutex_trylock (x); \
+	  if (err != 0 && err != EBUSY) { \
+	    text_color_set(DW_COLOR_ERROR); \
+	    dw_printf ("INTERNAL ERROR %s %d pthread_mutex_trylock returned %d", __FILE__, __LINE__, err); \
+	    exit (1); \
+	  } ; \
+	  ! err; \
+	})
+
+#define dw_mutex_unlock(x) \
+	{	\
+	  int err; \
+	  err = pthread_mutex_unlock (x); \
+	  if (err != 0) { \
+	    text_color_set(DW_COLOR_ERROR); \
+	    dw_printf ("INTERNAL ERROR %s %d pthread_mutex_unlock returned %d", __FILE__, __LINE__, err); \
+	    exit (1); \
+	  } \
+	}
+
+
+#endif
+
+
 
 #endif   /* ifndef DIREWOLF_H */

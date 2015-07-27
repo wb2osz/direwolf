@@ -5,7 +5,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2013,2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -58,6 +58,7 @@
 #include "latlong.h"
 #include "dwgps.h"
 #include "log.h"
+#include "dlq.h"
 
 
 
@@ -73,8 +74,9 @@ static int g_using_gps = 0;
  * Save pointers to configuration settings.
  */
 
-static struct misc_config_s *g_misc_config_p;
-static struct digi_config_s *g_digi_config_p;
+static struct audio_s        *g_modem_config_p;
+static struct misc_config_s  *g_misc_config_p;
+static struct digi_config_s  *g_digi_config_p;
 
 
 
@@ -102,9 +104,11 @@ void beacon_tracker_set_debug (int level)
  *
  * Purpose:     Initialize the beacon process.
  *
- * Inputs:	pconfig		- misc. configuration from config file.
+ * Inputs:	pmodem		- Aduio device and modem configuration.
+ *				  Used only to find valide channels.
+ *		pconfig		- misc. configuration from config file.
  *		pdigi		- digipeater configuration from config file.
- *				  Use to obtain "mycall" for each channel.
+ *				TODO: Is this needed?
  *
  *
  * Outputs:	Remember required information for future use.
@@ -119,7 +123,7 @@ void beacon_tracker_set_debug (int level)
 
 
 
-void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
+void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct digi_config_s *pdigi)
 {
 	time_t now;
 	int j;
@@ -142,6 +146,7 @@ void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
 /* 
  * Save parameters for later use.
  */
+	g_modem_config_p = pmodem;
 	g_misc_config_p = pconfig;
 	g_digi_config_p = pdigi;
 
@@ -156,9 +161,9 @@ void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
 
 	  if (chan < 0) chan = 0;	/* For IGate, use channel 0 call. */
 
-	  if (chan < pdigi->num_chans) {
+	  if (g_modem_config_p->achan[chan].valid) {
 
-	    if (strlen(pdigi->mycall[chan]) > 0 && strcasecmp(pdigi->mycall[chan], "NOCALL") != 0) {
+	    if (strlen(g_modem_config_p->achan[chan].mycall) > 0 && strcasecmp(g_modem_config_p->achan[chan].mycall, "NOCALL") != 0) {
 
               switch (g_misc_config_p->beacon[j].btype) {
 
@@ -239,7 +244,7 @@ void beacon_init (struct misc_config_s *pconfig, struct digi_config_s *pdigi)
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("beacon[%d] chan=%d, delay=%d, every=%d\n",
 		j,
-		g_misc_config_p->beacon[j].chan,
+		g_misc_config_p->beacon[j].sendto_chan,
 		g_misc_config_p->beacon[j].delay,
 		g_misc_config_p->beacon[j].every);
 #endif
@@ -587,7 +592,7 @@ static void * beacon_thread (void *arg)
 
 	      assert (g_misc_config_p->beacon[j].sendto_chan >= 0);
 
-	      strcpy (mycall, g_digi_config_p->mycall[g_misc_config_p->beacon[j].sendto_chan]);
+	      strcpy (mycall, g_modem_config_p->achan[g_misc_config_p->beacon[j].sendto_chan].mycall);
 	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
 	        text_color_set(DW_COLOR_ERROR);
@@ -694,6 +699,7 @@ static void * beacon_thread (void *arg)
 	            if (g_tracker_debug_level >= 3) {
 		
 		      decode_aprs_t A;
+		      alevel_t alevel;
 
 		      memset (&A, 0, sizeof(A));
 	  	      A.g_freq   = G_UNKNOWN;
@@ -711,7 +717,8 @@ static void * beacon_thread (void *arg)
 		      A.g_altitude = my_alt_ft;
 
 		      /* Fake channel of 999 to distinguish from real data. */
-		      log_write (999, &A, NULL, 0, 0);
+		      memset (&alevel, 0, sizeof(alevel));
+		      log_write (999, &A, NULL, alevel, 0);
 		    }
 	 	  }
 	          else {
@@ -748,6 +755,9 @@ static void * beacon_thread (void *arg)
 
 		/* Send to desired destination. */
 
+	        alevel_t alevel;
+
+
 	        switch (g_misc_config_p->beacon[j].sendto_type) {
 
 	          case SENDTO_IGATE:
@@ -769,9 +779,10 @@ static void * beacon_thread (void *arg)
 
 		  case SENDTO_RECV:
 
-		    // TODO:  Put into receive queue rather than calling directly.
+	            /* Simulated reception. */
 
-		    app_process_rec_packet (g_misc_config_p->beacon[j].sendto_chan, 0, pp, -1, 0, "");
+		    memset (&alevel, 0xff, sizeof(alevel));
+	            dlq_append (DLQ_REC_FRAME, g_misc_config_p->beacon[j].sendto_chan, 0, pp, alevel, 0, "");
 	            break; 
 		}
 	      }

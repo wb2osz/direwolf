@@ -1,0 +1,86 @@
+.TH DECODE_APRS  1
+
+.SH NAME
+decode_aprs \- Convert APRS raw data to human readable form.
+
+
+.SH SYNOPSIS
+.B decode_aprs 
+[ \fItext-file\fR ]
+.RS
+.P
+\fItext-file\fR should contain AX.25 packets in the standard monitoring format.  
+If no file specified, data will be read from stdin.
+.P
+.RE
+
+.SH DESCRIPTION
+\fBdecode_aprs\fR is useful for understanding sometimes obscure APRS packets and finding errors.
+
+
+.SH OPTIONS
+None.
+
+
+
+.SH EXAMPLES
+
+You see something like this show up on your screen:
+.P
+.RS
+M0XER-3>APRS63,WIDE2-1:!/4\\;u/)K$O J]YD/A=041216|h`RY(1>q!(|
+.RE
+.P
+What does it mean?  If you haven't spent a lot of time studying the APRS protocol
+specification, most of it probably looks like random noise.
+Pipe it into decode_aprs to find out.
+.P
+.RS
+.B echo 'M0XER-3>APRS63,WIDE2-1:!/4\\\\;u/)K$O J]YD/A=041216|h`RY(1>q!(|' | decode_aprs
+.RE
+.P
+
+http://www.findu.com/cgi-bin/errors.cgi has a never-ending collection of packets 
+with errors.  Sometimes it's  not  obvious what is wrong with them.  
+Dire Wolf will usually tell you what is wrong.  First,
+cut-n-paste the bad packets into a text file.  Here a couple examples:
+.P
+.RS
+n2cma>APRS,TCPIP*,qAC,SEVENTH:@212127z43.2333n/77.1w_338/002g001t025P000h65b10208.wview_5_19_0
+.P
+K0YTH-10>APNU3B,NULL,qAR,K0DMF-10:!4601.5NS09255.52W#PHG6360/W2,MNn 444.575
+.RE
+.P
+If  you  simply  fed  this  into decode_aprs, it would complain about the 
+lower case in qA-something, added by the IGate, in the via path.  
+We can take it out with something like this:
+.P
+.RS
+.B cat findu-errors.txt | sed -e 's/,qA.*:/:/' | decode_aprs
+.RE
+.P
+In the first case, we get,
+.P
+.RS
+Address has lower case letters. "n2cma" must be all upper case.
+.RE
+.P
+After changing the source address to upper case, there are other issues.  Identifying them is left as an exercise for the reader.
+.P
+And in the second example,
+.P
+.RS
+.PD 0
+Invalid character in latitude.  Found 'N' when expecting 0-9 for hundredths of minutes.
+.P
+Invalid character in longitude.  Found '9' when expecting 0 or 1 for hundreds of degrees.
+.PD
+.RE
+
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

@@ -1,0 +1,40 @@
+.TH UTM2LL  1
+
+.SH NAME
+utm2ll \- Convert UTM coordinates to Latitude and Longitude.
+
+
+.SH SYNOPSIS
+.B utm2ll 
+.I zone easting northing 
+.RS
+.P
+\fIzone\fR is UTM zone 1 thru 60 with optional latitudinal band.
+.P
+\fIeasting\fR is x coordinate in meters.
+.P
+\fInorthing\fR is y coordinate in meters.
+.RE
+
+.SH DESCRIPTION
+\fBll2utm\fR  converts UTM coordinates to latitude and longitude.
+
+
+.SH OPTIONS
+.TP
+None.
+
+
+.SH EXAMPLES
+.P
+.B utm2ll 19T 306130 4726010
+.P
+latitude = 42.662139, longitude = -71.365553
+.P
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

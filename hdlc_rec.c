@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+
 
 
 /********************************************************************************
@@ -38,6 +39,8 @@
 #include "ax25_pad.h"
 #include "rrbb.h"
 #include "multi_modem.h"
+#include "demod_9600.h"		/* for descramble() */
+#include "ptt.h"
 
 
 //#define TEST 1				/* Define for unit testing. */
@@ -65,9 +68,14 @@
 
 struct hdlc_state_s {
 
+
 	int prev_raw;			/* Keep track of previous bit so */
 					/* we can look for transitions. */
 					/* Should be only 0 or 1. */
+
+	int lfsr;			/* Descrambler shift register for 9600 baud. */
+
+	int prev_descram;		/* Previous descrambled for 9600 baud. */
 
 	unsigned char pat_det; 		/* 8 bit pattern detector shift register. */
 					/* See below for more details. */
@@ -93,9 +101,6 @@ struct hdlc_state_s {
 					/* This will not be triggered by voice or other */
 					/* noise or even tones.  */
 
-	enum retry_e fix_bits;		/* Level of effort to recover from */
-					/* a bad FCS on the frame. */
-
 	rrbb_t rrbb;			/* Handle for bit array for raw received bits. */
 					
 };
@@ -103,7 +108,11 @@ struct hdlc_state_s {
 
 static struct hdlc_state_s hdlc_state[MAX_CHANS][MAX_SUBCHANS];
 
-static int num_subchan[MAX_CHANS];
+static int num_subchan[MAX_CHANS];		//TODO1.2 use ptr rather than copy.
+
+static int composite_dcd[MAX_CHANS];
+
+static void dcd_change (int chan, int subchan, int state);
 
 
 /***********************************************************************************
@@ -128,27 +137,35 @@ void hdlc_rec_init (struct audio_s *pa)
 
 	assert (pa != NULL);
 	
-	for (j=0; j<pa->num_channels; j++)
+	for (j=0; j<MAX_CHANS; j++)
 	{
-	  num_subchan[j] = pa->num_subchan[j];
+	  composite_dcd[j] = 0;
 
-	  assert (num_subchan[j] >= 1 && num_subchan[j] < MAX_SUBCHANS);
+	  if (pa->achan[j].valid) {
 
-	  for (k=0; k<MAX_SUBCHANS; k++) 
-	  {
-	    H = &hdlc_state[j][k];
+	    num_subchan[j] = pa->achan[j].num_subchan;
 
-	    H->prev_raw = 0;
-	    H->pat_det = 0;
-	    H->flag4_det = 0;
-	    H->olen = -1;
-	    H->frame_len = 0;
-	    H->data_detect = 0;
-	    H->fix_bits = pa->fix_bits;
-	    H->rrbb = rrbb_new(j, k, pa->modem_type[j] == SCRAMBLE, -1);
+	    assert (num_subchan[j] >= 1 && num_subchan[j] <= MAX_SUBCHANS);
+
+	    for (k=0; k<MAX_SUBCHANS; k++) 
+	    {
+	      H = &hdlc_state[j][k];
+
+	      H->prev_raw = 0;
+	      H->lfsr = 0;
+	      H->prev_descram = 0;
+	      H->pat_det = 0;
+	      H->flag4_det = 0;
+	      H->olen = -1;
+	      H->frame_len = 0;
+	      H->data_detect = 0;
+		// TODO: wasteful if not needed.
+	      H->rrbb = rrbb_new(j, k, pa->achan[j].modem_type == MODEM_SCRAMBLE, H->lfsr, H->prev_descram);
+	    }
 	  }
 	}
 
+	hdlc_rec2_init (pa);
 	was_init = 1;
 }
 
@@ -171,8 +188,6 @@ void hdlc_rec_init (struct audio_s *pa)
  *
  *		descram_state - Current descrambler state.
  *					
- *		sam	- Possible future: Sample from demodulator output.
- *			  Should nominally be in roughly -1 to +1 range.
  *
  * Description:	This is called once for each received bit.
  *		For each valid frame, process_rec_frame()
@@ -180,11 +195,11 @@ void hdlc_rec_init (struct audio_s *pa)
  *
  ***********************************************************************************/
 
-#if SLICENDICE
-void hdlc_rec_bit_sam (int chan, int subchan, int raw, float demod_out)
-#else
-void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram_state)
-#endif
+// TODO: int not_used_remove
+
+
+void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int not_used_remove)
+
 {
 
 	int dbit;			/* Data bit after undoing NRZI. */
@@ -207,8 +222,19 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
  *   A '1' bit is represented by no change.
  */
 
-	dbit = (raw == H->prev_raw);
-	H->prev_raw = raw;
+	if (is_scrambled) {
+	  int descram;
+
+	  descram = descramble(raw, &(H->lfsr));
+
+	  dbit = (descram == H->prev_descram);
+	  H->prev_descram = descram;			
+	  H->prev_raw = raw;	}
+	else {
+
+	  dbit = (raw == H->prev_raw);
+	  H->prev_raw = raw;
+	}
 
 /*
  * Octets are sent LSB first.
@@ -226,37 +252,49 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 
 
 /*
- * "Data Carrier detect" function based on data rather than
- * tones from a modem.
+ * "Data Carrier detect" function based on data patterns rather than
+ * audio signal strength.
  *
  * Idle time, at beginning of transmission should be filled
  * with the special "flag" characters.
  *
  * Idle time of all zero bits (alternating tones at maximum rate)
- * has also been observed. 
+ * has also been observed rarely. 
+ * Recognize zero(s) followed by a flag even though it vilolates the spec.
  */
 
-	if (H->flag4_det == 0x7e7e7e7e) {	
-	  
+/*
+ * Originally, this looked for 4 flags in a row or 3 zeros and a flag. 
+ * Is that too fussy?
+ * Here are the numbers of start of DCD for our favorite Track 2 test.
+ *
+ *	7e7e7e7e  504 	7e000000  32  	
+ *	7e7e7e--  513   7e0000--  33	
+ *	7e7e----  555   7e00----  42	
+ *	7e------ 2088
+ *					
+ * I don't think we want to look for a single flag because that would
+ * make DCD too sensitive to noise and it would interfere with waiting for a 
+ * clear channel to transmit.  Even a two byte match causes a lot of flickering
+ * when listening to live signals.  Let's try 3 and see how that works out.
+ */
+
+	//if (H->flag4_det == 0x7e7e7e7e) {
+	if ((H->flag4_det & 0xffffff00) == 0x7e7e7e00) {	
+	//if ((H->flag4_det & 0xffff0000) == 0x7e7e0000) {	
 
 	  if ( ! H->data_detect) {
 	    H->data_detect = 1;
-#if DEBUG3
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("DCD%d = 1 flags\n", chan);
-#endif
+	    dcd_change (chan, subchan, 1);
 	  }
 	}
-
-	if (H->flag4_det == 0x7e000000) {	
+	//else if (H->flag4_det == 0x7e000000) {	
+	else if ((H->flag4_det & 0xffffff00) == 0x7e000000) {	
+	//else if ((H->flag4_det & 0xffff0000) == 0x7e000000) {	
 	  
-
 	  if ( ! H->data_detect) {
 	    H->data_detect = 1;
-#if DEBUG3
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("DCD%d = 1 zero fill\n", chan);
-#endif
+	    dcd_change (chan, subchan, 1);
 	  }
 	}
 
@@ -271,10 +309,7 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 	  
 	  if ( H->data_detect ) {
 	    H->data_detect = 0;
-#if DEBUG3
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("DCD%d =   0\n", chan);
-#endif
+	    dcd_change (chan, subchan, 0);
 	  }
 	}
 
@@ -285,11 +320,9 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
  * The rest is concerned with framing.
  */
 
-#if SLICENDICE
-	rrbb2_append_bit (H->rrbb, demod_out);
-#else
+
 	rrbb_append_bit (H->rrbb, raw);
-#endif
+
 	if (H->pat_det == 0x7e) {
 
 	  rrbb_chop8 (H->rrbb);
@@ -338,7 +371,7 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 	    expected_fcs = fcs_calc (H->frame_buf, H->frame_len - 2);
 
 	    if (actual_fcs == expected_fcs) {
-	      int alevel = demod_get_audio_level (chan, subchan);
+	      alevel_t alevel = demod_get_audio_level (chan, subchan);
 
 	      multi_modem_process_rec_frame (chan, subchan, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE);   /* len-2 to remove FCS. */
 	    }
@@ -360,33 +393,58 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 
 #if TEST
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("\nfound flag, %d bits in frame\n", rrbb_get_len(H->rrbb) - 1);
+	  dw_printf ("\nfound flag, channel %d.%d, %d bits in frame\n", chan, subchan, rrbb_get_len(H->rrbb) - 1);
 #endif
 	  if (rrbb_get_len(H->rrbb) >= MIN_FRAME_LEN * 8) {
 		
-	    int alevel = demod_get_audio_level (chan, subchan);
+	    alevel_t alevel = demod_get_audio_level (chan, subchan);
 
 	    rrbb_set_audio_level (H->rrbb, alevel);
-	    rrbb_set_fix_bits (H->rrbb, H->fix_bits);
-	    hdlc_rec2_block (H->rrbb, H->fix_bits);
+	    hdlc_rec2_block (H->rrbb);
 	    	/* Now owned by someone else who will free it. */
-	    H->rrbb = rrbb_new (chan, subchan, is_scrambled, descram_state); /* Allocate a new one. */
+	    H->rrbb = rrbb_new (chan, subchan, is_scrambled, H->lfsr, H->prev_descram); /* Allocate a new one. */
 	  }
 	  else {
-	    rrbb_clear (H->rrbb, is_scrambled, descram_state); 
+	    rrbb_clear (H->rrbb, is_scrambled, H->lfsr, H->prev_descram); 
 	  }
 
 	  H->olen = 0;		/* Allow accumulation of octets. */
 	  H->frame_len = 0;
 
-#if SLICENDICE
-	  rrbb2_append_bit (H->rrbb, H->prev_raw ? 1.0 : -1.0); /* Last bit of flag.  Needed to get first data bit. */
-#else
+
 	  rrbb_append_bit (H->rrbb, H->prev_raw); /* Last bit of flag.  Needed to get first data bit. */
-#endif
+						/* Now that we are saving other initial state information, */
+						/* it would be sensible to do the same for this instead */
+						/* of lumping it in with the frame data bits. */
 #endif
 
 	}
+
+//#define EXPERIMENT12B 1
+
+#if EXPERIMENT12B
+
+	else if (H->pat_det == 0xff) {
+
+/*
+ * Valid data will never have seven 1 bits in a row.
+ *
+ *	11111110
+ *
+ * This indicates loss of signal.
+ * But we will let it slip thru because it might diminish
+ * our single bit fixup effort.   Instead give up on frame
+ * only when we see eight 1 bits in a row.
+ *
+ *	11111111
+ *
+ * What is the impact?  No difference.
+ *
+ *  Before:	atest -P E -F 1 ../02_Track_2.wav	= 1003
+ *  After:	atest -P E -F 1 ../02_Track_2.wav	= 1003
+ */
+
+#else
 	else if (H->pat_det == 0xfe) {
 
 /*
@@ -397,15 +455,13 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
  * This indicates loss of signal.
  */
 
+#endif
+
 	  H->olen = -1;		/* Stop accumulating octets. */
 	  H->frame_len = 0;	/* Discard anything in progress. */
 
-	  rrbb_clear (H->rrbb, is_scrambled, descram_state); 
-#if SLICENDICE
-	  rrbb2_append_bit (H->rrbb, H->prev_raw ? 1.0 : -1.0); /* Last bit of flag.  Needed to get first data bit. */
-#else
-	  rrbb_append_bit (H->rrbb, H->prev_raw); /* Last bit of flag.  Needed to get first data bit. */
-#endif
+	  rrbb_clear (H->rrbb, is_scrambled, H->lfsr, H->prev_descram); 
+
 	}
 	else if ( (H->pat_det & 0xfc) == 0x7c ) {
 
@@ -449,8 +505,105 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 
 /*-------------------------------------------------------------------
  *
- * Name:        hdlc_rec_data_detect_1
- *		hdlc_rec_data_detect_any
+ * Name:        hdlc_rec_gathering
+ *
+ * Purpose:     Report whether bits are currently being gathered into a frame.
+ *		This is used to influence the PLL inertia.
+ *		The idea is that the PLL should be a little more agreeable to
+ *		synchronize with the incoming data stream when not in a frame
+ *		and resist changing a little more when capturing a frame.
+ *
+ * Inputs:	chan
+ *		subchan
+ *
+ * Returns:	True if we are currently gathering bits.
+ *		In this case we want the PLL to have more inertia.
+ *
+ * Discussion:	Originally I used the data carrier detect.
+ *		Later, it seemed like the we should be using "olen>=0" instead.
+ *
+ *		Seems to make no difference for Track 1 and the original
+ *		way was a hair better for Track 2.
+ *
+ *--------------------------------------------------------------------*/
+
+int hdlc_rec_gathering (int chan, int subchan)
+{
+	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
+
+	// Counts from 	     Track 1 & Track 2
+	// data_detect		992	988
+	// olen>=0		992	985
+	// OR-ed		992	985
+
+
+	return ( hdlc_state[chan][subchan].data_detect );
+
+	//return ( hdlc_state[chan][subchan].olen >= 0);
+
+	//return ( hdlc_state[chan][subchan].data_detect || hdlc_state[chan][subchan].olen >= 0 );
+
+} /* end hdlc_rec_gathering */
+
+
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dcd_change
+ *
+ * Purpose:     Combine DCD states of all subchannels into an overall
+ *		state for the channel.
+ *
+ * Inputs:	chan	
+ *		subchan	
+ *		state		1 for active, 0 for not.
+ *
+ * Returns:	None.  Use ??? to retrieve result.
+ *
+ * Description:	DCD for the channel is active if ANY of the subchannels
+ *		is active.  Update the DCD indicator.
+ *
+ * Future:	Roll DTMF into the final result.
+ *
+ *--------------------------------------------------------------------*/
+
+
+static void dcd_change (int chan, int subchan, int state)
+{
+	int old, new;
+
+	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
+	assert (state == 0 || state == 1);
+
+#if DEBUG3
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("DCD %d.%d = %d \n", chan, subchan, state);
+#endif
+
+	old = hdlc_rec_data_detect_any(chan);
+
+	if (state) {
+	  composite_dcd[chan] |= (1 << subchan);
+	}
+	else {
+	  composite_dcd[chan] &=  ~ (1 << subchan);
+	}
+
+	new = hdlc_rec_data_detect_any(chan);
+
+	if (new != old) {
+	  ptt_set (OCTYPE_DCD, chan, new);
+	}
+}
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        hdlc_rec_data_detect_any
  *
  * Purpose:     Determine if the radio channel is curently busy
  *		with packet data.
@@ -458,17 +611,13 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
  *		This is used by the transmit logic to transmit only
  *		when the channel is clear.
  *
- * Inputs:	chan	- Audio channel.  0 for left, 1 for right.
+ * Inputs:	chan	- Audio channel. 
  *
  * Returns:	True if channel is busy (data detected) or 
  *		false if OK to transmit. 
  *
  *
  * Description:	We have two different versions here.
- *
- *		hdlc_rec_data_detect_1 tests a single decoder (subchan)
- *		and is used by the DPLL to determine how much inertia
- *		to use when trying to follow the incoming signal.
  *
  *		hdlc_rec_data_detect_any sees if ANY of the decoders
  *		for this channel are receving a signal.   This is
@@ -480,31 +629,13 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
  *
  *--------------------------------------------------------------------*/
 
-int hdlc_rec_data_detect_1 (int chan, int subchan)
-{
-	assert (chan >= 0 && chan < MAX_CHANS);
-
-	return ( hdlc_state[chan][subchan].data_detect );
-
-} /* end hdlc_rec_data_detect_1 */
-
-
 int hdlc_rec_data_detect_any (int chan)
 {
 	int subchan;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 
-	for (subchan = 0; subchan < num_subchan[chan]; subchan++) {
-
-	  assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-	  if (hdlc_state[chan][subchan].data_detect) {
-	    return (1);
-	  }
-	}
-	return (0);
-
+	return (composite_dcd[chan] != 0);
 
 } /* end hdlc_rec_data_detect_any */
 

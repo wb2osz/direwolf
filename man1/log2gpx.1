@@ -1,0 +1,40 @@
+.TH LOG2GPX 1
+
+.SH NAME
+log2gpx \- Convert Dire Wolf log files to GPX format.
+
+
+.SH SYNOPSIS
+.B log2gpx 
+[ \fIfile\fR ... ]
+.P
+The command line can contain one or more log file names.  If no files are specified, stdin is used.  
+.P
+The result is always written to stdout.  Redirect stdout to save results to a file.
+
+
+.SH DESCRIPTION
+\fBlog2gpx\fR  converts Dire Wolf log files to the GPX format used by many mapping applications.
+.P
+Stationary entities are converted to waypoints.  Moving entities are converted to tracks.
+
+.SH OPTIONS
+.TP
+None.
+
+
+.SH EXAMPLES
+.P
+.B direwolf -l logdir
+.P
+.B log2gpx logdir/* > everybody.gpx
+.P
+.B egrep -e '^[^,]+,[^,]+,[^,]+,WB2OSZ,' logdir/* | log2gpx > justme.gpx
+.P
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

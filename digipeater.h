@@ -7,6 +7,8 @@
 
 #include "direwolf.h"		/* for MAX_CHANS */
 #include "ax25_pad.h"		/* for packet_t */
+#include "audio.h"		/* for radio channel properties */
+
 
 /*
  * Information required for digipeating.
@@ -18,11 +20,6 @@
 
 struct digi_config_s {
 
-	int	num_chans;
-
-	char mycall[MAX_CHANS][AX25_MAX_ADDR_LEN];	/* Call associated */
-					/* with each of the radio channels.  */
-					/* Could be the same or different. */
 
 	int	dedupe_time;	/* Don't digipeat duplicate packets */
 				/* within this number of seconds. */
@@ -41,6 +38,13 @@ struct digi_config_s {
 
 	enum preempt_e { PREEMPT_OFF, PREEMPT_DROP, PREEMPT_MARK, PREEMPT_TRACE } preempt[MAX_CHANS][MAX_CHANS];
 
+	//char type_filter[MAX_CHANS][MAX_CHANS][20]; // TODO1.2: remove this
+
+	char *filter_str[MAX_CHANS+1][MAX_CHANS+1];
+						// NULL or optional Packet Filter strings such as "t/m".
+						// Notice the size of arrays is one larger than normal.
+						// That extra position is for the IGate.
+
 	int regen[MAX_CHANS][MAX_CHANS];	// Regenerate packet.  
 						// Sort of like digipeating but passed along unchanged.
 };
@@ -49,7 +53,7 @@ struct digi_config_s {
  * Call once at application start up time.
  */
 
-extern void digipeater_init (struct digi_config_s *p_digi_config);
+extern void digipeater_init (struct audio_s *p_audio_config, struct digi_config_s *p_digi_config);
 
 /*
  * Call this for each packet received.

@@ -1,7 +1,8 @@
+
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -52,6 +53,7 @@
 #include <assert.h>
 
 #include "direwolf.h"
+#include "version.h"
 #include "ax25_pad.h"
 #include "hdlc_rec2.h"		/* for process_rec_frame */
 #include "textcolor.h"
@@ -60,22 +62,30 @@
 #include "tt_user.h"
 #include "symbols.h"
 #include "latlong.h"
-
+#include "dlq.h"
+#include "demod.h"          /* for alevel_t & demod_get_audio_level() */
 
 #if __WIN32__
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
-#include "utm/LatLong-UTMconversion.h"
+// geotranz
 
+#include "utm.h"
+#include "mgrs.h"
+#include "usng.h"
+#include "error_string.h"
 
-//TODO: #include "tt_user.h"
+/* Convert between degrees and radians. */
 
+#define D2R(d) ((d) * M_PI / 180.)
+#define R2D(r) ((r) * 180. / M_PI)
 
 
 /*
  * Touch Tone sequences are accumulated here until # terminator found.
- * Kept separate for each audio channel.
+ * Kept separate for each audio channel so the gateway CAN be listening
+ * on multiple channels at the same time.
  */
 
 #define MAX_MSG_LEN 100
@@ -83,7 +93,6 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 static char msg_str[MAX_CHANS][MAX_MSG_LEN+1];
 static int msg_len[MAX_CHANS];
 
-static void aprs_tt_message (int chan, char *msg);
 static int parse_fields (char *msg);
 static int parse_callsign (char *e);
 static int parse_object_name (char *e);
@@ -135,7 +144,10 @@ static struct ttloc_s test_config[] = {
 	{ TTLOC_GRID, "Byyyxxx", .grid.lat0 = 37 + 50./60.0, .grid.lon0 = 81, 
 				.grid.lat9 = 37 + 59.99/60.0, .grid.lon9 = 81 + 9.99/60.0 },
 
+	{ TTLOC_SATSQ, "BAxxxx" },
+
 	{ TTLOC_MACRO, "xxyyy", .macro.definition = "B9xx*AB166*AA2B4C5B3B0Ayyy" },
+	{ TTLOC_MACRO, "xxxxzzzzzzzzzz", .macro.definition = "BAxxxx*ACzzzzzzzzzz" },
 }; 
 #endif
 
@@ -154,6 +166,7 @@ void aprs_tt_init (struct tt_config_s *p)
 
 	/* Don't care about xmit timing or corral here. */
 #else
+	// TODO: Keep ptr instead of making a copy.
 	memcpy (&tt_config, p, sizeof(struct tt_config_s));
 #endif
 	for (c=0; c<MAX_CHANS; c++) {	
@@ -200,6 +213,11 @@ void aprs_tt_button (int chan, char button)
 	assert (chan >= 0 && chan < MAX_CHANS);
 
 
+	//if (button != '.') {
+	//  dw_printf ("aprs_tt_button (%d, '%c')\n", chan, button);
+	//}
+
+
 // TODO:  Might make more sense to put timeout here rather in the dtmf decoder.
 
 	if (button == '$') {
@@ -216,21 +234,32 @@ void aprs_tt_button (int chan, char button)
 	  }
 	  if (button == '#') {
 
-/* Process complete message. */
-	
-	    aprs_tt_message (chan, msg_str[chan]);
+/* 
+ * Put into the receive queue like any other packet.
+ * This way they are all processed by the common receive thread
+ * rather than the thread associated with the particular audio device.
+ */
+	    raw_tt_data_to_app (chan, msg_str[chan]);
+
 	    msg_len[chan] = 0;
 	    msg_str[chan][0] = '\0';
 	  }
 	}
 	else {
 
-/* Idle time. Poll occasionally for processing. */
-	  
-	  poll_period++;
-	  if (poll_period >= 39) {
-	    poll_period = 0;
-	    tt_user_background ();
+/* 
+ * Idle time. Poll occasionally for processing. 
+ * Timing would be off we we are listening to more than
+ * one channel so do this only for the one specified
+ * in the TTOBJ command. 
+ */
+
+	  if (chan == tt_config.obj_recv_chan) {	  
+	    poll_period++;
+	    if (poll_period >= 39) {
+	      poll_period = 0;
+	      tt_user_background ();
+	    }
 	  }
 	}	
   
@@ -240,7 +269,7 @@ void aprs_tt_button (int chan, char button)
 
 /*------------------------------------------------------------------
  *
- * Name:        aprs_tt_message
+ * Name:        aprs_tt_sequence
  *
  * Purpose:     Process complete received touch tone sequence
  *		terminated by #.
@@ -260,6 +289,11 @@ void aprs_tt_button (int chan, char button)
  *		entry1 * callsign #
  *		entry1 * entry * callsign #
  *
+ * Limitation:	Has one set of static data for communication among
+ *		group of functions.  This shouldn't be a problem
+ *		when receiving on multiple channels at once 
+ *		because they get serialized thru the receive packet queue.
+ *
  *----------------------------------------------------------------*/
 
 static char m_callsign[20];	/* really object name */
@@ -272,6 +306,7 @@ static char m_callsign[20];	/* really object name */
  *	Symbol table '\' (alternate), any symbol code.
  *	Alternate table symbol code, overlay of 0-9, A-Z.
  */
+
 static char m_symtab_or_overlay;
 static char m_symbol_code;
 
@@ -287,7 +322,7 @@ static int m_ssid;
 
 
 
-void aprs_tt_message (int chan, char *msg)
+void aprs_tt_sequence (int chan, char *msg)
 {
 	int err;
 
@@ -304,18 +339,6 @@ void aprs_tt_message (int chan, char *msg)
 	if (msg[0] == '#') return;
 
 /*
- * This takes the place of the usual line with audio level.
- * Do it here, rather than in process_rec_frame, so any
- * error messages are associated with the DTMF message
- * rather than the most recent regular AX.25 frame.
- */
-
-#ifndef TT_MAIN
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("\nDTMF message\n");
-#endif
-
-/*
  * The parse functions will fill these in. 
  */
 	strcpy (m_callsign, "");
@@ -328,11 +351,6 @@ void aprs_tt_message (int chan, char *msg)
 	m_mic_e = ' ';
 	strcpy (m_dao, "!T  !");	/* start out unknown */
 	m_ssid = 12;
-
-/* 
- * Send raw touch tone data to application. 
- */
-	raw_tt_data_to_app (chan, msg);
 
 /*
  * Parse the touch tone sequence.
@@ -362,7 +380,7 @@ void aprs_tt_message (int chan, char *msg)
 	// err == 0 OK, others, suitable error response.
 
 
-} /* end aprs_tt_message */
+} /* end aprs_tt_sequence */
 
 
 /*------------------------------------------------------------------
@@ -376,7 +394,7 @@ void aprs_tt_message (int chan, char *msg)
  *
  * Returns:     None
  *
- * Description:	It should have one or more fields separatedy by *.
+ * Description:	It should have one or more fields separated by *.
  *
  *		callsign #
  *		entry1 * callsign #
@@ -411,6 +429,14 @@ static int parse_fields (char *msg)
 	          break;
 	        case 'B':
 	          parse_symbol (e);
+	          break;
+	        case 'C':
+	          /*
+	           * New in 1.2: test for 10 digit callsign.
+	           */
+	          if (tt_call10_to_text(e+2,1,stemp) == 0) {
+	             strcpy(m_callsign, stemp);
+	          }
 	          break;
 	        default:
 	          parse_callsign (e);
@@ -475,6 +501,9 @@ static int parse_fields (char *msg)
  * Description:	Separate out the fields, perform substitution, 
  *		call parse_fields for processing.
  *
+ *
+ * Future:	Generalize this to allow any lower case letter for substitution?
+ *
  *----------------------------------------------------------------*/
 
 static int expand_macro (char *e) 
@@ -495,7 +524,12 @@ static int expand_macro (char *e)
 
 	if (ipat >= 0) {
 
-	  dw_printf ("Matched pattern %3d: '%s', x=%s, y=%s, z=%s, b=%s, d=%s\n", ipat, tt_config.ttloc_ptr[ipat].pattern, xstr, ystr, zstr, bstr, dstr);
+	  // Why did we print b & d here?
+	  // Documentation says only x, y, z can be used with macros.
+	  // Only those 3 are processed below.
+
+	  //dw_printf ("Matched pattern %3d: '%s', x=%s, y=%s, z=%s, b=%s, d=%s\n", ipat, tt_config.ttloc_ptr[ipat].pattern, xstr, ystr, zstr, bstr, dstr);
+	  dw_printf ("Matched pattern %3d: '%s', x=%s, y=%s, z=%s\n", ipat, tt_config.ttloc_ptr[ipat].pattern, xstr, ystr, zstr);
 
 	  dw_printf ("Replace with:        '%s'\n", tt_config.ttloc_ptr[ipat].macro.definition);
 
@@ -548,7 +582,10 @@ static int expand_macro (char *e)
 	  dw_printf ("After substitution:  '%s'\n", stemp);
 	  return (parse_fields (stemp));
 	}
+
 	else {
+
+
 	  /* Send reject sound. */
 	  /* Does not match any macro definitions. */
 	  text_color_set(DW_COLOR_ERROR);
@@ -589,6 +626,7 @@ static int expand_macro (char *e)
  *
  *		Att...ttvk	- Full callsign in two key method, numeric overlay, checksum.
  *		Att...ttvvk	- Full callsign in two key method, letter overlay, checksum.
+ *		
  *
  *----------------------------------------------------------------*/
 
@@ -883,12 +921,13 @@ static int parse_symbol (char *e)
  *		by total number of digits and sometimes the first digit.
  *
  *		We handle most of them in a general way, processing
- *		them in 4 groups:
+ *		them in 5 groups:
  *
  *		* points
  *		* vector
  *		* grid
  *		* utm
+ *		* usng / mgrs
  *
  *----------------------------------------------------------------*/
 
@@ -897,10 +936,7 @@ static int parse_symbol (char *e)
 /* Average radius of earth in meters. */
 #define R 6371000.
 
-/* Convert between degrees and radians. */
 
-#define D2R(a) ((a) * 2. * M_PI / 360.)
-#define R2D(a) ((a) * 360. / (2*M_PI))
 
 
 static int parse_location (char *e)
@@ -910,8 +946,10 @@ static int parse_location (char *e)
 	char xstr[20], ystr[20], zstr[20], bstr[20], dstr[20];
 	double x, y, dist, bearing;
 	double lat0, lon0;
-	double lat9, lon9;	
-	double easting, northing;	
+	double lat9, lon9;
+	long lerr;	
+	double easting, northing;
+	char mh[20];	
 
 	assert (*e == 'B');
 
@@ -969,6 +1007,7 @@ static int parse_location (char *e)
 
 	      /* Equations and caluculators found here: */
 	      /* http://movable-type.co.uk/scripts/latlong.html */
+	      /* This should probably be a function in latlong.c in case we have another use for it someday. */
 
 	      m_latitude = R2D(asin(sin(lat0) * cos(dist/R) + cos(lat0) * sin(dist/R) * cos(bearing)));
 
@@ -1021,10 +1060,88 @@ static int parse_location (char *e)
 
 	      y = atof(ystr);
 	      northing = y * tt_config.ttloc_ptr[ipat].utm.scale + tt_config.ttloc_ptr[ipat].utm.y_offset;
+		
+              lerr = Convert_UTM_To_Geodetic(tt_config.ttloc_ptr[ipat].utm.lzone, 
+			tt_config.ttloc_ptr[ipat].utm.hemi, easting, northing, &lat0, &lon0);
 
-	      UTMtoLL (WSG84, northing, easting, tt_config.ttloc_ptr[ipat].utm.zone, 
-					&m_latitude, &m_longitude);
+              if (lerr == 0) {
+                m_latitude = R2D(lat0);
+                m_longitude = R2D(lon0);
+
+                //printf ("DEBUG: from UTM, latitude = %.6f, longitude = %.6f\n", m_latitude, m_longitude);
+              }
+              else {
+	        char message[300];
+
+		text_color_set(DW_COLOR_ERROR);
+	        utm_error_string (lerr, message);
+                dw_printf ("Conversion from UTM failed:\n%s\n\n", message);
+              }
+
 	      break;
+
+
+	    case TTLOC_MGRS:
+	    case TTLOC_USNG:
+
+	      if (strlen(xstr) == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("MGRS/USNG: Missing X (easting) coordinate.\n");
+	        /* Should not be possible to get here. Fake it and carry on. */
+		strcpy (xstr, "5");
+	      }
+	      if (strlen(ystr) == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("MGRS/USNG: Missing Y (northing) coordinate.\n");
+	        /* Should not be possible to get here. Fake it and carry on. */
+		strcpy (ystr, "5");
+	      }
+
+	      char loc[40];
+	
+	      strcpy (loc, tt_config.ttloc_ptr[ipat].mgrs.zone);
+	      strcat (loc, xstr);
+	      strcat (loc, ystr);
+
+	      //text_color_set(DW_COLOR_DEBUG);
+	      //dw_printf ("MGRS/USNG location debug:  %s\n", loc);
+
+	      if (tt_config.ttloc_ptr[ipat].type == TTLOC_MGRS)
+                lerr = Convert_MGRS_To_Geodetic(loc, &lat0, &lon0);
+	      else
+                lerr = Convert_USNG_To_Geodetic(loc, &lat0, &lon0);
+
+
+              if (lerr == 0) {
+                m_latitude = R2D(lat0);
+                m_longitude = R2D(lon0);
+
+                //printf ("DEBUG: from MGRS/USNG, latitude = %.6f, longitude = %.6f\n", m_latitude, m_longitude);
+              }
+              else {
+	        char message[300];
+
+		text_color_set(DW_COLOR_ERROR);
+	        mgrs_error_string (lerr, message);
+                dw_printf ("Conversion from MGRS/USNG failed:\n%s\n\n", message);
+              }
+	      break;
+
+	    case TTLOC_SATSQ:
+
+	      if (strlen(xstr) != 4) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Expected 4 digits for the Satellite Square.\n");
+	        return (TT_ERROR_SATSQ);
+	      }
+
+	      /* Convert 4 digits to usual AA99 form, then to location. */
+
+	      if (tt_gridsquare_to_text (xstr, 0, mh)  == 0) {
+		ll_from_grid_square (mh, &m_latitude, &m_longitude);
+	      }
+	      break;
+
 
 	    default:
 	      assert (0);
@@ -1072,7 +1189,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	char mc;
 	int k;
 
-//TODO: remove dw_printf ("find_ttloc_match: e=%s\n", e);
+	// debug dw_printf ("find_ttloc_match: e=%s\n", e);
 
 	for (ipat=0; ipat<tt_config.ttloc_len; ipat++) {
 	  
@@ -1102,6 +1219,10 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	        case '7':
 	        case '8':
 	        case '9':
+	        case 'A':	/* Allow A,C,D after the B? */
+	        case 'C':
+	        case 'D':
+
 		  if (e[k] != mc) {
 		    match = 0;
 		  }
@@ -1286,36 +1407,17 @@ static void raw_tt_data_to_app (int chan, char *msg)
 	char *c, *s;
 	int i;
 	int err;
-
-/* 
- * "callsign" could be a general object name up to
- * 9 characters and a space which will get ax25_from_text upset.
- */
-
-	strcpy (src, "");
-	if (strlen(m_callsign) > 0) {
-	  for (c=m_callsign, s=src; *c != '\0' && strlen(src) < 6; c++) {
-	    if (isupper(*c) || isdigit(*c)) {
-	      *s++ = *c;
-	      *s = '\0';
-	    }
-	  }
-	}
-	else {
-	  strcpy (src, "APRSTT");
-	}
+	alevel_t alevel;
 
 
-	// TODO: test this.
 
-	err= symbols_into_dest (m_symtab_or_overlay, m_symbol_code, dest);
-	if (err) {
-	  /* Error message was already printed. */
-	  /* Set reasonable default rather than keeping "GPS???" which */
-	  /* is invalid and causes trouble later. */
-	
-	  strcpy (dest, "GPSAA");    
-	}
+// Set source and dest to something valid to keep rest of processing happy.
+// For lack of a better idea, make source "DTMF" to indicate where it came from.
+// Application version might be useful in case we end up using different
+// message formats in later versions.
+
+	strcpy (src, "DTMF");
+	sprintf (dest, "%s%d%d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
 
 	sprintf (raw_tt_msg, "%s>%s:t%s", src, dest, msg);
 
@@ -1325,10 +1427,22 @@ static void raw_tt_data_to_app (int chan, char *msg)
  * Process like a normal received frame.
  * NOTE:  This goes directly to application rather than
  * thru the multi modem duplicate processing.
+ *
+ * Should we use a different type so it can be easily
+ * distinguished later?
+ *
+ * We try to capture an overall audio level here.
+ * Mark and space do not apply in this case.
+ * This currently doesn't get displayed but we might want it someday.
  */
 
 	if (pp != NULL) {
-	  app_process_rec_packet (chan, -1, pp, -2, RETRY_NONE, "tt");
+
+	  alevel = demod_get_audio_level (chan, 0);
+	  alevel.mark = -2;
+	  alevel.space = -2;
+
+	  dlq_append (DLQ_REC_FRAME, chan, -1, pp, alevel, RETRY_NONE, "tt");
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1348,8 +1462,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
  *
  * Description:	Run unit test like this:
  *
- *		rm a.exe ; gcc tt_text.c -DTT_MAIN -DDEBUG aprs_tt.c strtok_r.o utm/LatLong-UTMconversion.c ; ./a.exe 
- *
+ *		rm a.exe ; gcc tt_text.c -DTT_MAIN -DDEBUG aprs_tt.c latlong.c strtok_r.o utm/LatLong-UTMconversion.c ; ./a.exe 
  *
  * Bugs:	No automatic checking.
  *		Just eyeball it to see if things look right.
@@ -1391,50 +1504,56 @@ int main (int argc, char *argv[])
 
 /* Callsigns & abbreviations. */
 
-	aprs_tt_message (0, "A9A2B42A7A7C71#");		/* WB4APR/7 */
-	aprs_tt_message (0, "A27773#");			/* abbreviated form */
+	aprs_tt_sequence (0, "A9A2B42A7A7C71#");		/* WB4APR/7 */
+	aprs_tt_sequence (0, "A27773#");			/* abbreviated form */
 	/* Example in http://www.aprs.org/aprstt/aprstt-coding24.txt has a bad checksum! */
-	aprs_tt_message (0, "A27776#");			/* Expect error message. */
+	aprs_tt_sequence (0, "A27776#");			/* Expect error message. */
 
-	aprs_tt_message (0, "A2A7A7C71#");		/* Spelled suffix, overlay, checksum */
-	aprs_tt_message (0, "A27773#");			/* Suffix digits, overlay, checksum */
+	aprs_tt_sequence (0, "A2A7A7C71#");		/* Spelled suffix, overlay, checksum */
+	aprs_tt_sequence (0, "A27773#");			/* Suffix digits, overlay, checksum */
 
-	aprs_tt_message (0, "A9A2B26C7D9D71#");		/* WB2OSZ/7 numeric overlay */
-	aprs_tt_message (0, "A67979#");			/* abbreviated form */
+	aprs_tt_sequence (0, "A9A2B26C7D9D71#");		/* WB2OSZ/7 numeric overlay */
+	aprs_tt_sequence (0, "A67979#");			/* abbreviated form */
 
-	aprs_tt_message (0, "A9A2B26C7D9D5A9#");	/* WB2OSZ/J letter overlay */
-	aprs_tt_message (0, "A6795A7#");		/* abbreviated form */
+	aprs_tt_sequence (0, "A9A2B26C7D9D5A9#");	/* WB2OSZ/J letter overlay */
+	aprs_tt_sequence (0, "A6795A7#");		/* abbreviated form */
 
-	aprs_tt_message (0, "A277#");			/* Tactical call "277" no overlay and no checksum */
+	aprs_tt_sequence (0, "A277#");			/* Tactical call "277" no overlay and no checksum */
 
 /* Locations */
 
-	aprs_tt_message (0, "B01*A67979#"); 
-	aprs_tt_message (0, "B988*A67979#"); 
+	aprs_tt_sequence (0, "B01*A67979#"); 
+	aprs_tt_sequence (0, "B988*A67979#"); 
 
 	/* expect about 52.79  +0.83 */
-	aprs_tt_message (0, "B51000125*A67979#"); 
+	aprs_tt_sequence (0, "B51000125*A67979#"); 
 
 	/* Try to get from Hilltop Tower to Archery & Target Range. */
 	/* Latitude comes out ok, 37.9137 -> 55.82 min. */
 	/* Longitude -81.1254 -> 8.20 min */
 
-	aprs_tt_message (0, "B5206070*A67979#"); 
+	aprs_tt_sequence (0, "B5206070*A67979#"); 
 
-	aprs_tt_message (0, "B21234*A67979#"); 
-	aprs_tt_message (0, "B533686*A67979#"); 
+	aprs_tt_sequence (0, "B21234*A67979#"); 
+	aprs_tt_sequence (0, "B533686*A67979#"); 
 
 
 /* Comments */
 
-	aprs_tt_message (0, "C1");
-	aprs_tt_message (0, "C2");
-	aprs_tt_message (0, "C146520");
-	aprs_tt_message (0, "C7788444222550227776669660333666990122223333");
+	aprs_tt_sequence (0, "C1");
+	aprs_tt_sequence (0, "C2");
+	aprs_tt_sequence (0, "C146520");
+	aprs_tt_sequence (0, "C7788444222550227776669660333666990122223333");
 
 /* Macros */
 
-	aprs_tt_message (0, "88345");
+	aprs_tt_sequence (0, "88345");
+
+/* 10 digit representation for callsign & satellite grid. WB4APR near 39.5, -77   */
+
+	aprs_tt_sequence (0, "AC9242771558*BA1819");
+	aprs_tt_sequence (0, "18199242771558");
+
 
 	return(0);
 

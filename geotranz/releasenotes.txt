@@ -1,0 +1,465 @@
+GEOTRANS Release Notes
+
+Release 2.0.2 - November 1999
+
+1. The datum parameter file 3_param.dat was changed to correct an error in the 
+latitude bounds for the NAD 27 Canada datum.
+
+2. The MGRS module was changed to make the final latitude check on MGRS to UTM 
+conversions sensitive to the precision of the input MGRS coordinate string.  The 
+lower the input precision, the more "slop" is allowed in the final check on the 
+latitude zone letter.  This is to handle an issue raised by some F-16 pilots, 
+who truncate MGRS strings that they receive from the Army.  This truncation can 
+put them on the wrong side of a latitude zone boundary, causing the truncated 
+MGRS string to be considered invalid.  The correction causes truncated strings 
+to be considered valid if any part of the square which they denote lies within 
+the latitude zone specified by the third letter of the string.
+
+Release 2.0.3 - April 2000
+
+1. Problems with the GEOTRANS file processing capability, including problems 
+reading coordinate system/projection parameters, and problems with some 
+coordinates being skipped.  Note that spaces must separate individual coordinate 
+values.
+
+2. The Bonne projection module has been changed to return an error when the 
+Origin Latitude parameter is set to zero.  In the next release, the Sinusoidal 
+projection will be used in this situation.
+
+3. Reported errors in certain cases of conversions between geodetic and MGRS 
+have been corrected.  The error actually occurred in the formatting of the 
+geodetic output.
+
+4. The Equidistant Cylindrical projection parameter that was previously called 
+Origin Latitude has been renamed to Standard Parallel, which more correctly 
+reflects its role in the projection.  The Origin Latitude for the Equidistant 
+Cylindrical projection is always zero (i.e., the Equator).  Error messages and 
+documentation were updated accordingly.  Note that the renaming of this 
+parameter is the only change to the external interface of the GEOTRANS Engine in 
+this release.
+
+5. An error in the method selection logic for datum transformations, in the 
+Datum module, has been corrected.  This error caused the Molodensky method to be 
+used when transforming between the two 7-parameter datums (EUR-7 and OGB-7) and 
+WGS 84.
+
+6. The datum parameter file 3_param.dat was changed to correct the names of 
+several South American (S-42) datums.
+
+7. A leftover debug printf statement in the Geoid module was removed.
+
+8. Several multiple declaration errors that prevented the Motif GUI source code 
+from being compiled successfully using the Gnu g++ compiler were corrected.  
+Additional comments were added to the make file for the GEOTRANS application to 
+facilitate switching between Sun and Gnu compilers.
+
+9. Comments were also added to the make file for the GEOTRANS application 
+concerning locating the libXpm shared object library.  This library, which 
+supports the use of X Window pixmaps, was moved to /usr/local/opt/xpm/lib under 
+Solaris 2.6.
+
+10. Documentation for the Local Cartesian module was corrected so that this 
+coordinate system is no longer referred to as a projection.
+
+11. The usage example in the GEOTRANS Engine Reuse Manual was corrected so that 
+it now compiles successfully.
+
+Release 2.1 - June 2000
+
+1. The geoid separation file has been converted from text to binary form and 
+renamed to egm96.grd to better reflect its implementation of the Earth Gravity 
+Model 1996.  The new binary file is less than half the size of the text file 
+(~4MB vs ~10MB), and is loaded much more quickly when GEOTRANS is started.
+
+2. Inverse flattening is now used as a primary ellipsoid parameter, along with 
+the semi-major axis, instead of the semi-minor axis.  Previously, the inverse 
+flattening was computed from the semi-major and semi-minor axes.  This is a more 
+correct approach and improves overall accuracy slightly.
+
+3. User-defined datums and ellipsoids can now be deleted.  A user-defined 
+ellipsoid can only be deleted if it is not used by any user-defined datum.
+
+4. Additional datum and ellipsoid parameter functions have been added to the 
+external interface of the GEOTRANS Engine, for use by applications.
+
+5. For Windows, a GEOTRANS dynamically linked library (DLL) is now provided 
+which includes the GEOTRANS Engine and all of the DT&CC modules.  A version of 
+the GEOTRANS application, geotrans2d.exe, which uses the DLL is also provided.
+Similarly, for UNIX, a GEOTRANS shared object (.so) library is provided, along 
+with a version of the GEOTRANS application, geotrans2d, which uses the shared 
+object library.
+
+6. The Bonne projection now defaults to the Sinusoidal projection when the origin 
+latitude is zero.
+
+7. A "No Height" option has been added for Geodetic coordinates, as an alternative 
+to "Ellipsoid Height" and "Geoid/MSL Height".  When "No Height" is selected on 
+input, the contents of the Height field is ignored.  When "No Height" is selected 
+on output, no Height value is output.
+
+8. Three new projections have been added:  Azimuthal Equidistant, (Oblique) Gnomonic, 
+and Oblique Mercator.  The only difference between Gnomonic and Oblique Gnomonic 
+is the value of the original latitude parameter.
+
+9. The Windows and Motif GUIs have been updated to make the screen layouts more 
+consistent.  Bidirectional conversion between the upper and lower panels is now 
+supported, using two Convert buttons (Upper-to-Lower and Lower-to-Upper).  Error 
+values are shown separately for each panel.
+
+10. A bug in the MGRS module that occasionally caused 100km errors was corrected.
+Easting and northing values greater than 99999.5 (i.e., less then 1/2m from the
+eastern or northern boundary of a 100km square) were being set to zero, but not 
+moved into the adjacent 100km square.  These values are now rounded to 99999.
+
+11. Documentation and on-line help has been updated to reflect all of the above 
+enhancements.
+
+Release 2.2 - September 2000
+
+1.  The datum code for WGS 72 has been corrected from "WGD" to "WGC".
+
+2.  The default initial output coordinate system type has been changed from 
+Mercator to UTM.
+
+3.  A bug in the Windows GUI that prevented degrees/minutes and decimal degrees
+formats from being selected has been corrected.
+
+4.  In the Windows GUI, the initial default value for inverse flattening and the 
+associated label in the Create Ellipsoid dialog box have been corrected.
+
+5.  A bug in the Windows GUI that allowed multiple Geodetic Height type radio 
+buttons to be selected in the File Processing dialog box has been corrected.
+
+6.  Diagrams showing MGRS grid zone, band, and 100,000m square layouts have been
+added to the Users' Guide and the on-line help.
+
+7.  An error in the implementation of Oblique Mercator has been corrected.
+
+8.  Four new projections have been added:  Ney's (Modified Lambert Conformal Conic), 
+Stereographic, British National Grid, and New Zealand Map Grid.
+
+9.  A prototype Java GUI has been added which runs on both Windows and UNIX 
+platforms.  It requires a Java run-time environment. To run it on a Windows
+platform, go to the /geotrans2/win95 directory and double click on the file 
+geo_22.jar.  To run it on a Solaris platform, cd to the /geotrans2/unix directory 
+and enter the command: make -f javamake.  It may be necessary to edit the 
+javamake file to point to the location of the Java run-time environment on your 
+system. 
+  
+Release 2.2.1 - June 2001
+
+1. Fixed problem(s) in Local Cartesian conversions.
+
+2. Corrected a rounding problem in MGRS coordinates when the output precision was 
+set coarser than 1m (10m, 100m, etc.), and the point being converted rounded to 
+the eastern or northern edge of a 100,000m square. An illegal MGRS string could 
+be produced, with an odd number of digits including a "1" followed by one or more 
+zeros.  This was corrected by rounding the UTM easting or northing BEFORE 
+determining the correct 100,000m square.
+
+3. Corrected a very old error in the determination of the 100,000m square from a
+UPS easting in the easternmost part of the south polar zone.
+
+4. Added more flexible support for delimiters in input files (commas, tabs, spaces) 
+
+5. Corrected a problem in reporting invalid northing errors in UTM.
+
+6. Correct an example in the Polar Stereo reuse manual with Latitude of True Scale 
+erroneously set to 0.0.
+
+7. Removed an invalid Central Meridian line from the header of the Mollweide 
+example input file.
+
+8. Added a special F-16 Grid Reference System, a special version of MGRS.
+
+9. Allowed 90% CE, 90% LE, and 90% SE accuracy values for input coordinates to be 
+specified.  These are used, along with datum transformation accuracy information, 
+in deriving the output coordinate accuracy values.
+
+10. Added a pull-down menu of coordinate sources, including GPS, maps, and digital 
+geospatial data which can be selected to automatically set input accuracy values.
+
+11. Improved the Java GUI to be fully functional, including support for file 
+processsing and improvements in its appearance.
+
+Release 2.2.2 - February 2002
+
+1.  Added two new datums from Amendment 1 to NIMA TR8350.2 (Jan 2001) to 3_param.dat file:
+     - Korean Geodetic Datum 1995 (KGS)
+     - SIRGAS, South America (SIR)
+    Corrected ellipsoid code errors in 3_param.dat file:
+     - Ellipsoid used with TIL datum changed from EA to EB,
+     - Ellipsoid used with IND-P datum changed from EA to EF.
+
+2.  Corrected an "off-by-one" error in the datum index validity check function in
+the GEOTRANS engine, which prevented the last datum in the pull-down list from being
+used.  The Java GUI reported this error, but the Windows and Motif GUIs did not.
+
+3.  Processing of input coordinate files was made more flexible and forgiving:
+     - Case sensitivity of keywords and name strings was eliminated.
+     - Height values with geodetic coordinates were made optional, defaulting 
+        to zero.
+     - Coordinate reference system names were made consistent with the GUI 
+        pull-down menus.
+     - File processing error messages were improved.
+
+4.  A warnings count was added to the file processing GUI.
+
+
+5.  Geodetic height fields are grayed out and the No Height selection is forced 
+whenever 3D conversion is not feasible.  For 3D conversion to be feasible, Geodetic, 
+Geocentric, or Local Cartesian must be selected on both panels.  For file processing, 
+the output Geodetic height field is grayed out and the No Height selection is forced 
+whenever the input coordinate reference system is not a 3D system.
+
+6.  File header generation, using a modified version of the File Processing GUI, was 
+added. (Java GUI Only)
+
+7.  Some results of the review of GEOTRANS by NIMA G&G were implemented:
+     - In the User’s Guide (and on-line help), the description of the use of 3-step 
+        method, rather than Molodenski, in polar regions was reworded.
+     - In the User's Guide (and on-line help), the description of how to specify 
+        Lambert Conformal Conic projection with one standard parallel was clarified.
+     - UTM zone fields were enabled independent of the state of the Override buttons, 
+        with default values of zero, and the valid range of zone numbers (1-60) was 
+        added to the zone field labels.
+     - In the Sources pull-down menus, the values for GPS PPS and GPS SPS were corrected 
+        to be the same, reflecting the shutting off of GPS selective availability (SA).
+     - The words “Warning:” or “Error:”, as appropriate, were explicitly included in 
+        all messages output by the GUIs.
+
+Release 2.2.3 - February 2003
+
+There were no changes made to the external interfaces of the GEOTRANS libraries.
+
+1.   The ellipsoid (ellipse.dat) and datum (3_param.dat) files were updated to correct
+several typos.  Dates were added to all ellipsoid names.
+
+2.   A problem in the MGRS module (mgrs.c) was corrected.  This problem occurred only
+when converting from geodetic to MGRS coordinates that round to the centerline of zone 
+31V.  This zone is “cut in half”, such that its centerline is also its eastern boundary.
+Points that are rounded up (eastward) to this boundary are considered to lie in zone 32V.
+
+3.   An error in the Local Cartesian module (loccart.c) was corrected to properly take 
+into account the longitude of the local Cartesian coordinate system origin in converting 
+between geocentric and local Cartesian coordinates.
+
+4.   A possible problem in the Transverse Mercator module (tranmerc.c) concerning 
+projections at the poles was investigated.  Points at the poles are projected when the 
+Transverse Mercator module is initialized in order to determine the range of valid inputs 
+for the inverse projection.  The tangent of the latitude is calculated, which should be 
+infinite at the poles.  Investigation determined that the tangent functions for both 
+Windows and Solaris actually return very large values in this case, which result in the 
+expected behavior.  However, to avoid this problem on other platforms, the maximum valid 
+latitude for the Transverse Mercator projection was reduced from 90 to 89.99 degrees. 
+
+5.   A reported incompatibility between GEOTRANS 2.2.2 and version 4 of the Boeing 
+Autometric EDGE Viewer on Windows platforms was investigated.  This version of the EDGE 
+Viewer includes the GEOTRANS 2.0.3 libraries.  When the EDGE Viewer is installed, it 
+sets the GEOTRANS environment variables to reference the directory C:/Program Files/Autometric/EDGEViewer/Data/GeoTrans. This overrides the default setting in the 
+GEOTRANS application, causing it to look for its required data files in the EDGE Viewer 
+directory.  The incompatibility arises from the fact that the Earth Gravity Model 1996 
+geoid separation file was renamed and changed from text to binary form in GEOTRANS 2.1,
+which reduced its size from 10MB to 4MB.  When the newer binary file is not found in 
+the EDGE data directory, the GEOTRANS application fails to initialize successfully.  
+Placing a copy of the binary geoid separation file (egm96.grd) into the EDGE Viewer 
+data directory eliminates the problem.  A recent update to the EDGE Viewer eliminates 
+the problem by using a more recent version of the GEOTRANS libraries.  Therefore no 
+changes to the GEOTRANS software were necessary.
+
+6.   The source data accuracy values for GPS PPS and SPS modes were updated from 10m 
+to 20m.
+
+7.   The Linear (i.e., vertical) Error (LE) and Spherical Error (SE) fields are now 
+grayed out whenever a conversion is not three-dimensional.
+
+Release 2.2.4 - August 2003
+
+There were no changes made to the external interfaces of the GEOTRANS libraries.
+
+1.   Minor changes were made to source code to eliminate all compilation warnings. 
+These changes involved the Ellisoid module, the GEOTRANS engine, GEOTRANS application 
+Windows GUI, and GEOTRANS application support source code file.
+
+2.   A bug in the MGRS module was corrected.  This bug caused MGRS coordinates located 
+in small triangular areas north of 64S latitude, and south of the 2,900,000 northing 
+line, to fail to convert correctly to UTM.
+
+3.  The MGRS module was corrected so that the MGRS "AL" 100,000m square pattern is used 
+with the Bessel 1841 Namibia (BN) ellipsoid.  On-line help was corrected to be consistent 
+with this change.
+
+4.  The MGRS module was updated to eliminate inconsistencies in the conversion of points 
+located on UTM zone and MGRS latitude band boundaries.
+
+5.  The MGRS module was reorganized internally to improve the clarity and efficiency of 
+the source code.  The external interface of the MGRS module was not changed.
+
+Release 2.2.4 - August 2003
+
+There were no changes made to the external interfaces of the GEOTRANS libraries.
+
+1.   Minor changes were made to source code to eliminate all compilation warnings. 
+These changes involved the Ellisoid module, the GEOTRANS engine, GEOTRANS application 
+Windows GUI, and GEOTRANS application support source code file.
+
+2.   A bug in the MGRS module was corrected.  This bug caused MGRS coordinates located 
+in small triangular areas north of 64S latitude, and south of the 2,900,000 northing 
+line, to fail to convert correctly to UTM.
+
+3.  The MGRS module was corrected so that the MGRS "AL" 100,000m square pattern is used 
+with the Bessel 1841 Namibia (BN) ellipsoid.  On-line help was corrected to be consistent 
+with this change.
+
+4.  The MGRS module was updated to eliminate inconsistencies in the conversion of points 
+located on UTM zone and MGRS latitude band boundaries.
+
+5.  The MGRS module was reorganized internally to improve the clarity and efficiency of 
+the source code.  The external interface of the MGRS module was not changed.
+Release 2.2.4 - August 2003
+
+There were no changes made to the external interfaces of the GEOTRANS libraries.
+
+1.   Minor changes were made to source code to eliminate all compilation warnings. 
+These changes involved the Ellisoid module, the GEOTRANS engine, GEOTRANS application 
+Windows GUI, and GEOTRANS application support source code file.
+
+2.   A bug in the MGRS module was corrected.  This bug caused MGRS coordinates located 
+in small triangular areas north of 64S latitude, and south of the 2,900,000 northing 
+line, to fail to convert correctly to UTM.
+
+3.  The MGRS module was corrected so that the MGRS "AL" 100,000m square pattern is used 
+with the Bessel 1841 Namibia (BN) ellipsoid.  On-line help was corrected to be consistent 
+with this change.
+
+4.  The MGRS module was updated to eliminate inconsistencies in the conversion of points 
+located on UTM zone and MGRS latitude band boundaries.
+
+5.  The MGRS module was reorganized internally to improve the clarity and efficiency of 
+the source code.  The external interface of the MGRS module was not changed.
+
+Release 2.2.5 - June 2004
+
+There were no changes made to the external interfaces of the GEOTRANS libraries.
+
+1.   A minor correction was made in the Datum module, to correct an "off-by-one" error in the Valid_Datum function, which caused it to return a warning when the last 3-parameter datum was accessed.
+
+2.   A minor correction was made in the Round_DMS function, in the common application GUI support software, which caused incorrect geodetic coordinate values to be displayed when converting to degrees with a precision of .0001.
+
+3    The 3-parameter datum file, 3_param.dat, was updated to reflect new parameter values for the MID (MIDWAY ASTRO 1961, Midway Is.) datum, which went into effect in June 2003.  The longitude limits for the NAS-U (North American 1927, Greenland), the DAL (Dabola, Guinea) and the TRN (Astro Tern Island (Frig) 1961 datums were also corrected.
+
+Release 2.2.6 - June 2005
+
+1.  A minor correction was made in the Get_Geoid_Height function in the GEOID module, which does bilinear interpolation of EGM96 geoid separation values.  The error caused the specified point to be shifted in longitude, mirrored around the east-west midline of the 15-minute grid cell that contains it.
+
+2.  The 3-parameter datum file, 3_param.dat, was updated to correct the latitude and longitude limits for the DID (Deception Island), EUR-S (European 1950, Israel and Iraq), and KEG (Kerguelen Island) datums.
+
+3.  A minor correction was made in the Convert_Orthographic_to_Geodetic function in the ORTHOGR module to use the two-argument arctangent function (atan2) rather than the single-argument arctangent function (atan).  This avoids sign errors in results near the poles.
+
+4.  A minor correction was made in the Convert_Albers_to_Geodetic function in the ALBERS module to avoid infinite loops when the iterative solution for latitude fails to converge.  After 30 iterations, the function now returns an error status.
+
+5.  Support was added for the Lambert Conformal Conic projection with one standard parallel.  A new LAMBERT_1 module was added, and the LAMBERT_2 module was renamed (from LAMBERT) and reengineered to use the new LAMBERT_1 module.  Backward compatibility was maintained at the DT&CC and GEOTRANS Engine levels.  However, all existing functions that include "Lambert", rather than "Lambert1" or "Lambert2", in their names are now considered to be deprecated, and will be removed in a future update.
+
+6. The GEOTRANS application GUI was enhanced to help users avoid incompatible combinations of coordinate systems and datums by color coding the conversion buttons.  Red indicates that the selected coordinate systems and datums are not compatible with one another, and that an error message will result from any attempted conversion operation.  Yellow indicates that the selected datums have disjoint areas of validity, adn that a warning message will result from any attempted conversion operation.
+
+7. A correction was made to the Geodetic_Shift_WGS72_To_WGS84 and Geodetic_Shift_WGS72_To_WGS84 functions in the DATUM module to wrap longitude values across the 180 degree line and wrap latitude values over the poles. 
+
+8. File processing examples in the online help, and in the /examples subdirectory, were improved to use more realistic coordinates, and additional examples were added.
+
+9. The GEOTRANS application GUI was enhanced to provide an option to display leading zeroes on output geodetic coordinate values, including degrees (three digits for longitude, two digits for latitude), minutes (two digits), and seconds (two digits).
+
+Release 2.3 - March 2006
+
+1. The 3-parameter datum file, 3_param.dat, was updated to correct the latitude and longitude limits for DID (Deception Island), switching longitude order, and JOH (Johnston Island) datums.
+
+2. An “off-by-one” error in datum indexing in the JNI interface was corrected.
+
+3. Support for Red Hat Linux (Red Hat Professional 9.3 and later) and for SuSE Linux (SuSE Linux 9 and later) was added.
+ 
+4. A reported potential error in file name string underflow/overflow in the Ellipsoid, Datum, and Geoid modules was corrected.
+
+5. Support for multithreading was improved by adding mutual exclusion zones around code that opens and reads data files in the Ellipsoid, Datum, and Geoid modules.
+
+6. Support for three additional gravity-related height models was added, based on requirements from the US military services:
+a. EGM96 with variable grid spacing and natural spline interpolation
+b. EGM84 with 10 degree by 10 degree grid spacing and bilinear interpolation
+c. EGM84 with 10 degree by 10 degree grid spacing and natural spline interpolation
+These are in addition to EGM96 with 15-minute grid spacing and bilinear interpolation, which was previously supported.
+
+Release 2.4 - September 2006
+
+1. The 3-parameter datum file, 3_param.dat, was updated to correct two spelling errors (Columbia -> Colombia, Phillipines -> Philippines).
+
+2. The 3-parameter datum file, 3_param.dat, was updated to adjust the limits for several local datums in the 3-parameter datum file (ADI-E, CAC, CAI, COA, HJO, ING-A, KEG, LCF, NDS, SAE, SAN-A, SAN-C, VOI, and VOR).
+
+3. All required ellipsoid, datum, and geoid data files to a /data subdirectory to eliminate the need for duplicate copies.
+
+4. Error reporting was improved when required ellipsoid, datum, and/or geoid data files cannot be located at initialization.
+
+5. In the Geoid module, problems were corrected in the interpolation of geoid separation values using a variable-resolution grid when converting to or from MSL-EGM96-VG-NS Height.
+
+6. In the MGRS module, a problem was corrected in rounding up to the equator when converting to MGRS.
+
+7. Support was added for the U.S. National Grid (USNG).
+
+8. Support was added for the Global Area Reference System (USNG).
+
+Release 2.4.1 - March 2007
+
+1. Corrected two minor errors (6cm and 1cm) in the values contained in the EGM84 geoid 
+separation file.
+
+2. Improved error handling and reporting in the Transverse Mercator, UTM, and MGRS 
+modules at extreme northern and southern latitudes, for points that are more than 9 
+degrees, but less than 400km, from the central meridian.
+
+3. Modified the US National Grid (USNG) module to truncate, rather than round, USNG 
+coordinates as required by the USNG specification.
+
+4. Corrected an error in the calculation of valid ranges for input easting and northing 
+coordinates in the Mercator module, and several other map projection modules.  This 
+caused valid inputs to be rejected when extremely large (e.g., 20,000,000m) false easting 
+or false northing values were specified for those map projections.
+
+5. Improved error handling and reporting in the Lambert Conformal Conic modules in cases 
+of extremely small scale factor values.
+
+6. Corrected an error in the MGRS module that occurred when a point rounded up to the 
+eastern boundary of the non-standard zone 31V in the northern Atlantic, which is 
+considered to be part of zone 32V.
+
+Release 2.4.2 - August 2008
+
+1.  Corrected an error in the MGRS and USNG modules that incorrectly mapped 100,000m square 
+row letters to northing values in the northern portion of the X latitude band (northings > 9,000,000m).
+
+2.  Revised the handling of warnings reported by the Transverse Mercator (TM) module for points
+located more than 9 degrees from the central meridian, when the TM module is invoked by the UTM and
+MGRS modules, so that UTM or MGRS error checking takes precedence.
+
+3.  Added datum domain checks for those cases where no datum transformations are performed.  
+Previously, coordinates were not checked against the valid domain of the datum when the input datum 
+and output datum were identical.
+
+4.  The default accuracy estimate values for DTED Level 1 and DTED Level 2 were updated to be consistent
+with MIL-PRF-89020B, Performance Specification, Digital Terrain Elevation Data (DTED), 23 May 2000, replacing 
+the values from MIL-PRF-89020A, 19 Apr 1996.  Default spherical accuracy estimate values for all relevant data 
+sources were updated to reflect a more accurate relationship to the corresponding circular (horizontal) 
+accuracy estimates.
+
+5.  In the GEOTRANS application, added commands to save the current selections and options settings as 
+the defaults, and to reset the current selections and options settings from the defaults.
+
+6.  In the GEOTRANS application, added capabilities to create and delete user-defined 7-parameter datums.
+
+7.  Corrected a problem with the checking of input coordinates against the valid region for a local datum 
+when a longitude value greater than +180 degrees was entered.
+
+8.  Corrected the valid regions for the PUK and NAR-E datums to use a range of longitudes that span the 
++180/-180 degree line.
+
+
+   
+
+
+

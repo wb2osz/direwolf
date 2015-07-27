@@ -1,0 +1,49 @@
+.TH ACLIENTS  1
+
+.SH NAME
+aclients \- Test program for side-by-side TNC performance comparison.
+
+
+.SH SYNOPSIS
+.B aclients 
+.I tnc ...
+.RS
+.P
+Each \fItnc\fR reference is either a serial port or TCP network port followed by = and a comment.
+.P
+.RE
+
+.SH DESCRIPTION
+\fBaclients\fR is used to compare how well different TNCs decode AS.25 frames.
+.P
+
+
+
+.SH OPTIONS
+None.
+
+
+
+.SH EXAMPLES
+
+.B aclients  /dev/ttyS0=KPC3+  /dev/ttyUSB0=D710A  8000=DireWolf
+.P
+Serial port /dev/ttyS0 is connected to a KPC3+ with monitor mode turned on.
+.P
+Serial port /dev/ttyUSB0 is connected to a TM-D710A with monitor mode turned on.
+.P
+The Dire Wolf software TNC is available on network port 8000.
+.P
+Packets from each are displayed in columns so it is easy to see how well each decodes 
+the received signals.
+.P
+
+The "Receive Performance" section of the \fBUser Guide\fR contains some complete examples 
+of how to set up tests and the results.
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -58,7 +58,7 @@
  *
  *		A few people have suggested ncurses.  This needs to 
  *		be investigated for a future version.   The foundation has
- *		already been put in place.  All of the printf's have been
+ *		already been put in place.  All of the printf's should have been
  *		replaced by dw_printf, defined in this file.   All of the
  *		text output is now being funneled thru this one function
  *		so it should be easy to send it to the user by some
@@ -73,19 +73,6 @@
 
 
 #if __WIN32__
-
-// /* Missing from MinGW header file. */
-// #define vsprintf_s vsnprintf
-
-//_CRTIMP int __cdecl __MINGW_NOTHROW vsprintf_s (char*, size_t, const char*, __VALIST);
-
-//int vsprintf_s(
-//   char *buffer,
-//   size_t numberOfElements,
-//   const char *format,
-//   va_list argptr 
-//); 
-
 
 #include <windows.h>
 
@@ -120,7 +107,6 @@ static const char clear_eos[]	= "\e[0J";
 
 #elif __arm__ 	/* Linux on Raspberry Pi or similar */
 
-
 /* We need "blink" (5) rather than the */
 /* expected bright/bold (1) to get bright white background. */
 /* Makes no sense but I stumbled across that somewhere. */
@@ -131,12 +117,12 @@ static const char background_white[] = "\e[5;47m";
 /* background is reset and needs to be set again. */
 
 static const char black[]	= "\e[0;30m" "\e[5;47m";
-static const char red[] 	= "\e[1;31m";
-static const char green[] 	= "\e[1;32m";
-static const char yellow[] 	= "\e[1;33m";
-static const char blue[] 	= "\e[1;34m";
-static const char magenta[] 	= "\e[1;35m";
-static const char cyan[] 	= "\e[1;36m";
+static const char red[] 	= "\e[1;31m" "\e[5;47m";
+static const char green[] 	= "\e[1;32m" "\e[5;47m";
+static const char yellow[] 	= "\e[1;33m" "\e[5;47m";
+static const char blue[] 	= "\e[1;34m" "\e[5;47m";
+static const char magenta[] 	= "\e[1;35m" "\e[5;47m";
+static const char cyan[] 	= "\e[1;36m" "\e[5;47m";
 static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
 
 /* Clear from cursor to end of screen. */
@@ -145,6 +131,28 @@ static const char clear_eos[]	= "\e[0J";
 
 
 #else 	/* Other Linux */
+
+#if 1		/* new in version 1.2, as suggested by IW2DHW */
+		/* Test done using gnome-terminal and xterm */
+
+static const char background_white[] = "\e[48;2;255;255;255m";
+
+/* Whenever a dark color is used, the */
+/* background is reset and needs to be set again. */
+
+
+static const char black[]	= "\e[0;30m" "\e[48;2;255;255;255m";
+static const char red[] 	= "\e[0;31m" "\e[48;2;255;255;255m";
+static const char green[] 	= "\e[0;32m" "\e[48;2;255;255;255m";
+static const char yellow[] 	= "\e[0;33m" "\e[48;2;255;255;255m";
+static const char blue[] 	= "\e[0;34m" "\e[48;2;255;255;255m";
+static const char magenta[] 	= "\e[0;35m" "\e[48;2;255;255;255m";
+static const char cyan[] 	= "\e[0;36m" "\e[48;2;255;255;255m";
+static const char dark_green[]	= "\e[0;32m" "\e[48;2;255;255;255m";
+
+
+#else 		/* from version 1.1 */
+
 
 static const char background_white[] = "\e[47;1m";
 
@@ -159,6 +167,10 @@ static const char blue[] 	= "\e[1;34m" "\e[1;47m";
 static const char magenta[] 	= "\e[1;35m" "\e[1;47m";
 static const char cyan[] 	= "\e[1;36m" "\e[1;47m";
 static const char dark_green[]	= "\e[0;32m" "\e[1;47m";
+
+
+#endif
+
 
 /* Clear from cursor to end of screen. */
 
@@ -214,7 +226,7 @@ void text_color_init (int enable_color)
 	if (g_enable_color) {
 	  //printf ("%s", clear_eos);
 	  printf ("%s", background_white);
-	  //printf ("%s", clear_eos);
+	  printf ("%s", clear_eos);
 	  printf ("%s", black);
 	}
 #endif

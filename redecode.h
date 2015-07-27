@@ -6,7 +6,7 @@
 #include "rrbb.h"	
 
 
-extern void redecode_init (void);
+extern void redecode_init (struct audio_s *p_audio_config);
 
 
 #endif

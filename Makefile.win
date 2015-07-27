@@ -16,19 +16,17 @@
 #
 
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc
 
 
 # People say we need -mthreads option for threads to work properly.
 # They also say it creates a dependency on mingwm10.dll but I'm not seeing that.
 
-#TODO: put -Ofast back in.
+CC := gcc
+CFLAGS :=    -Wall -Ofast -march=pentium3 -msse -Iregex -Iutm -Igeotranz -mthreads -DUSE_REGEX_STATIC
+AR := ar
 
-CC = gcc
-#CFLAGS = -g -Wall -Ofast -march=pentium3 -msse -Iregex -Iutm -mthreads -DUSE_REGEX_STATIC
-CFLAGS = -g -Wall -march=pentium3 -msse -Iregex -Iutm -mthreads -DUSE_REGEX_STATIC
-AR = ar
-
+#CFLAGS += -g
 
 #
 # Let's see impact of various optimization levels.
@@ -60,7 +58,7 @@ AR = ar
 
 # Name of zip file for distribution.
 
-z=$(notdir ${CURDIR})
+z := $(notdir ${CURDIR})
 
 
 
@@ -71,15 +69,15 @@ demod_9600.o : fsk_demod_state.h
 demod_afsk.o : fsk_demod_state.h
 
 
-direwolf : direwolf.o config.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
-		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o \
+direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o audio_win.o digipeater.o dedupe.o tq.o xmit.o \
+		gen_tone.o audio_win.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o \
-		dw-icon.o regex.a misc.a utm.a
-	$(CC) $(CFLAGS) -g -o $@ $^ -lwinmm -lws2_32
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o dtime_now.o \
+		dw-icon.o regex.a misc.a geotranz.a
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 dw-icon.o : dw-icon.rc dw-icon.ico
 	windres dw-icon.rc -o $@
@@ -97,10 +95,30 @@ fsk_fast_filter.h : demod_afsk.c
 	./gen_fff > fsk_fast_filter.h
 
 
-utm.a : LatLong-UTMconversion.o
+# UTM, USNG, MGRS conversions.
+
+geotranz.a : error_string.o  mgrs.o  polarst.o  tranmerc.o  ups.o  usng.o  utm.o
 	ar -cr $@ $^
 
-LatLong-UTMconversion.o : utm/LatLong-UTMconversion.c
+error_string.o : geotranz/error_string.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+mgrs.o : geotranz/mgrs.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+polarst.o : geotranz/polarst.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+tranmerc.o : geotranz/tranmerc.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+ups.o : geotranz/ups.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+usng.o : geotranz/usng.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+utm.o : geotranz/utm.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 
@@ -137,7 +155,7 @@ strcasestr.o : misc/strcasestr.c
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.o telemetry.o regex.a misc.a utm.a
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.o telemetry.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^
 
 
@@ -152,10 +170,10 @@ tt2text : tt_text.c
 
 # Convert between Latitude/Longitude and UTM coordinates.
 
-ll2utm : ll2utm.c utm.a
+ll2utm : ll2utm.c geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^
 
-utm2ll : utm2ll.c utm.a
+utm2ll : utm2ll.c geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^
 
 
@@ -167,7 +185,7 @@ log2gpx : log2gpx.c misc/strsep.c misc/strtok_r.c
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o textcolor.o misc.a regex.a
+gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o textcolor.o dsp.o misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^
 
 # For tweaking the demodulator.
@@ -177,50 +195,57 @@ demod_9600.o : tune.h
 demod_afsk.o : tune.h
 
 
-testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c telemetry.c regex.a misc.a \
-		fsk_demod_agc.h
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c fsk_demod_agc.h \
+		hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o latlong.o symbols.o textcolor.o telemetry.o \
+		regex.a misc.a \
+		
 	rm -f atest.exe
-	$(CC) $(CFLAGS) -DNOFIX -o atest $^
-	./atest ../direwolf-0.2/02_Track_2.wav | grep "packets decoded in" >atest.out
+	$(CC) $(CFLAGS) -o atest $^
+	./atest -P E ../02_Track_2.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
 
 
 noisy3.wav : gen_packets
 	./gen_packets -B 300 -n 100 -o noisy3.wav
 
 testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c telemetry.c regex.a misc.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		tune.h 
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
 	./atest -B 300 -P D -D 3 noisy3.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
 
 
 noisy96.wav : gen_packets
 	./gen_packets -B 9600 -n 100 -o noisy96.wav
 
 testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c telemetry.c regex.a misc.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		tune.h 
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
 	./atest -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
 	#./atest -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
 
 
 # Unit test for AFSK demodulator
 
-
 atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
 		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
 		fsk_fast_filter.h
-	$(CC) $(CFLAGS) -o $@ $^
 	echo " " > tune.h
-	./atest ..\\direwolf-0.2\\02_Track_2.wav 
+	$(CC) $(CFLAGS) -o $@ $^
+	#./atest ..\\direwolf-0.2\\02_Track_2.wav 
+	#atest -B 9600 z9.wav
+	#atest za100.wav
 
 atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
 		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
 		fsk_fast_filter.h
+	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
 	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
 	#./atest9 -B 9600 noise96.wav 
@@ -229,28 +254,21 @@ atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c 
 # Unit test for inner digipeater algorithm
 
 
-dtest : digipeater.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c misc.a regex.a
+dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c misc.a regex.a
 	$(CC) $(CFLAGS) -DTEST -o $@ $^
 	./dtest
 	rm dtest.exe
 
 # Unit test for APRStt.
 
-ttest : aprs_tt.c tt_text.c  misc.a utm.a
-	$(CC) $(CFLAGS) -DTT_MAIN  -o ttest aprs_tt.c tt_text.c  misc.a utm.a
+ttest : aprs_tt.c tt_text.c  latlong.c misc.a  geotranz.a
+	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^
 
 
 # Unit test for IGate
 
 itest : igate.c textcolor.c ax25_pad.c fcs_calc.c misc.a regex.a
-	$(CC) $(CFLAGS) -DITEST -g -o $@ $^ -lwinmm -lws2_32
-
-
-# Unit test for UDP reception with AFSK demodulator
-
-udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c
-	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
-	./udptest
+	$(CC) $(CFLAGS) -DITEST -o $@ $^ -lwinmm -lws2_32
 
 
 # Unit test for telemetry decoding.
@@ -264,22 +282,21 @@ etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
 # Multiple AGWPE network or serial port clients to test TNCs side by side.
 
 aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
-	$(CC) $(CFLAGS) -g -o $@ $^ -lwinmm -lws2_32
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
-SRCS = direwolf.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c \
-		hdlc_rec2.c multi_modem.c redecode.c rdq.c rrbb.c \
-		fcs_calc.c ax25_pad.c decode_aprs.c symbols.c \
-		server.c kiss.c kissnet.c kiss_frame.c hdlc_send.c fcs_calc.c gen_tone.c audio_win.c \
-		digipeater.c dedupe.c tq.c xmit.c beacon.c \
-		encode_aprs.c latlong.c telemetry.c \
-		dtmf.c aprs_tt.c tt_text.c igate.c
+# Touch Tone to Speech sample application.
+
+ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a regex.a
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
-depend : $(SRCS)
-	makedepend $(INCLUDES) $^
 
- 
+.PHONY: depend
+depend : $(wildcard *.c)
+	makedepend -f $(lastword $(MAKEFILE_LIST)) -- $(CFLAGS) -- $^
+
+.PHONY: clean
 clean :
 	rm -f *.o *.a *.exe fsk_fast_filter.h noisy96.wav
 	echo " " > tune.h
@@ -288,37 +305,83 @@ clean :
 # Package it up for distribution:  Prebuilt Windows & source versions.
 
 
-dist-win : direwolf.exe decode_aprs.exe CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf \
-			Raspberry-Pi-APRS.pdf Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf
-	rm -f ../$z-win.zip
-	zip ../$z-win.zip CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf \
-		Raspberry-Pi-APRS.pdf Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf LICENSE* *.conf \
-		direwolf.exe decode_aprs.exe tocalls.txt symbols-new.txt symbolsX.txt \
-		text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe aclients.exe log2gpx.exe
+# Left out RPi Tracker due to Comcast upload size limit.
 
-dist-src : CHANGES.txt User-Guide.pdf Quick-Start-Guide-Windows.pdf Raspberry-Pi-APRS.pdf \
-		Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf \
-		direwolf.desktop dw-start.sh \
-		tocalls.txt symbols-new.txt symbolsX.txt
+.PHONY: dist-win
+dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe \
+			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe \
+		 	direwolf.txt dwespeak.bat \
+			CHANGES.txt User-Guide.pdf \
+			Raspberry-Pi-APRS.pdf APRStt-Implementation-Notes.pdf \
+			A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
+			A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	rm -f ../$z-win.zip
+	egrep '^C|^W' direwolf.txt | cut -c2-999 > direwolf.conf
+	unix2dos direwolf.conf
+	zip ../$z-win.zip \
+		CHANGES.txt \
+		User-Guide.pdf \
+		Raspberry-Pi-APRS.pdf \
+		APRStt-Implementation-Notes.pdf \
+		A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
+		A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		LICENSE* \
+		direwolf.conf \
+		direwolf.exe \
+		decode_aprs.exe \
+		tocalls.txt symbols-new.txt symbolsX.txt \
+		text2tt.exe tt2text.exe \
+		ll2utm.exe utm2ll.exe \
+		aclients.exe \
+		log2gpx.exe \
+		gen_packets.exe \
+		atest.exe \
+		ttcalc.exe \
+		dwespeak.bat
+
+.PHONY: dist-src
+dist-src : CHANGES.txt \
+		User-Guide.pdf \
+		Raspberry-Pi-APRS.pdf \
+		Raspberry-Pi-APRS-Tracker.pdf \
+		APRStt-Implementation-Notes.pdf \
+		A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
+		A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		dw-start.sh dwespeak.bat dwespeak.sh \
+		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
 	rm -f fsk_fast_filter.h
 	echo " " > tune.h
 	rm -f ../$z-src.zip
+	egrep '^C|^L' direwolf.txt | cut -c2-999 > direwolf.conf
+	dos2unix direwolf.conf
+	dos2unix Makefile
+	dos2unix Makefile.linux
 	(cd .. ; zip $z-src.zip \
-		$z/CHANGES.txt $z/LICENSE* \
-		$z/User-Guide.pdf $z/Quick-Start-Guide-Windows.pdf \
-		$z/Raspberry-Pi-APRS.pdf $z/Raspberry-Pi-APRS-Tracker.pdf $z/APRStt-Implementation-Notes.pdf \
-		$z/Makefile* $z/*.c $z/*.h $z/regex/* $z/misc/* $z/utm/* \
-		$z/*.conf $z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
+		$z/CHANGES.txt \
+		$z/LICENSE* \
+		$z/User-Guide.pdf \
+		$z/Raspberry-Pi-APRS.pdf \
+		$z/Raspberry-Pi-APRS-Tracker.pdf \
+		$z/APRStt-Implementation-Notes.pdf \
+		$z/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
+		$z/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		$z/Makefile.win $z/Makefile.linux $z/Makefile \
+		$z/*.c $z/*.h \
+		$z/regex/* $z/misc/* $z/geotranz/* \
+		$z/man1/* \
+		$z/direwolf.conf $z/direwolf.txt \
+		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
 		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
-		$z/direwolf.desktop $z/dw-start.sh )
-		
+		$z/dw-start.sh $z/direwolf.spec \
+		$z/dwespeak.bat $z/dwespeak.sh )
+	unix2dos Makefile
+	unix2dos Makefile.linux
+	rm direwolf.conf
+
 
 
 User-Guide.pdf : User-Guide.docx
 	echo "***** User-Guide.pdf is out of date *****"
-
-Quick-Start-Guide-Windows.pdf : Quick-Start-Guide-Windows.docx
-	echo "***** Quick-Start-Guide-Windows.pdf is out of date *****" 
 
 Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
 	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
@@ -326,11 +389,16 @@ Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
 Raspberry-Pi-APRS-Tracker.pdf : Raspberry-Pi-APRS-Tracker.docx
 	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
 
-
 APRStt-Implementation-Notes.pdf : APRStt-Implementation-Notes.docx
 	echo "***** APRStt-Implementation-Notes.pdf is out of date *****"
 
+A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf : A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.docx
+	echo "***** A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf is out of date *****"
 
+A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf : A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.docx
+	echo "***** A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf is out of date *****"
+
+.PHONY: backup
 backup :
 	mkdir /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
 	cp -r . /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
@@ -340,15 +408,20 @@ backup :
 # The copy at http://www.aprs.org/tocalls.txt is out of date.
 #
 
+.PHONY: tocalls-symbols
 tocalls-symbols :
+	cp tocalls.txt tocalls.txt~
 	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
+	diff tocalls.txt~ tocalls.txt
+	cp symbols-new.txt symbols-new.txt~
 	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
+	diff symbols-new.txt~ symbols-new.txt
+	cp symbolsX.txt symbolsX.txt~
 	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
+	diff symbolsX.txt~ symbolsX.txt
 
 #
 # The following is updated by "make depend"
 #
 # DO NOT DELETE
-
-
 

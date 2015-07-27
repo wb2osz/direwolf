@@ -20,11 +20,11 @@
 
 
 
-void tq_init (int nchan);
+void tq_init (struct audio_s *audio_config_p);
 
 void tq_append (int chan, int prio, packet_t pp);
 
-void tq_wait_while_empty (void);
+void tq_wait_while_empty (int chan);
 
 packet_t tq_remove (int chan, int prio);
 
