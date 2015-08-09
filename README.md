@@ -60,7 +60,9 @@ Download the source, unpack the files and run:
 	sudo make install
 	make install-conf
 
-For more details see the **User Guide** in the doc directory.  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
+For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
+
+Use of "git clone" is not recommended at this time because there could be some inconsistencies during the transition from the old site.
 
 ## Join the conversation  ##
  

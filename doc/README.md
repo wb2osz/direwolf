@@ -24,7 +24,7 @@ These dive into more detail for specialized topics or typical usage scenarios.
 	Very few hams have portable equipment for APRS but nearly everyone has a handheld radio that can send DTMF tones.  APRStt allows a user, equipped with only DTMF (commonly known as Touch Tone) generation capability, to enter information into the global APRS data network.
 	This document explains how the APRStt concept was implemented in the Dire Wolf application.  
 
-- [APRStt Interface for SARTrack](APRStt-Interface-for-SARTrack.pdf)
+- [APRStt Interface for SARTrack](APRStt-interface-for-SARTrack.pdf)
 
 	This example illustrates how APRStt can be integrated with other applications such as SARTrack, APRSISCE/32, YAAC, or Xastir.  
 
