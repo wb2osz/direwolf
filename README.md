@@ -49,7 +49,7 @@ Version 1.2 decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](h
 
 ### Windows ###
 
-Go to the [releases page](releases/).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
+Go to the [releases page](https://github.com/wb2osz/direwolf/releases).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
 
 ### Linux - short version for the impatient ###
 
