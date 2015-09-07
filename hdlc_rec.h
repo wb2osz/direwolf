@@ -2,14 +2,11 @@
 
 #include "audio.h"
 
-//#include "rrbb.h"		
-
 
 void hdlc_rec_init (struct audio_s *pa);
 
 
 void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram_state);
-
 
 
 /* Provided elsewhere to process a complete frame. */
@@ -26,5 +23,6 @@ int hdlc_rec_gathering (int chan, int subchan);
 
 /* Transmit needs to know when someone else is transmitting. */
 
+void dcd_change (int chan, int subchan, int state);
 
 int hdlc_rec_data_detect_any (int chan);

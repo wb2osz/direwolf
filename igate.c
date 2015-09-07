@@ -85,9 +85,8 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <assert.h>
-
 #include <string.h>
-
+#include <time.h>
 
 #include "direwolf.h"
 #include "ax25_pad.h"
@@ -153,7 +152,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 	  case AF_INET:
 	    sa4 = (struct sockaddr_in *)pAddr;
 #if __WIN32__
-	    sprintf (pStringBuf, "%d.%d.%d.%d", sa4->sin_addr.S_un.S_un_b.s_b1,
+	    snprintf (pStringBuf, StringBufSize, "%d.%d.%d.%d", sa4->sin_addr.S_un.S_un_b.s_b1,
 						sa4->sin_addr.S_un.S_un_b.s_b2,
 						sa4->sin_addr.S_un.S_un_b.s_b3,
 						sa4->sin_addr.S_un.S_un_b.s_b4);
@@ -164,7 +163,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 	  case AF_INET6:
 	    sa6 = (struct sockaddr_in6 *)pAddr;
 #if __WIN32__
-	    sprintf (pStringBuf, "%x:%x:%x:%x:%x:%x:%x:%x",  
+	    snprintf (pStringBuf, StringBufSize, "%x:%x:%x:%x:%x:%x:%x:%x",  
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[0]),
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[1]),
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[2]),
@@ -178,9 +177,9 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 #endif
 	    break;
 	  default:
-	    sprintf (pStringBuf, "Invalid address family!");
+	    snprintf (pStringBuf, StringBufSize, "Invalid address family!");
 	}
-	assert (strlen(pStringBuf) < StringBufSize);
+	//assert (strlen(pStringBuf) < StringBufSize);
 	return pStringBuf;
 }
 
@@ -198,19 +197,19 @@ int main (int argc, char *argv[])
 
 	memset (&audio_config, 0, sizeof(audio_config));
 	audio_config.adev[0].num_chans = 2;
-	strcpy (audio_config.achan[0].mycall, "WB2OSZ-1");
-	strcpy (audio_config.achan[0].mycall, "WB2OSZ-2");
+	strlcpy (audio_config.achan[0].mycall, "WB2OSZ-1", sizeof(audio_config.achan[0].mycall));
+	strlcpy (audio_config.achan[1].mycall, "WB2OSZ-2", sizeof(audio_config.achan[0].mycall));
 
 	memset (&igate_config, 0, sizeof(igate_config));
 
-	strcpy (igate_config.t2_server_name, "localhost");
+	strlcpy (igate_config.t2_server_name, "localhost", sizeof(igate_config.t2_server_name));
 	igate_config.t2_server_port = 14580;
-	strcpy (igate_config.t2_login, "WB2OSZ-JL");
-	strcpy (igate_config.t2_passcode, "-1");
+	strlcpy (igate_config.t2_login, "WB2OSZ-JL", sizeof(igate_config.t2_login));
+	strlcpy (igate_config.t2_passcode, "-1", sizeof(igate_config.t2_passcode));
 	igate_config.t2_filter = strdup ("r/1/2/3");
 	
 	igate_config.tx_chan = 0;
-	strcpy (igate_config.tx_via, ",WIDE2-1");
+	strlcpy (igate_config.tx_via, ",WIDE2-1", sizeof(igate_config.tx_via));
 	igate_config.tx_limit_1 = 3;
 	igate_config.tx_limit_5 = 5;
 
@@ -314,6 +313,35 @@ static int stats_tx_igate_packets;	/* Number of packets from IGate server. */
 static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
 					/* after rate limiting or other restrictions. */
 
+/* We have some statistics.  What do we do with them?
+
+
+	IGate stations often send packets like this:
+
+	<IGATE MSG_CNT=1238 LOC_CNT=0 FILL_CNT=0
+	<IGATE,MSG_CNT=1,LOC_CNT=25
+	<IGATE,MSG_CNT=0,LOC_CNT=46,DIR_CNT=13,RF_CNT=49,RFPORT_ID=0
+
+	What does it all mean?
+	Why do some have spaces instead of commas between the capabilities?
+
+	The APRS Protocol Reference ( http://www.aprs.org/doc/APRS101.PDF ),
+	section 15, briefly discusses station capabilities and gives the example
+	IGATE,MSG_CNT=n,LOC_CNT=n
+
+	IGate Design ( http://www.aprs-is.net/IGating.aspx ) barely mentions
+	<IGATE,MSG_CNT=n,LOC_CNT=n
+
+	This leaves many questions.  Does "number of messages transmitted" mean only
+	the APRS "Message" (data type indicator ":") or does it mean any type of
+	APRS packet?   What are "local" stations?   Those we hear directly without
+	going thru a digipeater?
+
+	What are DIR_CNT, RF_CNT, and so on?
+
+	Are the counts since the system started up or are they for some interval?
+
+*/
 
 
 /*-------------------------------------------------------------------
@@ -504,7 +532,7 @@ static void * connnect_thread (void *arg)
 	WSADATA wsadata;
 #endif
 
-	sprintf (server_port_str, "%d", save_igate_config_p->t2_server_port);
+	snprintf (server_port_str, sizeof(server_port_str), "%d", save_igate_config_p->t2_server_port);
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
         dw_printf ("DEBUG: igate connect_thread start, port = %d = '%s'\n", save_igate_config_p->t2_server_port, server_port_str);
@@ -704,14 +732,14 @@ static void * connnect_thread (void *arg)
  */
 
 	      SLEEP_SEC(3);
-	      sprintf (stemp, "user %s pass %s vers Dire-Wolf %d.%d", 
+	      snprintf (stemp, sizeof(stemp), "user %s pass %s vers Dire-Wolf %d.%d", 
 			save_igate_config_p->t2_login, save_igate_config_p->t2_passcode,
 			MAJOR_VERSION, MINOR_VERSION);
 	      if (save_igate_config_p->t2_filter != NULL) {
-	        strcat (stemp, " filter ");
-	        strcat (stemp, save_igate_config_p->t2_filter);
+	        strlcat (stemp, " filter ", sizeof(stemp));
+	        strlcat (stemp, save_igate_config_p->t2_filter, sizeof(stemp));
 	      }
-	      strcat (stemp, "\r\n");
+	      strlcat (stemp, "\r\n", sizeof(stemp));
 	      send_msg_to_server (stemp);
 
 /* Delay until it is ok to start sending packets. */
@@ -739,7 +767,7 @@ static void * connnect_thread (void *arg)
 
 	    char heartbeat[10];
 
-	    strcpy (heartbeat, "#\r\n");
+	    strlcpy (heartbeat, "#\r\n", sizeof(heartbeat));
 
 	    /* This will close the socket if any error. */
 	    send_msg_to_server (heartbeat);
@@ -809,7 +837,8 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	}
 
 
-	/* Count only while connected. */
+	/* Gather statistics. */
+
 	stats_rf_recv_packets++;
 
 /*
@@ -817,6 +846,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  */
 
 	pp = ax25_dup (recv_pp);
+	assert (pp != NULL);
 
 /*
  * Third party frames require special handling to unwrap payload.
@@ -915,7 +945,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 /*
  * Someone around here occasionally sends a packet with no information part.
  */
-	if (strlen(pinfo) == 0) {
+	if (strlen((char*)pinfo) == 0) {
 
 #if DEBUGx
 	  text_color_set(DW_COLOR_DEBUG);
@@ -946,11 +976,11 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 	ax25_format_addrs (pp, msg);
 	msg[strlen(msg)-1] = '\0';    /* Remove trailing ":" */
-	strcat (msg, ",qAR,");
-	strcat (msg, save_audio_config_p->achan[chan].mycall);
-	strcat (msg, ":");
-	strcat (msg, (char*)pinfo);
-	strcat (msg, "\r\n");
+	strlcat (msg, ",qAR,", sizeof(msg));
+	strlcat (msg, save_audio_config_p->achan[chan].mycall, sizeof(msg));
+	strlcat (msg, ":", sizeof(msg));
+	strlcat (msg, (char*)pinfo, sizeof(msg));
+	strlcat (msg, "\r\n", sizeof(msg));
 
 	send_msg_to_server (msg);
 	stats_rx_igate_packets++;
@@ -1205,10 +1235,11 @@ static void * igate_recv_thread (void *arg)
 static void xmit_packet (char *message)
 {
 	packet_t pp3;
-	char payload[500];	/* what is max len? */
+	char payload[AX25_MAX_PACKET_LEN];	/* what is max len? */
 	char *pinfo = NULL;
 	int info_len;
-	int to_chan = save_igate_config_p->tx_chan;	/* which could be -1 if not configured for xmit!!! */
+	int to_chan = save_igate_config_p->tx_chan;	/* Should be -1 if not configured for xmit!!! */
+							/* Future:  Array of boolean to allow multiple xmit channels? */
 
 /*
  * Is IGate to Radio direction enabled?
@@ -1219,12 +1250,12 @@ static void xmit_packet (char *message)
 
 	stats_tx_igate_packets++;
 
-	assert (save_igate_config_p->tx_chan >= 0 && save_igate_config_p->tx_chan < MAX_CHANS);
+	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
 /*
  * Try to parse it into a packet object.
  * Bug:  Up to 8 digipeaters are allowed in radio format.
- * There is a potential of finding more here.
+ * There is a potential of finding a larger number here.
  */
 	pp3 = ax25_from_text(message, 0);
 	if (pp3 == NULL) {
@@ -1238,8 +1269,6 @@ static void xmit_packet (char *message)
 /*
  * Apply our own packet filtering if configured.
  */
-
-//TODO1.2: Should we allow IGating to RF with more than one channel?
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
@@ -1281,9 +1310,11 @@ static void xmit_packet (char *message)
 /*
  * Convert to text representation.
  */
+	memset (payload, 0, sizeof(payload));
+
 	ax25_format_addrs (pp3, payload);
 	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
-	strcat (payload, pinfo);
+	strlcat (payload, pinfo, sizeof(payload));
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("Tx IGate: payload=%s\n", payload);
@@ -1296,23 +1327,38 @@ static void xmit_packet (char *message)
 	  char radio [500];
 	  packet_t pradio;
 
-	  sprintf (radio, "%s>%s%d%d%s:}%s",
+	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
 				save_audio_config_p->achan[save_igate_config_p->tx_chan].mycall,
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
 				save_igate_config_p->tx_via,
 				payload);
 
 	  pradio = ax25_from_text (radio, 1);
+
+	  /* Oops.  Didn't have a check for NULL here. */
+	  /* Could this be the cause of rare and elusive crashes in 1.2? */
+
+	  if (pradio != NULL) {
+
 #if ITEST
-	  text_color_set(DW_COLOR_XMIT);
-	  dw_printf ("Xmit: %s\n", radio);
-	  ax25_delete (pradio);
+	    text_color_set(DW_COLOR_XMIT);
+	    dw_printf ("Xmit: %s\n", radio);
+	    ax25_delete (pradio);
 #else
-	  /* This consumes packet so don't reference it again! */
-	  tq_append (save_igate_config_p->tx_chan, TQ_PRIO_1_LO, pradio);
+	    /* This consumes packet so don't reference it again! */
+	    tq_append (save_igate_config_p->tx_chan, TQ_PRIO_1_LO, pradio);
 #endif
-	  stats_rf_xmit_packets++;
-	  ig_to_tx_remember (pp3);
+	    stats_rf_xmit_packets++;
+	    ig_to_tx_remember (pp3);
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Received invalid packet from IGate.\n");
+	    dw_printf ("%s\n", payload);	
+	    dw_printf ("Will not attempt to transmit third party packet.\n");
+	    dw_printf ("%s\n", radio);	
+	  }
+
 	}
 
 	ax25_delete (pp3);

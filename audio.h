@@ -87,6 +87,9 @@ struct audio_s {
 
 	char tts_script[80];		/* Script for text to speech. */
 
+	int statistics_interval;	/* Number of seconds between the audio */
+					/* statistics reports.  This is set by */
+					/* the "-a" option.  0 to disable feature. */
 
 	/* Properties for each audio channel, common to receive and transmit. */
 	/* Can be different for each radio channel. */
@@ -227,7 +230,7 @@ struct audio_s {
 };
 
 
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 #define DEFAULT_ADEVICE	""		/* Windows: Empty string = default audio device. */
 #else
 #if USE_ALSA

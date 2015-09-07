@@ -565,7 +565,7 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	int info_len;
 	int h;
 	char heard[20];
-	char alevel_text[32];
+	char alevel_text[AX25_ALEVEL_TO_TEXT_SIZE];
 
 	packets_decoded++;
 

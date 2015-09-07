@@ -5,7 +5,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -42,6 +42,7 @@
 
 #include "direwolf.h"
 #include "dtmf.h"
+#include "hdlc_rec.h"	// for dcd_change
 
 
 
@@ -269,6 +270,11 @@ char dtmf_sample (int c, float input)
 
 	  if (decoded == D->prev_dec) {
 	    D->debounced = decoded;
+
+	    // Update Data Carrier Detect Indicator.
+
+	    dcd_change (c, MAX_SUBCHANS, decoded != ' ');
+
 	    /* Reset timeout timer. */
 	    if (decoded != ' ') {
 	      D->timeout = ((TIMEOUT_SEC) * D->sample_rate) / D->block_size;

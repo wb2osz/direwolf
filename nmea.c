@@ -64,15 +64,7 @@ char *strsep(char **stringp, const char *delim);
 #include "nmea.h"
 #include "grm_sym.h"		/* Garmin symbols */
 #include "mgn_icon.h"		/* Magellan icons */
-
-
-#if __WIN32__
-typedef HANDLE MYFDTYPE;
-#define MYFDERROR INVALID_HANDLE_VALUE
-#else
-typedef int MYFDTYPE;
-#define MYFDERROR (-1)
-#endif
+#include "serial_port.h"
 
 
 // TODO: receive buffer... static kiss_frame_t kf;	/* Accumulated KISS frame and state of decoder. */
@@ -103,7 +95,7 @@ void nmea_set_debug (int n)
  * Name:	nmea_init
  *
  * Purpose:	Initialization for NMEA communication port.
- &
+ *
  * Inputs:	mc->nmea_port	- name of serial port.
  *
  * Global output: nmea_port_fd
@@ -112,14 +104,8 @@ void nmea_set_debug (int n)
  * Description:	(1) Open serial port device.
  *		(2) Start a new thread to listen for GPS receiver.
  *
- * Reference:	http://www.robbayer.com/files/serial-win.pdf
- *
  *---------------------------------------------------------------*/
 
-
-
-
-static MYFDTYPE nmea_open_port (char *device);
 
 void nmea_init (struct misc_config_s *mc)
 {
@@ -132,24 +118,12 @@ void nmea_init (struct misc_config_s *mc)
 
 /*
  * Open serial port connection.
+ * 4800 baud is standard for GPS.
+ * Should add an option to allow changing someday.
  */
 	if (strlen(mc->nmea_port) > 0) {
 
-#if ! __WIN32__
-
-	  /* Translate Windows device name into Linux name. */
-	  /* COM1 -> /dev/ttyS0, etc. */
-
-	  if (strncasecmp(mc->nmea_port, "COM", 3) == 0) {
-	    int n = atoi (mc->nmea_port + 3);
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Converted NMEA device '%s'", mc->nmea_port);
-	    if (n < 1) n = 1;
-	    sprintf (mc->nmea_port, "/dev/ttyS%d", n-1);
-	    dw_printf (" to Linux equivalent '%s'\n", mc->nmea_port);
-	  }
-#endif
-	  nmea_port_fd = nmea_open_port (mc->nmea_port);
+	  nmea_port_fd = serial_port_open (mc->nmea_port, 4800);
 
 	  if (nmea_port_fd != MYFDERROR) {
 #if __WIN32__
@@ -177,138 +151,6 @@ void nmea_init (struct misc_config_s *mc)
 
 	dw_printf ("end of nmea_init: nmea_port_fd = %d\n", nmea_port_fd);
 #endif
-}
-
-
-/*
- * Returns fd for serial port or MYFDERROR for error.
- */
-
-
-static MYFDTYPE nmea_open_port (char *devicename)
-{
-
-#if __WIN32__
-
-	MYFDTYPE fd;
-	DCB dcb;
-	int ok;
-	char bettername[50];
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("nmea_open_port ( '%s' )\n", devicename);
-#endif
-	
-
-// Need to use FILE_FLAG_OVERLAPPED for full duplex operation.
-// Without it, write blocks when waiting on read.
-
-// Read http://support.microsoft.com/kb/156932 
-
-// Bug fix in release 1.1 - Need to munge name for COM10 and up.
-// http://support.microsoft.com/kb/115831
-
-	strcpy (bettername, devicename);
-	if (strncasecmp(devicename, "COM", 3) == 0) {
-	  int n;
-	  n = atoi(devicename+3);
-	  if (n >= 10) {
-	    strcpy (bettername, "\\\\.\\");
-	    strcat (bettername, devicename);
-	  }
-	}
-
-	fd = CreateFile(bettername, GENERIC_READ | GENERIC_WRITE, 
-			0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-
-	if (fd == MYFDERROR) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR - Could not open NMEA port %s.\n", devicename);
-	  return (MYFDERROR);
-	}
-
-	/* Reference: http://msdn.microsoft.com/en-us/library/windows/desktop/aa363201(v=vs.85).aspx */
-
-	memset (&dcb, 0, sizeof(dcb));
-	dcb.DCBlength = sizeof(DCB);
-
-	ok = GetCommState (fd, &dcb);
-	if (! ok) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("nmea_open_port: GetCommState failed.\n");
-	}
-
-	/* http://msdn.microsoft.com/en-us/library/windows/desktop/aa363214(v=vs.85).aspx */
-
-	dcb.DCBlength = sizeof(DCB);
-	dcb.BaudRate = CBR_4800;
-	dcb.fBinary = 1;
-	dcb.fParity = 0;
-	dcb.fOutxCtsFlow = 0;
-	dcb.fOutxDsrFlow = 0;
-	dcb.fDtrControl = DTR_CONTROL_DISABLE;
-	dcb.fDsrSensitivity = 0;
-	dcb.fOutX = 0;
-	dcb.fInX = 0;
-	dcb.fErrorChar = 0;
-	dcb.fNull = 0;		/* Don't drop nul characters! */
-	dcb.fRtsControl = 0;
-	dcb.ByteSize = 8;
-	dcb.Parity = NOPARITY;
-	dcb.StopBits = ONESTOPBIT;
-
-	ok = SetCommState (fd, &dcb);
-	if (! ok) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("nmea_open_port: SetCommState failed.\n");
-	}
-
-	text_color_set(DW_COLOR_INFO);
-	dw_printf("NMEA communication started on %s.\n", devicename);
-
-#else
-
-/* Linux version. */
-
-	int fd;
-	struct termios ts;
-	int e;
-
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("nmea_open_port ( '%s' )\n", devicename);
-#endif
-
-	fd = open (devicename, O_RDWR);
-
-	if (fd == MYFDERROR) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR - Could not open NMEA port %s.\n", devicename);
-	  return (MYFDERROR);
-	}
-
-	e = tcgetattr (fd, &ts);
-	if (e != 0) { perror ("nm tcgetattr"); }
-
-	cfmakeraw (&ts);
-	
-	ts.c_cc[VMIN] = 1;	/* wait for at least one character */
-	ts.c_cc[VTIME] = 0;	/* no fancy timing. */
-
-	cfsetispeed (&ts, B4800);
-	cfsetospeed (&ts, B4800);
-
-	e = tcsetattr (fd, TCSANOW, &ts);
-	if (e != 0) { perror ("nmea tcsetattr"); }
-
-	text_color_set(DW_COLOR_INFO);
-	dw_printf("NMEA communication started on %s.\n", devicename);
-
-#endif
-
-	return (fd);
 }
 
 
@@ -575,7 +417,7 @@ https://freepository.com:444/50lItuLQ7fW6s-web/browser/Tracker2/trunk/sources/wa
 
 
 
-Data Transmission Protocol For Magellan Products – version 2.11
+Data Transmission Protocol For Magellan Products - version 2.11
 
 
 
@@ -637,45 +479,7 @@ static void nmea_send_sentence (char *sent)
 
 // TODO:  need to append CR LF.
 
-
-#if __WIN32__
-
-	DWORD nwritten; 
-
-	/* Without this, write blocks while we are waiting on a read. */
-	static OVERLAPPED ov_wr;
-	memset (&ov_wr, 0, sizeof(ov_wr));
-
-        if ( ! WriteFile (nmea_port_fd, sent, len, &nwritten, &ov_wr))
-	{
-	  err = GetLastError();
-	  if (err != ERROR_IO_PENDING) 
-	  {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\nError sending NMEA sentence.  Error %d.\n\n", (int)GetLastError());
-	    //CloseHandle (nmea_port_fd);
-	    //nmea_port_fd = MYFDERROR;
-	  }
-	}
-	else if (nwritten != len) 
-	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError sending NMEA sentence.  Only %d of %d written.\n\n", (int)nwritten, len);
-	  //CloseHandle (nmea_port_fd);
-	  //nmea_port_fd = MYFDERROR;
-	}
-
-#else
-        err = write (nmea_port_fd, sent, (size_t)len);
-	if (err != len)
-	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError sending NMEA sentence. err=%d\n\n", err);
-	  //close (nmea_port_fd);
-	  //nmea_port_fd = MYFDERROR;
-	}
-#endif
-
+	serial_port_write (nmea_port_fd, sent, len);
 
 } /* nmea_send_sentence */
 
@@ -694,109 +498,6 @@ static void nmea_send_sentence (char *sent)
  * Description:	Process messages from the client application.
  *
  *--------------------------------------------------------------------*/
-
-//TODO: should pass fd by reference so it can be zapped.
-//BUG: If we close it here, that fact doesn't get back 
-// to the main receiving thread.
-
-/* Return one byte (value 0 - 255) or terminate thread on error. */
-
-
-static int nmea_get (MYFDTYPE fd)
-{
-	unsigned char ch;
-
-#if __WIN32__		/* Native Windows version. */
-
-	DWORD n;	
-	static OVERLAPPED ov_rd;
-
-	memset (&ov_rd, 0, sizeof(ov_rd));
-	ov_rd.hEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
-
-	
-	/* Overlapped I/O makes reading rather complicated. */
-	/* See:  http://msdn.microsoft.com/en-us/library/ms810467.aspx */
-
-	/* It seems that the read completes OK with a count */
-	/* of 0 every time we send a message to the serial port. */
-
-	n = 0;	/* Number of characters read. */
-
-  	while (n == 0) {
-
-	  if ( ! ReadFile (fd, &ch, 1, &n, &ov_rd)) 
-	  {
-	    int err1 = GetLastError();
-
-	    if (err1 == ERROR_IO_PENDING) 
-	    {
-	      /* Wait for completion. */
-
-	      if (WaitForSingleObject (ov_rd.hEvent, INFINITE) == WAIT_OBJECT_0) 
-	      {
-	        if ( ! GetOverlappedResult (fd, &ov_rd, &n, 1))
-	        {
-	          int err3 = GetLastError();
-
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("\nKISS GetOverlappedResult error %d.\n\n", err3);
-	        }
-	        else 
-	        {
-		  /* Success!  n should be 1 */
-	        }
-	      }
-	    }
-	    else
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nKISS ReadFile error %d. Closing connection.\n\n", err1);
-	      //CloseHandle (fd);
-	      //fd = MYFDERROR;
-	      //pthread_exit (NULL);
-	    }
-	  }
-
-	}	/* end while n==0 */
-
-	CloseHandle(ov_rd.hEvent); 
-
-	if (n != 1) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nNMEA failed to get one byte. n=%d.\n\n", (int)n);
-
-#if DEBUG9
-	  fprintf (log_fp, "n=%d\n", n);
-#endif
-	}
-
-
-#else		/* Linux version */
-
-	int n;
-
-	n = read(fd, &ch, (size_t)1);
-
-	if (n != 1) {
-	  //text_color_set(DW_COLOR_ERROR);
-	  //dw_printf ("\nError receiving kiss message from client application.  Closing connection %d.\n\n", fd);
-
-	  close (fd);
-
-	  fd = MYFDERROR;
-	  pthread_exit (NULL);
-	}
-
-#endif
-
-#if DEBUGx
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("nmea_get(%d) returns 0x%02x\n", fd, ch);
-#endif
-
-	return (ch);
-}
 
 
 // Maximum length of message from GPS receiver.
@@ -823,9 +524,25 @@ static void * nmea_listen_thread (void *arg)
 
 
 	while (1) {
-	  unsigned char ch;
+	  int ch;
 
-	  ch = nmea_get(fd);
+	  ch = serial_port_get1(fd);
+
+
+// TODO:  if ch < 0, terminate thread ...
+
+      //CloseHandle (fd);
+	      //fd = MYFDERROR;
+	      //pthread_exit (NULL);
+
+	  //text_color_set(DW_COLOR_ERROR);
+	  //dw_printf ("\nError trying to read from GPS receiver.  Closing connection %d.\n\n", fd);
+
+	  //close (fd);  -> serial_port_close(fd)
+
+	  //fd = MYFDERROR;
+	  //pthread_exit (NULL);
+
 
 	  if (ch == '$') {
 	    // Start of new sentence.
@@ -982,7 +699,14 @@ static void nmea_parse_gps (char *sentence)
 
 	  text_color_set (DW_COLOR_INFO);
           dw_printf("%d %.6f %.6f %.1f %.0f %.1f\n", fix, g_lat, g_lon, g_speed, g_course, g_alt);
-	  
+
+#if WALK96
+	  // TODO: Need to design a proper interface.
+
+	  extern void walk96 (int fix, double lat, double lon, float knots, float course, float alt);
+
+          walk96 (fix, g_lat, g_lon, g_speed, g_course, g_alt);
+#endif	  
 	}
 
 // $GPGGA has altitude.

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011,2012,2013,2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@
 #include <stdlib.h>	
 #include <string.h>	
 #include <ctype.h>	
+
+#include "direwolf.h"
 #include "textcolor.h"
 #include "symbols.h"
 
@@ -259,6 +261,17 @@ static const struct {
 	/*  ~  94  */	{ "Q4", "TNC Stream Switch" } };
 
 
+// Make sure the array is null terminated.
+static const char *search_locations[] = {
+	(const char *) "symbols-new.txt",
+#ifndef __WIN32__
+	(const char *) "/usr/share/direwolf/symbols-new.txt",
+	(const char *) "/usr/local/share/direwolf/symbols-new.txt",
+#endif
+	(const char *) NULL
+};
+
+
 /*------------------------------------------------------------------
  *
  * Function:	symbols_init
@@ -306,7 +319,7 @@ static int new_sym_len = 0;			/* Number of elements used. */
 
 void symbols_init (void)
 {
-	FILE *fp;
+	FILE *fp = NULL;
 
 /*
  * We only care about lines with this format:
@@ -340,13 +353,13 @@ void symbols_init (void)
 
 // If search strategy changes, be sure to keep decode_tocall in sync.
 
+	fp = NULL;
+	j = 0;
+	do {
+	  if (search_locations[j] == NULL) break;
+	  fp = fopen(search_locations[j++], "r");
+	} while (fp == NULL);
 
-	fp = fopen("symbols-new.txt", "r");
-#ifndef __WIN32__
-	if (fp == NULL) {
-	  fp = fopen("/usr/share/direwolf/symbols-new.txt", "r");
-	}
-#endif
 	if (fp == NULL) {
 
 	  text_color_set(DW_COLOR_ERROR);
@@ -399,6 +412,83 @@ void symbols_init (void)
 #endif
 
 } /* end symbols_init */
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	symbols_list
+ *
+ * Purpose:	Print a list of all the symbols.
+ *
+ * Inputs:	none
+ *
+ *------------------------------------------------------------------*/
+
+void symbols_list (void) 
+{
+	int n;
+
+	dw_printf ("\n");
+
+	dw_printf ("\tPRIMARY SYMBOL TABLE\n");
+	dw_printf ("\n");
+	dw_printf ("sym  GPSxy  GPSCnn  APRStt  Icon\n");
+	dw_printf ("---  -----  ------  ------  ----\n");
+	for (n = 1; n < SYMTAB_SIZE; n++) {
+	  dw_printf (" /%c     %s      %02d  AB1%02d   %s\n", n + ' ', primary_symtab[n].xy, n, n, primary_symtab[n].description);
+	}
+
+	dw_printf ("\n");
+	dw_printf ("\tALTERNATE SYMBOL TABLE\n");
+	dw_printf ("\n");
+	dw_printf ("sym  GPSxy  GPSEnn  APRStt  Icon\n");
+	dw_printf ("---  -----  ------  ------  ----\n");
+	for (n = 1; n < SYMTAB_SIZE; n++) {
+	  dw_printf (" \\%c     %s      %02d  AB2%02d   %s\n", n + ' ', alternate_symtab[n].xy, n, n, alternate_symtab[n].description);
+	}
+
+	dw_printf ("\n");
+	dw_printf ("\tNEW SYMBOLS from symbols-new.txt\n");
+	dw_printf ("\n");
+	dw_printf ("sym  GPSxyz  GPSxnn  APRStt   Icon\n");
+	dw_printf ("---  ------  ------  ------   ----\n");
+
+
+	for (n = 0; n < new_sym_len; n++) {
+
+	  int overlay = new_sym_ptr[n].overlay;
+	  int symbol = new_sym_ptr[n].symbol;
+	  char tones[12];
+
+	  symbols_to_tones (overlay, symbol, tones);
+
+	  if (overlay == '/') {
+
+	    dw_printf (" %c%c     %s%c     C%02d  %-7s  %s\n", overlay, symbol, 
+								primary_symtab[symbol - ' '].xy, ' ',
+								symbol - ' ', tones,
+								new_sym_ptr[n].description);
+	  }
+	  else if (isupper(overlay) || isdigit(overlay)) {
+
+	    dw_printf (" %c%c     %s%c          %-7s  %s\n", overlay, symbol, 
+								alternate_symtab[symbol - ' '].xy, overlay,
+								tones,
+								new_sym_ptr[n].description);
+	  }
+	  else {
+
+	    dw_printf (" %c%c     %s%c     E%02d  %-7s  %s\n", overlay, symbol, 
+								alternate_symtab[symbol - ' '].xy, ' ', 
+								symbol - ' ', tones,
+								new_sym_ptr[n].description);
+	  }
+	}
+	dw_printf ("\n");
+
+
+} /* end symbols_list */
+
 
 
 /*------------------------------------------------------------------
@@ -602,19 +692,19 @@ int symbols_into_dest (char symtab, char symbol, char *dest)
 	if (symbol >= '!' && symbol <= '~' && symtab == '/') {
 	  
 	  /* Primary Symbol table. */
-	  sprintf (dest, "GPSC%02d", symbol - ' ');
+	  snprintf (dest, 7, "GPSC%02d", symbol - ' ');
 	  return (0);
 	}
 	else if (symbol >= '!' && symbol <= '~' && symtab == '\\') {
 	  
 	  /* Alternate Symbol table. */
-	  sprintf (dest, "GPSE%02d", symbol - ' ');
+	  snprintf (dest, 7, "GPSE%02d", symbol - ' ');
 	  return (0);
 	}
 	else if (symbol >= '!' && symbol <= '~' && (isupper(symtab) || isdigit(symtab))) {
 
 	  /* Alternate Symbol table with overlay. */
-	  sprintf (dest, "GPS%s%c", alternate_symtab[symbol - ' '].xy, symtab);
+	  snprintf (dest, 7, "GPS%s%c", alternate_symtab[symbol - ' '].xy, symtab);
 	  return (0);
 	}
 
@@ -623,7 +713,7 @@ int symbols_into_dest (char symtab, char symbol, char *dest)
 	dw_printf ("Could not convert symbol \"%c%c\" to GPSxyz destination format.\n",
 			symtab, symbol);
 
-	strcpy (dest, "GPS???");	/* Error. */
+	strlcpy (dest, "GPS???", sizeof(dest));	/* Error. */
 	return (1);
 }
 
@@ -637,16 +727,19 @@ int symbols_into_dest (char symtab, char symbol, char *dest)
  * Inputs:	symtab		/, \, 0-9, A-Z
  *		symbol		any printable character ! to ~ 
  *
+ *		desc_size	Size of description provided by caller
+ *				so we can avoid buffer overflow.
+ *
  * Outputs:	description	Text description.
  *				"--no-symbol--"  if error.
  *
- *
+ *	 
  * Description:	This is used for the monitoring and the 
  *		decode_aprs utility.
  *
  *------------------------------------------------------------------*/
 
-void symbols_get_description (char symtab, char symbol, char *description)
+void symbols_get_description (char symtab, char symbol, char *description, size_t desc_size)
 {
 	char tmp2[2];
 	int j;
@@ -672,7 +765,7 @@ void symbols_get_description (char symtab, char symbol, char *description)
 	  /* We do the latter. */
 
 	  symbol = ' ';
-	  strcpy (description, primary_symtab[symbol-' '].description);
+	  strlcpy (description, primary_symtab[symbol-' '].description, desc_size);
 	  return;
 	}
 
@@ -688,7 +781,7 @@ void symbols_get_description (char symtab, char symbol, char *description)
 
 	for (j=0; j<new_sym_len; j++) {
 	  if (symtab == new_sym_ptr[j].overlay && symbol == new_sym_ptr[j].symbol) {
-	    strcpy (description, new_sym_ptr[j].description);
+	    strlcpy (description, new_sym_ptr[j].description, desc_size);
 	    return;
 	  }
 	}  
@@ -696,15 +789,15 @@ void symbols_get_description (char symtab, char symbol, char *description)
 // Otherwise use the original symbol tables.
 
 	if (symtab == '/') {
-	  strcpy (description, primary_symtab[symbol-' '].description);
+	  strlcpy (description, primary_symtab[symbol-' '].description, desc_size);
 	}
 	else {
-	  strcpy (description, alternate_symtab[symbol-' '].description);
+	  strlcpy (description, alternate_symtab[symbol-' '].description, desc_size);
 	  if (symtab != '\\') {
-	    strcat (description, " w/overlay ");
+	    strlcat (description, " w/overlay ", desc_size);
 	    tmp2[0] = symtab;
 	    tmp2[1] = '\0';
-	    strcat (description, tmp2);
+	    strlcat (description, tmp2, desc_size);
 	  }
 	}
 
@@ -796,6 +889,57 @@ int symbols_code_from_description (char overlay, char *description, char *symtab
 	return (0);
 
 } /* end symbols_code_from_description */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	symbols_to_tones
+ *
+ * Purpose:	Convert symbol to APRStt tone sequence.
+ *
+ * Inputs:	symtab/overlay
+ *		symbol
+ *
+ * Output:	tones	- string of AB...		
+ *		
+ * Description: 
+ *
+ *		Primary: 	AB1nn		nn = same number as GPSCnn
+ *		Alternate:	AB2nn 		nn = same number as GPSEnn
+ *		with overlay:	AB0nntt   	nn = same as with alternate
+ *						tt = one or two tones from two key method.
+ *
+ *------------------------------------------------------------------*/
+
+void symbols_to_tones (char symtab, char symbol, char *tones)
+{
+
+	if (symtab == '/') {
+
+	  // TODO: potential buffer overflow.
+	  sprintf (tones, "AB1%02d", symbol - ' ');
+	}
+	else if (isupper(symtab) || isdigit(symtab)) {
+
+	  char text[2];
+	  char tt[8];
+
+	  text[0] = symtab;
+	  text[1] = '\0';
+
+	  tt_text_to_two_key (text, 0, tt);
+
+	  sprintf (tones, "AB0%02d%s", symbol - ' ', tt);
+	}
+	else {
+	 
+	  sprintf (tones, "AB2%02d", symbol - ' ');
+	}
+
+}  /* end symbols_to_tones */
+
+
 
 
 #if 0

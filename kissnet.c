@@ -382,6 +382,7 @@ static void * connect_listen_thread (void *arg)
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
 	int kiss_port = (int)(long)arg;
 	int listen_sock;  
+	int bcopt = 1;
 
 	listen_sock= socket(AF_INET,SOCK_STREAM,0);
 	if (listen_sock == -1) {
@@ -389,6 +390,14 @@ static void * connect_listen_thread (void *arg)
 	  perror ("connect_listen_thread: Socket creation failed");
 	  return (NULL);
 	}
+
+	/* Version 1.3 - as suggested by G8BPQ. */
+	/* Without this, if you kill the application then try to run it */
+	/* again quickly the port number is unavailable for a while. */
+	/* Don't try doing the same thing On Windows; It has a different meaning. */
+	/* http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t */
+
+        setsockopt (listen_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&bcopt, 4);
 
     	sockaddr.sin_addr.s_addr = INADDR_ANY;
     	sockaddr.sin_port = htons(kiss_port);

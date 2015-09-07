@@ -73,6 +73,7 @@
 #include "hdlc_send.h"
 #include "gen_tone.h"
 #include "textcolor.h"
+#include "morse.h"
 
 
 static void usage (char **argv);
@@ -81,6 +82,8 @@ static int audio_file_close (void);
 
 static int g_add_noise = 0;
 static float g_noise_level = 0;
+static int g_morse_wpm = 0;		/* Send morse code at this speed. */
+
 
 static struct audio_s modem;
 
@@ -92,15 +95,22 @@ static void send_packet (char *str)
     	int flen;
 	int c;
 
-	pp = ax25_from_text (str, 1);
-	flen = ax25_pack (pp, fbuf);
-	for (c=0; c<modem.adev[0].num_channels; c++)
-	{
-	   hdlc_send_flags (c, 8, 0);
-	   hdlc_send_frame (c, fbuf, flen);
-	   hdlc_send_flags (c, 2, 1);
+
+	if (g_morse_wpm > 0) {
+
+	  morse_send (0, str, g_morse_wpm, 100, 100);
 	}
-	ax25_delete (pp);
+	else {
+	  pp = ax25_from_text (str, 1);
+	  flen = ax25_pack (pp, fbuf);
+	  for (c=0; c<modem.adev[0].num_channels; c++)
+	  {
+	    hdlc_send_flags (c, 8, 0);
+	    hdlc_send_frame (c, fbuf, flen);
+	    hdlc_send_flags (c, 2, 1);
+	  }
+	  ax25_delete (pp);
+	}
 }
 
 
@@ -164,7 +174,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82",
+          c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82M:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -328,6 +338,20 @@ int main(int argc, char **argv)
               dw_printf ("Output file set to %s\n", output_file);
               break;
 
+            case 'M':				/* -M for morse code speed */
+
+//TODO: document this.
+
+              g_morse_wpm = atoi(optarg);
+              text_color_set(DW_COLOR_INFO); 
+              dw_printf ("Morse code speed set to %d WPM.\n", g_morse_wpm);
+              if (g_morse_wpm < 5 || g_morse_wpm > 50) {
+                text_color_set(DW_COLOR_ERROR); 
+	        dw_printf ("Morse code speed must be in range of 5 to 50 WPM.\n");
+                exit (EXIT_FAILURE);
+              }
+              break;
+
             case '?':
 
               /* Unknown option message was already printed. */
@@ -365,11 +389,18 @@ int main(int argc, char **argv)
         }
 
 
+
+
 	gen_tone_init (&modem, amplitude/2);
+	morse_init (&modem, amplitude/2);
+
 
         assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
         assert (modem.adev[0].num_channels == 1 || modem.adev[0].num_channels == 2);
         assert (modem.adev[0].samples_per_sec >= MIN_SAMPLES_PER_SEC && modem.adev[0].samples_per_sec <= MAX_SAMPLES_PER_SEC);
+
+
+
 
 /*
  * Get user packets(s) from file or stdin if specified.

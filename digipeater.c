@@ -134,7 +134,6 @@ void digipeater_init (struct audio_s *p_audio_config, struct digi_config_s *p_di
 void digipeater (int from_chan, packet_t pp)
 {
 	int to_chan;
-	packet_t result;
 
 
 	// dw_printf ("digipeater()\n");
@@ -156,6 +155,8 @@ void digipeater (int from_chan, packet_t pp)
 	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
 	  if (save_digi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan == from_chan) {
+	      packet_t result;
+
 	      result = digipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
@@ -179,6 +180,8 @@ void digipeater (int from_chan, packet_t pp)
 	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
 	  if (save_digi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan != from_chan) {
+	      packet_t result;
+
 	      result = digipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
@@ -227,6 +230,9 @@ void digipeater (int from_chan, packet_t pp)
  *		filter_str	- Filter expression string or NULL.
  *		
  * Returns:	Packet object for transmission or NULL.
+ *		The original packet is not modified.  (with one exception, probably obsolete)
+ *		We make a copy and return that modified copy!
+ *		This is very important because we could digipeat from one channel to many.
  *
  * Description:	The packet will be digipeated if the next unused digipeater
  *		field matches one of the following:
@@ -262,7 +268,6 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	int ssid;
 	int r;
 	char repeater[AX25_MAX_ADDR_LEN];
-	packet_t result = NULL;
 	int err;
 	char err_msg[100];
 
@@ -276,6 +281,8 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	  if (pfilter(from_chan, to_chan, filter_str, pp) != 1) {
 
 // TODO1.2: take out debug message
+// Actually it turns out to be useful.
+// Maybe add a quiet option to suppress it although no one has complained about it yet.
 //#if DEBUG
 	    text_color_set(DW_COLOR_DEBUG);
 	    dw_printf ("Packet was rejected for digipeating from channel %d to %d by filter: %s\n", from_chan, to_chan, filter_str);
@@ -289,8 +296,8 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  *
  * 	The SSID in the Destination Address field of all packets is coded to specify
  * 	the APRS digipeater path.
- * 	If the Destination Address SSID is –0, the packet follows the standard AX.25
- * 	digipeater (“VIA”) path contained in the Digipeater Addresses field of the
+ * 	If the Destination Address SSID is -0, the packet follows the standard AX.25
+ * 	digipeater ("VIA") path contained in the Digipeater Addresses field of the
  * 	AX.25 frame.
  * 	If the Destination Address SSID is non-zero, the packet follows one of 15
  * 	generic APRS digipeater paths.
@@ -317,7 +324,7 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	r = ax25_get_first_not_repeated(pp);
 
 	if (r < AX25_REPEATER_1) {
-	  return NULL;
+	  return (NULL);
 	}
 
 	ax25_get_addr_with_ssid(pp, r, repeater);
@@ -337,7 +344,11 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  */
 	
 	if (strcmp(repeater, mycall_rec) == 0) {
+	  packet_t result;
+
 	  result = ax25_dup (pp);
+	  assert (result != NULL);
+
 	  /* If using multiple radio channels, they */
 	  /* could have different calls. */
 	  ax25_set_addr (result, r, mycall_xmit);	
@@ -369,7 +380,6 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Digipeater: Drop redundant packet to channel %d.\n", to_chan);
 //#endif
-	  assert (result == NULL);
 	  return NULL;
 	}
 
@@ -379,7 +389,11 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  */
 	err = regexec(alias,repeater,0,NULL,0);
 	if (err == 0) {
+	  packet_t result;
+
 	  result = ax25_dup (pp);
+	  assert (result != NULL);
+
 	  ax25_set_addr (result, r, mycall_xmit);	
 	  ax25_set_h (result, r);
 	  return (result);
@@ -408,8 +422,11 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 	    if (strcmp(repeater2, mycall_rec) == 0 ||
 	        regexec(alias,repeater2,0,NULL,0) == 0) {
+	      packet_t result;
 
 	      result = ax25_dup (pp);
+	      assert (result != NULL);
+
 	      ax25_set_addr (result, r2, mycall_xmit);	
 	      ax25_set_h (result, r2);
 
@@ -461,14 +478,22 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  */
 
 	  if (ssid == 1) {
+	    packet_t result;
+
 	    result = ax25_dup (pp);
+	    assert (result != NULL);
+
  	    ax25_set_addr (result, r, mycall_xmit);	
 	    ax25_set_h (result, r);
 	    return (result);
 	  }
 
 	  if (ssid >= 2 && ssid <= 7) {
+	    packet_t result;
+
 	    result = ax25_dup (pp);
+	    assert (result != NULL);
+
 	    ax25_set_ssid(result, r, ssid-1);	// should be at least 1
 
 	    if (ax25_get_num_repeaters(pp) < AX25_MAX_REPEATERS) {
@@ -488,8 +513,8 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 /*
  * Don't repeat it if we get here.
  */
-	assert (result == NULL);
-	return NULL;
+
+	return (NULL);
 }
 
 
@@ -597,6 +622,7 @@ static void test (char *in, char *out)
 	ax25_delete (pp);
 
 	pp = ax25_from_frame (frame, frame_len, 50);
+	assert (pp != NULL);
 	ax25_format_addrs (pp, rec);
 	info_len = ax25_get_info (pp, &pinfo);
 	strcat (rec, (char*)pinfo);

@@ -139,7 +139,7 @@ static const char call10encoding[10][4] = {
 
 
 /*
- * 4 digit gridsquares to cover "99.99% of the world's population."
+ * Special satellite 4 digit gridsquares to cover "99.99% of the world's population."
  */
 
 static const char grid[10][10][3] =      
@@ -370,6 +370,77 @@ int tt_text_to_two_key (char *text, int quiet, char *buttons)
 
 /*------------------------------------------------------------------
  *
+ * Name:        tt_letter_to_two_digits
+ *
+ * Purpose:     Convert one letter to 2 digit representation.
+ *
+ * Inputs:      c	- One letter.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	buttons	- Sequence of two buttons to press.
+ *			  "00" for error because this is probably
+ *			  being used to build up a fixed length
+ *			  string where positions are signficant.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+
+// TODO:  need to test this.
+
+int tt_letter_to_two_digits (char c, int quiet, char *buttons) 
+{
+	char *b = buttons;
+	int row, col;
+	int errors = 0;
+	int found;
+
+	*b = '\0';
+  
+	if (islower(c)) {
+	  c = toupper(c);
+	}
+
+	if ( ! isupper(c)) {
+	  errors++;
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Letter to two digits: \"%c\" found where a letter is required.\n", c);
+	  }
+	  strcpy (buttons, "00");
+	  return (errors);
+	}
+
+/* Search in the translation table. */
+
+	found = 0;
+
+	for (row=0; row<10 && ! found; row++) {
+	  for (col=0; col<4 && ! found; col++) {
+	    if (c == translate[row][col]) {
+	      *b++ = '0' + row;
+	      *b++ = '1' + col;
+	      *b = '\0';
+	      found = 1;
+	    }
+	  }
+	 }
+	 if (! found) {
+	  errors++;
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Letter to two digits: INTERNAL ERROR.  Should not be here.\n");
+	  strcpy (buttons, "00");
+	}
+
+	return (errors);          
+
+} /* end tt_letter_to_two_digits */
+
+
+/*------------------------------------------------------------------
+ *
  * Name:        tt_text_to_call10
  *
  * Purpose:     Convert text to the 10 character callsign format.
@@ -478,9 +549,9 @@ int tt_text_to_call10 (char *text, int quiet, char *buttons)
 
 /*------------------------------------------------------------------
  *
- * Name:        tt_text_to_gridsquare
+ * Name:        tt_text_to_satsq		
  *
- * Purpose:     Convert Gridsquare to 4 digit DTMF representation.
+ * Purpose:     Convert Special Satellite Gridsquare to 4 digit DTMF representation.
  *
  * Inputs:      text	- Input string.
  *			  Should be two letters (A thru R) and two digits.
@@ -497,7 +568,7 @@ int tt_text_to_call10 (char *text, int quiet, char *buttons)
  *
  *----------------------------------------------------------------*/
 
-int tt_text_to_gridsquare (char *text, int quiet, char *buttons) 
+int tt_text_to_satsq (char *text, int quiet, char *buttons) 
 {
 
 	int row, col;
@@ -514,7 +585,7 @@ int tt_text_to_gridsquare (char *text, int quiet, char *buttons)
 
 	  if (! quiet) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Gridsquare to DTMF: Gridsquare \"%s\" must be 4 characters.\n", text);
+	    dw_printf ("Satellite Gridsquare to DTMF: Gridsquare \"%s\" must be 4 characters.\n", text);
 	  }
 	  errors++;
 	  return (errors);
@@ -530,7 +601,7 @@ int tt_text_to_gridsquare (char *text, int quiet, char *buttons)
 
 	  if (! quiet) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Gridsquare to DTMF: First two characters \"%s\" must be letters in range of A to R.\n", text);
+	    dw_printf ("Satellite Gridsquare to DTMF: First two characters \"%s\" must be letters in range of A to R.\n", text);
 	  }
 	  errors++;
 	  return (errors);
@@ -540,7 +611,7 @@ int tt_text_to_gridsquare (char *text, int quiet, char *buttons)
 
 	  if (! quiet) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Gridsquare to DTMF: Last two characters \"%s\" must digits.\n", text);
+	    dw_printf ("Satellite Gridsquare to DTMF: Last two characters \"%s\" must digits.\n", text);
 	  }
 	  errors++;
 	  return (errors);
@@ -569,13 +640,13 @@ int tt_text_to_gridsquare (char *text, int quiet, char *buttons)
 	  errors++;
 	  if (! quiet) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Gridsquare to DTMF: Sorry, your location can't be converted to DTMF.\n");
+	    dw_printf ("Satellite Gridsquare to DTMF: Sorry, your location can't be converted to DTMF.\n");
 	  }
 	}
 
 	return (errors);          
 
-} /* end tt_text_to_gridsquare */
+} /* end tt_text_to_satsq */
 
 
 
@@ -767,6 +838,79 @@ int tt_two_key_to_text (char *buttons, int quiet, char *text)
 
 /*------------------------------------------------------------------
  *
+ * Name:        tt_two_digits_to_letter
+ *
+ * Purpose:     Convert the two digit representation to one letter.
+ *
+ * Inputs:      buttons	- Input string.
+ *			  Should contain exactly two digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	text	- Converted to string which should contain one upper case letter.
+ *			  If error, use 'x' as a placeholder because we are probably
+ *			  dealing with fixed length strings where position matters.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+// TODO:  need to test
+
+int tt_two_digits_to_letter (char *buttons, int quiet, char *text) 
+{
+	char c1 = buttons[0];
+	char c2 = buttons[1];
+	int row, col;
+	int errors = 0;
+
+	strcpy (text, "x");
+	
+	if (c1 >= '2' && c1 <= '9') {
+
+	  if (c2 >= '1' && c2 <= '4') {
+
+	    row = c1 - '0';
+	    col = c2 - '1';
+
+	    if (translate[row][col] != 0) {
+	      text[0] = translate[row][col];
+	      text[1] = '\0';
+	    }
+	    else {
+	      errors++;
+	      strcpy (text, "x");
+	      if (! quiet) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("Two digits to letter: Invalid combination \"%c%c\".\n", c1, c2);
+	      }
+	    }
+	  }
+	  else {
+	    errors++;
+	    strcpy (text, "x");
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("Two digits to letter: Second character \"%c\" must be in range of 1 through 4.\n", c2);
+	    }
+	  }
+	}
+	else {
+	  errors++;
+	  strcpy (text, "x");
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Two digits to letter: First character \"%c\" must be in range of 2 through 9.\n", c1);
+	  }
+	}
+
+	return (errors);     
+
+} /* end tt_two_digits_to_letter */
+
+
+/*------------------------------------------------------------------
+ *
  * Name:        tt_call10_to_text
  *
  * Purpose:     Convert the 10 digit callsign representation to text.
@@ -864,9 +1008,218 @@ int tt_call10_to_text (char *buttons, int quiet, char *text)
 
 /*------------------------------------------------------------------
  *
- * Name:        tt_gridsquare_to_text
+ * Name:        tt_mhead_to_text	
  *
- * Purpose:     Convert the 4 digit DTMF gridsquare to normal 2 letters and 2 digits.
+ * Purpose:     Convert the 4, 6, 10, or 12 digit DTMF representation of Maidenhead
+ *		Grid Square Locator to normal text representation.
+ *
+ * Inputs:      buttons	- Input string.
+ *			  Must contain 4, 6, 10, or 12 digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Outputs:	text	- Converted to gridsquare with upper case letters and digits.
+ *			  Length should be 2, 4, 6, or 8 with alternating letter or digit pairs.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+
+int tt_mhead_to_text (char *buttons, int quiet, char *text) 
+{
+	char *b;
+	char *t;
+	int errors = 0;
+
+	strcpy (text, "");
+
+/* Validity check. */
+
+	if (strlen(buttons) != 4 && strlen(buttons) != 6 && strlen(buttons) != 10 && strlen(buttons) != 12) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("DTMF to Maidenhead Gridsquare Locator: Input \"%s\" must be exactly 4, 6, 10, or 12 digits.\n", buttons);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+	for (b = buttons; *b != '\0'; b++) {
+
+	  if (! isdigit(*b)) {
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("DTMF to Maidenhead Gridsquare Locator: Input \"%s\" can contain only digits.\n", buttons);
+	    }
+	    errors++;
+	    return (errors);
+	  }
+   	}
+
+	b = buttons;
+	t = text;
+
+	errors += tt_two_digits_to_letter (b, quiet, t);
+	b += 2;
+	t++;
+
+	errors += tt_two_digits_to_letter (b, quiet, t);
+	b += 2;
+	t++;
+
+	if (strlen(buttons) > 4) {
+
+	  *t++ = *b++;
+	  *t++ = *b++;
+	  *t = '\0';
+
+	  if (strlen(buttons) > 6) {
+
+	    errors += tt_two_digits_to_letter (b, quiet, t);
+	    b += 2;
+	    t++;
+
+	    errors += tt_two_digits_to_letter (b, quiet, t);
+	    b += 2;
+	    t++;
+
+	    if (strlen(buttons) > 10) {
+
+	      *t++ = *b++;
+	      *t++ = *b++;
+	      *t = '\0';
+	    }
+	  }
+	}
+
+	return (errors);          
+
+} /* end tt_mhead_to_text */
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_text_to_mhead	
+ *
+ * Purpose:     Convert the 2, 4, 6, or 8 character Maidenhead
+ *		Grid Square Locator to DTMF representation.
+ *
+ * Outputs:	text	- Maidenhead Grid Square locator in usual format.
+ *			  Length should be 2, 4, 6, or 8 with alternating letter or digit pairs.
+ *
+ * Inputs:      buttons	- Result with 4, 6, 10, or 12 digits.
+ *			  Each letter is replaced by two digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *	
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+
+int tt_text_to_mhead (char *text, int quiet, char *buttons) 
+{
+	char *b;
+	char *t;
+	int errors = 0;
+
+	strcpy (buttons, "");
+
+
+	if (strlen(text) != 2 && strlen(text) != 4 && strlen(text) != 6 && strlen(text) != 8) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Maidenhead Gridsquare Locator to DTMF: Input \"%s\" must be exactly 2, 4, 6, or 8 characters.\n", text);
+	  }
+	  errors++;
+	  return (errors);
+   	}
+
+	t = text;
+	b = buttons;
+
+	if (toupper(t[0]) < 'A' || toupper(t[0]) > 'R' || toupper(t[1]) < 'A' || toupper(t[1]) > 'R') {
+	  if (! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("The first pair of characters in Maidenhead locator \"%s\" must be in range of A thru R.\n", text);
+	  }
+	  errors++;  
+	  return(errors);
+	}
+
+	errors += tt_letter_to_two_digits (*t, quiet, b);
+	t++;
+	b += 2;
+
+	errors += tt_letter_to_two_digits (*t, quiet, b);
+	t++;
+	b += 2;
+
+	if (strlen(text) > 2) {
+
+	  if ( ! isdigit(t[0]) || ! isdigit(t[1])) {
+	    if (! quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("The second pair of characters in Maidenhead locator \"%s\" must digits 0 thru 9.\n", text);
+	    }
+	    errors++;  
+	    return(errors);
+	  }
+
+	  *b++ = *t++;
+	  *b++ = *t++;
+	  *b = '\0';
+
+	  if (strlen(text) > 4) {
+
+	    if (toupper(t[0]) < 'A' || toupper(t[0]) > 'X' || toupper(t[1]) < 'A' || toupper(t[1]) > 'X') {
+	      if (! quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("The third pair of characters in Maidenhead locator \"%s\" must be in range of A thru X.\n", text);
+	      }
+	      errors++;  
+	      return(errors);
+	    }
+
+	    errors += tt_letter_to_two_digits (*t, quiet, b);
+	    t++;
+	    b += 2;
+
+	    errors += tt_letter_to_two_digits (*t, quiet, b);
+	    t++;
+	    b += 2;
+
+	    if (strlen(text) > 6) {
+
+	      if ( ! isdigit(t[0]) || ! isdigit(t[1])) {
+	        if (! quiet) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("The fourth pair of characters in Maidenhead locator \"%s\" must digits 0 thru 9.\n", text);
+	        }
+	        errors++;  
+	        return(errors);
+	      }
+
+	      *b++ = *t++;
+	      *b++ = *t++;
+	      *b = '\0';
+	    }
+	  }
+	}
+
+	return (errors);          
+
+} /* tt_text_to_mhead */
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_satsq_to_text	
+ *
+ * Purpose:     Convert the 4 digit DTMF special Satellite gridsquare to normal 2 letters and 2 digits.
  *
  * Inputs:      buttons	- Input string.
  *			  Should contain 4 digits.
@@ -879,7 +1232,7 @@ int tt_call10_to_text (char *buttons, int quiet, char *text)
  *
  *----------------------------------------------------------------*/
 
-int tt_gridsquare_to_text (char *buttons, int quiet, char *text) 
+int tt_satsq_to_text (char *buttons, int quiet, char *text) 
 {
 	char *b;
 	int row, col;
@@ -893,7 +1246,7 @@ int tt_gridsquare_to_text (char *buttons, int quiet, char *text)
 
 	  if (! quiet) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("DTMF to Gridsquare: Input \"%s\" must be exactly 4 digits.\n", buttons);
+	    dw_printf ("DTMF to Satellite Gridsquare: Input \"%s\" must be exactly 4 digits.\n", buttons);
 	  }
 	  errors++;
 	  return (errors);
@@ -904,7 +1257,7 @@ int tt_gridsquare_to_text (char *buttons, int quiet, char *text)
 	  if (! isdigit(*b)) {
 	    if (! quiet) {
 	      text_color_set (DW_COLOR_ERROR);
-	      dw_printf ("DTMF to Gridsquare: Input \"%s\" can contain only digits.\n", buttons);
+	      dw_printf ("DTMF to Satellite Gridsquare: Input \"%s\" can contain only digits.\n", buttons);
 	    }
 	    errors++;
 	    return (errors);
@@ -919,7 +1272,7 @@ int tt_gridsquare_to_text (char *buttons, int quiet, char *text)
 
 	return (errors);          
 
-} /* end tt_gridsquare_to_text */
+} /* end tt_satsq_to_text */
 
 
 /*------------------------------------------------------------------
@@ -1042,9 +1395,15 @@ int main (int argc, char *argv[])
 	  dw_printf ("\"%s\"\n", buttons);
 	}
 
-	n = tt_text_to_gridsquare (text, 1, buttons);
+	n = tt_text_to_mhead (text, 1, buttons);
 	if (n == 0) {
-	  dw_printf ("Push buttons for gridsquare:\n");
+	  dw_printf ("Push buttons for Maidenhead Grid Square Locator:\n");
+	  dw_printf ("\"%s\"\n", buttons);
+	}
+
+	n = tt_text_to_satsq (text, 1, buttons);
+	if (n == 0) {
+	  dw_printf ("Push buttons for satellite gridsquare:\n");
 	  dw_printf ("\"%s\"\n", buttons);
 	}
 
@@ -1112,9 +1471,15 @@ int main (int argc, char *argv[])
 	  dw_printf ("\"%s\"\n", text);
 	}
 
-	n = tt_gridsquare_to_text (buttons, 1, text);
+	n = tt_mhead_to_text (buttons, 1, text);
 	if (n == 0) {
-	  dw_printf ("Decoded gridsquare from 4 DTMF digits:\n");
+	  dw_printf ("Decoded Maidenhead Locator from DTMF digits:\n");
+	  dw_printf ("\"%s\"\n", text);
+	}
+
+	n = tt_satsq_to_text (buttons, 1, text);
+	if (n == 0) {
+	  dw_printf ("Decoded satellite gridsquare from 4 DTMF digits:\n");
 	  dw_printf ("\"%s\"\n", text);
 	}
 

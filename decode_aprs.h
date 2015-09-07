@@ -61,6 +61,8 @@ typedef struct decode_aprs_s {
         char g_name[12];		/* Object or item name. Max. 9 characters. */
 
 	char g_addressee[12];		/* Addressee for a "message."  Max. 9 characters. */
+					/* Also for Directed Station Query which is a */
+					/* special case of message. */
 
         float g_speed;			/* Speed in MPH.  */
 
@@ -88,7 +90,23 @@ typedef struct decode_aprs_s {
 
         int g_dcs;			/* Digital coded squelch, print as 3 octal digits. */
 
-        int g_offset;			/* Transmit offset, KHz */
+        int g_offset;			/* Transmit offset, kHz */
+
+
+	char g_query_type[12];		/* General Query: APRS, IGATE, WX, ... */
+					/* Addressee is NOT set. */
+
+					/* Directed Station Query: exactly 5 characters. */
+					/* APRSD, APRST, PING?, ... */
+					/* Addressee is set. */
+	
+	double g_footprint_lat;		/* A general query may contain a foot print. */
+	double g_footprint_lon;		/* Set all to G_UNKNOWN if not used. */
+	float g_footprint_radius;	/* Radius in miles. */
+
+	char g_query_callsign[12];	/* Directed query may contain callsign.  */
+					/* e.g. tell me all objects from that callsign. */
+
 
         char g_weather[500];		/* Weather.  Can get quite long. Rethink max size. */
 

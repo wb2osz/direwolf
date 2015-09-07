@@ -35,6 +35,12 @@
  *
  * Version 1.1: Add parallel printer port for x86 Linux only.
  *
+ *		This is hardcoded to use the primary motherboard parallel
+ *		printer port at I/O address 0x378.  This might work with
+ *		a PCI card configured to use the same address if the 
+ *		motherboard does not have a built in parallel port.
+ *		It won't work with a USB-to-parallel-printer-port adapter.
+ *
  * Version 1.2: More than two radio channels.
  *		Generalize for additional signals besides PTT.
  *

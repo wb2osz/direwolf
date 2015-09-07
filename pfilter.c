@@ -133,7 +133,7 @@ static int filt_s (pfstate_t *pf);
  *				Both are 0 .. MAX_CHANS-1 or MAX_CHANS for IGate.  
  *			 	For debug/error messages only.
  *
- *		filter	- Filter specs and logical operators to combine them.
+ *		filter	- String of filter specs and logical operators to combine them.
  *
  *		pp	- Packet object handle.
  *
@@ -152,12 +152,28 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp)
 	char *p;
 	int result;
 
+	assert (from_chan >= 0 && from_chan <= MAX_CHANS);
+	assert (to_chan >= 0 && to_chan <= MAX_CHANS);
+
+	if (pp == NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("INTERNAL ERROR in pfilter: NULL packet pointer. Please report this!\n");
+	  return (-1);
+	}
+	if (filter == NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("INTERNAL ERROR in pfilter: NULL filter string pointer. Please report this!\n");
+	  return (-1);
+	}
+
 	pfstate.from_chan = from_chan;
 	pfstate.to_chan = to_chan;
 
 	/* Copy filter string, removing any control characters. */
+
+	memset (pfstate.filter_str, 0, sizeof(pfstate.filter_str));
 	strncpy (pfstate.filter_str, filter, MAX_FILTER_LEN-1);
-	pfstate.filter_str[MAX_FILTER_LEN-1] = '\0';
+
 	pfstate.nexti = 0;
 	for (p = pfstate.filter_str; *p != '\0'; p++) {
 	  if (iscntrl(*p)) {
@@ -206,11 +222,11 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp)
  *		Note that a filter-spec must be followed by space or 
  *		end of line.  This is so the magic characters can appear in one.
  *
- * Future:	Allow words like 'OR' as alternatives to symbols like '|'.
+ * Future:	Maybe allow words like 'OR' as alternatives to symbols like '|'.
  *
  * Unresolved Issue:
  *
- *		Adding the special operattors adds a new complication.
+ *		Adding the special operators adds a new complication.
  *		How do we handle the case where we want those characters in
  *		a filter specification?   For example how do we know if the
  *		last character of /#& means HF gateway or AND the next part
@@ -242,32 +258,32 @@ static void next_token (pfstate_t *pf)
 
 	if (pf->filter_str[pf->nexti] == '\0') {
 	  pf->token_type = TOKEN_EOL;
-	  strcpy (pf->token_str, "end-of-line");
+	  strlcpy (pf->token_str, "end-of-line", sizeof(pf->token_str));
 	}
 	else if (pf->filter_str[pf->nexti] == '&') {
 	  pf->nexti++;
 	  pf->token_type = TOKEN_AND;
-	  strcpy (pf->token_str, "\"&\"");
+	  strlcpy (pf->token_str, "\"&\"", sizeof(pf->token_str));
 	}
 	else if (pf->filter_str[pf->nexti] == '|') {
 	  pf->nexti++;
 	  pf->token_type = TOKEN_OR;
-	  strcpy (pf->token_str, "\"|\"");
+	  strlcpy (pf->token_str, "\"|\"", sizeof(pf->token_str));
 	}
 	else if (pf->filter_str[pf->nexti] == '!') {
 	  pf->nexti++;
 	  pf->token_type = TOKEN_NOT;
-	  strcpy (pf->token_str, "\"!\"");
+	  strlcpy (pf->token_str, "\"!\"", sizeof(pf->token_str));
 	}
 	else if (pf->filter_str[pf->nexti] == '(') {
 	  pf->nexti++;
 	  pf->token_type = TOKEN_LPAREN;
-	  strcpy (pf->token_str, "\"(\"");
+	  strlcpy (pf->token_str, "\"(\"", sizeof(pf->token_str));
 	}
 	else if (pf->filter_str[pf->nexti] == ')') {
 	  pf->nexti++;
 	  pf->token_type = TOKEN_RPAREN;
-	  strcpy (pf->token_str, "\")\"");
+	  strlcpy (pf->token_str, "\")\"", sizeof(pf->token_str));
 	}
 	else {
 	  char *p = pf->token_str;
@@ -488,7 +504,7 @@ static int parse_filter_spec (pfstate_t *pf)
 
 	else  {
 	  char stemp[80];
-	  sprintf (stemp, "Unrecognized filter type '%c'", pf->token_str[0]);
+	  snprintf (stemp, sizeof(stemp), "Unrecognized filter type '%c'", pf->token_str[0]);
 	  print_error (pf, stemp);
 	  result = -1;
 	}
@@ -535,7 +551,7 @@ static int filt_bodgu (pfstate_t *pf, char *arg)
 	char *v;
 	int result = 0;
 
-	strcpy (str, pf->token_str);
+	strlcpy (str, pf->token_str, sizeof(str));
 	sep[0] = str[1];
 	sep[1] = '\0';
 	cp = str + 2;
@@ -590,12 +606,15 @@ static int filt_bodgu (pfstate_t *pf, char *arg)
 
 static int filt_t (pfstate_t *pf) 
 {
-	char src[MAX_TOKEN_LEN];
-	char *infop;
+	char src[AX25_MAX_ADDR_LEN];
+	char *infop = NULL;
 	char *f;
 
+	memset (src, 0, sizeof(src));
 	ax25_get_addr_with_ssid (pf->pp, AX25_SOURCE, src);
 	(void) ax25_get_info (pf->pp, (unsigned char **)(&infop));
+
+	assert (infop != NULL);
 
 	for (f = pf->token_str + 2; *f != '\0'; f++) {
 	  switch (*f) {
@@ -678,6 +697,12 @@ static int filt_t (pfstate_t *pf)
 		  infop[2] == src[1] &&
 		  infop[3] == src[2]) return (1);
 	      break;
+
+	    default:
+
+	      print_error (pf, "Invalid letter in t/ filter.\n");
+	      return (-1);
+	      break;
 	  }
 	}
 	return (0);			/* Didn't match anything.  Reject */
@@ -690,7 +715,7 @@ static int filt_t (pfstate_t *pf)
  *
  * Name:	filt_r
  * 
- * Purpose:	Is it in range of given location.
+ * Purpose:	Is it in range (kilometers) of given location.
  *
  * Inputs:	pf	- Pointer to current state information.	
  *			  token_str should contain something of format:
@@ -718,7 +743,7 @@ static int filt_r (pfstate_t *pf)
 	double dlat, dlon, ddist, km;
 
 
-	strcpy (str, pf->token_str);
+	strlcpy (str, pf->token_str, sizeof(str));
 	sep[0] = str[1];
 	sep[1] = '\0';
 	cp = str + 2;
@@ -781,9 +806,9 @@ static int filt_r (pfstate_t *pf)
  *
  * Description:	
  *		  
- *		“pri” is zero or more symbols from the primary symbol set.
- *		“alt” is one or more symbols from the alternate symbol set.
- *		“over” is overlay characters.  Overlays apply only to the alternate symbol set.
+ *		"pri" is zero or more symbols from the primary symbol set.
+ *		"alt" is one or more symbols from the alternate symbol set.
+ *		"over" is overlay characters.  Overlays apply only to the alternate symbol set.
  *		
  *		Examples:
  *			s/->		Allow house and car from primary symbol table.
@@ -801,7 +826,7 @@ static int filt_s (pfstate_t *pf)
 	char *pri, *alt, *over;
 
 
-	strcpy (str, pf->token_str);
+	strlcpy (str, pf->token_str, sizeof(str));
 	sep[0] = str[1];
 	sep[1] = '\0';
 	cp = str + 2;
@@ -869,19 +894,19 @@ static void print_error (pfstate_t *pf, char *msg)
 	if (pf->from_chan == MAX_CHANS) {
 
 	  if (pf->to_chan == MAX_CHANS) {
-	    sprintf (intro, "filter[IG,IG]: ");
+	    snprintf (intro, sizeof(intro), "filter[IG,IG]: ");
 	  }
 	  else {
-	    sprintf (intro, "filter[IG,%d]: ", pf->to_chan);
+	    snprintf (intro, sizeof(intro), "filter[IG,%d]: ", pf->to_chan);
 	  }
 	}
 	else {
 
 	  if (pf->to_chan == MAX_CHANS) {
-	    sprintf (intro, "filter[%d,IG]: ", pf->from_chan);
+	    snprintf (intro, sizeof(intro), "filter[%d,IG]: ", pf->from_chan);
 	  }
 	  else {
-	    sprintf (intro, "filter[%d,%d]: ", pf->from_chan, pf->to_chan);
+	    snprintf (intro, sizeof(intro), "filter[%d,%d]: ", pf->from_chan, pf->to_chan);
 	  }
 	}
 
@@ -903,7 +928,7 @@ static void print_error (pfstate_t *pf, char *msg)
  *    
  * Purpose:     Unit test for packet filtering.
  *
- * Usage:	gcc -Wall -o pftest -DTEST pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o latlong.o symbols.o telemetry.o misc.a regex.a && ./pftest
+ * Usage:	gcc -Wall -o pftest -DTEST pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o latlong.o symbols.o telemetry.o tt_text.c misc.a regex.a && ./pftest
  *		
  *
  *--------------------------------------------------------------------*/

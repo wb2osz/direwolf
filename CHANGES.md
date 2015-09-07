@@ -3,6 +3,41 @@
 
 ----------
 
+## Version 1.3  -- Development snapshot F  --  September 2015 ##
+
+### New Feature: ###
+
+- Command line option "-a n" to print audio device statistics each n seconds.  Previously this was always each 100 seconds on Linux and not available on Windows.
+
+### Bug Fixed: ###
+
+- Crashed when receiving packet with comment of a few hundred characters.
+
+----------
+
+## Version 1.3  -- Development snapshot E  --  August 2015 ##
+
+### Bug Fixed: ###
+
+- Crashed when receiving packet with unexpected form of GPS NMEA sentence.
+
+----------
+
+## Version 1.3  -- Development snapshot D  --  July 2015 ##
+
+### New Features: ###
+
+- Enhancements to APRStt gateway including Morse code and speech responses to to APRStt tone sequences.
+
+- Preliminary support for Mac OS X.  NEEDS MORE TESTING!
+
+- A list of all symbols available can be obtained with the -S
+command line option.
+
+- APRS Telemetry Toolkit (incomplete).
+
+----------
+
 ## Version 1.2  -- June 2015 ##
 
 ### New Features ###

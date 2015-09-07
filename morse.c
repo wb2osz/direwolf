@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -35,47 +35,32 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/time.h>
+#include <math.h>
 
-#if __WIN32__
-#include <windows.h>
-#else
-#include <sys/termios.h>
-#include <sys/ioctl.h>
-#include <fcntl.h>
-#endif
 
 #include "direwolf.h"
 #include "textcolor.h"
 #include "audio.h"
 #include "ptt.h"
-
-
-#define WPM 10
-#define TIME_UNITS_TO_MS(tu,wpm)  (((tu)*1200)/(wpm))
-
-
-// TODO : should be in .h file.
+#include "gen_tone.h"		/* for gen_tone_put_sample */
+#include "morse.h"
 
 /*
- * Delay from PTT on to start of first character.
- * Currently the only anticipated use for this is 
- * APRStt responses.  In this case, we want an adequate
- * delay for someone to press the # button, release 
- * the PTT button, and start listening for a response.
+ * Might get ambitious and make this adjustable some day.
+ * Good enough for now.
  */
-#define MORSE_TXDELAY_MS  1500
 
-/*
- * Delay from end of last character to PTT off.
- * Avoid chopping off the last element.
- */
-#define MORSE_TXTAIL_MS   200
+#define MORSE_TONE 800
+
+#define TIME_UNITS_TO_MS(tu,wpm)  (((tu)*1200.0)/(wpm))
+
 
 
 static const struct morse_s {
 	char ch;
-	char enc[7];
+	char enc[8];	/* $ has 7 elements */
 } morse[] = {
 	{ 'A', ".-" },
 	{ 'B', "-..." },
@@ -117,17 +102,101 @@ static const struct morse_s {
 	{ '.', ".-.-.-" },
 	{ ',', "--..--" },
 	{ '?', "..--.." },
-	{ '/', "-..-." }
+	{ '/', "-..-." },
+
+	{ '=', "-...-" },	/* from ARRL */
+	{ '-', "-....-" },
+	{ ')', "-.--.-" },	/* does not distinguish open/close */
+	{ ':', "---..." },
+	{ ';', "-.-.-." },
+	{ '"', ".-..-." },
+	{ '\'', ".----." },
+	{ '$', "...-..-" },
+
+	{ '!', "-.-.--" },	/* more from wikipedia */
+	{ '(', "-.--." },
+	{ '&', ".-..." },
+	{ '+', ".-.-." },
+	{ '_', "..--.-" },
+	{ '@', ".--.-." },
+
 };
 
 #define NUM_MORSE (sizeof(morse) / sizeof(struct morse_s))
 
-static void morse_tone (int tu);
-static void morse_quiet (int tu);
+static void morse_tone (int chan, int tu, int wpm);
+static void morse_quiet (int chan, int tu, int wpm);
+static void morse_quiet_ms (int chan, int ms);
 static int morse_lookup (int ch);
 static int morse_units_ch (int ch);
 static int morse_units_str (char *str);
 
+
+
+/*
+ *  Properties of the digitized sound stream.
+ */
+
+static struct audio_s *save_audio_config_p;
+
+
+/* Constants after initialization. */
+
+#define TICKS_PER_CYCLE ( 256.0 * 256.0 * 256.0 * 256.0 )
+
+static short sine_table[256];
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        morse_init
+ *
+ * Purpose:     Initialize for tone generation.
+ *
+ * Inputs:      audio_config_p		- Pointer to audio configuration structure.
+ *
+ *				The fields we care about are:
+ *
+ *					samples_per_sec
+ *
+ *		amp		- Signal amplitude on scale of 0 .. 100.
+ *
+ *				  100 will produce maximum amplitude of +-32k samples. 
+ *
+ * Returns:     0 for success.
+ *              -1 for failure.
+ *
+ * Description:	 Precompute a sine wave table.
+ *
+ *----------------------------------------------------------------*/
+
+
+int morse_init (struct audio_s *audio_config_p, int amp)  
+{
+	int j;
+	
+/* 
+ * Save away modem parameters for later use. 
+ */
+
+	save_audio_config_p = audio_config_p;
+	
+        for (j=0; j<256; j++) {
+	  double a;
+	  int s;
+
+	  a = ((double)(j) / 256.0) * (2 * M_PI);
+	  s = (int) (sin(a) * 32767.0 * amp / 100.0);
+
+	  /* 16 bit sound sample is in range of -32768 .. +32767. */
+	  assert (s >= -32768 && s <= 32767);
+	  sine_table[j] = s;
+        }
+
+	return (0);
+
+} /* end morse_init */
 
 
 /*-------------------------------------------------------------------
@@ -159,7 +228,11 @@ int morse_send (int chan, char *str, int wpm, int txdelay, int txtail)
 	int time_units;
 	char *p;
 
+	
 	time_units = 0;
+
+	morse_quiet_ms (chan, txdelay);
+
 	for (p = str; *p != '\0'; p++) {
 	  int i;
 
@@ -169,37 +242,38 @@ int morse_send (int chan, char *str, int wpm, int txdelay, int txtail)
 
 	    for (e = morse[i].enc; *e != '\0'; e++) {
 	      if (*e == '.') {
-	        morse_tone (1);
+	        morse_tone (chan,1,wpm);
 	        time_units++;
 	      }
 	      else {
-	        morse_tone (3);
+	        morse_tone (chan,3,wpm);
 	        time_units += 3;
 	      }
 	      if (e[1] != '\0') {
-	        morse_quiet (1);
+	        morse_quiet (chan,1,wpm);
 	        time_units++;
 	      }
 	    }
 	  }
 	  else {
-	    morse_quiet (1);
+	    morse_quiet (chan,1,wpm);
 	    time_units++;
 	  }
 	  if (p[1] != '\0') {
-	    morse_quiet (3);
+	    morse_quiet (chan,3,wpm);
 	    time_units += 3;
 	  }
 	}
+
+	morse_quiet_ms (chan, txtail);
 
 	if (time_units != morse_units_str(str)) {
 	  dw_printf ("morse: Internal error.  Inconsistent length, %d vs. %d calculated.\n", 
 		time_units, morse_units_str(str));
 	}
 
-
 	return (txdelay +
-		TIME_UNITS_TO_MS(time_units, wpm) +
+		(int) (TIME_UNITS_TO_MS(time_units, wpm) + 0.5) +
 		txtail);
 
 }  /* end morse_send */
@@ -212,18 +286,47 @@ int morse_send (int chan, char *str, int wpm, int txdelay, int txtail)
  *
  * Purpose:    	Generate tone for specified number of time units.
  *
- * Inputs:	tu	- Number of time units.
+ * Inputs:	chan	- Radio channel.
+ *		tu	- Number of time units.  Should be 1 or 3.
+ *		wpm	- Speed in WPM.
  *
  *--------------------------------------------------------------------*/
 
-static void morse_tone (int tu) {
-	int num_cycles;
-	int n;
+static void morse_tone (int chan, int tu, int wpm) {
 
+#if MTEST1
+	int n;
 	for (n=0; n<tu; n++) {
 	  dw_printf ("#");
 	}
+#else
 
+	int a = ACHAN2ADEV(chan);	/* device for channel. */
+	int sam;
+	int nsamples;
+	int j;
+	unsigned int tone_phase; // Phase accumulator for tone generation.
+				 // Upper bits are used as index into sine table.
+
+	int f1_change_per_sample;  // How much to advance phase for each audio sample.
+
+	assert (save_audio_config_p->achan[chan].valid);
+
+	tone_phase = 0;
+
+	f1_change_per_sample = (int) (((double)MORSE_TONE * TICKS_PER_CYCLE / (double)save_audio_config_p->adev[a].samples_per_sec ) + 0.5);
+
+	nsamples = (int) ((TIME_UNITS_TO_MS(tu,wpm) * (float)save_audio_config_p->adev[a].samples_per_sec / 1000.) + 0.5);
+
+	for (j=0; j<nsamples; j++)  {
+
+	  tone_phase += f1_change_per_sample;
+          sam = sine_table[(tone_phase >> 24) & 0xff];
+	  gen_tone_put_sample (chan, a, sam);
+
+        };
+
+#endif
 	
 
 } /* end morse_tone */
@@ -235,19 +338,74 @@ static void morse_tone (int tu) {
  *
  * Purpose:    	Generate silence for specified number of time units.
  *
- * Inputs:	tu	- Number of time units.
+ * Inputs:	chan	- Radio channel.
+ *		tu	- Number of time units.
+ *		wpm	- Speed in WPM.
  *
  *--------------------------------------------------------------------*/
 
-static void morse_quiet (int tu) {
-	int n;
+static void morse_quiet (int chan, int tu, int wpm) {
 
+
+#if MTEST1
+	int n;
 	for (n=0; n<tu; n++) {
 	  dw_printf (".");
 	}
+#else
+	int a = ACHAN2ADEV(chan);	/* device for channel. */
+	int sam = 0;
+	int nsamples;
+	int j;
+
+	assert (save_audio_config_p->achan[chan].valid);
+
+	nsamples = (int) ((TIME_UNITS_TO_MS(tu,wpm) * (float)save_audio_config_p->adev[a].samples_per_sec / 1000.) + 0.5);
+
+	for (j=0; j<nsamples; j++)  {
+
+	  gen_tone_put_sample (chan, a, sam);
+
+        };
+#endif
 
 } /* end morse_quiet */
 
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        morse_quiet
+ *
+ * Purpose:    	Generate silence for specified number of milliseconds.
+ *		This is used for the txdelay and txtail times.
+ *
+ * Inputs:	chan	- Radio channel.
+ *		tu	- Number of time units.
+ *
+ *--------------------------------------------------------------------*/
+
+static void morse_quiet_ms (int chan, int ms) {
+
+#if MTEST1
+#else
+	int a = ACHAN2ADEV(chan);	/* device for channel. */
+	int sam = 0;
+	int nsamples;
+	int j;
+
+	assert (save_audio_config_p->achan[chan].valid);
+
+	nsamples = (int) ((ms * (float)save_audio_config_p->adev[a].samples_per_sec / 1000.) + 0.5);
+
+	for (j=0; j<nsamples; j++)  {
+
+	  gen_tone_put_sample (chan, a, sam);
+
+        };
+
+#endif
+
+} /* end morse_quiet_ms */
 
 
 /*-------------------------------------------------------------------
@@ -346,7 +504,7 @@ static int morse_units_ch (int ch)
 
 static int morse_units_str (char *str)
 {
-	int i;
+	//int i;
 	int len;
 	int k;
 	int units;
@@ -362,6 +520,8 @@ static int morse_units_str (char *str)
 }
 
 
+#if MTEST1
+
 int main (int argc, char *argv[]) {
 
 	dw_printf ("CQ DX\n");
@@ -373,6 +533,8 @@ int main (int argc, char *argv[]) {
 	dw_printf ("\n\n");
 
 } 
+
+#endif
 
 
 /* end morse.c */

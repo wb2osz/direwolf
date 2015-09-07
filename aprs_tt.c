@@ -42,12 +42,12 @@
 // What do we call the parts separated by * key?   Entry?  Field?
 
 
-#include <math.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-
+#include <errno.h>
 
 #include <ctype.h>
 #include <assert.h>
@@ -64,6 +64,8 @@
 #include "latlong.h"
 #include "dlq.h"
 #include "demod.h"          /* for alevel_t & demod_get_audio_level() */
+#include "tq.h"
+
 
 #if __WIN32__
 char *strtok_r(char *str, const char *delim, char **saveptr);
@@ -143,6 +145,8 @@ static struct ttloc_s test_config[] = {
 				.grid.lat9 = 12.99, .grid.lon9 = 56.99 },
 	{ TTLOC_GRID, "Byyyxxx", .grid.lat0 = 37 + 50./60.0, .grid.lon0 = 81, 
 				.grid.lat9 = 37 + 59.99/60.0, .grid.lon9 = 81 + 9.99/60.0 },
+
+	{ TTLOC_MHEAD, "BAxxxxxx", .mhead.prefix = "326129" },
 
 	{ TTLOC_SATSQ, "BAxxxx" },
 
@@ -310,6 +314,7 @@ static char m_callsign[20];	/* really object name */
 static char m_symtab_or_overlay;
 static char m_symbol_code;
 
+static char m_loc_text[24];
 static double m_longitude;
 static double m_latitude;
 static char m_comment[200];
@@ -325,6 +330,10 @@ static int m_ssid;
 void aprs_tt_sequence (int chan, char *msg)
 {
 	int err;
+	char audible_response[1000];
+	packet_t pp;
+	char script_response[1000];
+
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -341,15 +350,16 @@ void aprs_tt_sequence (int chan, char *msg)
 /*
  * The parse functions will fill these in. 
  */
-	strcpy (m_callsign, "");
+	strlcpy (m_callsign, "", sizeof(m_callsign));
 	m_symtab_or_overlay = '\\';
 	m_symbol_code = 'A';
+	strlcpy (m_loc_text, "", sizeof(m_loc_text));
 	m_longitude = G_UNKNOWN; 
 	m_latitude = G_UNKNOWN; 
-	strcpy (m_comment, "");
-	strcpy (m_freq, "");
+	strlcpy (m_comment, "", sizeof(m_comment));
+	strlcpy (m_freq, "", sizeof(m_freq));
 	m_mic_e = ' ';
-	strcpy (m_dao, "!T  !");	/* start out unknown */
+	strlcpy (m_dao, "!T  !", sizeof(m_dao));	/* start out unknown */
 	m_ssid = 12;
 
 /*
@@ -371,13 +381,46 @@ void aprs_tt_sequence (int chan, char *msg)
  */
 
 #ifndef TT_MAIN
-	  err = tt_user_heard (m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, m_latitude, m_longitude,
+	  err = tt_user_heard (m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, 
+		m_loc_text, m_latitude, m_longitude,
 		m_freq, m_comment, m_mic_e, m_dao);
 #endif
 	}
 
-	// TODO send response to user.
-	// err == 0 OK, others, suitable error response.
+
+/*
+ * If a command / script was supplied, run it now.
+ * This can do additional processing and provide a custom audible response.
+ */
+
+	strlcpy (script_response, "", sizeof(script_response));
+
+	if (strlen(tt_config.ttcmd) > 0) {
+
+	  dw_run_cmd (tt_config.ttcmd, 1, script_response, (int)sizeof(script_response));
+
+	}
+
+/*
+ * Send response to user by constructing packet with SPEECH or MORSE as destination.
+ * Source shouldn't matter because it doesn't get transmitted as AX.25 frame.
+ * Use high priority queue for consistent timing.  
+ */
+
+	snprintf (audible_response, sizeof(audible_response), 
+					"APRSTT>%s:%s", 
+					tt_config.response[err].method,
+					(strlen(script_response) > 0) ? script_response : tt_config.response[err].mtext);
+
+	pp = ax25_from_text (audible_response, 0);
+
+	if (pp == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error. Couldn't make frame from \"%s\"\n", audible_response);
+	  return;
+	}
+
+	tq_append (chan, TQ_PRIO_0_HI, pp);
 
 
 } /* end aprs_tt_sequence */
@@ -414,10 +457,18 @@ static int parse_fields (char *msg)
 	char stemp[MAX_MSG_LEN+1];
 	char *e;
 	char *save;
+	int err;
 
-	strcpy (stemp, msg);
+
+	//text_color_set(DW_COLOR_DEBUG);
+	//printf ("parse_fields (%s).\n", msg);
+
+	strlcpy (stemp, msg, sizeof(stemp));
 	e = strtok_r (stemp, "*#", &save);
 	while (e != NULL) {
+
+	  //text_color_set(DW_COLOR_DEBUG);
+	  //printf ("parse_fields () field = %s\n", e);
 
 	  switch (*e) {
 
@@ -425,31 +476,36 @@ static int parse_fields (char *msg)
 	      
 	      switch (e[1]) {
 	        case 'A':
-	          parse_object_name (e);
+	          err = parse_object_name (e);
+	          if (err != 0) return (err);
 	          break;
 	        case 'B':
-	          parse_symbol (e);
+	          err = parse_symbol (e);
+	          if (err != 0) return (err);
 	          break;
 	        case 'C':
 	          /*
 	           * New in 1.2: test for 10 digit callsign.
 	           */
 	          if (tt_call10_to_text(e+2,1,stemp) == 0) {
-	             strcpy(m_callsign, stemp);
+	             strlcpy(m_callsign, stemp, sizeof(m_callsign));
 	          }
+		  // TODO1.3: else return (?)
 	          break;
 	        default:
-	          parse_callsign (e);
+	          err = parse_callsign (e);
 	          break;
 	      }
 	      break;
 
 	    case 'B': 
-	      parse_location (e);
+	      err = parse_location (e);
+	      if (err != 0) return (err);
 	      break;
 
 	    case 'C': 
-	      parse_comment (e);
+	      err = parse_comment (e);
+	      if (err != 0) return (err);
 	      break;
 
 	    case '0': 
@@ -462,7 +518,8 @@ static int parse_fields (char *msg)
 	    case '7': 
 	    case '8': 
 	    case '9': 
-	      expand_macro (e);
+	      err = expand_macro (e);
+	      if (err != 0) return (err);
 	      break;
 
 	    case '\0':
@@ -473,13 +530,16 @@ static int parse_fields (char *msg)
 	    default:
 
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Entry does not start with A, B, C, or digit: \"%s\"\n", msg);
+	      dw_printf ("Field does not start with A, B, C, or digit: \"%s\"\n", msg);
 	      return (TT_ERROR_D_MSG);
 
 	  }
 	
 	  e = strtok_r (NULL, "*#", &save);
 	}
+
+	//text_color_set(DW_COLOR_DEBUG);
+	//printf ("parse_fields () normal return\n");
 
 	return (0);
 
@@ -546,7 +606,7 @@ static int expand_macro (char *e)
  * Substitute values in to the definition.
  */		
 	  
-	  strcpy (stemp, "");
+	  strlcpy (stemp, "", sizeof(stemp));
 
 	  for (d = tt_config.ttloc_ptr[ipat].macro.definition; *d != '\0'; d++) {
 
@@ -557,20 +617,20 @@ static int expand_macro (char *e)
 
 	    switch (*d) {
 	      case 'x':
-		strcat (stemp, xstr);
+		strlcat (stemp, xstr, sizeof(stemp));
 	        break;
 	      case 'y':
-		strcat (stemp, ystr);
+		strlcat (stemp, ystr, sizeof(stemp));
 	        break;
 	      case 'z':
-		strcat (stemp, zstr);
+		strlcat (stemp, zstr, sizeof(stemp));
 	        break;
 	      default:
 		{
 	        char c1[2];
 	        c1[0] = *d;
 	        c1[1] = '\0';
-	        strcat (stemp, c1); 
+	        strlcat (stemp, c1, sizeof(stemp)); 
 		}
 		break;
 	    }
@@ -675,7 +735,7 @@ static int parse_callsign (char *e)
  */
 
 	if (len == 4 && isdigit(e[1]) && isdigit(e[2]) && isdigit(e[3])) {
-	  strcpy (m_callsign, e+1);
+	  strlcpy (m_callsign, e+1, sizeof(m_callsign));
 	  return (0);
 	}
 
@@ -844,7 +904,7 @@ static int parse_object_name (char *e)
 static int parse_symbol (char *e)
 {
 	int len;
-	char nstr[4];
+	char nstr[3];
 	int nn;
 	char stemp[10];
 
@@ -950,6 +1010,8 @@ static int parse_location (char *e)
 	long lerr;	
 	double easting, northing;
 	char mh[20];	
+	char stemp[32];
+
 
 	assert (*e == 'B');
 
@@ -1020,12 +1082,12 @@ static int parse_location (char *e)
 	      if (strlen(xstr) == 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Missing X coordinate.\n");
-		strcpy (xstr, "0");
+		strlcpy (xstr, "0", sizeof(xstr));
 	      }
 	      if (strlen(ystr) == 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Missing Y coordinate.\n");
-		strcpy (ystr, "0");
+		strlcpy (ystr, "0", sizeof(ystr));
 	      }
 
 	      lat0 = tt_config.ttloc_ptr[ipat].grid.lat0;
@@ -1046,13 +1108,13 @@ static int parse_location (char *e)
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Missing X coordinate.\n");
 	        /* Avoid divide by zero later.  Put in middle of range. */
-		strcpy (xstr, "5");
+		strlcpy (xstr, "5", sizeof(xstr));
 	      }
 	      if (strlen(ystr) == 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Missing Y coordinate.\n");
 	        /* Avoid divide by zero later.  Put in middle of range. */
-		strcpy (ystr, "5");
+		strlcpy (ystr, "5", sizeof(ystr));
 	      }
 
 	      x = atof(xstr);
@@ -1060,7 +1122,17 @@ static int parse_location (char *e)
 
 	      y = atof(ystr);
 	      northing = y * tt_config.ttloc_ptr[ipat].utm.scale + tt_config.ttloc_ptr[ipat].utm.y_offset;
-		
+	
+	      if (isalpha(tt_config.ttloc_ptr[ipat].utm.latband)) {
+	        snprintf (m_loc_text, sizeof(m_loc_text), "%d%c %.0f %.0f", (int)(tt_config.ttloc_ptr[ipat].utm.lzone), tt_config.ttloc_ptr[ipat].utm.latband, easting, northing);
+	      }
+	      else if (tt_config.ttloc_ptr[ipat].utm.latband == '-') {
+	        snprintf (m_loc_text, sizeof(m_loc_text), "%d %.0f %.0f", (int)(- tt_config.ttloc_ptr[ipat].utm.lzone), easting, northing);
+	      }
+	      else {
+	        snprintf (m_loc_text, sizeof(m_loc_text), "%d %.0f %.0f", (int)(tt_config.ttloc_ptr[ipat].utm.lzone), easting, northing);
+	      }
+
               lerr = Convert_UTM_To_Geodetic(tt_config.ttloc_ptr[ipat].utm.lzone, 
 			tt_config.ttloc_ptr[ipat].utm.hemi, easting, northing, &lat0, &lon0);
 
@@ -1088,23 +1160,25 @@ static int parse_location (char *e)
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("MGRS/USNG: Missing X (easting) coordinate.\n");
 	        /* Should not be possible to get here. Fake it and carry on. */
-		strcpy (xstr, "5");
+		strlcpy (xstr, "5", sizeof(xstr));
 	      }
 	      if (strlen(ystr) == 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("MGRS/USNG: Missing Y (northing) coordinate.\n");
 	        /* Should not be possible to get here. Fake it and carry on. */
-		strcpy (ystr, "5");
+		strlcpy (ystr, "5", sizeof(ystr));
 	      }
 
 	      char loc[40];
 	
-	      strcpy (loc, tt_config.ttloc_ptr[ipat].mgrs.zone);
-	      strcat (loc, xstr);
-	      strcat (loc, ystr);
+	      strlcpy (loc, tt_config.ttloc_ptr[ipat].mgrs.zone, sizeof(loc));
+	      strlcat (loc, xstr, sizeof(loc));
+	      strlcat (loc, ystr, sizeof(loc));
 
 	      //text_color_set(DW_COLOR_DEBUG);
 	      //dw_printf ("MGRS/USNG location debug:  %s\n", loc);
+
+	      strlcpy (m_loc_text, loc, sizeof(m_loc_text));
 
 	      if (tt_config.ttloc_ptr[ipat].type == TTLOC_MGRS)
                 lerr = Convert_MGRS_To_Geodetic(loc, &lat0, &lon0);
@@ -1127,17 +1201,48 @@ static int parse_location (char *e)
               }
 	      break;
 
+	    case TTLOC_MHEAD:
+
+
+	      /* Combine prefix from configuration and digits from user. */
+	
+  	      strlcpy (stemp, tt_config.ttloc_ptr[ipat].mhead.prefix, sizeof(stemp));
+	      strlcat (stemp, xstr, sizeof(stemp));
+
+	      if (strlen(stemp) != 4 && strlen(stemp) != 6 && strlen(stemp) != 10 && strlen(stemp) != 12) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Expected total of 4, 6, 10, or 12 digits for the Maidenhead Locator \"%s\" + \"%s\"\n", 
+							tt_config.ttloc_ptr[ipat].mhead.prefix, xstr);
+	        return (TT_ERROR_INVALID_MHEAD);
+	      }
+
+	      //text_color_set(DW_COLOR_DEBUG);
+	      //dw_printf ("Case MHEAD: Convert to text \"%s\".\n", stemp);
+
+	      if (tt_mhead_to_text (stemp, 0, mh)  == 0) {
+	        //text_color_set(DW_COLOR_DEBUG);
+	        //dw_printf ("Case MHEAD: Resulting text \"%s\".\n", mh);
+
+		strlcpy (m_loc_text, mh, sizeof(m_loc_text));
+
+		ll_from_grid_square (mh, &m_latitude, &m_longitude);
+	      }
+	      break;
+
 	    case TTLOC_SATSQ:
 
 	      if (strlen(xstr) != 4) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Expected 4 digits for the Satellite Square.\n");
-	        return (TT_ERROR_SATSQ);
+	        return (TT_ERROR_INVALID_SATSQ);
 	      }
 
 	      /* Convert 4 digits to usual AA99 form, then to location. */
 
-	      if (tt_gridsquare_to_text (xstr, 0, mh)  == 0) {
+	      if (tt_satsq_to_text (xstr, 0, mh)  == 0) {
+
+	        strlcpy (m_loc_text, mh, sizeof(m_loc_text));
+
 		ll_from_grid_square (mh, &m_latitude, &m_longitude);
 	      }
 	      break;
@@ -1149,8 +1254,12 @@ static int parse_location (char *e)
 	  return (0);
 	}
 
-	/* Send reject sound. */
 	/* Does not match any location specification. */
+
+	text_color_set(DW_COLOR_ERROR);
+	dw_printf ("Received location \"%s\" does not match any definitions.\n", e);
+
+	/* Send reject sound. */
 
 	return (TT_ERROR_INVALID_LOC);
 
@@ -1198,11 +1307,11 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	  if (strlen(e) == len) {
 
 	    match = 1;
-	    strcpy (xstr, "");
-	    strcpy (ystr, "");
-	    strcpy (zstr, "");
-	    strcpy (bstr, "");
-	    strcpy (dstr, "");
+	    strlcpy (xstr, "", sizeof(xstr));
+	    strlcpy (ystr, "", sizeof(ystr));
+	    strlcpy (zstr, "", sizeof(zstr));
+	    strlcpy (bstr, "", sizeof(bstr));
+	    strlcpy (dstr, "", sizeof(dstr));
 
 	    for (k=0; k<len; k++) {
 	      mc = tt_config.ttloc_ptr[ipat].pattern[k];
@@ -1233,7 +1342,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strcat (xstr, stemp);
+		     strlcat (xstr, stemp, sizeof(xstr));
 		   }
 		   else {
 		     match = 0;
@@ -1245,7 +1354,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strcat (ystr, stemp);
+		     strlcat (ystr, stemp, sizeof(ystr));
 		   }
 		   else {
 		     match = 0;
@@ -1257,7 +1366,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strcat (zstr, stemp);
+		     strlcat (zstr, stemp, sizeof(zstr));
 		   }
 		   else {
 		     match = 0;
@@ -1269,7 +1378,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strcat (bstr, stemp);
+		     strlcat (bstr, stemp, sizeof(bstr));
 		   }
 		   else {
 		     match = 0;
@@ -1281,7 +1390,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strcat (dstr, stemp);
+		     strlcat (dstr, stemp, sizeof(dstr));
 		   }
 		   else {
 		     match = 0;
@@ -1324,8 +1433,10 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
  *
  * Description:	We recognize these different formats:
  *
- *		Cn		- One digit for MIC-E position comment.
- *				  Always / plus exactly 10 characters.
+ *		Cn		- One digit (1-9) predefined status.  0 is reserved for none.
+ *				  The defaults are derived from the MIC-E position comments
+ *				  which were always "/" plus exactly 10 characters.
+ *				  Users can override the defaults with configuration options.
  *	
  *		Cnnnnnn		- Six digit frequency reformatted as nnn.nnnMHz
  *
@@ -1402,7 +1513,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
 	return ;
 #else
 	char src[10], dest[10];
-	char raw_tt_msg[200];
+	char raw_tt_msg[256];
 	packet_t pp;
 	char *c, *s;
 	int i;
@@ -1416,10 +1527,10 @@ static void raw_tt_data_to_app (int chan, char *msg)
 // Application version might be useful in case we end up using different
 // message formats in later versions.
 
-	strcpy (src, "DTMF");
-	sprintf (dest, "%s%d%d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
+	strlcpy (src, "DTMF", sizeof(src));
+	snprintf (dest, sizeof(dest), "%s%d%d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
 
-	sprintf (raw_tt_msg, "%s>%s:t%s", src, dest, msg);
+	snprintf (raw_tt_msg, sizeof(raw_tt_msg), "%s>%s:t%s", src, dest, msg);
 
 	pp = ax25_from_text (raw_tt_msg, 1);
 
@@ -1452,6 +1563,103 @@ static void raw_tt_data_to_app (int chan, char *msg)
 #endif
 }
 
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        dw_run_cmd
+ *
+ * Purpose:     Run a command and capture the output. 
+ *
+ * Inputs:      cmd		- The command.
+ *
+ *		oneline		- 0 = Keep original line separators. Caller
+ *					must deal with operating system differences.
+ *				  1 = Change CR, LF, TAB to space so result
+ *					is one line of text.
+ *				  2 = Also remove any trailing whitespace.
+ *
+ *		maxresult	- Amount of space available for result.
+ *
+ * Outputs:	result		- Output captured from running command.
+ *
+ * Returns:     -1 for any sort of error.
+ *		>0 for number of characters returned (= strlen(result))
+ *
+ * Description:	This is currently used for running a user-specified
+ *		script to generate a custom speech response.
+ *
+ * Future:	There are potential other uses so it should probably
+ *		be relocated to a file of other misc. utilities.
+ *
+ *----------------------------------------------------------------*/
+
+int dw_run_cmd (char *cmd, int oneline, char *result, int maxresult) 
+{
+	FILE *fp;
+
+	strlcpy (result, "", sizeof(result));
+
+	fp = popen (cmd, "r");
+	if (fp != NULL) {
+	  int remaining = maxresult;
+	  char *pr = result;
+	  int err;
+
+	  while (remaining > 2 && fgets(pr, remaining, fp) != NULL) {
+	    pr = result + strlen(result);
+	    remaining = maxresult - strlen(result);
+	  }
+
+	  if ((err = pclose(fp)) != 0) {	 
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR: Unable to run \"%s\"\n", cmd);
+	    // On Windows, non-existent file produces "Operation not permitted"
+	    // Maybe we should put in a test for whether file exists.
+	    dw_printf ("%s\n", strerror(err));
+
+	    return (-1);
+	  }
+
+	  // take out any newline characters.
+	
+	  if (oneline) {
+	    for (pr = result; *pr != '\0'; pr++) {
+	      if (*pr == '\r' || *pr == '\n' || *pr == '\t') {
+	        *pr = ' ';
+	      }
+	    }
+
+	    if (oneline > 1) {
+	      pr = result + strlen(result) - 1;
+	      while (pr >= result && *pr == ' ') {
+	        *pr = '\0';
+	        pr--;
+	      }
+	    }
+	  }
+
+	  //text_color_set(DW_COLOR_DEBUG);
+	  //dw_printf ("%s returns \"%s\"\n", cmd, result);
+	  
+	  return (strlen(result));
+	}
+
+	else {
+	  // explain_popen() would be nice but doesn't seem to be commonly available.
+	  
+	  // We get here only if fork or pipe fails.
+	  // The command not existing must be caught above.
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Unable to run \"%s\"\n", cmd);
+	  dw_printf ("%s\n", strerror(errno));
+	  
+	  return (-1);
+	}
+
+
+} /* end dw_run_cmd */
 
 
 /*------------------------------------------------------------------

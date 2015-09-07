@@ -2,7 +2,7 @@
 # Makefile for Linux version of Dire Wolf.
 #
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.desktop 
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.desktop direwolf.conf
 	@echo " "
 	@echo "Next step - install with:"
 	@echo " "
@@ -216,10 +216,10 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hd
 		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o audio.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
+		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o dtime_now.o \
-		geotranz.a
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o dtime_now.o \
+		misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread -lrt $(LDLIBS) -lm
 
 
@@ -263,6 +263,25 @@ utm.o : geotranz/utm.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 
+# Provide our own copy of strlcpy and strlcat because they are not included with Linux.
+# We don't need the others in that same directory.
+
+misc.a : strlcpy.o strlcat.o
+	ar -cr $@ $^	
+ 
+strlcpy.o : misc/strlcpy.c
+	$(CC) $(CFLAGS) -I. -c -o $@ $^
+
+strlcat.o : misc/strlcat.c
+	$(CC) $(CFLAGS) -I. -c -o $@ $^
+
+
+
+# Generate apprpriate sample configuration file for this platform.
+
+direwolf.conf : generic.conf
+	egrep '^C|^L' generic.conf | cut -c2-999 > direwolf.conf
+
 
 # Where should we install it?
 
@@ -282,7 +301,7 @@ INSTALLDIR := /usr/local
 # It was hardcoded with lxterminal, /home/pi, and so on.
 # In version 1.2, try to customize this to match other situations better.
 
-# TODO1.2:  Test this better.
+# TODO:  Test this better.
 
 
 direwolf.desktop :
@@ -310,7 +329,7 @@ endif
 # TODO: Review file locations.
 
 install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets \
-		tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+		tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop 
 	install direwolf $(INSTALLDIR)/bin
 	install decode_aprs $(INSTALLDIR)/bin
 	install text2tt $(INSTALLDIR)/bin
@@ -323,20 +342,21 @@ install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	install atest $(INSTALLDIR)/bin
 	install ttcalc $(INSTALLDIR)/bin
 	install dwespeak.sh $(INSTALLDIR)/bin
+	install telemetry-toolkit/*.p[ly] $(INSTALLDIR)/bin
 	install -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
 	install -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
 	install -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
 	install -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
 	install -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
-	install -D --mode=644 CHANGES.txt $(INSTALLDIR)/share/doc/direwolf/CHANGES.txt
+	install -D --mode=644 README.md $(INSTALLDIR)/share/doc/direwolf/README.md
+	install -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
 	install -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
 	install -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
-	install -D --mode=644 User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
-	install -D --mode=644 Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
-	install -D --mode=644 Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
-	install -D --mode=644 APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	install -D --mode=644 A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
-	install -D --mode=644 A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	install -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	install -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
+	install -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
+	install -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	install -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
 	install -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
 	install -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
 	install -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
@@ -348,15 +368,15 @@ install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	install -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
 	install -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
 	@echo " "
-	@echo "If this is your first install, not an upgrade, type this"
-	@echo "to put a copy of the sample configuration file in your home directory:"
+	@echo "If this is your first install, not an upgrade, type this to put a copy"
+	@echo "of the sample configuration file (direwolf.conf) in your home directory:"
 	@echo " "
 	@echo "        make install-conf"
 	@echo " "
 
 
 # TODO:  Should we put the sample direwolf.conf file somewhere like
-# /usr/share/doc/direwolf/examples or /etc/ax25 and add that to the 
+# /usr/share/doc/direwolf/examples and add that to the 
 # end of the search path list?
 # That would make it easy to see user customizations compared to the
 # latest sample.
@@ -371,6 +391,8 @@ install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 .PHONY: install-conf
 install-conf : direwolf.conf
 	cp direwolf.conf ~
+	cp telemetry-toolkit/telem-m0xer-3.txt ~
+	cp telemetry-toolkit/telem-*.conf ~
 ifneq ($(wildcard $(HOME)/Desktop),)
 	@echo " "
 	@echo "This will add a desktop icon on some systems:"
@@ -389,7 +411,7 @@ install-rpi : dw-start.sh
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.c telemetry.o
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.c telemetry.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^ -lm
 
 
@@ -405,22 +427,22 @@ tt2text : tt_text.c
 
 # Convert between Latitude/Longitude and UTM coordinates.
 
-ll2utm : ll2utm.c geotranz.a
+ll2utm : ll2utm.c geotranz.a textcolor.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
-utm2ll : utm2ll.c geotranz.a
+utm2ll : utm2ll.c geotranz.a textcolor.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 
 # Convert from log file to GPX.
 
-log2gpx : log2gpx.c 
+log2gpx : log2gpx.c textcolor.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c textcolor.c dsp.c
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) -lm
 
 demod.o : tune.h
@@ -428,7 +450,7 @@ demod_afsk.o : tune.h
 demod_9600.o : tune.h
 
 testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tune.h textcolor.c
+		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tune.h textcolor.c misc.a
 	$(CC) $(CFLAGS) -o atest $^ -lm
 	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
 
@@ -437,34 +459,36 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o
 
 
 atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c textcolor.c
+		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tt_text.c textcolor.c \
+		misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
 
 # Unit test for inner digipeater algorithm
 
 
-dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c
+dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c misc.a
 	$(CC) $(CFLAGS) -DTEST -o $@ $^
 	./dtest
 
 
 # Unit test for APRStt.
 
-ttest : aprs_tt.c tt_text.c  latlong.c misc.a  geotranz.a
+ttest : aprs_tt.c tt_text.c latlong.c textcolor.o misc.a geotranz.a misc.a
 	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^
 
 
 # Unit test for IGate
 
 
-itest : igate.c textcolor.c ax25_pad.c fcs_calc.c 
+itest : igate.c textcolor.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 	$(CC) $(CFLAGS) -DITEST -o $@ $^
 	./itest
 
 
 # Unit test for UDP reception with AFSK demodulator
 
-udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c
+udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c 
+		fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
 	./udptest
 
@@ -472,20 +496,20 @@ udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec
 # Unit test for telemetry decoding.
 
 
-etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
+etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.o misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
 	./etest
 	
 
 # Multiple AGWPE network or serial port clients to test TNCs side by side.
 
-aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
+aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 	$(CC) $(CFLAGS) -g -o $@ $^ 
 
 
 # Touch Tone to Speech sample application.
 
-ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o 
+ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a
 	$(CC) $(CFLAGS) -g -o $@ $^ 
 
 
@@ -503,48 +527,34 @@ clean :
 # Package it up for distribution.
 
 .PHONY: dist-src
-dist-src : CHANGES.txt User-Guide.pdf Raspberry-Pi-APRS.pdf \
-		Raspberry-Pi-APRS-Tracker.pdf APRStt-Implementation-Notes.pdf \
-		A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+dist-src : README.md CHANGES.md 
+		doc/User-Guide.pdf doc/Raspberry-Pi-APRS.pdf \
+		doc/Raspberry-Pi-APRS-Tracker.pdf doc/APRStt-Implementation-Notes.pdf \
 		dw-start.sh dwespeak.bat dwespeak.sh \
 		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
 	rm -f fsk_fast_filter.h
 	echo " " > tune.h
 	rm -f ../$z-src.zip
-	egrep '^C|^L' direwolf.txt | cut -c2-999 > direwolf.conf
 	(cd .. ; zip $z-src.zip \
-		$z/CHANGES.txt \
+		$z/README.md \
+		$z/CHANGES.md \
 		$z/LICENSE* \
-		$z/User-Guide.pdf \
-		$z/Raspberry-Pi-APRS.pdf \
-		$z/Raspberry-Pi-APRS-Tracker.pdf \
-		$z/APRStt-Implementation-Notes.pdf \
-		$z/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
-		$z/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		$z/doc/User-Guide.pdf \
+		$z/doc/Raspberry-Pi-APRS.pdf \
+		$z/doc/Raspberry-Pi-APRS-Tracker.pdf \
+		$z/doc/APRStt-Implementation-Notes.pdf \
+		$z/doc/APRS-Telemetry-Toolkit.pdf \
 		$z/Makefile* \
 		$z/*.c $z/*.h \
 		$z/regex/* $z/misc/* $z/geotranz/* \
 		$z/man1/* \
-		$z/direwolf.conf $z/direwolf.txt \
+		$z/generic.conf \
 		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
 		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
 		$z/dw-start.sh $z/direwolf.spec \
-		$z/dwespeak.bat $z/dwespeak.sh )
+		$z/dwespeak.bat $z/dwespeak.sh \
+		$z/telemetry-toolkit/* )
 		
-
-
-#User-Guide.pdf : User-Guide.docx
-#	echo "***** User-Guide.pdf is out of date *****"
-
-#Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
-#	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
-
-#Raspberry-Pi-APRS-Tracker.pdf : Raspberry-Pi-APRS-Tracker.docx
-#	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
-
-#A-Better-APRS-Packet-Demodulator.pdf : A-Better-APRS-Packet-Demodulator.docx
-#	echo "***** A-Better-APRS-Packet-Demodulator.pdf is out of date *****"
-
 
 #
 # The locations below appear to be the most recent.

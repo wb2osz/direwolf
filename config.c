@@ -17,6 +17,8 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#define CONFIG_C 1
+
 
 // #define DEBUG 1
 
@@ -41,7 +43,7 @@
 #include <math.h>
 
 #if __WIN32__
-#include "pthreads/pthread.h"
+//#include "pthreads/pthread.h"
 #else
 #include <pthread.h>
 #endif
@@ -56,6 +58,7 @@
 #include "latlong.h"
 #include "symbols.h"
 #include "xmit.h"
+#include "tt_text.h"
 
 // geotranz
 
@@ -204,7 +207,7 @@ static double parse_ll (char *str, enum parse_ll_which_e which, int line)
 /*
  * Remove any negative sign.
  */
-	strcpy (stemp, str);
+	strlcpy (stemp, str, sizeof(stemp));
 	sign = +1;
 	if (stemp[0] == '-') {
 	  sign = -1;
@@ -294,7 +297,9 @@ static double parse_ll (char *str, enum parse_ll_which_e which, int line)
  *
  * Inputs:      szone	- String like [-]number[letter]
  *
- * Output:	hemi	- Hemisphere, 'N' or 'S'.
+ * Outputs:	latband	- Latitude band if specified, otherwise space or -.
+ *
+ *		hemi	- Hemisphere, always one of 'N' or 'S'.
  *
  * Returns:	Zone as number.  
  *		Type is long because Convert_UTM_To_Geodetic expects that.
@@ -314,12 +319,13 @@ static double parse_ll (char *str, enum parse_ll_which_e which, int line)
  *
  *----------------------------------------------------------------*/
 
-long parse_utm_zone (char *szone, char *hemi)
+long parse_utm_zone (char *szone, char *latband, char *hemi)
 {
 	long lzone;
 	char *zlet;
 
 
+	*latband = ' ';
 	*hemi = 'N';	/* default */
 
         lzone = strtol(szone, &zlet, 10);
@@ -329,6 +335,7 @@ long parse_utm_zone (char *szone, char *hemi)
 	  /* Allow negative number to mean south. */
 
 	  if (lzone < 0) {
+	    *latband = '-';
 	    *hemi = 'S';
 	    lzone = (- lzone);
 	  }
@@ -337,6 +344,7 @@ long parse_utm_zone (char *szone, char *hemi)
 	  if (islower (*zlet)) {
 	    *zlet = toupper(*zlet);
 	  }
+	  *latband = *zlet;
 	  if (strchr ("CDEFGHJKLMNPQRSTUVWX", *zlet) != NULL) {
 	    if (*zlet < 'N') {
 	      *hemi = 'S';
@@ -356,7 +364,8 @@ long parse_utm_zone (char *szone, char *hemi)
         }
 
 	return (lzone);
-}
+
+} /* end parse_utm_zone */
 
 
 
@@ -382,7 +391,7 @@ main ()
 	parse_ll ("12.5S", LON);	// error
 
 	parse_ll ("12^30", LAT);
-	parse_ll ("12°30", LAT);
+	parse_ll ("12\xb030", LAT);			// ISO Latin-1 degree symbol
 
 	parse_ll ("91", LAT);		// out of range
 	parse_ll ("91", LON);
@@ -446,6 +455,120 @@ static int parse_interval (char *str, int line)
 
 /*-------------------------------------------------------------------
  *
+ * Name:        split
+ *
+ * Purpose:     Separate a line into command and parameters.
+ *
+ * Inputs:	string		- Complete command line to start process.
+ *				  NULL for subsequent calls.
+ *
+ *		rest_of_line	- Caller wants remainder of line, not just
+ *				  the next parameter.
+ *
+ * Returns:	Pointer to next part with any quoting removed.
+ *
+ * Description:	the configuration file started out very simple and strtok
+ *		was used to split up the lines.  As more complicated options
+ *		were added, there were several different situations where
+ *		parameter values might contain spaces.  These were handled
+ *		inconsistently in different places.  In version 1.3, we now
+ *		treat them consistently in one place.
+ *
+ *
+ *--------------------------------------------------------------------*/
+
+#define MAXCMDLEN 256
+
+
+static char *split (char *string, int rest_of_line)
+{
+	static char cmd[MAXCMDLEN];
+	static char token[MAXCMDLEN];
+	static char *nextp = NULL;
+	static char *c;		// current position in cmd.
+	char *s, *t;
+	int in_quotes;
+
+/*
+ * If string is provided, make a copy.
+ * Drop any CRLF at the end.
+ * Change any tabs to spaces so we don't have to check for it later.
+ */
+	if (string != NULL) {
+
+	  // dw_printf("split in: '%s'\n", string);
+
+	  c = cmd;
+	  for (s = string; *s != '\0'; s++) {
+	    if (*s == '\t') {
+	      *c++ = ' ';
+	    }
+	    else if (*s == '\r' || *s == '\n') {
+	      ;
+	    }
+	    else {
+	      *c++ = *s;
+	    }
+	  }
+	  *c = '\0';
+	  c = cmd;
+	}
+
+/*
+ * Get next part, separated by whitespace, keeping spaces within quotes.
+ * Quotation marks inside need to be doubled.
+ */
+
+	while (*c == ' ') {
+	  c++;
+	};
+
+	t = token;
+	in_quotes = 0;
+	for ( ; *c != '\0'; c++) {
+
+	  if (*c == '"') {
+	    if (in_quotes) {
+	      if (c[1] == '"') {
+	        *t++ = *c++;
+	      }
+	      else {
+	        in_quotes = 0;
+	      }
+	    }
+	    else {
+	      in_quotes = 1;
+	    }
+	  }
+	  else if (*c == ' ') {
+	    if (in_quotes || rest_of_line) {
+	      *t++ = *c;
+	    }
+	    else {
+	      break;
+	    }
+	  }
+	  else {
+	    *t++ = *c;
+	  }
+	}
+	*t = '\0';
+
+	// dw_printf("split out: '%s'\n", token);
+
+	t = token;
+	if (*t == '\0') {
+	  return (NULL);
+	}
+
+	return (t);
+
+} /* end split */
+
+
+
+/*-------------------------------------------------------------------
+ *
  * Name:        config_init
  *
  * Purpose:     Read configuration file when application starts up.
@@ -482,13 +605,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 			struct misc_config_s *p_misc_config)
 {
 	FILE *fp;
-	char stuff[256];
-	//char *p;
-	//int c, p;
-	//int err;
+	char filepath[128];
+	char stuff[MAXCMDLEN];
 	int line;
 	int channel;
 	int adevice;
+	int m;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -506,8 +628,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	for (adevice=0; adevice<MAX_ADEVS; adevice++) {
 
-	  strcpy (p_audio_config->adev[adevice].adevice_in, DEFAULT_ADEVICE);
-	  strcpy (p_audio_config->adev[adevice].adevice_out, DEFAULT_ADEVICE);
+	  strlcpy (p_audio_config->adev[adevice].adevice_in, DEFAULT_ADEVICE, sizeof(p_audio_config->adev[adevice].adevice_in));
+	  strlcpy (p_audio_config->adev[adevice].adevice_out, DEFAULT_ADEVICE, sizeof(p_audio_config->adev[adevice].adevice_out));
 
 	  p_audio_config->adev[adevice].defined = 0;
 	  p_audio_config->adev[adevice].num_channels = DEFAULT_NUM_CHANNELS;		/* -2 stereo */
@@ -529,7 +651,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_audio_config->achan[channel].baud = DEFAULT_BAUD;			/* -b option */
 
 	  /* None.  Will set default later based on other factors. */
-	  strcpy (p_audio_config->achan[channel].profiles, "");	
+	  strlcpy (p_audio_config->achan[channel].profiles, "", sizeof(p_audio_config->achan[channel].profiles));	
 
 	  p_audio_config->achan[channel].num_freq = 1;				
 	  p_audio_config->achan[channel].offset = 0;
@@ -540,7 +662,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	    p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_NONE;
-	    strcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "");
+	    strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "", sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 	    p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_NONE;
 	    p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_NONE;
 	    p_audio_config->achan[channel].octrl[ot].ptt_gpio = 0;
@@ -563,7 +685,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 	memset (p_digi_config, 0, sizeof(struct digi_config_s));
-	//p_digi_config->num_chans = p_audio_config->adev[0].num_channels;	// TODO: rethink for > 2 case.
 	p_digi_config->dedupe_time = DEFAULT_DEDUPE;
 
 	memset (p_tt_config, 0, sizeof(struct tt_config_s));	
@@ -575,9 +696,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	/* Retention time and decay algorithm from 13 Feb 13 version of */
 	/* http://www.aprs.org/aprstt/aprstt-coding24.txt */
+	/* Reduced by transmit count by one.  An 8 minute delay in between transmissions seems awful long. */
 
 	p_tt_config->retain_time = 80 * 60;
-	p_tt_config->num_xmits = 7;
+	p_tt_config->num_xmits = 6;
 	assert (p_tt_config->num_xmits <= TT_MAX_XMITS);
 	p_tt_config->xmit_delay[0] = 3;		/* Before initial transmission. */
 	p_tt_config->xmit_delay[1] = 16;
@@ -585,7 +707,25 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_tt_config->xmit_delay[3] = 64;
 	p_tt_config->xmit_delay[4] = 2 * 60;
 	p_tt_config->xmit_delay[5] = 4 * 60;
-	p_tt_config->xmit_delay[6] = 8 * 60;
+	p_tt_config->xmit_delay[6] = 8 * 60;		// not currently used.
+
+	strlcpy (p_tt_config->status[0], "", 		sizeof(p_tt_config->status[0]));
+	strlcpy (p_tt_config->status[1], "/off duty", 	sizeof(p_tt_config->status[1]));
+	strlcpy (p_tt_config->status[2], "/enroute", 	sizeof(p_tt_config->status[2]));
+	strlcpy (p_tt_config->status[3], "/in service", sizeof(p_tt_config->status[3]));
+	strlcpy (p_tt_config->status[4], "/returning", 	sizeof(p_tt_config->status[4]));
+	strlcpy (p_tt_config->status[5], "/committed", 	sizeof(p_tt_config->status[5]));
+	strlcpy (p_tt_config->status[6], "/special", 	sizeof(p_tt_config->status[6]));
+	strlcpy (p_tt_config->status[7], "/priority", 	sizeof(p_tt_config->status[7]));
+	strlcpy (p_tt_config->status[8], "/emergency", 	sizeof(p_tt_config->status[8]));
+	strlcpy (p_tt_config->status[9], "/custom 1", 	sizeof(p_tt_config->status[9]));
+
+	for (m = 0; m < TT_ERROR_MAXP1; m++) {
+	  strlcpy (p_tt_config->response[m].method, "MORSE",	sizeof(p_tt_config->response[m].method));
+	  strlcpy (p_tt_config->response[m].mtext, "?",		sizeof(p_tt_config->response[m].mtext));
+	}
+	strlcpy (p_tt_config->response[TT_ERROR_OK].mtext, "R", sizeof(p_tt_config->response[TT_ERROR_OK].mtext));
+
 
 	memset (p_misc_config, 0, sizeof(struct misc_config_s));
 	p_misc_config->agwpe_port = DEFAULT_AGWPE_PORT;
@@ -614,10 +754,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	/* Ideally we'd like to figure out if com0com is installed */
 	/* and automatically enable this.  */
 	
-	//strcpy (p_misc_config->nullmodem, DEFAULT_NULLMODEM);
-	strcpy (p_misc_config->nullmodem, "");
-	strcpy (p_misc_config->nmea_port, "");
-	strcpy (p_misc_config->logdir, "");
+	//strlcpy (p_misc_config->nullmodem, DEFAULT_NULLMODEM, sizeof(p_misc_config->nullmodem));
+	strlcpy (p_misc_config->nullmodem, "", sizeof(p_misc_config->nullmodem));
+	strlcpy (p_misc_config->nmea_port, "", sizeof(p_misc_config->nmea_port));
+	strlcpy (p_misc_config->logdir, "", sizeof(p_misc_config->logdir));
 
 
 /* 
@@ -626,34 +766,51 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * Windows:  File must be in current working directory.
  *
  * Linux: Search current directory then home directory.
+ *
+ * Future possibility - Could also search home directory
+ * for Windows by combinting two variables:
+ *	HOMEDRIVE=C:
+ *	HOMEPATH=\Users\John
+ *
+ * It's not clear if this always points to same location:
+ *	USERPROFILE=C:\Users\John
  */
 
 
 	channel = 0;
 	adevice = 0;
 
-	fp = fopen (fname, "r");
+// TODO: Would be better to have a search list and loop thru it.
+
+        strlcpy(filepath, fname, sizeof(filepath));
+
+        fp = fopen (filepath, "r");
+	
 #ifndef __WIN32__
 	if (fp == NULL && strcmp(fname, "direwolf.conf") == 0) {
 	/* Failed to open the default location.  Try home dir. */
 	  char *p;
 
+
+          strlcpy (filepath, "", sizeof(filepath));
+
 	  p = getenv("HOME");
 	  if (p != NULL) {
-	    strcpy (stuff, p);
-	    strcat (stuff, "/direwolf.conf");
-	    fp = fopen (stuff, "r");
+	    strlcpy (filepath, p, sizeof(filepath));
+	    strlcat (filepath, "/direwolf.conf", sizeof(filepath));
+	    fp = fopen (filepath, "r");
 	  } 
 	}
 #endif
 	if (fp == NULL)	{
 	  // TODO: not exactly right for all situations.
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR - Could not open config file %s\n", fname);
+	  dw_printf ("ERROR - Could not open config file %s\n", filepath);
 	  dw_printf ("Try using -c command line option for alternate location.\n");
 	  return;
 	}
 	
+	dw_printf ("\nReading config file %s\n", filepath);
 
 	line = 0;
 	while (fgets(stuff, sizeof(stuff), fp) != NULL) {
@@ -661,8 +818,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  line++;
 
+	  t = split(stuff,0);
 
-	  t = strtok (stuff, " ,\t\n\r");
 	  if (t == NULL) {
 	    continue;
 	  }
@@ -678,7 +835,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 /*
- * ADEVICE[n] 		- Name of input sound device, and optionally output, if different.
+ * ADEVICE[n] 		- Name of input sound device, and optionally output, if different.   
+ *
+ *			ADEVICE    plughw:1,0			-- same for in and out.
+ *			ADEVICE	   plughw:2,0  plughw:3,0	-- different in/out for a channel or channel pair.
+ *	
  */
 
 	  /* Note that ALSA name can contain comma such as hw:1,0 */
@@ -696,7 +857,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    t = strtok (NULL, " \t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing name of audio device for ADEVICE command on line %d.\n", line);
@@ -711,11 +872,88 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    strncpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in)-1);
 	    strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);
 
-	    t = strtok (NULL, " \t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 	      strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);
 	    }
 	  }
+
+
+/*
+ * PAIDEVICE[n]  input-device
+ * PAODEVICE[n]  output-device
+ *
+ *			This was submitted by KK5VD for the Mac OS X version.  (__APPLE__)
+ *
+ *			It looks like device names can contain spaces making it a little
+ *			more difficult to put two names on the same line unless we come up with
+ *			some other delimiter between them or a quoting scheme to handle
+ *			embedded spaces in a name.
+ *
+ *			It concerns me that we could have one defined without the other
+ *			if we don't put in more error checking later.
+ *
+ *	version 1.3 dev snapshot C:
+ *
+ *		We now have a general quoting scheme so the original ADEVICE can handle this.
+ *		These options will probably be removed before general 1.3 release.
+ */
+
+	  else if (strcasecmp(t, "PAIDEVICE") == 0) {
+		  adevice = 0;
+		  if (isdigit(t[9])) {
+			  adevice = t[9] - '0';
+		  }
+
+		  if (adevice < 0 || adevice >= MAX_ADEVS) {
+			  text_color_set(DW_COLOR_ERROR);
+			  dw_printf ("Config file: Device number %d out of range for PADEVICE command on line %d.\n", adevice, line);
+			  adevice = 0;
+			  continue;
+		  }
+
+		  t = split(NULL,1);
+		  if (t == NULL) {
+			  text_color_set(DW_COLOR_ERROR);
+			  dw_printf ("Config file: Missing name of audio device for PADEVICE command on line %d.\n", line);
+			  continue;
+		  }
+
+		  p_audio_config->adev[adevice].defined = 1;
+
+		  /* First channel of device is valid. */
+		  p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
+
+		  strncpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in)-1);
+	  }
+	  else if (strcasecmp(t, "PAODEVICE") == 0) {
+		  adevice = 0;
+		  if (isdigit(t[9])) {
+			  adevice = t[9] - '0';
+		  }
+
+		  if (adevice < 0 || adevice >= MAX_ADEVS) {
+			  text_color_set(DW_COLOR_ERROR);
+			  dw_printf ("Config file: Device number %d out of range for PADEVICE command on line %d.\n", adevice, line);
+			  adevice = 0;
+			  continue;
+		  }
+
+		  t = split(NULL,1);
+		  if (t == NULL) {
+			  text_color_set(DW_COLOR_ERROR);
+			  dw_printf ("Config file: Missing name of audio device for PADEVICE command on line %d.\n", line);
+			  continue;
+		  }
+
+		  p_audio_config->adev[adevice].defined = 1;
+
+		  /* First channel of device is valid. */
+		  p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
+
+		  strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);		  
+	  }
+
 
 /*
  * ARATE 		- Audio samples per second, 11025, 22050, 44100, etc.
@@ -723,7 +961,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "ARATE") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing audio sample rate for ARATE command.\n", line);
@@ -746,7 +984,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "ACHANNELS") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing number of audio channels for ACHANNELS command.\n", line);
@@ -779,7 +1017,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "CHANNEL") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing channel number for CHANNEL command.\n", line);
@@ -814,7 +1052,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * MYCALL station
  */
 	  else if (strcasecmp(t, "mycall") == 0) {
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing value for MYCALL command on line %d.\n", line);
@@ -843,7 +1081,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		      *p = toupper(*p);	/* silently force upper case. */
 	            }
 	          }
-	          // TODO: additional checks if valid
+	          // TODO: additional checks if valid.
 	        }
 	      }
 	    }
@@ -868,7 +1106,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "MODEM") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing data transmission speed for MODEM command.\n", line);
@@ -911,7 +1149,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Get mark frequency. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      /* all done. */
 	      continue;
@@ -939,7 +1177,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    
 	      /* Get space frequency */
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: Missing tone frequency for space.\n", line);
@@ -975,7 +1213,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	      /* New feature in 0.9 - Optional filter profile(s). */
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t != NULL) {
 
 	        /* Look for some combination of letter(s) and + */
@@ -994,7 +1232,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  }    
 		
 		  strncpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
-	          t = strtok (NULL, " ,\t\n\r");
+	          t = split(NULL,0);
 		  if (strlen(p_audio_config->achan[channel].profiles) > 1 && t != NULL) {
 	            text_color_set(DW_COLOR_ERROR);
                     dw_printf ("Line %d: Can't combine multiple demodulator types and multiple frequencies.\n", line);
@@ -1014,7 +1252,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        }
 	        p_audio_config->achan[channel].num_freq = n;
 
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	        if (t != NULL) {
 	          n = atoi(t);
                   if (n < 5 || n > abs(p_audio_config->achan[channel].mark_freq - p_audio_config->achan[channel].space_freq)/2) {
@@ -1037,7 +1275,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    else {
 
-/* New style. */
+/* New style in version 1.2. */
 
 	      while (t != NULL) {
 		char *s;
@@ -1110,7 +1348,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
                   dw_printf ("Line %d: Unrecognized option for MODEM: %s\n", line, t);
 	        } 
 
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	      }
 
 	      /* A later place catches disallowed combination of + and @. */
@@ -1121,94 +1359,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	  }
 
-/*
- * (deprecated) HBAUD 		- Set data bits per second.  Standard values are 300 & 1200 for AFSK
- *				and 9600 for baseband with scrambling.
- */
 
-#if 0
-	  else if (strcasecmp(t, "HBAUD") == 0) {
-	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing date transmission rate for HBAUD command.\n", line);
-	      continue;
-	    }
-	    n = atoi(t);
-            if (n >= 100 && n <= 10000) {
-	      p_audio_config->achan[channel].baud = n;
-	      if (n != 300 && n != 1200 && n != 9600) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Line %d: Warning: Non-standard baud rate.  Are you sure?\n", line);
-    	      }
-	      if (n == 9600) {
-		/* TODO: should be separate option to keep it more general. */
-	        //text_color_set(DW_COLOR_ERROR);
-	        //dw_printf ("Line %d: Note: Using scrambled baseband for 9600 baud.\n", line);
-	        p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;		
-    	      }
-	    }
-	    else {
-	      p_audio_config->achan[channel].baud = DEFAULT_BAUD;
-	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Unreasonable baud rate. Using %d.\n", 
-				 line, p_audio_config->achan[channel].baud);
-   	    }
-	  }
-#endif
-
-/*
- * (deprecated) MARK 		- Mark tone frequency.
- */
-
-#if 0
-	  else if (strcasecmp(t, "MARK") == 0) {
-	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing tone frequency for MARK command.\n", line);
-	      continue;
-	    }
-	    n = atoi(t);
-            if (n >= 300 && n <= 3000) {
-	      p_audio_config->achan[channel].mark_freq = n;
-	    }
-	    else {
-	      p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;
-	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Unreasonable mark tone frequency. Using %d.\n", 
-				 line, p_audio_config->achan[channel].mark_freq);
-   	    }
-	  }
-#endif
-
-/*
- * (deprecated) SPACE 		- Space tone frequency.
- */
-
-#if 0
-	  else if (strcasecmp(t, "SPACE") == 0) {
-	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
-	    if (t == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing tone frequency for SPACE command.\n", line);
-	      continue;
-	    }
-	    n = atoi(t);
-            if (n >= 300 && n <= 3000) {
-	      p_audio_config->achan[channel].space_freq = n;
-	    }
-	    else {
-	      p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;
-	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Unreasonable space tone frequency. Using %d.\n", 
-					 line, p_audio_config->achan[channel].space_freq);
-   	    }
-	  }
-#endif
 
 /*
  * DTMF  		- Enable DTMF decoder.
@@ -1234,7 +1385,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "FIX_BITS") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing value for FIX_BITS command.\n", line);
@@ -1251,7 +1402,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 			line, p_audio_config->achan[channel].fix_bits);
    	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    while (t != NULL) {
 
 	      // If more than one sanity test, we silently take the last one.
@@ -1272,7 +1423,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Line %d: Invalid option '%s' for FIX_BITS.\n", line, t);
 	      }
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	    }
 	  }
 
@@ -1295,18 +1446,18 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (strcasecmp(t, "PTT") == 0) {
 	      ot = OCTYPE_PTT;
-	      strcpy (otname, "PTT");
+	      strlcpy (otname, "PTT", sizeof(otname));
 	    }
 	    else if (strcasecmp(t, "DCD") == 0) {
 	      ot = OCTYPE_DCD;
-	      strcpy (otname, "DCD");
+	      strlcpy (otname, "DCD", sizeof(otname));
 	    }
 	    else {
 	      ot = OCTYPE_FUTURE;
-	      strcpy (otname, "FUTURE");
+	      strlcpy (otname, "FUTURE", sizeof(otname));
 	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: Missing serial port name for %s command.\n", 
@@ -1322,7 +1473,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: %s with GPIO is only available on Linux.\n", line, otname);
 #else		
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file line %d: Missing GPIO number for %s.\n", line, otname);
@@ -1346,7 +1497,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 #if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file line %d: Missing LPT bit number for %s.\n", line, otname);
@@ -1371,9 +1522,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /* serial port case. */
 
-	      strncpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
+	      strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file line %d: Missing RTS or DTR after %s device name.\n", 
@@ -1412,7 +1563,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      /* Some interfaces want the two control lines driven with opposite polarity. */
 	      /* e.g.   PTT COM1 RTS -DTR  */
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t != NULL) {
 
 	        if (strcasecmp(t, "rts") == 0) {
@@ -1457,7 +1608,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "DWAIT") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing delay time for DWAIT command.\n", line);
@@ -1481,7 +1632,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "SLOTTIME") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing delay time for SLOTTIME command.\n", line);
@@ -1505,7 +1656,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "PERSIST") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing probability for PERSIST command.\n", line);
@@ -1529,7 +1680,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "TXDELAY") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing time for TXDELAY command.\n", line);
@@ -1553,7 +1704,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "TXTAIL") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing time for TXTAIL command.\n", line);
@@ -1579,7 +1730,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "SPEECH") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing script for Text-to-Speech function.\n", line);
@@ -1589,7 +1740,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    /* See if we can run it. */
 
 	    if (xmit_speak_it(t, -1, " ") == 0) {
-	      strcpy (p_audio_config->tts_script, t);
+	      if (strlcpy (p_audio_config->tts_script, t, sizeof(p_audio_config->tts_script)) >= sizeof(p_audio_config->tts_script)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Script for text-to-speech function is too long.\n", line);
+	      }
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
@@ -1612,7 +1766,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    char message[100];
 	    	    
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
@@ -1632,7 +1786,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
@@ -1652,7 +1806,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing alias pattern on line %d.\n", line);
@@ -1667,7 +1821,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing wide pattern on line %d.\n", line);
@@ -1685,23 +1839,23 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_digi_config->enabled[from_chan][to_chan] = 1;
 	    p_digi_config->preempt[from_chan][to_chan] = PREEMPT_OFF;
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 	      if (strcasecmp(t, "OFF") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_OFF;
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	      }
 	      else if (strcasecmp(t, "DROP") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_DROP;
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	      }
 	      else if (strcasecmp(t, "MARK") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_MARK;
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	      }
 	      else if (strcasecmp(t, "TRACE") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	      }
 	    }
 
@@ -1717,7 +1871,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "DEDUPE") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing time for DEDUPE command.\n", line);
@@ -1745,7 +1899,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    char message[100];
 	    	    
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
@@ -1765,7 +1919,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
@@ -1807,7 +1961,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    char message[100];
 	    	    
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
@@ -1833,7 +1987,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
@@ -1858,7 +2012,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	    }
 
-	    t = strtok (NULL, "\n\r");		/* Take rest of line including spaces. */
+	    t = split(NULL,1);		/* Take rest of line including spaces. */
 
 	    if (t == NULL) {
 	      t = " ";				/* Empty means permit nothing. */
@@ -1883,7 +2037,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "TTCORRAL") == 0) {
 	    //int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing latitude for TTCORRAL command.\n", line);
@@ -1891,7 +2045,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    p_tt_config->corral_lat = parse_ll(t,LAT,line);
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing longitude for TTCORRAL command.\n", line);
@@ -1899,7 +2053,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    p_tt_config->corral_lon = parse_ll(t,LON,line);
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing longitude for TTCORRAL command.\n", line);
@@ -1930,6 +2084,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    assert (p_tt_config->ttloc_size >= 2);
 	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
 
+	    // Should make this a function/macro instead of repeating code.
 	    /* Allocate new space, but first, if already full, make larger. */
 	    if (p_tt_config->ttloc_len == p_tt_config->ttloc_size) {
 	      p_tt_config->ttloc_size += p_tt_config->ttloc_size / 2;
@@ -1940,19 +2095,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_POINT;
-	    strcpy(tl->pattern, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 	    tl->point.lat = 0;
 	    tl->point.lon = 0;
 
 	    /* Pattern: B and digits */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTPOINT command.\n", line);
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
@@ -1967,7 +2122,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Latitude */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing latitude for TTPOINT command.\n", line);
@@ -1977,7 +2132,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Longitude */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing longitude for TTPOINT command.\n", line);
@@ -2018,20 +2173,20 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_VECTOR;
-	    strcpy(tl->pattern, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 	    tl->vector.lat = 0;
 	    tl->vector.lon = 0;
 	    tl->vector.scale = 1;
 	   
 	    /* Pattern: B5bbbd... */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTVECTOR command.\n", line);
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2050,7 +2205,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Latitude */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing latitude for TTVECTOR command.\n", line);
@@ -2060,7 +2215,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Longitude */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing longitude for TTVECTOR command.\n", line);
@@ -2070,7 +2225,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Longitude */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing scale for TTVECTOR command.\n", line);
@@ -2080,7 +2235,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Unit. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing unit for TTVECTOR command.\n", line);
@@ -2132,7 +2287,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_GRID;
-	    strcpy(tl->pattern, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 	    tl->grid.lat0 = 0;
 	    tl->grid.lon0 = 0;
 	    tl->grid.lat9 = 0;
@@ -2140,13 +2295,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Pattern: B [digit] x... y... */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTGRID command.\n", line);
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2161,7 +2316,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Minimum Latitude - all zeros in received data */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing latitude for TTGRID command.\n", line);
@@ -2171,7 +2326,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Minimum Longitude - all zeros in received data */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing longitude for TTGRID command.\n", line);
@@ -2181,7 +2336,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Maximum Latitude - all nines in received data */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing latitude for TTGRID command.\n", line);
@@ -2191,7 +2346,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Maximum Longitude - all nines in received data */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing longitude for TTGRID command.\n", line);
@@ -2235,7 +2390,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_UTM;
-	    strcpy(tl->pattern, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 	    tl->utm.lzone = 0;
 	    tl->utm.scale = 1;
 	    tl->utm.x_offset = 0;
@@ -2243,14 +2398,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Pattern: B [digit] x... y... */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTUTM command.\n", line);
 	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2268,7 +2423,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Zone 1 - 60 and optional latitudinal letter. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing zone for TTUTM command.\n", line);
@@ -2276,25 +2431,25 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    tl->utm.lzone = parse_utm_zone (t, &(tl->utm.hemi));
+	    tl->utm.lzone = parse_utm_zone (t, &(tl->utm.latband), &(tl->utm.hemi));
 
  	    /* Optional scale. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 	      
 	      tl->utm.scale = atof(t);
 
 	      /* Optional x offset. */
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t != NULL) {
 
 	        tl->utm.x_offset = atof(t);
 
 	        /* Optional y offset. */
 
-	        t = strtok (NULL, " ,\t\n\r");
+	        t = split(NULL,0);
 	        if (t != NULL) {
 	     
 	          tl->utm.y_offset = atof(t);
@@ -2357,19 +2512,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else {
 	      tl->type = TTLOC_USNG;
 	    }
-	    strcpy(tl->pattern, "");
-	    strcpy(tl->mgrs.zone, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
+	    strlcpy(tl->mgrs.zone, "", sizeof(tl->mgrs.zone));
 
 	    /* Pattern: B [digit] x... y... */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTUSNG/TTMGRS command.\n", line);
 	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2397,15 +2552,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Zone 1 - 60 and optional latitudinal letter. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing zone & square for TTUSNG/TTMGRS command.\n", line);
 	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    memset (tl->mgrs.zone, 0, sizeof (tl->mgrs.zone));
-	    strncpy (tl->mgrs.zone, t, sizeof (tl->mgrs.zone) - 1);
+	    strlcpy (tl->mgrs.zone, t, sizeof(tl->mgrs.zone));
 
 	    /* Try converting it rather do our own error checking. */
 
@@ -2426,11 +2580,122 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Should be the end. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Unexpected stuff at end ignored:  %s\n", line, t);
 	    }
+	  }
+
+/*
+ * TTMHEAD 		- Define pattern to be used for Maidenhead Locator.
+ *
+ * TTMHEAD   pattern   [ prefix ] 
+ *
+ *			Pattern would be  B[0-9A-D]xxxx...	
+ *			Optional prefix is 10, 6, or 4 digits.
+ *
+ *			The total number of digts in both must be 4, 6, 10, or 12.
+ */
+	  else if (strcasecmp(t, "TTMHEAD") == 0) {
+
+// TODO1.3:  TTMHEAD needs testing. 
+
+	    struct ttloc_s *tl;
+	    int j;
+	    int k;
+	    int count_x;
+	    int count_other;
+
+
+	    assert (p_tt_config->ttloc_size >= 2);
+	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    /* Allocate new space, but first, if already full, make larger. */
+	    if (p_tt_config->ttloc_len == p_tt_config->ttloc_size) {
+	      p_tt_config->ttloc_size += p_tt_config->ttloc_size / 2;
+	      p_tt_config->ttloc_ptr = realloc (p_tt_config->ttloc_ptr, sizeof(struct ttloc_s) * p_tt_config->ttloc_size);
+	    }
+	    p_tt_config->ttloc_len++;
+	    assert (p_tt_config->ttloc_len > 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
+	    tl->type = TTLOC_MHEAD;
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
+	    strlcpy(tl->mhead.prefix, "", sizeof(tl->mhead.prefix));
+
+	    /* Pattern: B, optional additional button, some number of xxxx... for matching */
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing pattern for TTMHEAD command.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
+
+	    if (t[0] != 'B') {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTMHEAD pattern must begin with upper case 'B'.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+
+	    /* Optionally one of 0-9ABCD */
+
+	    if (strchr("ABCD", t[1]) != NULL || isdigit(t[1])) {
+	      j = 2;
+	    }
+	    else {
+	      j = 1;
+	    }
+
+	    count_x = 0;
+	    count_other = 0;
+	    for (k = j ; k < strlen(t); k++) {
+	      if (t[k] == 'x') count_x++;
+	      else count_other++;
+	    }
+
+	    if (count_other != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTMHEAD must have only lower case x to match received data.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+
+	    // optional prefix
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      char mh[30];
+
+	      strlcpy(tl->mhead.prefix, t, sizeof(tl->mhead.prefix));
+
+	      if (!alldigits(t) || (strlen(t) != 4 &&  strlen(t) != 6 && strlen(t) != 10)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: TTMHEAD prefix must be 4, 6, or 10 digits.\n", line);
+	        p_tt_config->ttloc_len--;
+	        continue;
+	      }
+	      if (tt_mhead_to_text(t, 0, mh) != 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: TTMHEAD prefix not a valid DTMF sequence.\n", line);
+	        p_tt_config->ttloc_len--;
+	        continue;
+	      }      
+	    }
+
+	    k = strlen(tl->mhead.prefix) + count_x;
+
+	    if (k != 4 && k != 6  && k != 10  && k != 12 ) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTMHEAD prefix and user data must have a total of 4, 6, 10, or 12 digits.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+	    
 	  }
 
 
@@ -2440,7 +2705,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * TTSATSQ   pattern    
  *
  *			Pattern would be  B[0-9A-D]xxxx 
+ *			
+ *			Must have exactly 4 x.
  */
+
 	  else if (strcasecmp(t, "TTSATSQ") == 0) {
 
 // TODO1.2:  TTSATSQ To be continued...
@@ -2461,20 +2729,20 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_SATSQ;
-	    strcpy(tl->pattern, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 	    tl->point.lat = 0;
 	    tl->point.lon = 0;
 
 	    /* Pattern: B, optional additional button, exactly xxxx for matching */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTSATSQ command.\n", line);
 	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    if (t[0] != 'B') {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2520,6 +2788,15 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *		definition can contain:
  *			0-9, A, B, C, D, *, #, x, y, z.
  *			Not sure why # was included in there.
+ *
+ *	    new for version 1.3 - in progress
+ *
+ *			AA{objname}
+ *			AB{symbol}
+ *			AC{call}
+ *
+ *		These provide automatic conversion from plain text to the TT encoding.
+ *		
  */
 	  else if (strcasecmp(t, "TTMACRO") == 0) {
 
@@ -2527,6 +2804,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    int j;
 	    //char ch;
 	    int p_count[3], d_count[3];
+	    int tt_error = 0;
 
 	    assert (p_tt_config->ttloc_size >= 2);
 	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
@@ -2541,19 +2819,20 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
 	    tl->type = TTLOC_MACRO;
-	    strcpy(tl->pattern, "");
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 
 	    /* Pattern: Any combination of digits, x, y, and z. */
 	    /* Also make note of which letters are used in pattern and defintition. */
  	    /* Version 1.2: also allow A,B,C,D in the pattern. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing pattern for TTMACRO command.\n", line);
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    strcpy (tl->pattern, t);
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
 
 	    p_count[0] = p_count[1] = p_count[2] = 0;
 
@@ -2561,6 +2840,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      if ( strchr ("0123456789ABCDxyz", t[j]) == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTMACRO pattern can contain only digits, A, B, C, D, and lower case x, y, or z.\n", line);
+	        p_tt_config->ttloc_len--;
 	        continue;
 	      }
 	      /* Count how many x, y, z in the pattern. */
@@ -2572,30 +2852,161 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    //text_color_set(DW_COLOR_DEBUG);
 	    //dw_printf ("Line %d: TTMACRO pattern \"%s\" p_count = %d %d %d.\n", line, t, p_count[0], p_count[1], p_count[2]);
 
-	    /* Now gather up the definition. */
+	    /* Next we should find the definition. */
 	    /* It can contain touch tone characters and lower case x, y, z for substitutions. */
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,1);;
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing definition for TTMACRO command.\n", line);
 	      tl->macro.definition = "";	/* Don't die on null pointer later. */
+	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    tl->macro.definition = strdup(t);
+
+	    /* Make a pass over the definition, looking for the xx{...} substitutions. */
+	    /* These are done just once when reading the configuration file. */
+
+	    char *pi;
+	    char *ps;
+	    char stemp[100];  // text inside of xx{...}
+	    char ttemp[300];  // Converted to tone sequences.
+	    char otemp[1000]; // Result after any substitutions.
+	    char t2[2];
+
+	    strlcpy (otemp, "", sizeof(otemp));
+	    t2[1] = '\0';
+	    pi = t;
+	    while (*pi == ' ' || *pi == '\t') {
+	      pi++;
+	    }
+	    for ( ; *pi != '\0'; pi++) {
+
+	      if (strncmp(pi, "AC{", 3) == 0) {
+
+		// Convert to fixed length 10 digit callsign.
+
+	        pi += 3;
+	        ps = stemp;
+	        while (*pi != '}' && *pi != '*' && *pi != '\0') {
+	          *ps++ = *pi++;
+	        }
+	        if (*pi == '}') {
+	          *ps = '\0';
+	          if (tt_text_to_call10 (stemp, 0, ttemp) == 0) {
+	            //text_color_set(DW_COLOR_DEBUG);
+	            //dw_printf ("DEBUG Line %d: AC{%s} -> AC%s\n", line, stemp, ttemp);
+	            strlcat (otemp, "AC", sizeof(otemp));
+	            strlcat (otemp, ttemp, sizeof(otemp));
+	          }
+	          else {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: AC{%s} could not be converted to tones for callsign.\n", line, stemp);
+		    tt_error++;
+	          }
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Line %d: AC{... is missing matching } in TTMACRO definition.\n", line);
+		  tt_error++;
+	        }
+	      }
+
+	      else if (strncmp(pi, "AA{", 3) == 0) {
+
+		// Convert to object name.
+
+	        pi += 3;
+	        ps = stemp;
+	        while (*pi != '}' && *pi != '*' && *pi != '\0') {
+	          *ps++ = *pi++;
+	        }
+	        if (*pi == '}') {
+	          *ps = '\0';
+	          if (strlen(stemp) > 9) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: Object name %s has been truncated to 9 characters.\n", line, stemp);
+	            stemp[9] = '\0';
+	          }
+	          if (tt_text_to_two_key (stemp, 0, ttemp) == 0) {
+	            //text_color_set(DW_COLOR_DEBUG);
+	            //dw_printf ("DEBUG Line %d: AA{%s} -> AA%s\n", line, stemp, ttemp);
+	            strlcat (otemp, "AA", sizeof(otemp));
+	            strlcat (otemp, ttemp, sizeof(otemp));
+	          }
+	          else {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: AA{%s} could not be converted to tones for object name.\n", line, stemp);
+		    tt_error++;
+	          }
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Line %d: AA{... is missing matching } in TTMACRO definition.\n", line);
+		  tt_error++;
+	        }
+	      }
+
+	      else if (strncmp(pi, "AB{", 3) == 0) {
+
+		// Attempt conversion from description to symbol code.
+
+	        pi += 3;
+	        ps = stemp;
+	        while (*pi != '}' && *pi != '*' && *pi != '\0') {
+	          *ps++ = *pi++;
+	        }
+	        if (*pi == '}') {
+	          char symtab;
+	          char symbol;
+	          char overlay;
+	          char symdest[8];
+
+	          *ps = '\0';
+
+	          // First try to find something matching the description.
+
+	          if (symbols_code_from_description (' ', stemp, &symtab, &symbol) == 0) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: Couldn't convert \"%s\" to APRS symbol code.  Using default.\n", line, stemp);
+	            symtab = '\\';	// Alternate
+	            symbol = 'A';	// Box
+	          }
+
+		  // Convert symtab(overlay) & symbol to tone sequence.
+
+		  symbols_to_tones (symtab, symbol, ttemp);
+
+	          //text_color_set(DW_COLOR_DEBUG);
+	          //dw_printf ("DEBUG config file Line %d: AB{%s} -> %s\n", line, stemp, ttemp);
+
+		  strlcat (otemp, ttemp, sizeof(otemp));
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Line %d: AB{... is missing matching } in TTMACRO definition.\n", line);
+		  tt_error++;
+	        }
+	      }
+
+	      else if (strchr("0123456789ABCD*#xyz", *pi) != NULL) {
+	        t2[0] = *pi;
+	        strlcat (otemp, t2, sizeof(otemp));
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: TTMACRO definition can contain only 0-9, A, B, C, D, *, #, x, y, z.\n", line);
+	        tt_error++;
+	      }
+	    } 
+
+	    /* Make sure that number of x, y, z, in pattern and definition match. */
 
 	    d_count[0] = d_count[1] = d_count[2] = 0;
 
-	    for (j=0; j<strlen(t); j++) {
-	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y' && t[j] != 'z' &&
-			t[j] != 'A' && t[j] != 'B' && t[j] != 'C' && t[j] != 'D' && 
-			t[j] != '*' && t[j] != '#') {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Line %d: TTMACRO definition can contain only 0-9, A, B, C, D, *, #, x, y, z.\n", line);
-	        continue;
-	      }
-	      if (t[j] >= 'x' && t[j] <= 'z') {
-		d_count[t[j]-'x']++;
+	    for (j=0; j<strlen(otemp); j++) {
+	      if (otemp[j] >= 'x' && otemp[j] <= 'z') {
+		d_count[otemp[j]-'x']++;
 	      }
 	    }
 
@@ -2611,19 +3022,34 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        dw_printf ("Line %d: '%c' is referenced in TTMACRO definition but does not appear in the pattern.\n", line, 'x'+j);
 	      }
 	    }
+
+	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("DEBUG Config Line %d: %s -> %s\n", line, t, otemp);
+
+	    if (tt_error == 0) {
+	      tl->macro.definition = strdup(otemp);
+	    }
+	    else {
+	      p_tt_config->ttloc_len--;
+	    }
 	  }
 
 /*
  * TTOBJ 		- TT Object Report options.
  *
- * TTOBJ  recv-chan  xmit-chan  [ via-path ] 
+ * TTOBJ  recv-chan  where-to  [ via-path ] 
+ *
+ *	whereto is any combination of transmit channel, APP, IG.
  */
 
 
 	  else if (strcasecmp(t, "TTOBJ") == 0) {
-	    int r, x;
+	    int r, x = -1;
+	    int app = 0;
+	    int ig = 0;
+	    char *p;
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing DTMF receive channel for TTOBJ command.\n", line);
@@ -2644,43 +3070,210 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing transmit channel for TTOBJ command.\n", line);
 	      continue;
 	    }
 
-	    x = atoi(t);
-	    if (x < 0 || x > MAX_CHANS-1) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file: Transmit channel must be in range of 0 to %d on line %d.\n", 
-							MAX_CHANS-1, line);
-	      continue;
-	    }
-	    if ( ! p_audio_config->achan[x].valid) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file, line %d: TTOBJ transmit channel %d is not valid.\n", 
-							line, x);
-	      continue;
+	    // Can have any combination of number, APP, IG.  
+    	    // Would it be easier with strtok?
+
+	    for (p = t; *p != '\0'; p++) {
+
+	      if (isdigit(*p)) {
+	        x = *p - '0';
+	        if (x < 0 || x > MAX_CHANS-1) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file: Transmit channel must be in range of 0 to %d on line %d.\n", MAX_CHANS-1, line);
+	          x = -1;
+	        }
+	        else if ( ! p_audio_config->achan[x].valid) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file, line %d: TTOBJ transmit channel %d is not valid.\n", line, x);
+	          x = -1;
+	        }
+	      }
+	      else if (*p == 'a' || *p == 'A') {
+	        app = 1;
+	      }
+	      else if (*p == 'i' || *p == 'I') {
+	        ig = 1;
+	      }
+	      else if (strchr("pPgG,", *p) != NULL) {
+	        ;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Expected comma separated list with some combination of transmit channel, APP, and IG.\n", line);
+	      }              
 	    }
 
 // This enables the DTMF decoder on the specified channel.
 // Additional channels can be enabled with the DTMF command.
-// Note that they do not enable the APRStt gateway.
+// Note that DTMF command does not enable the APRStt gateway.
+
+
+	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("Debug TTOBJ r=%d, x=%d, app=%d, ig=%d\n", r, x, app, ig);
 
 	    p_audio_config->achan[r].dtmf_decode = DTMF_DECODE_ON;
 	    p_tt_config->gateway_enabled = 1;
 	    p_tt_config->obj_recv_chan = r;
 	    p_tt_config->obj_xmit_chan = x;
+	    p_tt_config->obj_send_to_app = app;
+	    p_tt_config->obj_send_to_ig = ig;
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 
-	      // TODO: Should do some validity checking.
+	      // TODO: Should do some validity checking on the path.
 	      strncpy (p_tt_config->obj_xmit_via, t, sizeof(p_tt_config->obj_xmit_via));
 	    }
 	  }
+
+/*
+ * TTERR 		- TT responses for success or errors.
+ *
+ * TTERR  msg_id  method  text...  
+ */
+
+	  else if (strcasecmp(t, "TTERR") == 0) {
+	    int n, msg_num;
+	    char *p;
+	    char method[AX25_MAX_ADDR_LEN];
+	    int ssid;
+	    int heard;
+
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing message identifier for TTERR command.\n", line);
+	      continue;
+	    }
+	    
+	    msg_num = -1;
+	    for (n=0; n<TT_ERROR_MAXP1; n++) {
+	      if (strcasecmp(t, tt_msg_id[n]) == 0) {
+	        msg_num = n;
+	        break;
+	      }
+	    }
+	    if (msg_num < 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Invalid message identifier for TTERR command.\n", line);	
+		// pick one of ...
+	      continue;
+	    }
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing method (SPEECH, MORSE) for TTERR command.\n", line);
+	      continue;
+	    }
+
+	    for (p=t; *p!= '\0'; p++) {
+	      if (islower(*p)) *p = toupper(*p);
+	    }
+
+	    if ( ! ax25_parse_addr(t, 1, method, &ssid, &heard)) {
+	       continue;  // function above prints any error message
+	    }
+
+	    if (strcmp(method,"MORSE") != 0 && strcmp(method,"SPEECH") != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Response method of %s must be SPEECH or MORSE for TTERR command.\n", line, method);
+	      continue;
+	    }
+
+	    t = split(NULL,1);;
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing response text for TTERR command.\n", line);
+	      continue;
+	    }
+
+  	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("Line %d: TTERR debug %d %s-%d \"%s\"\n", line, msg_num, method, ssid, t);
+ 
+	    assert (msg_num >= 0 && msg_num < TT_ERROR_MAXP1);
+
+	    strlcpy (p_tt_config->response[msg_num].method, method, sizeof(p_tt_config->response[msg_num].method));
+
+// TODO1.3: Need SSID too!
+
+	    strlcpy (p_tt_config->response[msg_num].mtext, t, sizeof(p_tt_config->response[msg_num].mtext));
+	    p_tt_config->response[msg_num].mtext[TT_MTEXT_LEN-1] = '\0';
+
+	  }
+
+/*
+ * TTSTATUS 		- TT custom status messages.
+ *
+ * TTSTATUS  status_id  text...  
+ */
+
+	  else if (strcasecmp(t, "TTSTATUS") == 0) {
+	    int status_num;
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing status number for TTSTATUS command.\n", line);
+	      continue;
+	    }
+	    
+	    status_num = atoi(t);
+
+	    if (status_num < 1 || status_num > 9) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Status number for TTSTATUS command must be in range of 1 to 9.\n", line);	
+	      continue;
+	    }
+
+	    t = split(NULL,1);;
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing status text for TTSTATUS command.\n", line);
+	      continue;
+	    }
+
+  	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("Line %d: TTSTATUS debug %d \"%s\"\n", line, status_num, t);
+ 
+	    while (*t == ' ' || *t == '\t') t++;   // remove leading white space.
+
+	    strncpy (p_tt_config->status[status_num], t, TT_MTEXT_LEN);
+	    p_tt_config->status[status_num][TT_MTEXT_LEN-1] = '\0';
+
+	  }
+
+
+/*
+ * TTCMD 		- Command to run when valid sequence is received.
+ *			  Any text generated will be sent back to user.
+ *
+ * TTCMD ...  
+ */
+
+	  else if (strcasecmp(t, "TTCMD") == 0) {
+	    int status_num;
+
+	    t = split(NULL,1);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing command for TTCMD command.\n", line);
+	      continue;
+	    }
+	    
+	    strncpy (p_tt_config->ttcmd, t, sizeof(p_tt_config->ttcmd));
+	    p_tt_config->ttcmd[sizeof(p_tt_config->ttcmd)-1] = '\0';
+
+	  }
+
 
 /*
  * ==================== Internet gateway ==================== 
@@ -2695,7 +3288,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "IGSERVER") == 0) {
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing IGate server name for IGSERVER command.\n", line);
@@ -2723,7 +3316,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    /* Alternatively, the port number could be separated by white space. */
 	    
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 	      int n = atoi(t);
               if (n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) {
@@ -2747,7 +3340,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "IGLOGIN") == 0) {
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing login callsign for IGLOGIN command.\n", line);
@@ -2756,7 +3349,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    // TODO: Wouldn't hurt to do validity checking of format.
 	    strncpy (p_igate_config->t2_login, t, sizeof(p_igate_config->t2_login)-1);
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing passcode for IGLOGIN command.\n", line);
@@ -2774,7 +3367,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "IGTXVIA") == 0) {
 	    int n;
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing transmit channel for IGTXVIA command.\n", line);
@@ -2790,7 +3383,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    p_igate_config->tx_chan = n;
 
-	    t = strtok (NULL, " \t\n\r");
+	    t = split(NULL,0);
 	    if (t != NULL) {
 	      char *p;
 	      p_igate_config->tx_via[0] = ',';
@@ -2812,7 +3405,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "IGFILTER") == 0) {
 	    //int n;
 
-	    t = strtok (NULL, "\n\r");		/* Take rest of line as one string. */
+	    t = split(NULL,1);		/* Take rest of line as one string. */
 
 	    if (t != NULL && strlen(t) > 0) {
 	      p_igate_config->t2_filter = strdup (t);
@@ -2829,7 +3422,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "IGTXLIMIT") == 0) {
 	    int n;
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing one minute limit for IGTXLIMIT command.\n", line);
@@ -2848,7 +3441,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 				line, p_igate_config->tx_limit_1);
    	    }
 
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing five minute limit for IGTXLIMIT command.\n", line);
@@ -2878,7 +3471,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "AGWPORT") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing port number for AGWPORT command.\n", line);
@@ -2902,7 +3495,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "KISSPORT") == 0) {
 	    int n;
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing port number for KISSPORT command.\n", line);
@@ -2924,7 +3517,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * NULLMODEM		- Device name for our end of the virtual "null modem"
  */
 	  else if (strcasecmp(t, "nullmodem") == 0) {
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing device name for my end of the 'null modem' on line %d.\n", line);
@@ -2939,7 +3532,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * NMEA		- Device name for communication with NMEA device.
  */
 	  else if (strcasecmp(t, "nmea") == 0) {
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing device name for NMEA port on line %d.\n", line);
@@ -2954,7 +3547,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * LOGDIR	- Directory name for storing log files.  Use "." for current working directory.
  */
 	  else if (strcasecmp(t, "logdir") == 0) {
-	    t = strtok (NULL, " ,\t\n\r");
+	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing directory name for LOGDIR on line %d.\n", line);
@@ -2962,6 +3555,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    else {
 	      strncpy (p_misc_config->logdir, t, sizeof(p_misc_config->logdir)-1);
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: LOGDIR on line %d should have directory path and nothing more.\n", line);
 	    }
 	  }
 
@@ -3049,7 +3647,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    int n;
 
 #define SB_NUM(name,sbvar,minn,maxx,unit)  							\
-	    t = strtok (NULL, " ,\t\n\r");							\
+	    t = split(NULL,0);							\
 	    if (t == NULL) {									\
 	      text_color_set(DW_COLOR_ERROR);							\
 	      dw_printf ("Line %d: Missing %s for SmartBeaconing.\n", line, name);		\
@@ -3066,7 +3664,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
    	    }
 
 #define SB_TIME(name,sbvar,minn,maxx,unit)  							\
-	    t = strtok (NULL, " ,\t\n\r");							\
+	    t = split(NULL,0);							\
 	    if (t == NULL) {									\
 	      text_color_set(DW_COLOR_ERROR);							\
 	      dw_printf ("Line %d: Missing %s for SmartBeaconing.\n", line, name);		\
@@ -3164,7 +3762,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (strcmp(p_audio_config->achan[i].mycall, "NOCALL") == 0  || strcmp(p_audio_config->achan[i].mycall, "N0CALL") == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: MYCALL must be set for receive channel %d before Rx IGate is allowed.\n", i);
-	      strcpy (p_igate_config->t2_login, "");
+	      strlcpy (p_igate_config->t2_login, "", sizeof(p_igate_config->t2_login));
 	    }
 	    if (p_igate_config->tx_chan >= 0 && 
 			( strcmp(p_audio_config->achan[p_igate_config->tx_chan].mycall, "") == 0 ||
@@ -3200,8 +3798,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	double easting = G_UNKNOWN;
 	double northing = G_UNKNOWN;
 
-	strcpy (temp_symbol, "");
-	strcpy (zone, "");
+	strlcpy (temp_symbol, "", sizeof(temp_symbol));
+	strlcpy (zone, "", sizeof(zone));
 
 	b->sendto_type = SENDTO_XMIT;
 	b->sendto_chan = 0;
@@ -3215,74 +3813,13 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->symtab = '/';
 	b->symbol = '-';	/* house */
 
-/*
- * cmd should be rest of command line after ?BEACON was removed.
- *
- * Quoting is required for any values containing spaces.
- * This could happen for an object name, comment, symbol description, ...
- * To prevent strtok from stopping at those spaces, change them to 
- * non-breaking space character temporarily.  After spliting everything
- * up at white space, change them back to normal spaces.
- */
- 
-#define NBSP (' ' + 0x80)
 
-	p = cmd;		/* Process from here. */
-	o = options;		/* to here. */
-	q = 0;			/* Keep track of whether in quoted part. */
-
-	for ( ; *p != '\0' ; p++) {
-
-	  switch (*p) {
-
-	    case '"':
-	      if (!q) {		/* opening quote */
-	        if (*(p-1) != '=') {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Config file: line %d: Suspicious use of \" not after =.\n", line);
-	 	  dw_printf ("Suggestion: Double it and quote entire value.\n");
-	          *o++ = '"';	/* Treat as regular character. */
-	        }
-	        else {
-	          q = 1;
-	        }
-	      }
-	      else {		/* embedded or closing quote */
-	        if (*(p+1) == '"') {
-	          *o++ = '"';	/* reduce double to single */
-	          p++;
-	        }
-                else if (isspace(*(p+1)) || *(p+1) == '\0') {
-	          q = 0;
-	        }
-	        else {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Config file: line %d: Suspicious use of \" not at end of value.\n", line);
-	 	  dw_printf ("Suggestion: Double it and quote entire value.\n");
-	          *o++ = '"';	/* Treat as regular character. */
-	        }		  
-	      }
-	      break;
-
-	    case ' ':
-
-	      *o++ = q ? NBSP : ' ';
-	      break;
-
-	    default:
-	      *o++ = *p;
-	      break;
-	  }
-	}
-	*o = '\0';
-
-	for (t = strtok (options, " \t\n\r"); t != NULL; t = strtok (NULL, " \t\n\r")) {
+	while ((t = split(NULL,0)) != NULL) {
 
 	  char keyword[20];
 	  char value[200];
 	  char *e;
 	  char *p;
-	  //int q;
 
 
 	  e = strchr(t, '=');
@@ -3292,15 +3829,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    return (0);
 	  }
 	  *e = '\0';
-	  strcpy (keyword, t);
-	  strcpy (value, e+1);
-
-/* Put back normal spaces. */
-
-	  for (p = value; *p != '\0'; p++) {
-	    // char is signed for MinGW!
-	    if (((int)(*p) & 0xff) == NBSP) *p = ' ';
-	  }
+	  strlcpy (keyword, t, sizeof(keyword));
+	  strlcpy (value, e+1, sizeof(value));
 
 	  if (strcasecmp(keyword, "DELAY") == 0) {
 	    b->delay = parse_interval(value,line);
@@ -3367,6 +3897,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "INFO") == 0) {
 	    b->custom_info = strdup(value);
 	  }
+	  else if (strcasecmp(keyword, "INFOCMD") == 0) {
+	    b->custom_infocmd = strdup(value);
+	  }
 	  else if (strcasecmp(keyword, "OBJNAME") == 0) {
 	    strncpy(b->objname, value, 9);
 	  }
@@ -3390,7 +3923,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  }
 	  else if (strcasecmp(keyword, "SYMBOL") == 0) {
 	    /* Defer processing in case overlay appears later. */
-	    strcpy (temp_symbol, value);
+	    strlcpy (temp_symbol, value, sizeof(temp_symbol));
 	  }
 	  else if (strcasecmp(keyword, "OVERLAY") == 0) {
 	    if (strlen(value) == 1 && (isupper(value[0]) || isdigit(value[0]))) {
@@ -3425,6 +3958,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "COMMENT") == 0) {
 	    b->comment = strdup(value);
 	  }
+	  else if (strcasecmp(keyword, "COMMENTCMD") == 0) {
+	    b->commentcmd = strdup(value);
+	  }
 	  else if (strcasecmp(keyword, "COMPRESS") == 0 || strcasecmp(keyword, "COMPRESSED") == 0) {
 	    b->compress = atoi(value);
 	  }
@@ -3438,6 +3974,11 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  }
 	}
 
+	if (b->custom_info != NULL && b->custom_infocmd != NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Config file, line %d: Can't use both INFO and INFOCMD at the same time..\n", line);
+	}
+
 /*
  * Convert UTM coordintes to lat / long.
  */
@@ -3446,11 +3987,11 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  if (strlen(zone) > 0 && easting != G_UNKNOWN && northing != G_UNKNOWN) {
 
 	    long lzone;
-	    char hemi;
+	    char latband, hemi;
 	    long lerr;
 	    double dlat, dlon;
 
-	    lzone = parse_utm_zone (zone, &hemi);
+	    lzone = parse_utm_zone (zone, &latband, &hemi);
 
 	    lerr = Convert_UTM_To_Geodetic(lzone, hemi, easting, northing, &dlat, &dlon);
 

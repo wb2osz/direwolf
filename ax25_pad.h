@@ -318,7 +318,8 @@ extern void ax25_remove_addr (packet_t this_p, int n);
 extern int ax25_get_num_addr (packet_t pp);
 extern int ax25_get_num_repeaters (packet_t this_p);
 
-extern void ax25_get_addr_with_ssid (packet_t pp, int n, char *);
+extern void ax25_get_addr_with_ssid (packet_t pp, int n, char *station);
+extern void ax25_get_addr_no_ssid (packet_t pp, int n, char *station);
 
 extern int ax25_get_ssid (packet_t pp, int n);
 extern void ax25_set_ssid (packet_t this_p, int n, int ssid);
@@ -360,7 +361,8 @@ extern unsigned short ax25_m_m_crc (packet_t pp);
 
 extern void ax25_safe_print (char *, int, int ascii_only);
 
-extern int ax25_alevel_to_text (alevel_t alevel, char *text);
+#define AX25_ALEVEL_TO_TEXT_SIZE 32	// overkill but safe.
+extern int ax25_alevel_to_text (alevel_t alevel, char text[AX25_ALEVEL_TO_TEXT_SIZE]);
 
 
 #endif /* AX25_PAD_H */

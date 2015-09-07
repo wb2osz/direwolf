@@ -5,7 +5,7 @@
  *
  * Waypoint icon codes for use in the $PMGNWPL sentence.
  *
- * Derived from Data Transmission Protocol For Magellan Products – version 2.11
+ * Derived from Data Transmission Protocol For Magellan Products - version 2.11
  */
 
 #define MGN_crossed_square "a"

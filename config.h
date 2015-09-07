@@ -32,8 +32,8 @@ enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 
 struct misc_config_s {
 
-	int agwpe_port;		/* Port number for the “AGW TCPIP Socket Interface” */
-	int kiss_port;		/* Port number for the “KISS” protocol. */
+	int agwpe_port;		/* Port number for the "AGW TCPIP Socket Interface" */
+	int kiss_port;		/* Port number for the "KISS" protocol. */
 	int enable_kiss_pt;	/* Enable pseudo terminal for KISS. */
 				/* Want this to be off by default because it hangs */
 				/* after a while if nothing is reading from other end. */
@@ -97,6 +97,9 @@ struct misc_config_s {
 	  char *custom_info;	/* Info part for handcrafted custom beacon. */
 				/* Ignore the rest below if this is set. */
 
+	  char *custom_infocmd;	/* Command to generate info part. */
+				/* Again, other options below are then ignored. */
+
 	  int messaging;	/* Set messaging attribute for position report. */
 				/* i.e. Data Type Indicator of '=' rather than '!' */
 
@@ -119,6 +122,7 @@ struct misc_config_s {
 	  float offset;		/* MHz. */
 	
 	  char *comment;	/* Comment or NULL. */
+	  char *commentcmd;	/* Command to append more to Comment or NULL. */
 
 
 	} beacon[MAX_BEACONS];

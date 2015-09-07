@@ -62,7 +62,10 @@
 
 #if __WIN32__
 #define PTW32_STATIC_LIB
-#include "pthreads/pthread.h"
+//#include "pthreads/pthread.h"
+#define gmtime_r( _clock, _result ) \
+        ( *(_result) = *gmtime( (_clock) ), \
+          (_result) )
 #else
 #include <pthread.h>
 #endif
@@ -153,9 +156,50 @@ typedef pthread_mutex_t dw_mutex_t;
 	  } \
 	}
 
-
 #endif
 
+
+
+/* Platform differences for string functions. */
+
+
+#if __WIN32__
+char *strsep(char **stringp, const char *delim);
+#endif
+
+//#if __WIN32__
+char *strcasestr(const char *S, const char *FIND);
+//#endif
+
+
+#if defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
+
+// strlcpy and strlcat should be in string.h and the C library.
+
+#else   // Use our own copy
+
+
+#define DEBUG_STRL 1
+
+#if DEBUG_STRL
+
+#define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz,__FILE__,__func__,__LINE__)
+#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz,__FILE__,__func__,__LINE__)
+
+size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
+size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
+
+#else
+
+#define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz)
+#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz)
+
+size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
+size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
+
+#endif  /* DEBUG_STRL */
+
+#endif	/* BSD or Apple */
 
 
 #endif   /* ifndef DIREWOLF_H */

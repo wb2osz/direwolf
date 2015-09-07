@@ -14,3 +14,4 @@ int gen_tone_init (struct audio_s *pp, int amp);
 
 void tone_gen_put_bit (int chan, int dat);
 
+void gen_tone_put_sample (int chan, int a, int sam);

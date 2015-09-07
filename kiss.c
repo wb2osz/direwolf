@@ -84,7 +84,7 @@
  *		might be limited to these four choices.
  *
  *		The documentation instucts the user to install the com0com 
- *		“Null-modem emulator” from http://sourceforge.net/projects/com0com/   
+ *		"Null-modem emulator" from http://sourceforge.net/projects/com0com/   
  *		and configure it for COM3 & COM4.
  *
  *		By default Dire Wolf will use COM3 (/dev/ttyS2 or /dev/com3 - lower case!)
@@ -955,7 +955,7 @@ static THREAD_F kiss_listen_thread (void *arg)
 #if __WIN32__
 	return(0);
 #else
-	return;	/* Unreachable but avoids compiler warning. */
+	return (THREAD_F) 0;	/* Unreachable but avoids compiler warning. */
 #endif
 }
 

@@ -59,6 +59,7 @@
 #include "dwgps.h"
 #include "log.h"
 #include "dlq.h"
+#include "aprs_tt.h"		// for dw_run_cmd - should relocate someday.
 
 
 
@@ -205,11 +206,11 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 
 	        case BEACON_CUSTOM:
 
-		  /* INFO is required. */
+		  /* INFO or INFOCMD is required. */
 
-		  if (g_misc_config_p->beacon[j].custom_info == NULL) {
+		  if (g_misc_config_p->beacon[j].custom_info == NULL && g_misc_config_p->beacon[j].custom_infocmd == NULL) {
 	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Config file, line %d: INFO is required for custom beacon.\n", g_misc_config_p->beacon[j].lineno);
+	            dw_printf ("Config file, line %d: INFO or INFOCMD is required for custom beacon.\n", g_misc_config_p->beacon[j].lineno);
 		    g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
 		    continue;
 		  }	
@@ -578,6 +579,8 @@ static void * beacon_thread (void *arg)
 	      char mycall[AX25_MAX_ADDR_LEN];
 	      int alt_ft;
 
+	      char super_comment[AX25_MAX_INFO_LEN];	// Fixed part + any dynamic part.
+
 /*
  * Obtain source call for the beacon.
  * This could potentially be different on different channels.
@@ -588,11 +591,11 @@ static void * beacon_thread (void *arg)
  * Version 1.1 - channel should now be 0 for IGate.  
  * Type of destination is encoded separately.
  */
-	      strcpy (mycall, "NOCALL");
+	      strlcpy (mycall, "NOCALL", sizeof(mycall));
 
 	      assert (g_misc_config_p->beacon[j].sendto_chan >= 0);
 
-	      strcpy (mycall, g_modem_config_p->achan[g_misc_config_p->beacon[j].sendto_chan].mycall);
+	      strlcpy (mycall, g_modem_config_p->achan[g_misc_config_p->beacon[j].sendto_chan].mycall, sizeof(mycall));
 	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
 	        text_color_set(DW_COLOR_ERROR);
@@ -606,22 +609,52 @@ static void * beacon_thread (void *arg)
  * 	src > dest [ , via ]
  */
 
-	      strcpy (beacon_text, mycall);
-	      strcat (beacon_text, ">");
+	      strlcpy (beacon_text, mycall, sizeof(beacon_text));
+	      strlcat (beacon_text, ">", sizeof(beacon_text));
 
 	      if (g_misc_config_p->beacon[j].dest != NULL) {
-	        strcat (beacon_text, g_misc_config_p->beacon[j].dest);
+	        strlcat (beacon_text, g_misc_config_p->beacon[j].dest, sizeof(beacon_text));
 	      } 
 	      else {
-	         sprintf (stemp, "%s%1d%1d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
-	         strcat (beacon_text, stemp);
+	         snprintf (stemp, sizeof(stemp), "%s%1d%1d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
+	         strlcat (beacon_text, stemp, sizeof(beacon_text));
 	      }
 
 	      if (g_misc_config_p->beacon[j].via != NULL) {
-	        strcat (beacon_text, ",");
-	        strcat (beacon_text, g_misc_config_p->beacon[j].via);
+	        strlcat (beacon_text, ",", sizeof(beacon_text));
+	        strlcat (beacon_text, g_misc_config_p->beacon[j].via, sizeof(beacon_text));
 	      }
-	      strcat (beacon_text, ":");
+	      strlcat (beacon_text, ":", sizeof(beacon_text));
+
+
+/*
+ * If the COMMENTCMD option was specified, run specified command to get variable part.
+ * Result is any fixed part followed by any variable part.
+ */
+
+// TODO: test & document.
+
+	      strlcpy (super_comment, "", sizeof(super_comment));
+	      if (g_misc_config_p->beacon[j].comment != NULL) {
+	        strlcpy (super_comment, g_misc_config_p->beacon[j].comment, sizeof(super_comment));
+	      }
+
+	      if (g_misc_config_p->beacon[j].commentcmd != NULL) {
+	        char var_comment[AX25_MAX_INFO_LEN];
+	        int k;
+
+	        /* Run given command to get variable part of comment. */
+
+	        k = dw_run_cmd (g_misc_config_p->beacon[j].commentcmd, 2, var_comment, (int)sizeof(var_comment));
+	        if (k > 0) {
+	          strlcat (super_comment, var_comment, sizeof(super_comment));
+	        }
+	        else {
+		  text_color_set(DW_COLOR_ERROR);
+	    	  dw_printf ("xBEACON, config file line %d, COMMENTCMD failure.\n", g_misc_config_p->beacon[j].lineno);
+	        }
+	      }
+
 
 /* 
  * Add the info part depending on beacon type. 
@@ -638,9 +671,9 @@ static void * beacon_thread (void *arg)
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			0, 0, /* course, speed */	
 			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset,
-			g_misc_config_p->beacon[j].comment,
-			info);
-		  strcat (beacon_text, info);
+			super_comment,
+			info, sizeof(info));
+		  strlcat (beacon_text, info, sizeof(beacon_text));
 	          g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].every;
 		  break;
 
@@ -650,9 +683,9 @@ static void * beacon_thread (void *arg)
 			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			0, 0, /* course, speed */
-			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset, g_misc_config_p->beacon[j].comment,
-			info);
-		  strcat (beacon_text, info);
+			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset, super_comment,
+			info, sizeof(info));
+		  strlcat (beacon_text, info, sizeof(beacon_text));
 	          g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].every;
 		  break;
 
@@ -673,9 +706,9 @@ static void * beacon_thread (void *arg)
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			coarse, (int)roundf(my_speed_knots),	
 			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset,
-			g_misc_config_p->beacon[j].comment,
-			info);
-		    strcat (beacon_text, info);
+			super_comment,
+			info, sizeof(info));
+		    strlcat (beacon_text, info, sizeof(beacon_text));
 
 		    /* Remember most recent tracker beacon. */
 
@@ -707,7 +740,7 @@ static void * beacon_thread (void *arg)
 	  	      A.g_tone   = G_UNKNOWN;
 	  	      A.g_dcs    = G_UNKNOWN;
 
-		      strcpy (A.g_src, mycall);
+		      strlcpy (A.g_src, mycall, sizeof(A.g_src));
 		      A.g_symbol_table = g_misc_config_p->beacon[j].symtab;
 		      A.g_symbol_code = g_misc_config_p->beacon[j].symbol;
 		      A.g_lat = my_lat;
@@ -730,12 +763,32 @@ static void * beacon_thread (void *arg)
 		case BEACON_CUSTOM:
 
 		  if (g_misc_config_p->beacon[j].custom_info != NULL) {
-	            strcat (beacon_text, g_misc_config_p->beacon[j].custom_info);
+
+		    /* Fixed handcrafted text. */
+
+	            strlcat (beacon_text, g_misc_config_p->beacon[j].custom_info, sizeof(beacon_text));
+		  }
+		  else if (g_misc_config_p->beacon[j].custom_infocmd != NULL) {
+		    char info_part[AX25_MAX_INFO_LEN];
+		    char *p;
+		    int k;
+
+	            /* Run given command to obtain the info part for packet. */
+
+		    k = dw_run_cmd (g_misc_config_p->beacon[j].custom_infocmd, 2, info_part, (int)sizeof(info_part));
+		    if (k > 0) {
+	              strlcat (beacon_text, info_part, sizeof(beacon_text));
+	            }
+	            else {
+		      text_color_set(DW_COLOR_ERROR);
+	    	      dw_printf ("CBEACON, config file line %d, INFOCMD failure.\n", g_misc_config_p->beacon[j].lineno);
+		      strlcpy (beacon_text, "", sizeof(beacon_text));  // abort!
+	            }
 		  }
 		  else {
 		    text_color_set(DW_COLOR_ERROR);
 	    	    dw_printf ("Internal error. custom_info is null. %s %d\n", __FILE__, __LINE__);
-	            continue;
+		    strlcpy (beacon_text, "", sizeof(beacon_text));  // abort!
 	          }
 	          g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].every;
 		  break;
@@ -749,6 +802,10 @@ static void * beacon_thread (void *arg)
 /*
  * Parse monitor format into form for transmission.
  */	
+	      if (strlen(beacon_text) == 0) {
+		continue;
+	      }
+	      
 	      pp = ax25_from_text (beacon_text, strict);
 
               if (pp != NULL) {

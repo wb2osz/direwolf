@@ -22,7 +22,8 @@
 *.cpp		text
 *.h		text
 *.pl		text
-Makefile*	text
+*.py		text
+*.sh		text
 *.txt		text
 *.desktop	text
 *.conf		text
@@ -30,3 +31,5 @@ Makefile*	text
 
 *.ico		binary
 *.png		binary
+
+Makefile*	text

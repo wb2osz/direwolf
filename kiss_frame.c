@@ -131,6 +131,12 @@ void kiss_frame_init (struct audio_s *pa)
  * Inputs:	in	- Address of input block.
  *			  First byte is the "type indicator" with type and 
  *			  channel but we don't care about that here.
+ *
+ *			  This seems cumbersome and confusing to have this
+ *			  one byte offset when encapsulating an AX.25 frame.
+ *			  Maybe the type/channel byte should be passed in 
+ *			  as a separate argument.
+ *
  *			  Note that this is "binary" data and can contain
  *			  nul (0x00) values.   Don't treat it like a text string!
  *
@@ -176,6 +182,7 @@ int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out)
 }  /* end kiss_encapsulate */
 
 
+#ifndef WALK96
 
 /*-------------------------------------------------------------------
  *
@@ -658,5 +665,7 @@ main ()
 }
 
 #endif
+
+#endif /* WALK96 */
 
 /* end kiss_frame.c */

@@ -1,0 +1,516 @@
+#
+# Makefile for Macintosh 10.8+ version of Dire Wolf.
+#
+
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.conf
+	@echo " "
+	@echo "Next step install with: "
+	@echo " "
+	@echo "      sudo make install"
+	@echo " "
+	@echo "System SDK's (10.8 - 10.10) must be located here to make use of them. "
+	@echo "     /Developer/SDKs "
+	@echo " "
+
+SYS_LIBS :=
+SYS_MIN :=
+SDK := $(shell find /Developer -maxdepth 1 -type d -name "SDKs")
+#$(info $$SDK = ${SDK})
+ifeq (${SDK},/Developer/SDKs)
+	SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.8.sdk")
+	ifeq (${SDK},/Developer/SDKs/MacOSX10.8.sdk)
+		SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.8.sdk
+		SYS_MIN := -mmacosx-version-min=10.8
+	else
+		SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.9.sdk")
+		ifeq (${SDK},/Developer/SDKs/MacOSX10.9.sdk)
+			SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.9.sdk
+			SYS_MIN := -mmacosx-version-min=10.9
+		else
+			SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.10.sdk")
+			ifeq (${SDK},/Developer/SDKs/MacOSX10.10.sdk)
+				SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.10.sdk
+				SYS_MIN := -mmacosx-version-min=10.10
+			endif
+		endif
+	endif
+endif
+
+EXTRA_CFLAGS :=
+DARWIN_CC := $(shell which clang)
+ifeq (${DARWIN_CC},)
+DARWIN_CC := $(shell which gcc)
+EXTRA_CFLAGS :=
+else
+EXTRA_CFLAGS := -fvectorize -fslp-vectorize -fslp-vectorize-aggressive -pthread
+endif
+
+# Change as required in support of the available libraries
+
+#CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
+CFLAGS := -Os -pthread -Igeotranz $(EXTRA_CFLAGS)
+# $(info $$CC is [${CC}])
+
+#
+# The DSP filters spend a lot of time spinning around in little
+# loops multiplying and adding arrays of numbers.  The Intel "SSE"
+# instructions, introduced in 1999 with the Pentium III series,
+# can speed this up considerably.
+#
+# SSE2 instructions, added in 2000, don't seem to offer any advantage.
+#
+#
+# Let's take a look at the effect of the compile options.
+#
+#
+# Times are elapsed time to process Track 2 of the TNC test CD.
+#
+# i.e.   "./atest 02_Track_2.wav"
+# Default demodulator type is new "E" added for version 1.2.
+#
+
+#
+# ---------- x86 (32 bit) ----------
+#
+
+#
+# gcc 4.6.3 running on Ubuntu 12.04.05.
+# Intel(R) Celeron(R) CPU 2.53GHz.  Appears to have only 32 bit instructions.
+# Probably from around 2004 or 2005.
+#
+# When gcc is generating code for a 32 bit x86 target, it assumes the ancient
+# i386 processor.  This is good for portability but bad for performance.
+#
+# The code can run considerably faster by taking advantage of the SSE instructions
+# available in the Pentium 3 or later.
+#
+#       seconds options		comments
+#       ------  -------		--------
+#         524
+#         183	-O2
+#         182	-O3
+#         183	-O3 -ffast-math  	(should be same as -Ofast)
+#         184	-Ofast
+#         189	-O3 -ffast-math -march=pentium
+#         122	-O3 -ffast-math -msse
+#         122	-O3 -ffast-math -march=pentium -msse
+#         121	-O3 -ffast-math -march=pentium3   (this implies -msse)
+#         120	-O3 -ffast-math -march=native
+#
+# Note that "-march=native" is essentially the same as "-march=pentium3."
+#
+
+# If the compiler is generating code for the i386 target, we can
+# get much better results by telling it we have at least a Pentium 3.
+
+CFLAGS += -march=core2 -msse4.1 -std=gnu99
+#CFLAGS += -march=pentium3 -sse
+
+#
+# gcc 4.8.2 running on Ubuntu 14.04.1.
+# Intel Core 2 Duo from around 2007 or 2008.
+#
+# 64 bit target implies that we have SSE and probably even better vector instructions.
+#
+#       seconds options		comments
+#       ------  -------		--------
+#         245
+#          75	-01
+#          72 	-02
+#          71  	-03
+#          73  	-O3 -march=native
+#          42	-O3 -ffast-math
+#          42  	-Ofast			(note below)
+#          40	-O3 -ffast-math -march=native
+#
+#
+# Note that "-Ofast" is a newer option roughly equivalent to "-O3 -ffast-math".
+# I use the longer form because it is compatible with older compilers.
+#
+# Why don't I don't have "-march=native?"
+# Older compilers don't recognize "native" as one of the valid options.
+# One article said it was added with gcc 4.2 but I haven't verified that.
+#
+
+# Add -ffastmath in only if compiler version recognizes it.
+
+useffast := $(shell gcc --help -v 2>/dev/null | grep ffast-math)
+ifneq ($(useffast),)
+CFLAGS += -ffast-math
+endif
+
+#
+# You would expect "-march=native" to produce the fastest code.
+# Why don't I use it here?
+#
+#	1. In my benchmarks, above, it has a negligible impact if any at all.
+#	2. Some older versions of gcc don't recognize "native" as a valid choice.
+#	3. Results are less portable.  Not a consideration if you are
+#		building only for your own use but very important for anyone
+#		redistributing a "binary" version.
+#
+# If you are planning to distribute the binary version to other
+# people (in some ham radio software collection, RPM, or DEB package),
+# avoid # fine tuning it for your particular computer.  It could
+# cause compatibility issues for those with older computers.
+#
+
+#CFLAGS += -D_FORTIFY_SOURCE
+
+# Use PortAudio Library
+
+# Force static linking of portaudio if the static library is available.
+PA_LIB_STATIC := $(shell find /opt/local/lib -maxdepth 1 -type f -name "libportaudio.a")
+#$(info $$PA_LIB_STATIC is [${PA_LIB_STATIC}])
+ifeq (${PA_LIB_STATIC},)
+LDLIBS += -L/opt/local/lib -lportaudio
+else
+LDLIBS += /opt/local/lib/libportaudio.a
+endif
+
+# Include libraries portaudio requires.
+LDLIBS += -framework CoreAudio -framework AudioUnit -framework AudioToolbox
+LDLIBS += -framework Foundation -framework CoreServices
+
+CFLAGS += -DUSE_PORTAUDIO -I/opt/local/include
+
+# Uncomment following lines to enable GPS interface & tracker function.
+# Not available for MacOSX.
+# Although MacPorts has gpsd, wonder if it's the same thing.
+
+#CFLAGS += -DENABLE_GPS
+#LDLIBS += -lgps
+
+# Name of current directory.
+# Used to generate zip file name for distribution.
+
+z := $(notdir ${CURDIR})
+
+
+# Main application.
+
+direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_pad.o beacon.o \
+		config.o decode_aprs.o dedupe.o demod_9600.o demod_afsk.o \
+		demod.o digipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
+		encode_aprs.o encode_aprs.o fcs_calc.o fcs_calc.o gen_tone.o \
+		geotranz.a hdlc_rec.o hdlc_rec2.o hdlc_send.o igate.o kiss_frame.o \
+		kiss.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
+		nmea.o serial_port.o pfilter.o ptt.o rdq.o recv.o redecode.o rrbb.o server.o \
+		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xmit.o
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LDLIBS) -lm
+
+
+# Optimization for slow processors.
+
+demod.o : fsk_fast_filter.h
+
+demod_afsk.o : fsk_fast_filter.h
+
+
+fsk_fast_filter.h : demod_afsk.c
+	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c -lm
+	./gen_fff > fsk_fast_filter.h
+
+
+
+# UTM, USNG, MGRS conversions.
+
+geotranz.a : error_string.o  mgrs.o  polarst.o  tranmerc.o  ups.o  usng.o  utm.o
+	ar -cr $@ $^
+
+error_string.o : geotranz/error_string.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+mgrs.o : geotranz/mgrs.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+polarst.o : geotranz/polarst.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+tranmerc.o : geotranz/tranmerc.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+ups.o : geotranz/ups.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+usng.o : geotranz/usng.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+utm.o : geotranz/utm.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+
+
+# Generate apprpriate sample configuration file for this platform.
+
+direwolf.conf : generic.conf
+	egrep '^C|^M' generic.conf | cut -c2-999 > direwolf.conf
+
+
+# Where should we install it?
+
+# My understanding, of the convention, is that something you compile
+# from source, that is not a standard part of the operating system,
+# should go in /usr/local/bin.
+
+# This is a step in the right direction but not sufficient to use /usr instead.
+
+INSTALLDIR := /usr/local
+
+# TODO:  Test this better.
+
+# Optional installation into /usr/local/...
+# Needs to be run as root or with sudo.
+# TODO: Review file locations.
+
+install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets \
+		tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png
+	ginstall direwolf $(INSTALLDIR)/bin
+	ginstall decode_aprs $(INSTALLDIR)/bin
+	ginstall text2tt $(INSTALLDIR)/bin
+	ginstall tt2text $(INSTALLDIR)/bin
+	ginstall ll2utm $(INSTALLDIR)/bin
+	ginstall utm2ll $(INSTALLDIR)/bin
+	ginstall aclients $(INSTALLDIR)/bin
+	ginstall log2gpx $(INSTALLDIR)/bin
+	ginstall gen_packets $(INSTALLDIR)/bin
+	ginstall atest $(INSTALLDIR)/bin
+	ginstall ttcalc $(INSTALLDIR)/bin
+	ginstall dwespeak.sh $(INSTALLDIR)/bin
+	ginstall telemetry-toolkit/*.p[ly] $(INSTALLDIR)/bin
+	ginstall -D --mode=644 tocalls.txt $(INSTALLDIR)/share/direwolf/tocalls.txt
+	ginstall -D --mode=644 symbols-new.txt $(INSTALLDIR)/share/direwolf/symbols-new.txt
+	ginstall -D --mode=644 symbolsX.txt $(INSTALLDIR)/share/direwolf/symbolsX.txt
+	ginstall -D --mode=644 dw-icon.png $(INSTALLDIR)/share/direwolf/dw-icon.png
+	ginstall -D --mode=644 README.md $(INSTALLDIR)/share/doc/direwolf/README.md
+	ginstall -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
+	ginstall -D --mode=644 direwolf.conf $(INSTALLDIR)/share/direwolf/config/direwolf.conf
+	ginstall -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
+	ginstall -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
+	ginstall -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	ginstall -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
+	ginstall -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
+	ginstall -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	ginstall -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
+	ginstall -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
+	ginstall -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
+	ginstall -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
+	ginstall -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
+	ginstall -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
+	ginstall -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
+	ginstall -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
+	ginstall -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
+	ginstall -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
+	ginstall -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+	@echo " "
+	@echo "If this is your first install, not an upgrade, type this to put a copy"
+	@echo "of the sample configuration file (direwolf.conf) in your home directory:"
+	@echo " "
+	@echo "        make install-conf"
+	@echo " "
+
+
+# TODO:  Should we put the sample direwolf.conf file somewhere like
+# /usr/share/doc/direwolf/examples and add that to the
+# end of the search path list?
+# That would make it easy to see user customizations compared to the
+# latest sample.
+
+# These would be done as ordinary user.
+
+# The Raspberry Pi has ~/Desktop but Ubuntu does not.
+
+# TODO: Handle Linux variations correctly.
+
+
+.PHONY: install-conf
+install-conf : direwolf.conf
+	cp direwolf.conf ~
+	cp telemetry-toolkit/telem-m0xer-3.txt ~
+	cp telemetry-toolkit/telem-*.conf ~
+
+
+# Separate application to decode raw data.
+
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.c telemetry.o tt_text.o
+	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^ -lm
+
+# Convert between text and touch tone representation.
+
+text2tt : tt_text.c
+	$(CC) $(CFLAGS) -DENC_MAIN -o text2tt tt_text.c
+
+tt2text : tt_text.c
+	$(CC) $(CFLAGS) -DDEC_MAIN -o tt2text tt_text.c
+
+
+# Convert between Latitude/Longitude and UTM coordinates.
+
+ll2utm : ll2utm.c geotranz.a
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+utm2ll : utm2ll.c geotranz.a
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+
+# Convert from log file to GPX.
+
+log2gpx : log2gpx.c
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+
+# Test application to generate sound.
+
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) -lm
+
+demod.o : tune.h
+demod_afsk.o : tune.h
+demod_9600.o : tune.h
+
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tune.h textcolor.c
+	$(CC) $(CFLAGS) -o atest $^ -lm
+	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
+
+
+# Unit test for AFSK demodulator
+
+
+atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c textcolor.c tt_text.c
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+
+# Unit test for inner digipeater algorithm
+
+
+dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c
+	$(CC) $(CFLAGS) -DTEST -o $@ $^
+	./dtest
+
+
+# Unit test for APRStt.
+
+ttest : aprs_tt.c tt_text.c  latlong.c misc.a  geotranz.a
+	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^
+
+
+# Unit test for IGate
+
+
+itest : igate.c textcolor.c ax25_pad.c fcs_calc.c
+	$(CC) $(CFLAGS) -DITEST -o $@ $^
+	./itest
+
+
+# Unit test for UDP reception with AFSK demodulator
+
+udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+	./udptest
+
+
+# Unit test for telemetry decoding.
+
+
+etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+	./etest
+
+
+# Multiple AGWPE network or serial port clients to test TNCs side by side.
+
+aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
+	$(CC) $(CFLAGS) -g -o $@ $^
+
+
+# Touch Tone to Speech sample application.
+
+ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o
+	$(CC) $(CFLAGS) -g -o $@ $^
+
+
+depend : $(wildcard *.c)
+	makedepend -f $(lastword $(MAKEFILE_LIST)) -- $(CFLAGS) -- $^
+
+
+.PHONY: clean
+clean :
+	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc \
+		fsk_fast_filter.h *.o *.a
+	echo " " > tune.h
+
+
+.PHONY: dist-mac
+dist-mac: direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets \
+		tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png
+	rm -f ../direwolf_dist_bin.zip
+	(cd .. ; zip direwolf_dist_bin.zip \
+	$(INSTALLDIR)/bin/direwolf \
+	$(INSTALLDIR)/bin/decode_aprs \
+	$(INSTALLDIR)/bin/text2tt \
+	$(INSTALLDIR)/bin/tt2text \
+	$(INSTALLDIR)/bin/ll2utm \
+	$(INSTALLDIR)/bin/utm2ll \
+	$(INSTALLDIR)/bin/aclients \
+	$(INSTALLDIR)/bin/log2gpx \
+	$(INSTALLDIR)/bin/gen_packets \
+	$(INSTALLDIR)/bin/atest \
+	$(INSTALLDIR)/bin/ttcalc \
+	$(INSTALLDIR)/bin/dwespeak.sh \
+	$(INSTALLDIR)/share/direwolf/tocalls.txt \
+	$(INSTALLDIR)/share/direwolf/config/direwolf.conf \
+	$(INSTALLDIR)/share/direwolf/symbols-new.txt \
+	$(INSTALLDIR)/share/direwolf/symbolsX.txt \
+	$(INSTALLDIR)/share/direwolf/dw-icon.png \
+	$(INSTALLDIR)/share/doc/direwolf/README.md \
+	$(INSTALLDIR)/share/doc/direwolf/CHANGES.md \
+	$(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt \
+	$(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt \
+	$(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf \
+	$(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf \
+	$(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf \
+	$(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf \
+	$(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf \
+	$(INSTALLDIR)/man/man1/aclients.1 \
+	$(INSTALLDIR)/man/man1/atest.1 \
+	$(INSTALLDIR)/man/man1/decode_aprs.1 \
+	$(INSTALLDIR)/man/man1/direwolf.1 \
+	$(INSTALLDIR)/man/man1/gen_packets.1 \
+	$(INSTALLDIR)/man/man1/ll2utm.1 \
+	$(INSTALLDIR)/man/man1/log2gpx.1 \
+	$(INSTALLDIR)/man/man1/text2tt.1 \
+	$(INSTALLDIR)/man/man1/tt2text.1 \
+	$(INSTALLDIR)/man/man1/utm2ll.1 \
+	)
+
+# Package it up for distribution.
+
+.PHONY: dist-src
+dist-src : README.md CHANGES.md \
+		doc/User-Guide.pdf doc/Raspberry-Pi-APRS.pdf \
+		doc/Raspberry-Pi-APRS-Tracker.pdf doc/APRStt-Implementation-Notes.pdf \
+		dw-start.sh dwespeak.bat dwespeak.sh \
+		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
+	rm -f fsk_fast_filter.h
+	echo " " > tune.h
+	rm -f ../$z-src.zip
+	(cd .. ; zip $z-src.zip \
+		$z/README.md \
+		$z/CHANGES.md \
+		$z/LICENSE* \
+		$z/doc/User-Guide.pdf \
+		$z/doc/Raspberry-Pi-APRS.pdf \
+		$z/doc/Raspberry-Pi-APRS-Tracker.pdf \
+		$z/doc/APRStt-Implementation-Notes.pdf \
+		$z/Makefile* \
+		$z/*.c $z/*.h \
+		$z/regex/* $z/misc/* $z/geotranz/* \
+		$z/man1/* \
+		$z/generic.conf \
+		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
+		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
+		$z/dw-start.sh $z/direwolf.spec \
+		$z/dwespeak.bat $z/dwespeak.sh \
+		$z/telemetry-toolkit/* )

@@ -1,7 +1,4 @@
 
-// Remove next line to eliminate annoying/useful (depending on who you ask) debug messages every 100 seconds.
-#define STATISTICS 1
-
 
 // 
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
@@ -95,6 +92,7 @@
 
 #include "direwolf.h"
 #include "audio.h"
+#include "audio_stats.h"
 #include "textcolor.h"
 #include "dtime_now.h"
 #include "demod.h"		/* for alevel_t & demod_get_audio_level() */
@@ -290,14 +288,14 @@ int audio_open (struct audio_s *pa)
 	    if (strcasecmp(pa->adev[a].adevice_in, "stdin") == 0 || strcmp(pa->adev[a].adevice_in, "-") == 0) {
 	      adev[a].g_audio_in_type = AUDIO_IN_TYPE_STDIN;
 	      /* Change "-" to stdin for readability. */
-	      strcpy (pa->adev[a].adevice_in, "stdin");
+	      strlcpy (pa->adev[a].adevice_in, "stdin", sizeof(pa->adev[a].adevice_in));
 	    }
 	    if (strncasecmp(pa->adev[a].adevice_in, "udp:", 4) == 0) {
 	      adev[a].g_audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
 	      /* Supply default port if none specified. */
 	      if (strcasecmp(pa->adev[a].adevice_in,"udp") == 0 ||
 	        strcasecmp(pa->adev[a].adevice_in,"udp:") == 0) {
-	        sprintf (pa->adev[a].adevice_in, "udp:%d", DEFAULT_UDP_AUDIO_PORT);
+	        snprintf (pa->adev[a].adevice_in, sizeof(pa->adev[a].adevice_in), "udp:%d", DEFAULT_UDP_AUDIO_PORT);
 	      }
 	    } 
 
@@ -305,16 +303,16 @@ int audio_open (struct audio_s *pa)
 
 	    /* If not specified, the device names should be "default". */
 
-	    strcpy (audio_in_name, pa->adev[a].adevice_in);
-	    strcpy (audio_out_name, pa->adev[a].adevice_out);
+	    strlcpy (audio_in_name, pa->adev[a].adevice_in, sizeof(audio_in_name));
+	    strlcpy (audio_out_name, pa->adev[a].adevice_out, sizeof(audio_out_name));
 
 	    char ctemp[40];
 
 	    if (pa->adev[a].num_channels == 2) {
-	      sprintf (ctemp, " (channels %d & %d)", ADEVFIRSTCHAN(a), ADEVFIRSTCHAN(a)+1);
+	      snprintf (ctemp, sizeof(ctemp), " (channels %d & %d)", ADEVFIRSTCHAN(a), ADEVFIRSTCHAN(a)+1);
 	    }
 	    else {
-	      sprintf (ctemp, " (channel %d)", ADEVFIRSTCHAN(a));
+	      snprintf (ctemp, sizeof(ctemp), " (channel %d)", ADEVFIRSTCHAN(a));
 	    }
 
             text_color_set(DW_COLOR_INFO);
@@ -358,7 +356,7 @@ int audio_open (struct audio_s *pa)
 	        if (oss_audio_device_fd < 0) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("%s:\n", pa->adev[a].adevice_in);
-//	          sprintf (message, "Could not open audio device %s", pa->adev[a].adevice_in);
+//	          snprintf (message, sizeof(message), "Could not open audio device %s", pa->adev[a].adevice_in);
 //	          perror (message);
 	          return (-1);
 	        }
@@ -874,75 +872,6 @@ int audio_get (int a)
 		adev[a].inbuf_size_in_bytes / adev[a].bytes_per_frame, n);	
 #endif
 
-#if STATISTICS
-
-// TODO1.2: add audio level information to windows version.  Common function?
-// TODO1.2: add quiet option to suppress this.
-
-/*
- * Print information about the sample rate as a debugging aid.
- * I've never seen an issue with Windows or x86 Linux but the Raspberry Pi
- * has a very troublesome audio input system where many samples got lost.
- * Occasional lines like this would immediately identify the issue.
- *
- *	Past 100 seconds, 4409856 audio samples processed, 0 errors.
- *
- * That's a little hard to read.  Maybe we'd be better off with an average
- * and fewer digits like this:    44.1 k
- *
- * While we are at it we can also print the current audio level(s) providing 
- * more clues if nothing is being decoded.
- */
-
-	      if (last_time[a] == 0) {
-	        last_time[a] = time(NULL);
-	        sample_count[a] = 0;
-	        error_count[a] = 0;
-	      }
-	      else {
-	        if (n > 0) {
-	           sample_count[a] += n;
-	        }
-	        else {
-	           error_count[a]++;
-	        }
-	        this_time[a] = time(NULL);
-	        if (this_time[a] >= last_time[a] + duration) {
-
-#if 1	/* Try this for version 1.2 and see how people react. */
-
-		  float ave_rate = (sample_count[a] / 1000.0) / duration;
-
-	          text_color_set(DW_COLOR_DEBUG);
-
-	          if (save_audio_config_p->adev[a].num_channels > 1) {
-		    int ch0 = ADEVFIRSTCHAN(a);
-		    alevel_t alevel0 = demod_get_audio_level(a,ch0);
-		    int ch1 = ADEVFIRSTCHAN(a) + 1;
-		    alevel_t alevel1 = demod_get_audio_level(a,ch1);
-
-	            dw_printf ("\nADEVICE%d: Sample rate approx. %.1f k, %d errors, receive audio levels CH%d %d, CH%d %d\n\n", 
-			a, ave_rate, error_count[a], ch0, alevel0.rec, ch1, alevel1.rec);
-	          }
-	          else {
-		    int ch0 = ADEVFIRSTCHAN(a);
-		    alevel_t alevel0 = demod_get_audio_level(a,ch0);
-
-	            dw_printf ("\nADEVICE%d: Sample rate approx. %.1f k, %d errors, receive audio level CH%d %d\n\n", 
-			a, ave_rate, error_count[a], ch0, alevel0.rec);
-	          }
-
-#else
-	          text_color_set(DW_COLOR_DEBUG);
-	          dw_printf ("\nADEVICE%d: Past %d seconds, %d audio samples processed, %d errors.\n\n", 
-			a, duration, sample_count[a], error_count[a]);
-#endif 
-	          last_time[a] = this_time[a];
-	          sample_count[a] = 0;
-	          error_count[a] = 0;
-	        }      
-	      }
-#endif
  
 	      if (n > 0) {
 
@@ -950,6 +879,12 @@ int audio_get (int a)
 
 	        adev[a].inbuf_len = n * adev[a].bytes_per_frame;		/* convert to number of bytes */
 	        adev[a].inbuf_next = 0;
+
+	        audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			n, 
+			save_audio_config_p->statistics_interval);
+
 	      }
 	      else if (n == 0) {
 
@@ -972,6 +907,11 @@ int audio_get (int a)
 
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Audio input device %d error: %s\n", a, snd_strerror(n));
+
+	        audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			0, 
+			save_audio_config_p->statistics_interval);
 
 	        /* Try to recover a few times and eventually give up. */
 	        if (++retries > 10) {
@@ -1015,10 +955,21 @@ int audio_get (int a)
 	        perror("Can't read from audio device");
 	        adev[a].inbuf_len = 0;
 	        adev[a].inbuf_next = 0;
+
+	        audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			0, 
+			save_audio_config_p->statistics_interval);
+
 	        return (-1);
 	      }
 	      adev[a].inbuf_len = n;
 	      adev[a].inbuf_next = 0;
+
+	      audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			n / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
+			save_audio_config_p->statistics_interval);
 	    }
 
 #endif	/* USE_ALSA */
@@ -1042,11 +993,23 @@ int audio_get (int a)
 	        dw_printf ("Can't read from udp socket, res=%d", res);
 	        adev[a].inbuf_len = 0;
 	        adev[a].inbuf_next = 0;
+
+	        audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			0, 
+			save_audio_config_p->statistics_interval);
+
 	        return (-1);
 	      }
 	    
 	      adev[a].inbuf_len = res;
 	      adev[a].inbuf_next = 0;
+
+	      audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			res / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
+			save_audio_config_p->statistics_interval);
+
 	    }
 	    break;
 
@@ -1064,6 +1027,11 @@ int audio_get (int a)
 	        dw_printf ("\nEnd of file on stdin.  Exiting.\n");
 	        exit (0);
 	      }
+	    
+	      audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			res / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
+			save_audio_config_p->statistics_interval);
 	    
 	      adev[a].inbuf_len = res;
 	      adev[a].inbuf_next = 0;

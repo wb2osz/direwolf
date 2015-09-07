@@ -256,52 +256,52 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	switch (fromto) {
 
 	  case FROM_CLIENT:
-	    strcpy (direction, "from");		/* from the client application */
+	    strlcpy (direction, "from", sizeof(direction));		/* from the client application */
 
 	    switch (pmsg->kind_lo) {
-	      case 'P': strcpy (datakind, "Application Login"); break;
-	      case 'X': strcpy (datakind, "Register CallSign"); break;
-	      case 'x': strcpy (datakind, "Unregister CallSign"); break;
-	      case 'G': strcpy (datakind, "Ask Port Information"); break;
-	      case 'm': strcpy (datakind, "Enable Reception of Monitoring Frames"); break;
-	      case 'R': strcpy (datakind, "AGWPE Version Info"); break;
-	      case 'g': strcpy (datakind, "Ask Port Capabilities"); break;
-	      case 'H': strcpy (datakind, "Callsign Heard on a Port"); break;
-	      case 'y': strcpy (datakind, "Ask Outstanding frames waiting on a Port"); break;
-	      case 'Y': strcpy (datakind, "Ask Outstanding frames waiting for a connection"); break;
-	      case 'M': strcpy (datakind, "Send UNPROTO Information"); break;
-	      case 'C': strcpy (datakind, "Connect, Start an AX.25 Connection"); break;
-	      case 'D': strcpy (datakind, "Send Connected Data"); break;
-	      case 'd': strcpy (datakind, "Disconnect, Terminate an AX.25 Connection"); break;
-	      case 'v': strcpy (datakind, "Connect VIA, Start an AX.25 circuit thru digipeaters"); break;
-	      case 'V': strcpy (datakind, "Send UNPROTO VIA"); break;
-	      case 'c': strcpy (datakind, "Non-Standard Connections, Connection with PID"); break;
-	      case 'K': strcpy (datakind, "Send data in raw AX.25 format"); break;
-	      case 'k': strcpy (datakind, "Activate reception of Frames in raw format"); break;
-	      default:  strcpy (datakind, "**INVALID**"); break;
+	      case 'P': strlcpy (datakind, "Application Login",				sizeof(datakind)); break;
+	      case 'X': strlcpy (datakind, "Register CallSign",				sizeof(datakind)); break;
+	      case 'x': strlcpy (datakind, "Unregister CallSign",			sizeof(datakind)); break;
+	      case 'G': strlcpy (datakind, "Ask Port Information",			sizeof(datakind)); break;
+	      case 'm': strlcpy (datakind, "Enable Reception of Monitoring Frames",	sizeof(datakind)); break;
+	      case 'R': strlcpy (datakind, "AGWPE Version Info",			sizeof(datakind)); break;
+	      case 'g': strlcpy (datakind, "Ask Port Capabilities",			sizeof(datakind)); break;
+	      case 'H': strlcpy (datakind, "Callsign Heard on a Port",			sizeof(datakind)); break;
+	      case 'y': strlcpy (datakind, "Ask Outstanding frames waiting on a Port",	sizeof(datakind)); break;
+	      case 'Y': strlcpy (datakind, "Ask Outstanding frames waiting for a connection", sizeof(datakind)); break;
+	      case 'M': strlcpy (datakind, "Send UNPROTO Information",			sizeof(datakind)); break;
+	      case 'C': strlcpy (datakind, "Connect, Start an AX.25 Connection",	sizeof(datakind)); break;
+	      case 'D': strlcpy (datakind, "Send Connected Data",			sizeof(datakind)); break;
+	      case 'd': strlcpy (datakind, "Disconnect, Terminate an AX.25 Connection",	sizeof(datakind)); break;
+	      case 'v': strlcpy (datakind, "Connect VIA, Start an AX.25 circuit thru digipeaters", sizeof(datakind)); break;
+	      case 'V': strlcpy (datakind, "Send UNPROTO VIA",				sizeof(datakind)); break;
+	      case 'c': strlcpy (datakind, "Non-Standard Connections, Connection with PID", sizeof(datakind)); break;
+	      case 'K': strlcpy (datakind, "Send data in raw AX.25 format",		sizeof(datakind)); break;
+	      case 'k': strlcpy (datakind, "Activate reception of Frames in raw format", sizeof(datakind)); break;
+	      default:  strlcpy (datakind, "**INVALID**",				sizeof(datakind)); break;
 	    }
 	    break;
 
 	  case TO_CLIENT:
 	  default:
-	    strcpy (direction, "to");	/* sent to the client application. */
+	    strlcpy (direction, "to", sizeof(direction));	/* sent to the client application. */
 
 	    switch (pmsg->kind_lo) {
-	      case 'R': strcpy (datakind, "Version Number"); break;
-	      case 'X': strcpy (datakind, "Callsign Registration"); break;
-	      case 'G': strcpy (datakind, "Port Information"); break;
-	      case 'g': strcpy (datakind, "Capabilities of a Port"); break;
-	      case 'y': strcpy (datakind, "Frames Outstanding on a Port"); break;
-	      case 'Y': strcpy (datakind, "Frames Outstanding on a Connection"); break;
-	      case 'H': strcpy (datakind, "Heard Stations on a Port"); break;
-	      case 'C': strcpy (datakind, "AX.25 Connection Received"); break;
-	      case 'D': strcpy (datakind, "Connected AX.25 Data"); break;
-	      case 'M': strcpy (datakind, "Monitored Connected Information"); break;
-	      case 'S': strcpy (datakind, "Monitored Supervisory Information"); break;
-	      case 'U': strcpy (datakind, "Monitored Unproto Information"); break;
-	      case 'T': strcpy (datakind, "Monitoring Own Information"); break;
-	      case 'K': strcpy (datakind, "Monitored Information in Raw Format"); break;
-	      default:  strcpy (datakind, "**INVALID**"); break;
+	      case 'R': strlcpy (datakind, "Version Number",				sizeof(datakind)); break;
+	      case 'X': strlcpy (datakind, "Callsign Registration",			sizeof(datakind)); break;
+	      case 'G': strlcpy (datakind, "Port Information",				sizeof(datakind)); break;
+	      case 'g': strlcpy (datakind, "Capabilities of a Port",			sizeof(datakind)); break;
+	      case 'y': strlcpy (datakind, "Frames Outstanding on a Port",		sizeof(datakind)); break;
+	      case 'Y': strlcpy (datakind, "Frames Outstanding on a Connection",	sizeof(datakind)); break;
+	      case 'H': strlcpy (datakind, "Heard Stations on a Port",			sizeof(datakind)); break;
+	      case 'C': strlcpy (datakind, "AX.25 Connection Received",			sizeof(datakind)); break;
+	      case 'D': strlcpy (datakind, "Connected AX.25 Data",			sizeof(datakind)); break;
+	      case 'M': strlcpy (datakind, "Monitored Connected Information",		sizeof(datakind)); break;
+	      case 'S': strlcpy (datakind, "Monitored Supervisory Information",		sizeof(datakind)); break;
+	      case 'U': strlcpy (datakind, "Monitored Unproto Information",		sizeof(datakind)); break;
+	      case 'T': strlcpy (datakind, "Monitoring Own Information",		sizeof(datakind)); break;
+	      case 'K': strlcpy (datakind, "Monitored Information in Raw Format",	sizeof(datakind)); break;
+	      default:  strlcpy (datakind, "**INVALID**",				sizeof(datakind)); break;
 	    }
 	}
 
@@ -466,7 +466,7 @@ static THREAD_F connect_listen_thread (void *arg)
 	SOCKET listen_sock;  
 	WSADATA wsadata;
 
-	sprintf (server_port_str, "%d", (int)(long)arg);
+	snprintf (server_port_str, sizeof(server_port_str), "%d", (int)(long)arg);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
         dw_printf ("DEBUG: serverport = %d = '%s'\n", (int)(long)arg, server_port_str);
@@ -591,6 +591,7 @@ static THREAD_F connect_listen_thread (void *arg)
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
 	int server_port = (int)(long)arg;
 	int listen_sock;  
+	int bcopt = 1;
 
 	listen_sock= socket(AF_INET,SOCK_STREAM,0);
 	if (listen_sock == -1) {
@@ -598,6 +599,15 @@ static THREAD_F connect_listen_thread (void *arg)
 	  perror ("connect_listen_thread: Socket creation failed");
 	  return (NULL);
 	}
+
+	/* Version 1.3 - as suggested by G8BPQ. */
+	/* Without this, if you kill the application then try to run it */
+	/* again quickly the port number is unavailable for a while. */
+	/* Don't try doing the same thing On Windows; It has a different meaning. */
+	/* http://stackoverflow.com/questions/14388706/socket-options-so-reuseaddr-and-so-reuseport-how-do-they-differ-do-they-mean-t */
+
+        setsockopt (listen_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&bcopt, 4);
+
 
     	sockaddr.sin_addr.s_addr = INADDR_ANY;
     	sockaddr.sin_port = htons(server_port);
@@ -791,7 +801,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    /* The documentation example includes these 3 extra in the Len= value */
 	    /* but actual observed data uses only the packet info length. */
 
-	    sprintf (agwpe_msg.data, " %d:Fm %s To %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
+	    snprintf (agwpe_msg.data, sizeof(agwpe_msg.data), " %d:Fm %s To %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
 			chan+1, agwpe_msg.hdr.call_from, agwpe_msg.hdr.call_to,
 			ax25_get_pid(pp), info_len, 
 			tm->tm_hour, tm->tm_min, tm->tm_sec,
@@ -1103,7 +1113,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		    count++;
 		  }
 		}
-		sprintf (reply.info, "%d;", count);
+		snprintf (reply.info, sizeof(reply.info), "%d;", count);
 
 		for (j=0; j<MAX_CHANS; j++) {
 	 	  if (save_audio_config_p->achan[j].valid) {
@@ -1113,22 +1123,22 @@ static THREAD_F cmd_listen_thread (void *arg)
 		    static const char *names[8] = { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth" };
 
 		    if (save_audio_config_p->adev[a].num_channels == 1) {
-		      sprintf (stemp, "Port%d %s soundcard mono;", j+1, names[a]);
-		      strcat (reply.info, stemp);
+		      snprintf (stemp, sizeof(stemp), "Port%d %s soundcard mono;", j+1, names[a]);
+		      strlcat (reply.info, stemp, sizeof(reply.info));
 		    }
 		    else {
-		      sprintf (stemp, "Port%d %s soundcard %s;", j+1, names[a], j&1 ? "right" : "left");
-		      strcat (reply.info, stemp);
+		      snprintf (stemp, sizeof(stemp), "Port%d %s soundcard %s;", j+1, names[a], j&1 ? "right" : "left");
+		      strlcat (reply.info, stemp, sizeof(reply.info));
 		    }
 		  }
 		}
 
 #else
 		if (num_channels == 1) {
-		  sprintf (reply.info, "1;Port1 Single channel;");
+		  snprintf (reply.info, sizeof(reply.info), "1;Port1 Single channel;");
 		}
 		else {
-		  sprintf (reply.info, "2;Port1 Left channel;Port2 Right Channel;");
+		  snprintf (reply.info, sizeof(reply.info), "2;Port1 Left channel;Port2 Right Channel;");
 		}
 #endif
 	        reply.hdr.data_len = strlen(reply.info) + 1;
@@ -1200,9 +1210,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        reply.hdr.portx = cmd.hdr.portx
 
-	        strcpy (reply.hdr.call_from, "WB2OSZ-15");
+	        strlcpy (reply.hdr.call_from, "WB2OSZ-15", sizeof(reply.hdr.call_from));
 
-	        strcpy (agwpe_msg.data, ...);
+	        strlcpy (agwpe_msg.data, ..., sizeof(agwpe_msg.data));
 
 	        reply.hdr.data_len = strlen(reply.info);
 
@@ -1247,21 +1257,21 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		// We have already assured these do not exceed 9 characters.
 
-	      	strcpy (stemp, cmd.hdr.call_from);
-	      	strcat (stemp, ">");
-	      	strcat (stemp, cmd.hdr.call_to);
+	      	strlcpy (stemp, cmd.hdr.call_from, sizeof(stemp));
+	      	strlcat (stemp, ">", sizeof(stemp));
+	      	strlcat (stemp, cmd.hdr.call_to, sizeof(stemp));
 
 		cmd.data[cmd.hdr.data_len] = '\0';
 		ndigi = cmd.data[0];
 		p = cmd.data + 1;
 
 		for (k=0; k<ndigi; k++) {
-		  strcat (stemp, ",");
-		  strcat (stemp, p);
+		  strlcat (stemp, ",", sizeof(stemp));
+		  strlcat (stemp, p, sizeof(stemp));
 		  p += 10;
 	        }
-		strcat (stemp, ":");
-		strcat (stemp, p);
+		strlcat (stemp, ":", sizeof(stemp));
+		strlcat (stemp, p, sizeof(stemp));
 
 	        //text_color_set(DW_COLOR_DEBUG);
 		//dw_printf ("Transmit '%s'\n", stemp);
@@ -1306,7 +1316,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		//
 		// The first byte of data is described as:
 		//
-		// 		the “TNC” to use
+		// 		the "TNC" to use
 		//		00=Port 1
 		//		16=Port 2
 		//

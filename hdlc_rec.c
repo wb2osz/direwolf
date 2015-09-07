@@ -112,7 +112,6 @@ static int num_subchan[MAX_CHANS];		//TODO1.2 use ptr rather than copy.
 
 static int composite_dcd[MAX_CHANS];
 
-static void dcd_change (int chan, int subchan, int state);
 
 
 /***********************************************************************************
@@ -558,7 +557,10 @@ int hdlc_rec_gathering (int chan, int subchan)
  *		state for the channel.
  *
  * Inputs:	chan	
- *		subchan	
+ *
+ *		subchan		0 to MAX_SUBCHANS-1 for HDLC.
+ *				MAX_SUBCHANS for DTMF decoder.
+ *
  *		state		1 for active, 0 for not.
  *
  * Returns:	None.  Use ??? to retrieve result.
@@ -566,17 +568,18 @@ int hdlc_rec_gathering (int chan, int subchan)
  * Description:	DCD for the channel is active if ANY of the subchannels
  *		is active.  Update the DCD indicator.
  *
- * Future:	Roll DTMF into the final result.
+ * version 1.3:	Add DTMF detection into the final result.
+ *		This is now called from dtmf.c too.
  *
  *--------------------------------------------------------------------*/
 
 
-static void dcd_change (int chan, int subchan, int state)
+void dcd_change (int chan, int subchan, int state)
 {
 	int old, new;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
-	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
+	assert (subchan >= 0 && subchan <= MAX_SUBCHANS);
 	assert (state == 0 || state == 1);
 
 #if DEBUG3

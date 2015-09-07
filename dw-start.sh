@@ -24,7 +24,7 @@ sleep 30
 # Nothing to do if it is already running.
 #
 
-a=`ps -ef | grep direwolf | grep -v grep`
+a=`pgrep direwolf`
 if [ "$a" != "" ] 
 then
   #date >> /tmp/dw-start.log
@@ -62,13 +62,13 @@ echo "Start up application." >> /tmp/dw-start.log
 
 if [ -x /usr/bin/lxterminal ]
 then
-  /usr/bin/lxterminal -t "Dire Wolf" -e "/usr/local/bin/direwolf" &
+  /usr/bin/lxterminal -t "Dire Wolf" -e "/usr/local/bin/direwolf -a 100" &
 elif [ -x /usr/bin/xterm ] 
 then
-  /usr/bin/xterm -bg white -fg black -e /usr/local/bin/direwolf &
+  /usr/bin/xterm -bg white -fg black -e "/usr/local/bin/direwolf -a 100" &
 elif [ -x /usr/bin/x-terminal-emulator ]
 then
-  /usr/bin/x-terminal-emulator -e  /usr/local/bin/direwolf &
+  /usr/bin/x-terminal-emulator -e  "/usr/local/bin/direwolf -a 100" &
 else
   echo "Did not find an X terminal emulator."
 fi

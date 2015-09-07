@@ -1,3 +1,4 @@
+
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -342,7 +343,7 @@ static int cse_spd_data_extension (int course, int speed, char *presult)
 	x = course;
 	if (x < 0) x = 0;
 	if (x > 360) x = 360;
-	sprintf (stemp, "%03d", x);
+	snprintf (stemp, sizeof(stemp), "%03d", x);
 	memcpy (r->cse, stemp, 3);
 
 	r->slash = '/';
@@ -350,7 +351,7 @@ static int cse_spd_data_extension (int course, int speed, char *presult)
 	x = speed;
 	if (x < 0) x = 0;
 	if (x > 999) x = 999;
-	sprintf (stemp, "%03d", x);
+	snprintf (stemp, sizeof(stemp), "%03d", x);
 	memcpy (r->spd, stemp, 3);
 
 	return (sizeof(cs_t));
@@ -403,10 +404,11 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
 	
 	if (freq != 0) {
 	  freq_t *f = (freq_t*)presult;
-	  char stemp[12];
+	  char stemp[12];	/* Frequency should be exactly 7 characters:  999.999 */
+				/* Offset shouldbe exactly 4 characters:  +999 */
 
-	  /* Should use letters for > 999.999. */
-	  sprintf (stemp, "%07.3f", freq);
+	  /* TODO: Should use letters for > 999.999. */
+	  snprintf (stemp, sizeof(stemp), "%07.3f", freq);
 	  memcpy (f->f, stemp, 7);
 	  memcpy (f->mhz, "MHz", 3);
 	  f->space = ' ';
@@ -422,11 +424,11 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
 	    memcpy(to->ttt, "off", 3);
 	  }
 	  else {
-	    sprintf (stemp, "%03d", (int)tone);
+	    snprintf (stemp, sizeof(stemp), "%03d", (int)tone);
 	    memcpy (to->ttt, stemp, 3);
 	  }
 	  to->space1 = ' ';
-	  sprintf (stemp, "%+04d", (int)round(offset * 100));
+	  snprintf (stemp, sizeof(stemp), "%+04d", (int)round(offset * 100));
 	  memcpy (to->oooo, stemp, 4);
 	  to->space2 = ' ';
 
@@ -466,8 +468,12 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *
  *		comment	- Additional comment text.
  *
+ *		result_size - Ammount of space for result, provideed by 
+ *				caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.  Should be at least ??? bytes.
+ *				Could get into hundreds of characters
+ *				because it includes the comment.
  *
  * Returns:     Number of characters in result.
  *
@@ -503,7 +509,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 		int course, int speed,
 		float freq, float tone, float offset,
 		char *comment,
-		char *presult)
+		char *presult, size_t result_size)
 {
 	int result_len = 0;
 
@@ -551,16 +557,21 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 	  /* Be sure it will be converted to 6 digits. */
 	  if (alt_ft < 0) alt_ft = 0;
 	  if (alt_ft > 999999) alt_ft = 999999;
-	  sprintf (salt, "/A=%06d", alt_ft);
-	  strcat (presult, salt);
+	  snprintf (salt, sizeof(salt), "/A=%06d", alt_ft);
+	  strlcat (presult, salt, result_size);
 	  result_len += strlen(salt);
 	}
 
 /* Finally, comment text. */
 	
 	if (comment != NULL) {
-	  strcat (presult, comment);
+	  strlcat (presult, comment, result_size);
 	  result_len += strlen(comment);
+	}
+
+	if (result_len >= result_size) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("encode_position result of %d characters won't fit into space provided.\n", result_len);
 	}
 
 	return (result_len);
@@ -596,7 +607,14 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *
  *		comment	- Additional comment text.
  *
+ *		result_size - Ammount of space for result, provideed by 
+ *				caller, to avoid buffer overflow.
+ *
  * Outputs:	presult	- Stored here.  Should be at least ??? bytes.
+ *				36 for fixed part,
+ *				7 for optional extended data,
+ *				~20 for freq, etc.,
+ *				comment ...
  *
  * Returns:     Number of characters in result.
  *
@@ -622,7 +640,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 		int power, int height, int gain, char *dir,
 		int course, int speed,
 		float freq, float tone, float offset, char *comment,
-		char *presult)
+		char *presult, size_t result_size)
 {
 	aprs_object_t *p = (aprs_object_t *) presult;
 	int result_len = 0;
@@ -651,7 +669,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 
 	  localtime_r (thyme, &tm);
 #endif
-	  sprintf (p->o.time_stamp, "%02d%02d%02d", tm.tm_mday, tm.tm_hour, tm.tm_min);
+	  snprintf (p->o.time_stamp, sizeof(p->o.time_stamp), "%02d%02d%02d", tm.tm_mday, tm.tm_hour, tm.tm_min);
 #if XMIT_UTC
 	  p->o.time_stamp[6] = 'z';
 #else
@@ -695,8 +713,13 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 /* Finally, comment text. */
 	
 	if (comment != NULL) {
-	  strcat (presult, comment);
+	  strlcat (presult, comment, result_size);
 	  result_len += strlen(comment);
+	}
+
+	if (result_len >= result_size) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("encode_object result of %d characters won't fit into space provided.\n", result_len);
 	}
 
 	return (result_len);
@@ -729,42 +752,42 @@ int main (int argc, char *argv[])
 /***********  Position  ***********/
 
 	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result);
+		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with PHG. */
 
 	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result);
+		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with freq. */
 
 	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 146.955, 74.4, -0.6, NULL, result);
+		0, 0, 0, NULL, 0, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with course/speed, freq, and comment! */
 
 	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result);
+		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* Course speed, no tone, + offset */
 
 	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result);
+		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* Course speed, no tone, + offset + altitude */
 
 	encode_position (0, 42+34.61/60, -(71+26.47/60), 12345, 'D', '&', 
-		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result);
+		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 /A=012345River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
@@ -772,7 +795,7 @@ int main (int argc, char *argv[])
 /*********** Compressed position. ***********/
 
 	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result);
+		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!D8yKC<Hn[&  !") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
@@ -780,14 +803,14 @@ int main (int argc, char *argv[])
 /* with PHG. In this case it is converted to precomputed radio range.  TODO: check on this.  Is 27.4 correct? */
 
 	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result);
+		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!D8yKC<Hn[&{CG") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
 /* with course/speed, freq, and comment!  TODO:  check on this 55 knots should be 63 MPH.  we get 62. */
 
 	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result);
+		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!D8yKC<Hn[&  !146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 
@@ -803,7 +826,7 @@ int main (int argc, char *argv[])
 /*********** Object. ***********/
 
 	encode_object ("WB1GOF-C", 0, 0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result);
+		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, ";WB1GOF-C *111111z4234.61ND07126.47W&") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
 

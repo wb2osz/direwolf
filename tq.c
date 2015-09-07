@@ -226,6 +226,12 @@ void tq_append (int chan, int prio, packet_t pp)
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (prio >= 0 && prio < TQ_NUM_PRIO);
 
+	if (pp == NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("INTERNAL ERROR:  tq_append NULL packet pointer. Please report this!\n");
+	  return;
+	}
+
 #if AX25MEMDEBUG
 
 	if (ax25memdebug_get()) {
@@ -245,16 +251,16 @@ void tq_append (int chan, int prio, packet_t pp)
  * Is transmit queue out of control? 
  *
  * There is no technical reason to limit the transmit packet queue length, it just seemed like a good 
- * warning that something wasn’t right.
+ * warning that something wasn't right.
  * When this was written, I was mostly concerned about APRS where packets would only be sent 
- * occasionally and they can be discarded if they can’t be sent out in a reasonable amount of time.
+ * occasionally and they can be discarded if they can't be sent out in a reasonable amount of time.
  *
  * If a large file is being sent, with TCP/IP, it is perfectly reasonable to have a large number 
  * of packets waiting for transmission.
  *
  * Ideally, the application should be able to throttle the transmissions so the queue doesn't get too long.
  * If using the KISS interface, there is no way to get this information from the TNC back to the client app.
- * The AGW network interface does have a command ‘y’ to query about the number of frames waiting for transmission.
+ * The AGW network interface does have a command 'y' to query about the number of frames waiting for transmission.
  * This was implemented in version 1.2.
  *
  * I'd rather not take out the queue length check because it is a useful sanity check for something going wrong.

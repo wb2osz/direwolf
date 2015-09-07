@@ -559,7 +559,7 @@ double ll_distance_km (double lat1, double lon1, double lat2, double lon2)
  *
  * Purpose:	Convert Maidenhead locator to latitude and longitude.
  *
- * Inputs:	maidenhead	- 4 or 6 character grid square.
+ * Inputs:	maidenhead	- 2, 4, 6, or 8 character grid square locator.
  *
  * Outputs:	dlat, dlon	- Latitude and longitude.  
  *				  Original values unchanged if error.
@@ -591,9 +591,9 @@ int ll_from_grid_square (char *maidenhead, double *dlat, double *dlon)
 	char mh[16];
 
 
-	if (strlen(maidenhead) != 4 &&  strlen(maidenhead) != 6) {
+	if (strlen(maidenhead) != 2 &&  strlen(maidenhead) != 4 &&  strlen(maidenhead) != 6 &&  strlen(maidenhead) != 8) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("Maidenhead locator \"%s\" must 4 or 6 characters in this context.\n", maidenhead);
+	  dw_printf("Maidenhead locator \"%s\" must 2, 4, 6, or 8 characters.\n", maidenhead);
 	  return (0);
 	}
 
@@ -607,11 +607,6 @@ int ll_from_grid_square (char *maidenhead, double *dlat, double *dlon)
 	  return (0);
 	}
 
-	if ( ! isdigit(mh[2]) || ! isdigit(mh[3]) ) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("The second pair of characters in Maidenhead locator \"%s\" must be digits.\n", maidenhead);
-	  return (0);
-	}
 
 	/* Lon:  360 deg / 18 squares = 20 deg / square */
 	/* Lat:  180 deg / 18 squares = 10 deg / square */
@@ -619,55 +614,68 @@ int ll_from_grid_square (char *maidenhead, double *dlat, double *dlon)
 	lon = (mh[0] - 'A') * 20 - 180;
 	lat = (mh[1] - 'A') * 10 - 90;
 
-	/* Lon:  20 deg / 10 squares = 2 deg / square */
-	/* Lat:  10 deg / 10 squares = 1 deg / square */
+	if (strlen(mh) >= 4) {
 
-	lon += (mh[2] - '0') * 2;
-	lat += (mh[3] - '0');
-
-
-	if (strlen(mh) >=6) {
-
-	  if (islower(mh[4])) mh[4] = toupper(mh[4]);
-	  if (islower(mh[5])) mh[5] = toupper(mh[5]);
-
-	  if (mh[4] < 'A' || mh[4] > 'X' || mh[5] < 'A' || mh[5] > 'X') {
+	  if ( ! isdigit(mh[2]) || ! isdigit(mh[3]) ) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("The third pair of characters in Maidenhead locator \"%s\" must be in range of A thru X.\n", maidenhead);
+	    dw_printf("The second pair of characters in Maidenhead locator \"%s\" must be digits.\n", maidenhead);
 	    return (0);
 	  }
 
-	  /* Lon:  2 deg / 24 squares = 5 minutes / square */
-	  /* Lat:  1 deg / 24 squares = 2.5 minutes / square */
+	  /* Lon:  20 deg / 10 squares = 2 deg / square */
+	  /* Lat:  10 deg / 10 squares = 1 deg / square */
 
-	  lon += (mh[4] - 'A') * 5.0 / 60.0;
-	  lat += (mh[5] - 'A') * 2.5 / 60.0;
+	  lon += (mh[2] - '0') * 2;
+	  lat += (mh[3] - '0');
 
-	  if (strlen(mh) >= 8) {
 
-	    if ( ! isdigit(mh[6]) || ! isdigit(mh[7]) ) {
+	  if (strlen(mh) >=6) {
+
+	    if (islower(mh[4])) mh[4] = toupper(mh[4]);
+	    if (islower(mh[5])) mh[5] = toupper(mh[5]);
+
+	    if (mh[4] < 'A' || mh[4] > 'X' || mh[5] < 'A' || mh[5] > 'X') {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("The fourth pair of characters in Maidenhead locator \"%s\" must be digits.\n", maidenhead);
+	      dw_printf("The third pair of characters in Maidenhead locator \"%s\" must be in range of A thru X.\n", maidenhead);
 	      return (0);
 	    }
 
-	    /* Lon:  5   min / 10 squares = 0.5 minutes / square */
-	    /* Lat:  2.5 min / 10 squares = 0.25 minutes / square */
+	    /* Lon:  2 deg / 24 squares = 5 minutes / square */
+	    /* Lat:  1 deg / 24 squares = 2.5 minutes / square */
 
-	    lon += (mh[6] - '0') * 0.50 / 60.0;
-	    lat += (mh[7] - '0') * 0.25 / 60.0;
+	    lon += (mh[4] - 'A') * 5.0 / 60.0;
+	    lat += (mh[5] - 'A') * 2.5 / 60.0;
 
-	    lon += 0.250 / 60.0;	/* Move from corner to center of square */
-	    lat += 0.125 / 60.0;
+	    if (strlen(mh) >= 8) {
+
+	      if ( ! isdigit(mh[6]) || ! isdigit(mh[7]) ) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("The fourth pair of characters in Maidenhead locator \"%s\" must be digits.\n", maidenhead);
+	        return (0);
+	      }
+
+	      /* Lon:  5   min / 10 squares = 0.5 minutes / square */
+	      /* Lat:  2.5 min / 10 squares = 0.25 minutes / square */
+
+	      lon += (mh[6] - '0') * 0.50 / 60.0;
+	      lat += (mh[7] - '0') * 0.25 / 60.0;
+
+	      lon += 0.250 / 60.0;	/* Move from corner to center of square */
+	      lat += 0.125 / 60.0;
+	    }
+	    else {
+	      lon += 2.5  / 60.0;	/* Move from corner to center of square */
+	      lat += 1.25 / 60.0;
+	    }
 	  }
 	  else {
-	    lon += 2.5  / 60.0;	/* Move from corner to center of square */
-	    lat += 1.25 / 60.0;
+	    lon += 1.0;	/* Move from corner to center of square */
+	    lat += 0.5;
 	  }
 	}
 	else {
-	  lon += 1.0;	/* Move from corner to center of square */
-	  lat += 0.5;
+	  lon += 10;	/* Move from corner to center of square */
+	  lat += 5;
 	}
 
  	//text_color_set(DW_COLOR_DEBUG);

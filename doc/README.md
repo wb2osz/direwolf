@@ -63,3 +63,9 @@ and a couple things that can be done about it.
 	cause the amplitudes of the two tones to be different.
 	This makes it more difficult to demodulate them accurately.
 	9600 baud operation is an entirely different animal.  ...
+
+- [WA8LMF TNC Test CD Results a.k.a. Battle of the TNCs](WA8LMF-TNC-Test-CD-Results.pdf)
+
+	How can we compare how well the TNCs perform under real world conditions?
+	The de facto standard of measurement is the number of packets decoded from [WA8LMF’s TNC Test CD](http://wa8lmf.net/TNCtest/index.htm).
+	Many have published the number of packets they have been able to decode from this test. Here they are, all gathered in one place, for your reading pleasure.

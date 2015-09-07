@@ -26,7 +26,7 @@ CC := gcc
 CFLAGS :=    -Wall -Ofast -march=pentium3 -msse -Iregex -Iutm -Igeotranz -mthreads -DUSE_REGEX_STATIC
 AR := ar
 
-#CFLAGS += -g
+CFLAGS += -g
 
 #
 # Let's see impact of various optimization levels.
@@ -73,9 +73,9 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hd
 		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o audio_win.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
+		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o log.o telemetry.o dtime_now.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o dtime_now.o \
 		dw-icon.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
@@ -139,7 +139,7 @@ regex.o : regex/regex.c
 # There are also a couple other functions in the misc
 # subdirectory that are missing on Windows.
 
-misc.a : strsep.o strtok_r.o strcasestr.o
+misc.a : strsep.o strtok_r.o strcasestr.o strlcpy.o strlcat.o
 	ar -cr $@ $^	
  
 strsep.o : misc/strsep.c
@@ -151,11 +151,16 @@ strtok_r.o : misc/strtok_r.c
 strcasestr.o : misc/strcasestr.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
+strlcpy.o : misc/strlcpy.c
+	$(CC) $(CFLAGS) -I. -c -o $@ $^
+
+strlcat.o : misc/strlcat.c
+	$(CC) $(CFLAGS) -I. -c -o $@ $^
 
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.o telemetry.o regex.a misc.a geotranz.a
+decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^
 
 
@@ -170,22 +175,23 @@ tt2text : tt_text.c
 
 # Convert between Latitude/Longitude and UTM coordinates.
 
-ll2utm : ll2utm.c geotranz.a
+ll2utm : ll2utm.c textcolor.c geotranz.a misc.a
 	$(CC) $(CFLAGS) -o $@ $^
 
-utm2ll : utm2ll.c geotranz.a
+utm2ll : utm2ll.c textcolor.c geotranz.a misc.a
 	$(CC) $(CFLAGS) -o $@ $^
 
 
 # Convert from log file to GPX.
 
-log2gpx : log2gpx.c misc/strsep.c misc/strtok_r.c
+#log2gpx : log2gpx.c misc/strsep.c misc/strtok_r.c
+log2gpx : log2gpx.c misc.a
 	$(CC) $(CFLAGS) -o $@ $^
 
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o textcolor.o dsp.o misc.a regex.a
+gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o morse.o textcolor.o dsp.o misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^
 
 # For tweaking the demodulator.
@@ -234,7 +240,7 @@ testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.
 # Unit test for AFSK demodulator
 
 atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c tt_text.c textcolor.c telemetry.c misc.a regex.a \
 		fsk_fast_filter.h
 	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
@@ -291,6 +297,16 @@ ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
+# Send GPS location to KISS TNC each second.
+
+walk96 : walk96.c nmea.c kiss_frame.c \
+		latlong.o encode_aprs.o serial_port.o textcolor.o \
+		ax25_pad.o fcs_calc.o regex.a \
+		misc.a 
+	$(CC) $(CFLAGS) -DWALK96 -o $@ $^ -lwinmm -lws2_32
+
+
+
 
 .PHONY: depend
 depend : $(wildcard *.c)
@@ -310,21 +326,21 @@ clean :
 .PHONY: dist-win
 dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe \
 			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe \
-		 	direwolf.txt dwespeak.bat \
-			CHANGES.txt User-Guide.pdf \
-			Raspberry-Pi-APRS.pdf APRStt-Implementation-Notes.pdf \
-			A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
-			A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+		 	generic.conf dwespeak.bat \
+			README.md CHANGES.md \
+			doc/User-Guide.pdf \
+			doc/Raspberry-Pi-APRS.pdf \
+			doc/APRStt-Implementation-Notes.pdf 
 	rm -f ../$z-win.zip
-	egrep '^C|^W' direwolf.txt | cut -c2-999 > direwolf.conf
+	egrep '^C|^W' generic.conf | cut -c2-999 > direwolf.conf
 	unix2dos direwolf.conf
-	zip ../$z-win.zip \
-		CHANGES.txt \
-		User-Guide.pdf \
-		Raspberry-Pi-APRS.pdf \
-		APRStt-Implementation-Notes.pdf \
-		A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
-		A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+	zip --junk-paths ../$z-win.zip \
+		README.md \
+		CHANGES.md \
+		doc/User-Guide.pdf \
+		doc/Raspberry-Pi-APRS.pdf \
+		doc/APRStt-Implementation-Notes.pdf \
+		doc/APRS-Telemetry-Toolkit.pdf \
 		LICENSE* \
 		direwolf.conf \
 		direwolf.exe \
@@ -337,66 +353,95 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		gen_packets.exe \
 		atest.exe \
 		ttcalc.exe \
-		dwespeak.bat
+		dwespeak.bat \
+		telemetry-toolkit/*
 
 .PHONY: dist-src
-dist-src : CHANGES.txt \
-		User-Guide.pdf \
-		Raspberry-Pi-APRS.pdf \
-		Raspberry-Pi-APRS-Tracker.pdf \
-		APRStt-Implementation-Notes.pdf \
-		A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
-		A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+dist-src : README.md CHANGES.md \
+		doc/User-Guide.pdf \
+		doc/Raspberry-Pi-APRS.pdf \
+		doc/Raspberry-Pi-APRS-Tracker.pdf \
+		doc/APRStt-Implementation-Notes.pdf \
+		doc/APRS-Telemetry-Toolkit.pdf \
 		dw-start.sh dwespeak.bat dwespeak.sh \
 		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
 	rm -f fsk_fast_filter.h
 	echo " " > tune.h
 	rm -f ../$z-src.zip
-	egrep '^C|^L' direwolf.txt | cut -c2-999 > direwolf.conf
-	dos2unix direwolf.conf
+	dos2unix generic.conf
 	dos2unix Makefile
 	dos2unix Makefile.linux
+	dos2unix Makefile.macosx
+	dos2unix telemetry-toolkit/telem-balloon.conf
+	dos2unix telemetry-toolkit/telem-balloon.pl
+	dos2unix telemetry-toolkit/telem-bits.pl
+	dos2unix telemetry-toolkit/telem-data.pl
+	dos2unix telemetry-toolkit/telem-data91.pl
+	dos2unix telemetry-toolkit/telem-eqns.pl
+	dos2unix telemetry-toolkit/telem-m0xer-3.txt
+	dos2unix telemetry-toolkit/telem-parm.pl
+	dos2unix telemetry-toolkit/telem-unit.pl
+	dos2unix telemetry-toolkit/telem-volts.py
+	dos2unix telemetry-toolkit/telem-volts.conf
 	(cd .. ; zip $z-src.zip \
-		$z/CHANGES.txt \
+		$z/README.md \
+		$z/CHANGES.md \
 		$z/LICENSE* \
-		$z/User-Guide.pdf \
-		$z/Raspberry-Pi-APRS.pdf \
-		$z/Raspberry-Pi-APRS-Tracker.pdf \
-		$z/APRStt-Implementation-Notes.pdf \
-		$z/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
-		$z/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
-		$z/Makefile.win $z/Makefile.linux $z/Makefile \
+		$z/doc/User-Guide.pdf \
+		$z/doc/Raspberry-Pi-APRS.pdf \
+		$z/doc/Raspberry-Pi-APRS-Tracker.pdf \
+		$z/doc/APRStt-Implementation-Notes.pdf \
+		$z/doc/APRS-Telemetry-Toolkit.pdf \
+		$z/Makefile.win $z/Makefile.linux $z/Makefile.macosx $z/Makefile \
 		$z/*.c $z/*.h \
 		$z/regex/* $z/misc/* $z/geotranz/* \
 		$z/man1/* \
-		$z/direwolf.conf $z/direwolf.txt \
+		$z/generic.conf \
 		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
 		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
 		$z/dw-start.sh $z/direwolf.spec \
-		$z/dwespeak.bat $z/dwespeak.sh )
+		$z/dwespeak.bat $z/dwespeak.sh \
+		$z/telemetry-toolkit/* )
 	unix2dos Makefile
 	unix2dos Makefile.linux
-	rm direwolf.conf
+	unix2dos Makefile.macosx
+	unix2dos telemetry-toolkit/telem-balloon.conf
+	unix2dos telemetry-toolkit/telem-balloon.pl
+	dos2unix telemetry-toolkit/telem-bits.pl
+	unix2dos telemetry-toolkit/telem-data.pl
+	unix2dos telemetry-toolkit/telem-data91.pl
+	unix2dos telemetry-toolkit/telem-eqns.pl
+	unix2dos telemetry-toolkit/telem-m0xer-3.txt
+	unix2dos telemetry-toolkit/telem-parm.pl
+	unix2dos telemetry-toolkit/telem-unit.pl
+	unix2dos telemetry-toolkit/telem-volts.py
+	unix2dos telemetry-toolkit/telem-volts.conf
+	
 
 
 
-User-Guide.pdf : User-Guide.docx
+doc/User-Guide.pdf : doc/User-Guide.docx
 	echo "***** User-Guide.pdf is out of date *****"
 
-Raspberry-Pi-APRS.pdf : Raspberry-Pi-APRS.docx
+doc/Raspberry-Pi-APRS.pdf : doc/Raspberry-Pi-APRS.docx
 	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
 
-Raspberry-Pi-APRS-Tracker.pdf : Raspberry-Pi-APRS-Tracker.docx
+doc/Raspberry-Pi-APRS-Tracker.pdf : doc/Raspberry-Pi-APRS-Tracker.docx
 	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
 
-APRStt-Implementation-Notes.pdf : APRStt-Implementation-Notes.docx
+doc/APRStt-Implementation-Notes.pdf : doc/APRStt-Implementation-Notes.docx
 	echo "***** APRStt-Implementation-Notes.pdf is out of date *****"
 
-A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf : A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.docx
+doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf : doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.docx
 	echo "***** A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf is out of date *****"
 
-A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf : A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.docx
+doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf : doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.docx
 	echo "***** A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf is out of date *****"
+
+doc/APRS-Telemetry-Toolkit.pdf : doc/APRS-Telemetry-Toolkit.docx
+	echo "***** APRS-Telemetry-Toolkit.pdf is out of date *****"
+
+
 
 .PHONY: backup
 backup :

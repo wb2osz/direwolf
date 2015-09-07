@@ -38,9 +38,7 @@
 #include <assert.h>
 #include <stdlib.h>	/* for atof */
 #include <string.h>	/* for strtok */
-#if __WIN32__
-char *strsep(char **stringp, const char *delim);
-#endif
+
 #include <math.h>	/* for pow */
 #include <ctype.h>	/* for isdigit */
 #include <fcntl.h>
@@ -110,6 +108,8 @@ static void aprs_object (decode_aprs_t *A, unsigned char *, int);
 static void aprs_item (decode_aprs_t *A, unsigned char *, int);
 static void aprs_station_capabilities (decode_aprs_t *A, char *, int);
 static void aprs_status_report (decode_aprs_t *A, char *, int);
+static void aprs_general_query (decode_aprs_t *A, char *, int, int quiet);
+static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet);
 static void aprs_telemetry (decode_aprs_t *A, char *, int, int quiet);
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *, int);
 static void aprs_morse_code (decode_aprs_t *A, char *, int);
@@ -127,6 +127,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext);
 static void decode_tocall (decode_aprs_t *A, char *dest);
 //static void get_symbol (decode_aprs_t *A, char dti, char *src, char *dest);
 static void process_comment (decode_aprs_t *A, char *pstart, int clen);
+
 
 
 
@@ -165,34 +166,32 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 	A->g_quiet = quiet;
 
-	sprintf (A->g_msg_type, "Unknown message type %c", *pinfo);
+	snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown message type %c", *pinfo);
 
-	A->g_symbol_table = '/';		/* Default to primary table. */
+	A->g_symbol_table = '/';	/* Default to primary table. */
 	A->g_symbol_code = ' ';		/* What should we have for default symbol? */
 
 	A->g_lat = G_UNKNOWN;
 	A->g_lon = G_UNKNOWN;
-	//strcpy (A->g_maidenhead, "");
 
-	//strcpy (A->g_name, "");
 	A->g_speed = G_UNKNOWN;
 	A->g_course = G_UNKNOWN;
 
 	A->g_power = G_UNKNOWN;
 	A->g_height = G_UNKNOWN;
 	A->g_gain = G_UNKNOWN;
-	//strcpy (A->g_directivity, "");
 
 	A->g_range = G_UNKNOWN;
 	A->g_altitude = G_UNKNOWN;
-	//strcpy(A->g_mfr, "");
-	//strcpy(A->g_mic_e_status, "");
 	A->g_freq = G_UNKNOWN;
 	A->g_tone = G_UNKNOWN;
 	A->g_dcs = G_UNKNOWN;
 	A->g_offset = G_UNKNOWN;
-	//strcpy (A->g_weather, "");
-	//strcpy (A->g_comment, "");
+
+	A->g_footprint_lat = G_UNKNOWN;
+	A->g_footprint_lon = G_UNKNOWN;
+	A->g_footprint_radius = G_UNKNOWN;
+
 
 /*
  * Extract source and destination including the SSID.
@@ -255,6 +254,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 
 	    case ':':		/* Message */
+				/* Directed Station Query */
 
 	      aprs_message (A, pinfo, info_len, quiet);
 	      break;
@@ -274,10 +274,14 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      aprs_status_report (A, (char*)pinfo, info_len);
 	      break;
 
-	    //case '?':		/* Query */
-	      //break;
+	    
+	    case '?':		/* General Query */
+
+	      aprs_general_query (A, (char*)pinfo, info_len, quiet);
+	      break;
 		
 	    case 'T':		/* Telemetry */
+
 	      aprs_telemetry (A, (char*)pinfo, info_len, quiet);
 	      break;
 
@@ -384,41 +388,43 @@ void decode_aprs_print (decode_aprs_t *A) {
  * - mic-e status
  * - power/height/gain, range
  */
-	strcpy (stemp, A->g_msg_type);
+	strlcpy (stemp, A->g_msg_type, sizeof(stemp));
 
 	if (strlen(A->g_name) > 0) {
-	  strcat (stemp, ", \"");
-	  strcat (stemp, A->g_name);
-	  strcat (stemp, "\"");
+	  strlcat (stemp, ", \"", sizeof(stemp));
+	  strlcat (stemp, A->g_name, sizeof(stemp));
+	  strlcat (stemp, "\"", sizeof(stemp));
 	}
 
-	symbols_get_description (A->g_symbol_table, A->g_symbol_code, symbol_description);	
-	strcat (stemp, ", ");
-	strcat (stemp, symbol_description);
+	if (A->g_symbol_code != ' ') {
+	  symbols_get_description (A->g_symbol_table, A->g_symbol_code, symbol_description, sizeof(symbol_description));	
+	  strlcat (stemp, ", ", sizeof(stemp));
+	  strlcat (stemp, symbol_description, sizeof(stemp));
+	}
 
 	if (strlen(A->g_mfr) > 0) {
-	  strcat (stemp, ", ");
-	  strcat (stemp, A->g_mfr);
+	  strlcat (stemp, ", ", sizeof(stemp));
+	  strlcat (stemp, A->g_mfr, sizeof(stemp));
 	}
 
 	if (strlen(A->g_mic_e_status) > 0) {
-	  strcat (stemp, ", ");
-	  strcat (stemp, A->g_mic_e_status);
+	  strlcat (stemp, ", ", sizeof(stemp));
+	  strlcat (stemp, A->g_mic_e_status, sizeof(stemp));
 	}
 
 
 	if (A->g_power > 0) {
 	  char phg[100];
 
-	  sprintf (phg, ", %d W height=%d %ddBi %s", A->g_power, A->g_height, A->g_gain, A->g_directivity);
-	  strcat (stemp, phg);
+	  snprintf (phg, sizeof(phg), ", %d W height=%d %ddBi %s", A->g_power, A->g_height, A->g_gain, A->g_directivity);
+	  strlcat (stemp, phg, sizeof(stemp));
 	}
 
 	if (A->g_range > 0) {
 	  char rng[100];
 
-	  sprintf (rng, ", range=%.1f", A->g_range);
-	  strcat (stemp, rng);
+	  snprintf (rng, sizeof(rng), ", range=%.1f", A->g_range);
+	  strlcat (stemp, rng, sizeof(stemp));
 	}
 	text_color_set(DW_COLOR_DECODED);
 	dw_printf("%s\n", stemp);
@@ -451,7 +457,7 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  dw_printf("Grid square = %s, ", A->g_maidenhead);
 	}
 
-	strcpy (stemp, "");
+	strlcpy (stemp, "", sizeof(stemp));
 
 	if (A->g_lat != G_UNKNOWN || A->g_lon != G_UNKNOWN) {
 
@@ -469,10 +475,10 @@ void decode_aprs_print (decode_aprs_t *A) {
 	    }
 	    deg = (int) absll;
 	    min = (absll - deg) * 60.0;
-	    sprintf (s_lat, "%c %02d%s%07.4f", news, deg, CH_DEGREE, min);
+	    snprintf (s_lat, sizeof(s_lat), "%c %02d%s%07.4f", news, deg, CH_DEGREE, min);
 	  }
 	  else {
-	    strcpy (s_lat, "Invalid Latitude");
+	    strlcpy (s_lat, "Invalid Latitude", sizeof(s_lat));
 	  }
 
 	  if (A->g_lon != G_UNKNOWN) {
@@ -487,72 +493,72 @@ void decode_aprs_print (decode_aprs_t *A) {
 	    }
 	    deg = (int) absll;
 	    min = (absll - deg) * 60.0;
-	    sprintf (s_lon, "%c %03d%s%07.4f", news, deg, CH_DEGREE, min);
+	    snprintf (s_lon, sizeof(s_lon), "%c %03d%s%07.4f", news, deg, CH_DEGREE, min);
 	  }
 	  else {
-	    strcpy (s_lon, "Invalid Longitude");
+	    strlcpy (s_lon, "Invalid Longitude", sizeof(s_lon));
 	  }	
 
-	  sprintf (stemp, "%s, %s", s_lat, s_lon);
+	  snprintf (stemp, sizeof(stemp), "%s, %s", s_lat, s_lon);
 	}
 
 	if (strlen(A->g_aprstt_loc) > 0) {
-	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  strcat (stemp, A->g_aprstt_loc);
+	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
+	  strlcat (stemp, A->g_aprstt_loc, sizeof(stemp));
 	};
 
 	if (A->g_speed != G_UNKNOWN) {
 	  char spd[20];
 
-	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  sprintf (spd, "%.0f MPH", A->g_speed);
-	  strcat (stemp, spd);
+	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
+	  snprintf (spd, sizeof(spd), "%.0f MPH", A->g_speed);
+	  strlcat (stemp, spd, sizeof(stemp));
 	};
 
 	if (A->g_course != G_UNKNOWN) {
 	  char cse[20];
 
-	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  sprintf (cse, "course %.0f", A->g_course);
-	  strcat (stemp, cse);
+	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
+	  snprintf (cse, sizeof(cse), "course %.0f", A->g_course);
+	  strlcat (stemp, cse, sizeof(stemp));
 	};
 
 	if (A->g_altitude != G_UNKNOWN) {
 	  char alt[20];
 
-	  if (strlen(stemp) > 0) strcat (stemp, ", ");
-	  sprintf (alt, "alt %.0f ft", A->g_altitude);
-	  strcat (stemp, alt);
+	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
+	  snprintf (alt, sizeof(alt), "alt %.0f ft", A->g_altitude);
+	  strlcat (stemp, alt, sizeof(stemp));
 	};
 
 	if (A->g_freq != G_UNKNOWN) {
 	  char ftemp[30];
 
-	  sprintf (ftemp, ", %.3f MHz", A->g_freq);
-	  strcat (stemp, ftemp);
+	  snprintf (ftemp, sizeof(ftemp), ", %.3f MHz", A->g_freq);
+	  strlcat (stemp, ftemp, sizeof(stemp));
 	}
 
 	if (A->g_offset != G_UNKNOWN) {
 	  char ftemp[30];
 
 	  if (A->g_offset % 1000 == 0) {
-	    sprintf (ftemp, ", %+dM", A->g_offset/1000);
+	    snprintf (ftemp, sizeof(ftemp), ", %+dM", A->g_offset/1000);
 	  }
 	  else {
-	    sprintf (ftemp, ", %+dk", A->g_offset);
+	    snprintf (ftemp, sizeof(ftemp), ", %+dk", A->g_offset);
 	  }
-	  strcat (stemp, ftemp);
+	  strlcat (stemp, ftemp, sizeof(stemp));
 	}
 
 	if (A->g_tone != G_UNKNOWN) {
 	  if (A->g_tone == 0) {
-	    strcat (stemp, ", no PL");
+	    strlcat (stemp, ", no PL", sizeof(stemp));
 	  }
 	  else {
 	    char ftemp[30];
 
-	    sprintf (ftemp, ", PL %.1f", A->g_tone);
-	    strcat (stemp, ftemp);
+	    snprintf (ftemp, sizeof(ftemp), ", PL %.1f", A->g_tone);
+	    strlcat (stemp, ftemp, sizeof(stemp));
 	  }
 	}
 
@@ -560,8 +566,8 @@ void decode_aprs_print (decode_aprs_t *A) {
 
 	  char ftemp[30];
 
-	  sprintf (ftemp, ", DCS %03o", A->g_dcs);
-	  strcat (stemp, ftemp);
+	  snprintf (ftemp, sizeof(ftemp), ", DCS %03o", A->g_dcs);
+	  strlcat (stemp, ftemp, sizeof(stemp));
 	}
 
 	if (strlen (stemp) > 0) {
@@ -588,17 +594,13 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  A->g_weather[n-1] = '\0';
 	  n--;
 	}
-	if (n > 0) {
-	  //int j;
-
+	if (n > 0) {  
 	  ax25_safe_print (A->g_weather, -1, 0);
 	  dw_printf("\n");
 	}
 
 
 	if (strlen(A->g_telemetry) > 0) {
-	  //int j;
-
 	  ax25_safe_print (A->g_telemetry, -1, 0);
 	  dw_printf("\n");
 	}
@@ -695,7 +697,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 	} *q;
 
 
-	strcpy (A->g_msg_type, "Position");
+	strlcpy (A->g_msg_type, "Position", sizeof(A->g_msg_type));
 
 	p = (struct aprs_ll_pos_s *)info;
 	q = (struct aprs_compressed_pos_s *)info;
@@ -709,7 +711,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strcpy (A->g_msg_type, "Weather Report");
+	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
 	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
@@ -728,7 +730,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* compressed data so we don't expect a 7 byte "data */
 	    /* extension" for them. */
 
-	    strcpy (A->g_msg_type, "Weather Report");
+	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
 	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
@@ -798,7 +800,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	} *q;
 
 
-	strcpy (A->g_msg_type, "Position with time");
+	strlcpy (A->g_msg_type, "Position with time", sizeof(A->g_msg_type));
 
 	time_t ts = 0;
 
@@ -817,7 +819,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strcpy (A->g_msg_type, "Weather Report");
+	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
 	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
@@ -838,7 +840,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* compressed data so we don't expect a 7 byte "data */
 	    /* extension" for them. */
 
-	    strcpy (A->g_msg_type, "Weather Report");
+	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
 	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
@@ -920,10 +922,9 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 	char *next;
 
 
-	strcpy (A->g_msg_type, "Raw NMEA");
+	strlcpy (A->g_msg_type, "Raw NMEA", sizeof(A->g_msg_type));
 
-	strncpy (stemp, (char *)info, ilen);
-	stemp[ilen] = '\0';
+	strlcpy (stemp, (char *)info, sizeof(stemp));
 	nmea_checksum (A, stemp);
 
 	next = stemp;
@@ -957,15 +958,30 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	  /* Process time??? */
 
-	  if (plat != NULL && strlen(plat) > 0) {
+	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
 	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
-	  if (plon != NULL && strlen(plon) > 0) {
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete latitude in sentence.\n");
+	  }
+
+	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
 	    A->g_lon = longitude_from_nmea(plon, pew);
 	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete longitude in sentence.\n");
+	  }
+
 	  if (paltitude != NULL && strlen(paltitude) > 0) {
 	    A->g_altitude = DW_METERS_TO_FEET(atof(paltitude));
 	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete altitude in sentence.\n");
+	  }
+
 	}
 	else if (strcmp(ptype, "$GPGLL") == 0)
 	{
@@ -981,11 +997,20 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 	  plon = strsep(&next, ",");
 	  pew = strsep(&next, ",");
 
-	  if (plat != NULL && strlen(plat) > 0) {
+	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
 	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
-	  if (plon != NULL && strlen(plon) > 0) {
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete latitude in sentence.\n");
+	  }
+
+	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
 	    A->g_lon = longitude_from_nmea(plon, pew);
+	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete longitude in sentence.\n");
 	  }
 
 	}
@@ -1018,18 +1043,38 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	  /* process time ??? date ??? */
 
-	  if (plat != NULL && strlen(plat) > 0) {
+	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
 	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
-	  if (plon != NULL && strlen(plon) > 0) {
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete latitude in sentence.\n");
+	  }
+
+	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
 	    A->g_lon = longitude_from_nmea(plon, pew);
 	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete longitude in sentence.\n");
+	  }
+
 	  if (pknots != NULL && strlen(pknots) > 0) {
 	    A->g_speed = DW_KNOTS_TO_MPH(atof(pknots));
 	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete speed in sentence.\n");
+	  }
+
 	  if (pcourse != NULL && strlen(pcourse) > 0) {
 	    A->g_course = atof(pcourse);
 	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete course in sentence.\n");
+	  }
+
 	}
 	else if (strcmp(ptype, "$GPVTG") == 0)
 	{
@@ -1060,14 +1105,22 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 	  if (pknots != NULL && strlen(pknots) > 0) {
 	    A->g_speed = DW_KNOTS_TO_MPH(atof(pknots));
 	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete speed in sentence.\n");
+	  }
+
 	  if (ptcourse != NULL && strlen(ptcourse) > 0) {
 	    A->g_course = atof(ptcourse);
+	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete course in sentence.\n");
 	  }
 
 	}
 	else if (strcmp(ptype, "$GPWPL") == 0)
 	{
-	  //char *plat, *pns, *plon, *pew, *pident;
 
 	  char *plat;			/* Latitude */
 	  char *pns;			/* North/South */
@@ -1082,11 +1135,20 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 	  pew = strsep(&next, ",");
 	  pident = strsep(&next, ",");
 
-	  if (plat != NULL && strlen(plat) > 0) {
+	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
 	    A->g_lat = latitude_from_nmea(plat, pns);
 	  }
-	  if (plon != NULL && strlen(plon) > 0) {
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete latitude in sentence.\n");
+	  }
+
+	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
 	    A->g_lon = longitude_from_nmea(plon, pew);
+	  }
+	  else {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf("Incomplete longitude in sentence.\n");
 	  }
 
 	  /* do something with identifier? */
@@ -1109,7 +1171,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  * Description:	
  *
- *		Destination Address Field — 
+ *		Destination Address Field - 
  *
  *		The 7-byte Destination Address field contains
  *		the following encoded information:
@@ -1261,7 +1323,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	const char *cust_text[8] = {"Emergency", "Custom-6", "Custom-5", "Custom-4", "Custom-3", "Custom-2", "Custom-1", "Custom-0" }; 
 	unsigned char *pfirst, *plast;
 
-	strcpy (A->g_msg_type, "MIC-E");
+	strlcpy (A->g_msg_type, "MIC-E", sizeof(A->g_msg_type));
 
 	p = (struct aprs_mic_e_s *)info;
 
@@ -1456,16 +1518,16 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 /* Message type from two 3-bit codes. */
 
 	if (std_msg == 0 && cust_msg == 0) {
-	  strcpy (A->g_mic_e_status, "Emergency");
+	  strlcpy (A->g_mic_e_status, "Emergency", sizeof(A->g_mic_e_status));
 	}
 	else if (std_msg == 0 && cust_msg != 0) {
-	  strcpy (A->g_mic_e_status, cust_text[cust_msg]);
+	  strlcpy (A->g_mic_e_status, cust_text[cust_msg], sizeof(A->g_mic_e_status));
 	}
 	else if (std_msg != 0 && cust_msg == 0) {
-	  strcpy (A->g_mic_e_status, std_text[std_msg]);
+	  strlcpy (A->g_mic_e_status, std_text[std_msg], sizeof(A->g_mic_e_status));
 	}
 	else {
-	  strcpy (A->g_mic_e_status, "Unknown MIC-E Message Type");
+	  strlcpy (A->g_mic_e_status, "Unknown MIC-E Message Type", sizeof(A->g_mic_e_status));
 	}
 
 /* Speed and course from next 3 bytes. */
@@ -1492,7 +1554,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 /* Now try to pick out manufacturer and other optional items. */
 /* The telemetry field, in the original spec, is no longer used. */
   
-	strcpy (A->g_mfr, "Unknown manufacturer");
+	strlcpy (A->g_mfr, "Unknown manufacturer", sizeof(A->g_mfr));
 
 	pfirst = info + sizeof(struct aprs_mic_e_s);
 	plast = info + ilen - 1;
@@ -1511,35 +1573,35 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 	if (isT(*pfirst)) {
 	
-	  if (*pfirst == ' ') { strcpy (A->g_mfr, "Original MIC-E"); pfirst++; }
+	  if (*pfirst == ' ') { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == '>' && *plast == '=') { strcpy (A->g_mfr, "Kenwood TH-D72"); pfirst++; plast--; }
-	  else if (*pfirst == '>') { strcpy (A->g_mfr, "Kenwood TH-D7A"); pfirst++; }
+	  else if (*pfirst == '>' && *plast == '=') { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == '>') { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == ']' && *plast == '=') { strcpy (A->g_mfr, "Kenwood TM-D710"); pfirst++; plast--; }
-	  else if (*pfirst == ']') { strcpy (A->g_mfr, "Kenwood TM-D700"); pfirst++; }
+	  else if (*pfirst == ']' && *plast == '=') { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == ']') { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ' ') { strcpy (A->g_mfr, "Yaesu VX-8"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '"') { strcpy (A->g_mfr, "Yaesu FTM-350"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strcpy (A->g_mfr, "Yaesu VX-8G"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '$') { strcpy (A->g_mfr, "Yaesu FT1D"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '%') { strcpy (A->g_mfr, "Yaesu FTM-400DR"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ')') { strcpy (A->g_mfr, "Yaesu FTM-100D"); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '(') { strcpy (A->g_mfr, "Yaesu FT2D"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ' ') { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '"') { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '$') { strlcpy (A->g_mfr, "Yaesu FT1D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '%') { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ')') { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '(') { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strcpy (A->g_mfr, "Byonics TinyTrack3"); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strcpy (A->g_mfr, "Byonics TinyTrack4"); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*(plast-1) == '\\') { strcpy (A->g_mfr, "Hamhud ?"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '/') { strcpy (A->g_mfr, "Argent ?"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '^') { strcpy (A->g_mfr, "HinzTec anyfrog"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '*') { strcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO"); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '~') { strcpy (A->g_mfr, "OTHER"); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '\\') { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '/') { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '^') { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '*') { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*(plast-1) == '~') { strlcpy (A->g_mfr, "OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  // Should Original Mic-E and Kenwood be moved down to here?
 
-	  else if (*pfirst == '`') { strcpy (A->g_mfr, "Mic-Emsg"); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'') { strcpy (A->g_mfr, "McTrackr"); pfirst++; plast-=2; }
+	  else if (*pfirst == '`') { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'') { strlcpy (A->g_mfr, "McTrackr", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	}
 
 /*
@@ -1602,9 +1664,8 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		It's a lot more complicated with different types of addressees
  *		and replies with acknowledgement or rejection.
  *
- *		Displaying and logging these messages could be useful.
  *
- * Examples:	
+ * Examples:	...
  *		
  *
  *------------------------------------------------------------------*/
@@ -1618,16 +1679,35 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char colon;			/* : */
 	  char message[73];		/* 0-67 characters for message */
 					/* { followed by 1-5 characters for message number */
+
+					/* If the first chracter is '?' it is a Directed Station Query. */
 	} *p;
 
 	char addressee[AX25_MAX_ADDR_LEN];
 	int i;
 
-
 	p = (struct aprs_message_s *)info;
 
+	strlcpy (A->g_msg_type, "APRS Message", sizeof(A->g_msg_type));
+
+	if (ilen < 11) {
+	  if (! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Message must have a minimum of 11 characters for : addressee :\n");
+	  }
+	  return;
+	}
+
+	if (p->colon != ':') {
+	  if (! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Message must begin with : addressee :\n");
+	  }
+	  return;
+	}
+
 	memset (addressee, 0, sizeof(addressee));
-	strncpy (addressee, p->addressee, sizeof(p->addressee));
+	memcpy (addressee, p->addressee, sizeof(p->addressee));	// copy exactly 9 bytes.
 
 	/* Trim trailing spaces. */
 	i = strlen(addressee) - 1;
@@ -1635,7 +1715,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  addressee[i--] = '\0';
 	}
 
-	strcpy (A->g_addressee, addressee);
+	strlcpy (A->g_addressee, addressee, sizeof(A->g_addressee));
 
 /*
  * Special message formats contain telemetry metadata.
@@ -1649,27 +1729,38 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
  */
 
 	if (strncmp(p->message,"PARM.",5) == 0) {
-	  sprintf (A->g_msg_type, "Telemetry Parameter Name Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Parameter Name Message for \"%s\"", addressee);
 	  telemetry_name_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"UNIT.",5) == 0) {
-	  sprintf (A->g_msg_type, "Telemetry Unit/Label Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Unit/Label Message for \"%s\"", addressee);
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
-	  sprintf (A->g_msg_type, "Telemetry Equation Coefficents Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficents Message for \"%s\"", addressee);
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
 	else if (strncmp(p->message,"BITS.",5) == 0) {
-	  sprintf (A->g_msg_type, "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
 	  telemetry_bit_sense_message (addressee, p->message+5, quiet);
 	}
+
+/*
+ * If first character of message is "?" it is a query directed toward a specific station.
+ */
+
+	else if (p->message[0] == '?') {
+
+	  strlcpy (A->g_msg_type, "Directed Station Query", sizeof(A->g_msg_type));
+
+	  aprs_directed_station_query (A, addressee, p->message+1, quiet);
+	}
 	else {
-	  sprintf (A->g_msg_type, "APRS Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message for \"%s\"", addressee);
 
 	  /* No location so don't use  process_comment () */
 
-	  strcpy (A->g_comment, p->message);
+	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
 	}
 
 }
@@ -1729,19 +1820,23 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	p = (struct aprs_object_s *)info;
 	q = (struct aprs_compressed_object_s *)info;
 
-	strncpy (A->g_name, p->name, 9);
-	A->g_name[9] = '\0';
+	//assert (sizeof(A->g_name) > sizeof(p->name));
+
+	memset (A->g_name, 0, sizeof(A->g_name));
+	memcpy (A->g_name, p->name, sizeof(p->name));	// copy exactly 9 bytes.
+
+	/* Trim trailing spaces. */
 	i = strlen(A->g_name) - 1;
 	while (i >= 0 && A->g_name[i] == ' ') {
 	  A->g_name[i--] = '\0';
 	}
 
-	if (p->live_killed == '*')
-	  strcpy (A->g_msg_type, "Object");
+ 	if (p->live_killed == '*')
+	  strlcpy (A->g_msg_type, "Object", sizeof(A->g_msg_type));
 	else if (p->live_killed == '_')
-	  strcpy (A->g_msg_type, "Killed Object");
+	  strlcpy (A->g_msg_type, "Killed Object", sizeof(A->g_msg_type));
 	else
-	  strcpy (A->g_msg_type, "Object - invalid live/killed");
+	  strlcpy (A->g_msg_type, "Object - invalid live/killed", sizeof(A->g_msg_type));
 
 	ts = get_timestamp (A, p->time_stamp);
 
@@ -1754,7 +1849,7 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strcpy (A->g_msg_type, "Weather Report with Object");
+	    strlcpy (A->g_msg_type, "Weather Report with Object", sizeof(A->g_msg_type));
 	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
@@ -1773,7 +1868,7 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* of weather report and object with compressed */
 	    /* position. */
 
-	    strcpy (A->g_msg_type, "Weather Report with Object");
+	    strlcpy (A->g_msg_type, "Weather Report with Object", sizeof(A->g_msg_type));
 	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
@@ -1813,6 +1908,9 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	struct aprs_item_s {
 	  char dti;			/* ) */
 	  char name[9];			/* Actually variable length 3 - 9 bytes. */
+					/* DON'T refer to the rest of this structure; */
+					/* the offsets will be wrong! */
+
 	  char live_killed;		/* ! for live or _ for killed */
 	  position_t pos;
 	  char comment[43]; 		/* First 7 bytes could be data extension. */
@@ -1821,6 +1919,9 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	struct aprs_compressed_item_s {
 	  char dti;			/* ) */
 	  char name[9];			/* Actually variable length 3 - 9 bytes. */
+					/* DON'T refer to the rest of this structure; */
+					/* the offsets will be wrong! */
+
 	  char live_killed;		/* ! for live or _ for killed */
 	  compressed_position_t cpos;
 	  char comment[40]; 		/* No data extension in this case. */
@@ -1835,6 +1936,7 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	p = (struct aprs_item_s *)info;
 	q = (struct aprs_compressed_item_s *)info;
 
+	memset (A->g_name, 0, sizeof(A->g_name));
 	i = 0;
 	while (i < 9 && p->name[i] != '!' && p->name[i] != '_') {
 	  A->g_name[i] = p->name[i];
@@ -1843,15 +1945,15 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	}
 
 	if (p->name[i] == '!')
-	  strcpy (A->g_msg_type, "Item");
+	  strlcpy (A->g_msg_type, "Item", sizeof(A->g_msg_type));
 	else if (p->name[i] == '_')
-	  strcpy (A->g_msg_type, "Killed Item");
+	  strlcpy (A->g_msg_type, "Killed Item", sizeof(A->g_msg_type));
 	else {
 	  if ( ! A->g_quiet) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Item name too long or not followed by ! or _.\n");
 	  }
-	  strcpy (A->g_msg_type, "Object - invalid live/killed");
+	  strlcpy (A->g_msg_type, "Object - invalid live/killed", sizeof(A->g_msg_type));
 	}
 
 	ppos = p->name + i + 1;
@@ -1895,12 +1997,14 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 static void aprs_station_capabilities (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (A->g_msg_type, "Station Capabilities");
+	strlcpy (A->g_msg_type, "Station Capabilities", sizeof(A->g_msg_type));
 
-	// 	Is process_comment() applicable?
+	// 	process_comment() not applicable here because it 
+	//	extracts information found in certain formats.
 
-	strcpy (A->g_comment, info+1);
-}
+	strlcpy (A->g_comment, info+1, sizeof(A->g_comment));
+
+} /* end aprs_station_capabilities */
 
 
 
@@ -1980,7 +2084,7 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	} *ps;
 
 
-	strcpy (A->g_msg_type, "Status Report");
+	strlcpy (A->g_msg_type, "Status Report", sizeof(A->g_msg_type));
 
 	pt = (struct aprs_status_time_s *)info;
 	pm4 = (struct aprs_status_m4_s *)info;
@@ -1998,7 +2102,10 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	    isdigit(pt->ztime[5]) &&
 	    pt->ztime[6] == 'z') {
 
-	  strcpy (A->g_comment, pt->comment);
+	  // 	process_comment() not applicable here because it 
+	  //	extracts information found in certain formats.
+
+	  strlcpy (A->g_comment, pt->comment, sizeof(A->g_comment));
 	}
 
 /*
@@ -2006,8 +2113,8 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
  */
 	else if (get_maidenhead (A, pm6->mhead6) == 6) {
 
-	  strncpy (A->g_maidenhead, pm6->mhead6, 6);
-	  A->g_maidenhead[6] = '\0';
+	  memset (A->g_maidenhead, 0, sizeof(A->g_maidenhead));
+	  memcpy (A->g_maidenhead, pm6->mhead6, sizeof(pm6->mhead6));
 
 	  A->g_symbol_table = pm6->sym_table_id;
 	  A->g_symbol_code = pm6->symbol_code;
@@ -2029,7 +2136,10 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	    }	
 	  }
 
-	  strcpy (A->g_comment, pm6->comment);
+	  // 	process_comment() not applicable here because it 
+	  //	extracts information found in certain formats.
+
+	  strlcpy (A->g_comment, pm6->comment, sizeof(A->g_comment));
 	}
 
 /*
@@ -2037,8 +2147,8 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
  */
 	else if (get_maidenhead (A, pm4->mhead4) == 4) {
 
-	  strncpy (A->g_maidenhead, pm4->mhead4, 4);
-	  A->g_maidenhead[4] = '\0';
+	  memset (A->g_maidenhead, 0, sizeof(A->g_maidenhead));
+	  memcpy (A->g_maidenhead, pm4->mhead4, sizeof(pm4->mhead4));
 
 	  A->g_symbol_table = pm4->sym_table_id;
 	  A->g_symbol_code = pm4->symbol_code;
@@ -2060,14 +2170,17 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	    }
 	  }
 
-	  strcpy (A->g_comment, pm4->comment);
+	  // 	process_comment() not applicable here because it 
+	  //	extracts information found in certain formats.
+
+	  strlcpy (A->g_comment, pm4->comment, sizeof(A->g_comment));
 	}
 
 /*
  * Whole thing is status text.
  */
 	else {
-	  strcpy (A->g_comment, ps->comment);
+	  strlcpy (A->g_comment, ps->comment, sizeof(A->g_comment));
 	}
 
 
@@ -2102,7 +2215,207 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	    *hp = '\0';
 	  }
 	}
-}
+
+} /* end aprs_status_report */
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	aprs_general_query
+ *
+ * Purpose:	Decode "General Query" for all stations.
+ *
+ * Inputs:	info 	- Pointer to Information field.  First character should be "?".
+ *		ilen 	- Information field length.
+ *		quiet	- suppress error messages.
+ *
+ * Outputs:	A	- Decoded packet structure
+ *				A->g_query_type
+ *				A->g_query_lat		(optional)
+ *				A->g_query_lon		(optional)
+ *				A->g_query_radius	(optional)
+ *
+ * Description:	Formats are:
+ *	
+ *			?query?
+ *			?query?lat,long,radius
+ *
+ *		'query' is one of APRS, IGATE, WX, ...
+ *		optional footprint, in degrees and miles radius, means only
+ *			those in the specified circle should respond.
+ *
+ * Examples from specification, Chapter 15:		
+ *
+ *		?APRS?
+ *		?APRS? 34.02,-117.15,0200
+ *		?IGATE?
+ *	
+ *------------------------------------------------------------------*/
+
+static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quiet) 
+{
+	char *q2;
+	char *p;
+	char *tok;
+	char stemp[256];		
+	double lat, lon;
+	float radius;
+
+	strlcpy (A->g_msg_type, "General Query", sizeof(A->g_msg_type));
+
+/*
+ * First make a copy because we will modify it while parsing it.
+ */
+
+	strlcpy (stemp, info, sizeof(stemp));
+
+/*
+ * There should be another "?" after the query type.
+ */
+	q2 = strchr(stemp+1, '?');
+	if (q2 == NULL) {
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("General Query must have ? after the query type.\n");
+	  }
+	  return; 
+	}
+
+	*q2 = '\0';
+	strlcpy (A->g_query_type, stemp+1, sizeof(A->g_query_type));
+
+// TODO: remove debug
+
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf("DEBUG: General Query type = \"%s\"\n", A->g_query_type);
+
+	p = q2 + 1;
+	if (strlen(p) == 0) {
+	  return;
+	}
+
+/*
+ * Try to extract footprint.
+ * Spec says positive coordinate would be preceded by space
+ * and radius must be exactly 4 digits.  We are more forgiving. 
+ */
+	tok = strsep(&p, ",");
+	if (tok != NULL) {
+	  lat = atof(tok);
+	  tok = strsep(&p, ",");
+	  if (tok != NULL) {
+	    lon = atof(tok);
+	    tok = strsep(&p, ",");
+	    if (tok != NULL) {
+	      radius = atof(tok);
+
+	      if (lat < -90 || lat > 90) {
+	        if ( ! A->g_quiet) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Invalid latitude for General Query footprint.\n");
+	        }
+	        return; 
+	      }
+
+	      if (lon < -180 || lon > 180) {
+	        if ( ! A->g_quiet) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Invalid longitude for General Query footprint.\n");
+	        }
+	        return; 
+	      }
+
+	      if (radius <= 0 || radius > 9999) {
+	        if ( ! A->g_quiet) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Invalid radius for General Query footprint.\n");
+	        }
+	        return; 
+	      }
+
+	      A->g_footprint_lat = lat;
+	      A->g_footprint_lon = lon;
+	      A->g_footprint_radius = radius;
+	    }
+	    else {
+	      if ( ! A->g_quiet) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Can't get radius for General Query footprint.\n");
+	      }
+	      return;
+	    }
+	  }
+	  else {
+	    if ( ! A->g_quiet) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Can't get longitude for General Query footprint.\n");
+	    }
+	    return;
+	  }
+	}
+	else {
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Can't get latitude for General Query footprint.\n");
+	  }
+	  return;
+	}
+	
+// TODO: remove debug
+
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf("DEBUG: General Query footprint = %.6f %.6f %.2f\n", lat, lon, radius);
+
+
+} /* end aprs_general_query */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	aprs_directed_station_query
+ *
+ * Purpose:	Decode "Directed Station Query" aimed at specific station.
+ *		This is actually a special format of the more general "message."
+ *
+ * Inputs:	addressee	- To whom it is directed.
+ *				  Redundant because it is already in A->addressee.
+ *
+ *		query	 	- What's left over after ":addressee:?" in info part.
+ *
+ *		quiet		- suppress error messages.
+ *
+ * Outputs:	A	- Decoded packet structure
+ *				A->g_query_type
+ *				A->g_query_callsign	(optional)
+ *
+ * Description:	The caller has already removed the :addressee:? part so we are left 
+ *		with a query type of exactly 5 characters and optional "callsign 
+ *		of heard station."
+ *	
+ * Examples from specification, Chapter 15.   Our "query" argument.	
+ *
+ *		:KH2Z     :?APRSD		APRSD
+ *		:KH2Z     :?APRSHVN0QBF     	APRSHVN0QBF
+ *		:KH2Z     :?APRST		APRST
+ *		:KH2Z     :?PING?		PING?
+ *	
+ *		"PING?" contains "?" only to pad it out to exactly 5 characters.
+ *
+ *------------------------------------------------------------------*/
+
+static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet)
+{
+	char query_type[20];		/* Does the query type always need to be exactly 5 characters? */
+					/* If not, how would we know where the extra optional information starts? */
+
+	char callsign[AX25_MAX_ADDR_LEN];
+
+	//if (strlen(query) < 5) ...
+
+
+}  /* end aprs_directed_station_query */
+
 
 
 /*------------------------------------------------------------------
@@ -2129,7 +2442,7 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet) 
 {
 
-	strcpy (A->g_msg_type, "Telemetry");
+	strlcpy (A->g_msg_type, "Telemetry", sizeof(A->g_msg_type));
 
 	telemetry_data_original (A->g_src, info, quiet, A->g_telemetry, A->g_comment);
 
@@ -2156,14 +2469,14 @@ static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet)
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (A->g_msg_type, "Raw Touch Tone Data");
+	strlcpy (A->g_msg_type, "Raw Touch Tone Data", sizeof(A->g_msg_type));
 
 	/* Just copy the info field without the message type. */
 
 	if (*info == '{') 
-	  strcpy (A->g_comment, info+3);
+	  strlcpy (A->g_comment, info+3, sizeof(A->g_comment));
 	else
-	  strcpy (A->g_comment, info+1);
+	  strlcpy (A->g_comment, info+1, sizeof(A->g_comment));
 
 
 } /* end aprs_raw_touch_tone */
@@ -2187,14 +2500,14 @@ static void aprs_raw_touch_tone (decode_aprs_t *A, char *info, int ilen)
 static void aprs_morse_code (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strcpy (A->g_msg_type, "Morse Code Data");
+	strlcpy (A->g_msg_type, "Morse Code Data", sizeof(A->g_msg_type));
 
 	/* Just copy the info field without the message type. */
 
 	if (*info == '{') 
-	  strcpy (A->g_comment, info+3);
+	  strlcpy (A->g_comment, info+3, sizeof(A->g_comment));
 	else
-	  strcpy (A->g_comment, info+1);
+	  strlcpy (A->g_comment, info+1, sizeof(A->g_comment));
 
 
 } /* end aprs_morse_code */
@@ -2227,7 +2540,7 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
 	} *p;
 
 
-	strcpy (A->g_msg_type, "Positionless Weather Report");
+	strlcpy (A->g_msg_type, "Positionless Weather Report", sizeof(A->g_msg_type));
 
 	time_t ts = 0;
 
@@ -2289,7 +2602,7 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
 
 static int getwdata (char **wpp, char ch, int dlen, float *val) 
 {
-	char stemp[8];
+	char stemp[8];	// larger than maximum dlen.
 	int i;
 
 
@@ -2318,8 +2631,8 @@ static int getwdata (char **wpp, char ch, int dlen, float *val)
 	  }
 	} 
 
-	strncpy (stemp, (*wpp)+1, dlen);
-	stemp[dlen] = '\0';
+	memset (stemp, 0, sizeof(stemp));
+	memcpy (stemp, (*wpp)+1, dlen);
 	*val = atof(stemp);
 
 	//dw_printf("debug: getwdata returning %f\n", *val);
@@ -2372,12 +2685,12 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 // from one of three methods.
 
 	if (A->g_speed != G_UNKNOWN) {
-	  char ctemp[30];
 
-	  sprintf (A->g_weather, "wind %.1f mph", A->g_speed);
+	  snprintf (A->g_weather, sizeof(A->g_weather), "wind %.1f mph", A->g_speed);
 	  if (A->g_course != G_UNKNOWN) {
-	    sprintf (ctemp, ", direction %.0f", A->g_course);
-	    strcat (A->g_weather, ctemp);
+	    char ctemp[40];
+	    snprintf (ctemp, sizeof(ctemp), ", direction %.0f", A->g_course);
+	    strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	  }
 	}
 
@@ -2393,9 +2706,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
  */
 	if (getwdata (&wp, 'g', 3, &fval)) {
 	  if (fval != G_UNKNOWN) {
-	    char ctemp[30];
-	    sprintf (ctemp, ", gust %.0f", fval);
-	    strcat (A->g_weather, ctemp);
+	    char ctemp[40];
+	    snprintf (ctemp, sizeof(ctemp), ", gust %.0f", fval);
+	    strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	  }
 	}
 	else {
@@ -2407,9 +2720,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 
 	if (getwdata (&wp, 't', 3, &fval)) {
 	  if (fval != G_UNKNOWN) {
-	    char ctemp[30];
-	    sprintf (ctemp, ", temperature %.0f", fval);
-	    strcat (A->g_weather, ctemp);
+	    char ctemp[40];
+	    snprintf (ctemp, sizeof(ctemp), ", temperature %.0f", fval);
+	    strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	  }
 	}
 	else {
@@ -2430,9 +2743,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* r = rainfall, 1/100 inch, last hour */
 
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", rain %.2f in last hour", fval / 100.);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", rain %.2f in last hour", fval / 100.);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'p', 3, &fval)) {	
@@ -2440,9 +2753,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* p = rainfall, 1/100 inch, last 24 hours */
 
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", rain %.2f in last 24 hours", fval / 100.);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", rain %.2f in last 24 hours", fval / 100.);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'P', 3, &fval)) {	
@@ -2450,9 +2763,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* P = rainfall, 1/100 inch, since midnight */
 
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", rain %.2f since midnight", fval / 100.);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", rain %.2f since midnight", fval / 100.);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'h', 2, &fval)) {	
@@ -2462,8 +2775,8 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	    if (fval != G_UNKNOWN) {
 	      char ctemp[30];
 	      if (fval == 0) fval = 100;
-	      sprintf (ctemp, ", humidity %.0f", fval);
-	      strcat (A->g_weather, ctemp);
+	      snprintf (ctemp, sizeof(ctemp), ", humidity %.0f", fval);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'b', 5, &fval)) {	
@@ -2472,10 +2785,10 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* Here, display as inches of mercury. */
 
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
+	      char ctemp[40];
 	      fval = DW_MBAR_TO_INHG(fval * 0.1);
-	      sprintf (ctemp, ", barometer %.2f", fval);
-	      strcat (A->g_weather, ctemp);
+	      snprintf (ctemp, sizeof(ctemp), ", barometer %.2f", fval);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'L', 3, &fval)) {	
@@ -2483,9 +2796,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* L = Luminosity, watts/ sq meter, 000-999  */
 	
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", %.0f watts/m^2", fval);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", %.0f watts/m^2", fval);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'l', 3, &fval)) {	
@@ -2493,9 +2806,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* l = Luminosity, watts/ sq meter, 1000-1999  */
 	
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", %.0f watts/m^2", fval + 1000);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", %.0f watts/m^2", fval + 1000);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 's', 3, &fval)) {	
@@ -2506,9 +2819,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* position in the message so there is no confusion. */
 	
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", %.1f snow in 24 hours", fval);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", %.1f snow in 24 hours", fval);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 's', 3, &fval)) {	
@@ -2516,9 +2829,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	/* # = Raw rain counter  */
 	
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", raw rain counter %.f", fval);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", raw rain counter %.f", fval);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 	  else if (getwdata (&wp, 'X', 3, &fval)) {	
@@ -2530,9 +2843,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 // TODO: decode this properly
 	
 	    if (fval != G_UNKNOWN) {
-	      char ctemp[30];
-	      sprintf (ctemp, ", nuclear Radiation %.f", fval);
-	      strcat (A->g_weather, ctemp);
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", nuclear Radiation %.f", fval);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
 	    }
 	  }
 
@@ -2554,8 +2867,8 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
  *  / {UIV32N}
  */
 
-	strcat (A->g_weather, ", \"");
-	strcat (A->g_weather, wp);
+	strlcat (A->g_weather, ", \"", sizeof(A->g_weather));
+	strlcat (A->g_weather, wp, sizeof(A->g_weather));
 /*
  * Drop any CR / LF character at the end.
  */
@@ -2569,10 +2882,11 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	  A->g_weather[n-1] = '\0';
 	}
 
-	strcat (A->g_weather, "\"");
+	strlcat (A->g_weather, "\"", sizeof(A->g_weather));
 
 	return;
-}
+
+} /* end weather_data */
 
 
 /*------------------------------------------------------------------
@@ -2631,7 +2945,7 @@ static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen)
 
 	int n;
 
-	strcpy (A->g_msg_type, "Ultimeter");
+	strlcpy (A->g_msg_type, "Ultimeter", sizeof(A->g_msg_type));
 
 	if (*info == '$')
  	{
@@ -2660,7 +2974,7 @@ static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen)
 	    baro = DW_MBAR_TO_INHG(h_baro * 0.1);
 	    ohumid = h_ohumid * 0.1;
 	  
-	    sprintf (A->g_weather, "wind %.1f mph, direction %.0f, temperature %.1f, barometer %.2f, humidity %.0f",
+	    snprintf (A->g_weather, sizeof(A->g_weather), "wind %.1f mph, direction %.0f, temperature %.1f, barometer %.2f, humidity %.0f",
 			windpeak, wdir, otemp, baro, ohumid);
 	  }
 	}
@@ -2701,7 +3015,7 @@ static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen)
 	    wdir = (h_wdir & 0xff) * 360. / 256.;
 	    otemp = h_otemp * 0.1;
 	  
-	    sprintf (A->g_weather, "wind %.1f mph, direction %.0f, temperature %.1f\n",
+	    snprintf (A->g_weather, sizeof(A->g_weather), "wind %.1f mph, direction %.0f, temperature %.1f\n",
 			windpeak, wdir, otemp);
 	  }
 
@@ -2729,7 +3043,7 @@ static void third_party_header (decode_aprs_t *A, char *info, int ilen)
 {
 	int n;
 
-	strcpy (A->g_msg_type, "Third Party Header");
+	strlcpy (A->g_msg_type, "Third Party Header", sizeof(A->g_msg_type));
 
 	/* more later? */
 
@@ -3202,7 +3516,7 @@ double get_longitude_9 (char *p, int quiet)
  *
  *		Day/Hours/Minutes (DHM) format is a fixed 7-character field, consisting of
  *		a 6-digit day/time group followed by a single time indicator character (z or
- *		/). The day/time group consists of a two-digit day-of-the-month (01–31) and
+ *		/). The day/time group consists of a two-digit day-of-the-month (01-31) and
  *		a four-digit time in hours and minutes.
  *		Times can be expressed in zulu (UTC/GMT) or local time. For example:
  *
@@ -3223,12 +3537,12 @@ double get_longitude_9 (char *p, int quiet)
  *		Note: This format may not be used in Status Reports.
  *
  *		Month/Day/Hours/Minutes (MDHM) format is a fixed 8-character field,
- *		consisting of the month (01–12) and day-of-the-month (01–31), followed by
+ *		consisting of the month (01-12) and day-of-the-month (01-31), followed by
  *		the time in hours and minutes zulu. For example:
  *
  *		  10092345 is 23 hours 45 minutes zulu on October 9th.
  *
- *		This format is only used in reports from stand-alone “positionless” weather
+ *		This format is only used in reports from stand-alone "positionless" weather
  *		stations (i.e. reports that do not contain station position information).
  *
  *
@@ -3430,7 +3744,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	int n;
 
 	if (strlen(pdext) < 7) {
-	  strcpy (A->g_comment, pdext);
+	  strlcpy (A->g_comment, pdext, sizeof(A->g_comment));
 	  return 0;
 	}
 
@@ -3480,7 +3794,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	  A->g_height = (1 << (pdext[4] - '0')) * 10;
 	  A->g_gain = pdext[5] - '0';
 	  if (pdext[6] >= '0' && pdext[6] <= '8') {
-	    strcpy (A->g_directivity, dir[pdext[6]-'0']);
+	    strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
 	  }
 
 	  process_comment (A, pdext+7, -1);
@@ -3507,7 +3821,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	  A->g_height = (1 << (pdext[4] - '0')) * 10;
 	  A->g_gain = pdext[5] - '0';
 	  if (pdext[6] >= '0' && pdext[6] <= '8') {
-	    strcpy (A->g_directivity, dir[pdext[6]-'0']);
+	    strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
 	  }
 
 	  process_comment (A, pdext+7, -1);
@@ -3554,6 +3868,16 @@ static struct tocalls_s {
 
 static int num_tocalls = 0;
 
+// Make sure the array is null terminated.
+static const char *search_locations[] = {
+	(const char *) "tocalls.txt",
+#ifndef __WIN32__
+	(const char *) "/usr/share/direwolf/tocalls.txt",
+	(const char *) "/usr/local/share/direwolf/tocalls.txt",
+#endif
+	(const char *) NULL
+};
+
 static int tocall_cmp (const struct tocalls_s *x, const struct tocalls_s *y) 
 {
 	if (x->len != y->len) return (y->len - x->len);
@@ -3562,12 +3886,12 @@ static int tocall_cmp (const struct tocalls_s *x, const struct tocalls_s *y)
 
 static void decode_tocall (decode_aprs_t *A, char *dest)
 {
-	FILE *fp;
-	int n;
+	FILE *fp = 0;
+	int n = 0;
 	static int first_time = 1;
 	char stuff[100];
-	char *p;
-	char *r;
+	char *p = NULL;
+	char *r = NULL;
 
 	//dw_printf("debug: decode_tocall(\"%s\")\n", dest);
 
@@ -3593,12 +3917,13 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 
 	if (first_time) {
 
-	  fp = fopen("tocalls.txt", "r");
-#ifndef __WIN32__
-	  if (fp == NULL) {
-	    fp = fopen("/usr/share/direwolf/tocalls.txt", "r");
-	  }
-#endif
+	  n = 0;
+	  fp = NULL;
+	  do {
+	    if(search_locations[n] == NULL) break;
+	    fp = fopen(search_locations[n++], "r");
+	  } while (fp == NULL);
+
 	  if (fp != NULL) {
 
 	    while (fgets(stuff, sizeof(stuff), fp) != NULL && num_tocalls < MAX_TOCALLS) {
@@ -3666,7 +3991,7 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
  * models before getting to the more generic APY.
  */
 
-#if defined(__WIN32__) || defined(__OpenBSD__) || defined(__FreeBSD__)
+#if defined(__WIN32__) || defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
 	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), tocall_cmp);
 #else
 	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), (__compar_fn_t)tocall_cmp);
@@ -3687,8 +4012,7 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 
 	for (n=0; n<num_tocalls; n++) {
 	  if (strncmp(dest, tocalls[n].prefix, tocalls[n].len) == 0) {
-	    strncpy (A->g_mfr, tocalls[n].description, sizeof(A->g_mfr)-1);
-	    A->g_mfr[sizeof(A->g_mfr)-1] = '\0';
+	    strlcpy (A->g_mfr, tocalls[n].description, sizeof(A->g_mfr));
 	    return;
 	  }
 	}
@@ -3713,12 +4037,14 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
  *
  *------------------------------------------------------------------*/
 
+// TODO: potential for buffer overflow here.
+
 static void substr_se (char *dest, const char *src, int start, int endp1)
 {
 	int len = endp1 - start;
 
 	if (start < 0 || endp1 < 0 || len <= 0) {
-	  strcpy (dest, "");
+	  dest[0] = '\0';
 	  return;
 	}
 	memcpy (dest, src + start, len);
@@ -3823,7 +4149,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	char emsg[100];
 #define MAXMATCH 4
 	regmatch_t match[MAXMATCH];
-	char temp[256];
+	char temp[sizeof(A->g_comment)];
 	int keep_going;
 
 
@@ -3919,15 +4245,37 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  first_time = 0;
 	}
 
-	if (clen >= 0) {
-	  assert (clen < sizeof(A->g_comment));
+/*
+ * If clen is >= 0, take only specified number of characters.
+ * Otherwise, take it all.
+ */
+	if (clen < 0) {
+	  clen = strlen(pstart);
+	}
+
+/*
+ * Watch out for buffer overflow.
+ * KG6AZZ reports that there is a local digipeater that seems to 
+ * malfunction ocassionally.  It corrupts the packet, as it is
+ * digipeated, causing the comment to be hundreds of characters long.
+ */
+
+	if (clen > sizeof(A->g_comment) - 1) {
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Comment is extremely long, %d characters.\n", clen);
+	    dw_printf("Please report this, along with surrounding lines, so we can find the cause.\n");
+	  }
+	  clen = sizeof(A->g_comment) - 1;
+	}
+
+	if (clen > 0) {
 	  memcpy (A->g_comment, pstart, (size_t)clen);
 	  A->g_comment[clen] = '\0';
 	}
 	else {
-	  strcpy (A->g_comment, pstart);
+	  A->g_comment[0] = '\0';
 	}
-	//dw_printf("\nInitial comment='%s'\n", A->g_comment);
 
 
 /*
@@ -3974,8 +4322,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    }
 	  }
 
-	  strcpy (temp, A->g_comment + match[0].rm_eo);
-	  strcpy (A->g_comment + match[0].rm_so, temp);
+	  strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	  strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment));
 	}
 	else if (strlen(A->g_name) > 0) {
 
@@ -4028,16 +4376,16 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	      }
 	    }
 
-	    strcpy (temp, A->g_comment + match[0].rm_eo);
-	    strcpy (A->g_comment + match[0].rm_so, temp);
+	    strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	    strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment));
 	  }
 	  else if (regexec (&std_toff_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
 	    printf ("NO tone\n");
 	    A->g_tone = 0;
 
-	    strcpy (temp, A->g_comment + match[0].rm_eo);
-	    strcpy (A->g_comment + match[0].rm_so, temp);
+	    strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	    strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment));
 	  }
 	  else if (regexec (&std_dcs_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
@@ -4049,8 +4397,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
 	    A->g_dcs = strtoul (sttemp, NULL, 8);
 
-	    strcpy (temp, A->g_comment + match[0].rm_eo);
-	    strcpy (A->g_comment + match[0].rm_so, temp);
+	    strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	    strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	  }
 	  else if (regexec (&std_offset_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
@@ -4061,8 +4409,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
 	    A->g_offset = 10 * atoi(sttemp);
 
-	    strcpy (temp, A->g_comment + match[0].rm_eo);
-	    strcpy (A->g_comment + match[0].rm_so, temp);
+	    strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	    strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	  }
 	  else if (regexec (&std_range_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
@@ -4080,8 +4428,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	      A->g_range = DW_KM_TO_MILES(atoi(sttemp));
 	    }
 
-	    strcpy (temp, A->g_comment + match[0].rm_eo);
-	    strcpy (A->g_comment + match[0].rm_so, temp);
+	    strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	    strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	  }
 	  else {
 	    keep_going = 0;
@@ -4107,8 +4455,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
 	  telemetry_data_base91 (A->g_src, tdata, A->g_telemetry);
 
-	  strcpy (temp, A->g_comment + match[0].rm_eo);
-	  strcpy (A->g_comment + match[0].rm_so, temp);
+	  strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	  strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	}
 
 
@@ -4140,16 +4488,16 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  if (d == 'T') {
 
 	    if (a == ' ' && o == ' ') {
-	      sprintf (A->g_aprstt_loc, "APRStt corral location");
+	      snprintf (A->g_aprstt_loc, sizeof(A->g_aprstt_loc), "APRStt corral location");
 	    }
 	    else if (isdigit(a) && o == ' ') {
-	      sprintf (A->g_aprstt_loc, "APRStt location %c of 10", a);
+	      snprintf (A->g_aprstt_loc, sizeof(A->g_aprstt_loc), "APRStt location %c of 10", a);
 	    }
 	    else if (isdigit(a) && isdigit(o)) {
-	      sprintf (A->g_aprstt_loc, "APRStt location %c%c of 100", a, o);
+	      snprintf (A->g_aprstt_loc, sizeof(A->g_aprstt_loc), "APRStt location %c%c of 100", a, o);
 	    }
 	    else if (a == 'B' && isdigit(o)) {
-	      sprintf (A->g_aprstt_loc, "APRStt location %c%c...", a, o);
+	      snprintf (A->g_aprstt_loc, sizeof(A->g_aprstt_loc), "APRStt location %c%c...", a, o);
 	    }
 
 	  }
@@ -4194,8 +4542,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    }
 	  }
 
-	  strcpy (temp, A->g_comment + match[0].rm_eo);
-	  strcpy (A->g_comment + match[0].rm_so, temp);
+	  strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
+	  strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	}
 
 /*
@@ -4207,12 +4555,12 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
           //dw_printf("start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
-	  strcpy (temp, A->g_comment + match[0].rm_eo);
+	  strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
 
 	  A->g_comment[match[0].rm_eo] = '\0';
           A->g_altitude = atoi(A->g_comment + match[0].rm_so + 3);
 
-	  strcpy (A->g_comment + match[0].rm_so, temp);
+	  strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	}
 
 	//dw_printf("Final comment='%s'\n", A->g_comment);
@@ -4221,8 +4569,9 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * Finally look for something that looks like frequency or CTCSS tone
  * in the remaining comment.  Point this out and suggest the 
  * standardized format.
+ * Don't complain if we have already found a valid value.
  */
-	if (regexec (&bad_freq_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	if (A->g_freq == G_UNKNOWN && regexec (&bad_freq_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 	  char bad[30];
 	  char good[30];
@@ -4248,7 +4597,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  }
 	}
 
-	if (regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 	  char bad1[30];	/* original 99.9 or 999.9 format or one of 67 77 100 123 */
 	  char bad2[30];	/* 99.9 or 999.9 format.  ".0" appended for special cases. */
@@ -4256,9 +4605,9 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  int i;
 
 	  substr_se (bad1, A->g_comment, match[2].rm_so, match[2].rm_eo);
-	  strcpy (bad2, bad1);
+	  strlcpy (bad2, bad1, sizeof(bad2));
 	  if (strcmp(bad2, "67") == 0 || strcmp(bad2, "77") == 0 || strcmp(bad2, "100") == 0 || strcmp(bad2, "123") == 0) {
-	    strcat (bad2, ".0");
+	    strlcat (bad2, ".0", sizeof(bad2));
 	  }
 
 // TODO:  Why wasn't freq/PL recognized here?
@@ -4279,7 +4628,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    if (strcmp (s_ctcss[i], bad2) == 0) {
 
 	      if ( ! A->g_quiet) {
-                sprintf (good, "T%03d", i_ctcss[i]);
+                snprintf (good, sizeof(good), "T%03d", i_ctcss[i]);
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf("\"%s\" in comment looks like it might be a CTCSS tone in non-standard format.\n", bad1);
 	        dw_printf("For most systems to recognize it, use exactly this form \"%s\" at near beginning of comment, after any frequency.\n", good);

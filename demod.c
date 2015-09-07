@@ -191,28 +191,16 @@ int demod_init (struct audio_s *pa)
 #if __arm__
 	          /* We probably don't have a lot of CPU power available. */
 	          /* Previously we would use F if possible otherwise fall back to A. */
-#if 0
-	          if (save_audio_config_p->achan[chan].baud == FFF_BAUD &&
-		      save_audio_config_p->achan[chan].mark_freq == FFF_MARK_FREQ && 
-		      save_audio_config_p->achan[chan].space_freq == FFF_SPACE_FREQ &&
-		      save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec == FFF_SAMPLES_PER_SEC) {
 
-	            just_letters[0] = FFF_PROFILE;
-	            just_letters[1] = '\0';
-	          }
-	          else {
-	            strcpy (just_letters, "A");
-	          }
-#else
 	          /* In version 1.2, new default is E+ /3. */
 	          strcpy (just_letters, "E");			// version 1.2 now E.
 	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
 								// If not explicitly turned off.
 	          if (save_audio_config_p->achan[chan].decimate == 0) {
-	            save_audio_config_p->achan[chan].decimate = 3;
+	            if (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
+	              save_audio_config_p->achan[chan].decimate = 3;
+	            }
 	          }
-#endif
-
 #else
 	          strcpy (just_letters, "E");			// version 1.2 changed C to E.
 	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2

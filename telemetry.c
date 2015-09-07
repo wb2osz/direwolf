@@ -129,7 +129,7 @@ static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_A
  *
  * Inputs:	station		- Station name with optional SSID.
  *
- * REturns:	Pointer to metadata.
+ * Returns:	Pointer to metadata.
  *
  *--------------------------------------------------------------------*/
 
@@ -145,6 +145,10 @@ static struct t_metadata_s * t_get_metadata (char *station)
 
 	for (p = md_list_head; p != NULL; p = p->pnext) {
 	  if (strcmp(station, p->station) == 0) {
+
+	    assert (p->magic1 == MAGIC1);
+	    assert (p->magic2 == MAGIC2);
+
 	    return (p);
 	  }
 	}
@@ -153,6 +157,7 @@ static struct t_metadata_s * t_get_metadata (char *station)
 	memset (p, 0, sizeof (struct t_metadata_s));
 
 	p->magic1 = MAGIC1;
+	
 	strncpy (p->station, station, sizeof(p->station)-1);
 
 	for (n = 0; n < T_NUM_ANALOG; n++) {
@@ -232,6 +237,7 @@ static int t_ndp (char *str)
  *		quiet	- suppress error messages.
  *
  * Outputs:	output	- Decoded telemetry in human readable format.
+ *				TODO:  How big does it need to be?  (buffer overflow?)
  *		comment	- Any comment after the data.
  *
  * Description:	The first character, after the "T" data type indicator, must be "#" 
@@ -275,6 +281,10 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 #endif
 
 	pm = t_get_metadata(station);
+
+	assert (pm->magic1 == MAGIC1);
+	assert (pm->magic2 == MAGIC2);
+
 	seq = 0;
 	for (n = 0; n < T_NUM_ANALOG; n++) {
 	  araw[n] = G_UNKNOWN;
@@ -294,10 +304,15 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 
 /*
  * Make a copy of the input string because this will alter it.
+ * Remove any trailing CR/LF.
  */
 
-	strncpy (stemp, info+2, sizeof(stemp));
-	stemp[sizeof(stemp)-1] = '\0';
+	memset (stemp, 0, sizeof(stemp));
+	strncpy (stemp, info+2, sizeof(stemp)-1);
+
+	for (p = stemp + strlen(stemp) - 1; p >= stemp && (*p == '\r' || *p == '\n') ; p--) {
+	  *p = '\0';
+	} 
 
 	next = stemp;
 	p = strsep(&next,",");
@@ -309,13 +324,16 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	      araw[n] = atof(p);
 	      ndp[n] = t_ndp(p);
 	    }
-	    if (strlen(p) != 3 || araw[n] < 0 || araw[n] > 255 || araw[n] != (int)(araw[n])) {
-	      if ( ! quiet) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf("Telemetry analog values should be 3 digit integer values in range of 000 to 255.\n");	      
-	        dw_printf("Some applications might not interpret \"%s\" properly.\n", p);
-	      }	      
-	    }
+	    // Version 1.3: Suppress this message.
+	    // No one pays attention to the original 000 to 255 range.
+	    // BTW, this doesn't trap values like 0.0 or 1.0
+	    //if (strlen(p) != 3 || araw[n] < 0 || araw[n] > 255 || araw[n] != (int)(araw[n])) {
+	    //  if ( ! quiet) {
+	    //    text_color_set(DW_COLOR_ERROR);
+	    //    dw_printf("Telemetry analog values should be 3 digit integer values in range of 000 to 255.\n");	      
+	    //    dw_printf("Some applications might not interpret \"%s\" properly.\n", p);
+	    //  }	      
+	    //}
 	    n++;
 	  }
 
@@ -331,8 +349,10 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	        dw_printf("Expected to find 8 binary digits after \"%s\" for the digital values.\n", p);	
 	      }      
 	    }
+
+	    // TODO: test this!
 	    if (strlen(next) > 8) {
-	      strcpy (comment, next+8);
+	      strlcpy (comment, next+8, sizeof(comment));
 	      next[8] = '\0';
 	    }
 	    for (k = 0; k < strlen(next); k++) {
@@ -447,6 +467,9 @@ void telemetry_data_base91 (char *station, char *cdata, char *output)
 
 	pm = t_get_metadata(station);
 
+	assert (pm->magic1 == MAGIC1);
+	assert (pm->magic2 == MAGIC2);
+
 	seq = 0;
 	for (n = 0; n < T_NUM_ANALOG; n++) {
 	  araw[n] = G_UNKNOWN;
@@ -540,12 +563,19 @@ void telemetry_name_message (char *station, char *msg)
 
 /*
  * Make a copy of the input string because this will alter it.
+ * Remove any trailing CR LF.
  */
 
-	strncpy (stemp, msg, sizeof(stemp));
-	stemp[sizeof(stemp)-1] = '\0';
+	memset (stemp, 0, sizeof(stemp));
+	strncpy (stemp, msg, sizeof(stemp)-1);
+
+	for (p = stemp + strlen(stemp) - 1; p >= stemp && (*p == '\r' || *p == '\n') ; p--) {
+	  *p = '\0';
+	} 
 
 	pm = t_get_metadata(station);
+	assert (pm->magic1 == MAGIC1);
+	assert (pm->magic2 == MAGIC2);
 
 	next = stemp;
 
@@ -553,6 +583,7 @@ void telemetry_name_message (char *station, char *msg)
 	while ((p = strsep(&next,",")) != NULL) {
 	  if (n < T_NUM_ANALOG + T_NUM_DIGITAL) {
 	    if (strlen(p) > 0 && strcmp(p,"-") != 0) {
+	      memset (pm->name[n], 0, T_STR_LEN);
 	      strncpy (pm->name[n], p, T_STR_LEN-1);
 	    }
 	    n++;
@@ -610,12 +641,19 @@ void telemetry_unit_label_message (char *station, char *msg)
 
 /*
  * Make a copy of the input string because this will alter it.
+ * Remove any trailing CR LF.
  */
+	
+	memset (stemp, 0, sizeof(stemp));
+	strncpy (stemp, msg, sizeof(stemp)-1);
 
-	strncpy (stemp, msg, sizeof(stemp));
-	stemp[sizeof(stemp)-1] = '\0';
+	for (p = stemp + strlen(stemp) - 1; p >= stemp && (*p == '\r' || *p == '\n') ; p--) {
+	  *p = '\0';
+	} 
 
 	pm = t_get_metadata(station);
+	assert (pm->magic1 == MAGIC1);
+	assert (pm->magic2 == MAGIC2);
 
 	next = stemp;
 
@@ -623,6 +661,7 @@ void telemetry_unit_label_message (char *station, char *msg)
 	while ((p = strsep(&next,",")) != NULL) {
 	  if (n < T_NUM_ANALOG + T_NUM_DIGITAL) {
 	    if (strlen(p) > 0) {
+	      memset (pm->unit[n], 0, T_STR_LEN);
 	      strncpy (pm->unit[n], p, T_STR_LEN-1);
 	    }
 	    n++;
@@ -681,12 +720,19 @@ void telemetry_coefficents_message (char *station, char *msg, int quiet)
 
 /*
  * Make a copy of the input string because this will alter it.
+ * Remove any trailing CR LF.
  */
 
-	strncpy (stemp, msg, sizeof(stemp));
-	stemp[sizeof(stemp)-1] = '\0';
+	memset (stemp, 0, sizeof(stemp));
+	strncpy (stemp, msg, sizeof(stemp)-1);
+
+	for (p = stemp + strlen(stemp) - 1; p >= stemp && (*p == '\r' || *p == '\n') ; p--) {
+	  *p = '\0';
+	} 
 
 	pm = t_get_metadata(station);
+	assert (pm->magic1 == MAGIC1);
+	assert (pm->magic2 == MAGIC2);
 
 	next = stemp;
 
@@ -765,6 +811,8 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
 #endif
 
 	pm = t_get_metadata(station);
+	assert (pm->magic1 == MAGIC1);
+	assert (pm->magic2 == MAGIC2);
 
 	if (strlen(msg) < 8) {
 	  if ( ! quiet) {
@@ -835,30 +883,32 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
  *		
  *--------------------------------------------------------------------*/
 
-static void fval_to_str (float x, int ndp, char *str)
+#define VAL_STR_SIZE 64
+
+static void fval_to_str (float x, int ndp, char str[VAL_STR_SIZE])
 {
 	if (x == G_UNKNOWN) {
-	  strcpy (str, "?");
+	  strlcpy (str, "?", VAL_STR_SIZE);
 	}
 	else {
-	  sprintf (str, "%.*f", ndp, x);
+	  snprintf (str, VAL_STR_SIZE, "%.*f", ndp, x);
 	}
 }
 
-static void ival_to_str (int x, char *str)
+static void ival_to_str (int x, char str[VAL_STR_SIZE])
 {
 	if (x == G_UNKNOWN) {
-	  strcpy (str, "?");
+	  strlcpy (str, "?", VAL_STR_SIZE);
 	}
 	else {
-	  sprintf (str, "%d", x);
+	  snprintf (str, VAL_STR_SIZE, "%d", x);
 	}
 }
 
 static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_ANALOG], int ndp[T_NUM_ANALOG], int draw[T_NUM_DIGITAL], char *output) 
 {
 	int n;
-	char stemp[50];
+	char val_str[VAL_STR_SIZE];
 
 
 	assert (pm != NULL);
@@ -872,9 +922,9 @@ static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_A
 	  strcat (output, ": ");
 	}
 
-	ival_to_str (seq, stemp);
+	ival_to_str (seq, val_str);
 	strcat (output, "Seq=");
-	strcat (output, stemp);
+	strcat (output, val_str);
 	
 	for (n = 0; n < T_NUM_ANALOG; n++) {
 	  
@@ -905,8 +955,8 @@ static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_A
 	      z = pm->coeff_ndp[n][C_A] == 0 ? 0 : pm->coeff_ndp[n][C_A] + ndp[n] + ndp[n];
 	      fndp = MAX (z, MAX(pm->coeff_ndp[n][C_B] + ndp[n], pm->coeff_ndp[n][C_C]));
 	    }
-	    fval_to_str (fval, fndp, stemp);
-	    strcat (output, stemp);
+	    fval_to_str (fval, fndp, val_str);
+	    strcat (output, val_str);
 	    if (strlen(pm->unit[n]) > 0) {
 	      strcat (output, " ");
 	      strcat (output, pm->unit[n]);
@@ -936,13 +986,13 @@ static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_A
 	      dval = draw[n] ^ ! pm->sense[n];
 	    }
 
-	    ival_to_str (dval , stemp);
+	    ival_to_str (dval, val_str);
 
 	    if (strlen(pm->unit[T_NUM_ANALOG+n]) > 0) {
 	      strcat (output, " ");
 	      strcat (output, pm->unit[T_NUM_ANALOG+n]);
 	    }
-	    strcat (output, stemp);
+	    strcat (output, val_str);
 	    
 	  }
 	}

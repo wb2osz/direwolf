@@ -1,4 +1,3 @@
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -151,6 +150,7 @@
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
+#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "fcs_calc.h"
@@ -232,10 +232,19 @@ static packet_t ax25_new (void)
 	}
 
 	this_p = calloc(sizeof (struct packet_s), (size_t)1);
+
+	if (this_p == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR - can't allocate memory in ax25_new.\n");
+	}
+
+	assert (this_p != NULL);
+
 	this_p->magic1 = MAGIC;
 	this_p->seq = last_seq_num;
 	this_p->magic2 = MAGIC;
 	this_p->num_addr = (-1);
+
 	return (this_p);
 }
 
@@ -257,6 +266,13 @@ void ax25_delete (packet_t this_p)
         text_color_set(DW_COLOR_DEBUG);
         dw_printf ("ax25_delete(): before free, new=%d, delete=%d\n", new_count, delete_count);
 #endif
+
+	if (this_p == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR - NULL pointer passed to ax25_delete.\n");
+	  return;
+	}
+
 
 	delete_count++;
 
@@ -345,7 +361,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 	/* information field of an AX.25 frame? */
 	/* Yes, but it would be difficult in the from-text case. */
 
-	strcpy (stuff, monitor);
+	strlcpy (stuff, monitor, sizeof(stuff));
 
 /* 
  * Translate hexadecimal values like <0xff> to non-printing characters.
@@ -379,8 +395,8 @@ packet_t ax25_from_text (char *monitor, int strict)
 	    stuff[match[0].rm_so + 5] = '\0';
 	    n = strtol (stuff + match[0].rm_so + 3, &p, 16);
 	    stuff[match[0].rm_so] = n;
-	    strcpy (temp, stuff + match[0].rm_eo);
-	    strcpy (stuff + match[0].rm_so + 1, temp);
+	    strlcpy (temp, stuff + match[0].rm_eo, sizeof(temp));
+	    strlcpy (stuff + match[0].rm_so + 1, temp, sizeof(stuff)-match[0].rm_so-1);
 	  }
 	  else {
 	    keep_going = 0;
@@ -520,9 +536,8 @@ packet_t ax25_from_text (char *monitor, int strict)
 /*
  * Append the info part.  
  */
-	strcpy ((char*)(this_p->frame_data+this_p->frame_len), pinfo);
+	strlcpy ((char*)(this_p->frame_data+this_p->frame_len), pinfo, sizeof(this_p->frame_data)-this_p->frame_len);
 	this_p->frame_len += strlen(pinfo);
-
 
 	return (this_p);
 }
@@ -634,6 +649,8 @@ packet_t ax25_dup (packet_t copy_from)
 
 	
 	this_p = ax25_new ();
+	assert (this_p != NULL);
+
 	save_seq = this_p->seq;
 
 	memcpy (this_p, copy_from, sizeof (struct packet_s));
@@ -684,11 +701,11 @@ packet_t ax25_dup (packet_t copy_from)
 int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, int *out_heard)
 {
 	char *p;
-	char sstr[4];
+	char sstr[8];		/* Should be 1 or 2 digits for SSID. */
 	int i, j, k;
 	int maxlen;
 
-	strcpy (out_addr, "");
+	*out_addr = '\0';
 	*out_ssid = 0;
 	*out_heard = 0;
 
@@ -712,8 +729,8 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	  }
 	}
 	
-	strcpy (sstr, "");
 	j = 0;
+	sstr[j] = '\0';
 	if (*p == '-') {
 	  for (p++; isalnum(*p); p++) {
 	    if (j >= 2) {
@@ -1081,6 +1098,8 @@ int ax25_get_num_repeaters (packet_t this_p)
  *
  * Outputs:	station - String representation of the station, including the SSID.
  *			e.g.  "WB2OSZ-15"
+ *			  Usually variables will be AX25_MAX_ADDR_LEN bytes
+ *			  but 10 would be adequate.
  *
  * Bugs:	No bounds checking is performed.  Be careful.
  *		  
@@ -1094,7 +1113,7 @@ int ax25_get_num_repeaters (packet_t this_p)
 void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 {	
 	int ssid;
-	char sstr[4];
+	char sstr[8];		/* Should be 1 or 2 digits for SSID. */
 	int i;
 
 	assert (this_p->magic1 == MAGIC);
@@ -1105,7 +1124,7 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Internal error detected in ax25_get_addr_with_ssid, %s, line %d.\n", __FILE__, __LINE__);
 	  dw_printf ("Address index, %d, is less than zero.\n", n);
-	  strcpy (station, "??????");
+	  strlcpy (station, "??????", 10);
 	  return;
 	}
 
@@ -1113,7 +1132,7 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Internal error detected in ax25_get_addr_with_ssid, %s, line %d.\n", __FILE__, __LINE__);
 	  dw_printf ("Address index, %d, is too large for number of addresses, %d.\n", n, this_p->num_addr);
-	  strcpy (station, "??????");
+	  strlcpy (station, "??????", 10);
 	  return;
 	}
 
@@ -1128,10 +1147,70 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 
 	ssid = ax25_get_ssid (this_p, n);
 	if (ssid != 0) {
-	  sprintf (sstr, "-%d", ssid);
-	  strcat (station, sstr);
+	  snprintf (sstr, sizeof(sstr), "-%d", ssid);
+	  strlcat (station, sstr, 10);
 	}   
 }
+
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_get_addr_no_ssid
+ * 
+ * Purpose:	Return specified address WITHOUT any SSID.
+ *
+ * Inputs:	n	- Index of address.   Use the symbols 
+ *			  AX25_DESTINATION, AX25_SOURCE, AX25_REPEATER1, etc.
+ *
+ * Outputs:	station - String representation of the station, WITHOUT the SSID.
+ *			e.g.  "WB2OSZ"
+ *			  Usually variables will be AX25_MAX_ADDR_LEN bytes
+ *			  but 7 would be adequate.
+ *
+ * Bugs:	No bounds checking is performed.  Be careful.
+ *		  
+ * Assumption:	ax25_from_text or ax25_from_frame was called first.
+ *
+ * Returns:	Character string in usual human readable format,
+ *		
+ *
+ *------------------------------------------------------------------------------*/
+
+void ax25_get_addr_no_ssid (packet_t this_p, int n, char *station)
+{	
+	int ssid;
+	int i;
+
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+
+	if (n < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error detected in ax25_get_addr_no_ssid, %s, line %d.\n", __FILE__, __LINE__);
+	  dw_printf ("Address index, %d, is less than zero.\n", n);
+	  strlcpy (station, "??????", 7);
+	  return;
+	}
+
+	if (n >= this_p->num_addr) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error detected in ax25_get_no_with_ssid, %s, line %d.\n", __FILE__, __LINE__);
+	  dw_printf ("Address index, %d, is too large for number of addresses, %d.\n", n, this_p->num_addr);
+	  strlcpy (station, "??????", 7);
+	  return;
+	}
+
+	memset (station, 0, 7);
+	for (i=0; i<6; i++) {
+	  unsigned char ch;
+
+	  ch = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
+	  if (ch <= ' ') break;
+	  station[i] = ch;
+	}
+
+} /* end ax25_get_addr_no_ssid */
 
 
 /*------------------------------------------------------------------------------
@@ -1490,6 +1569,8 @@ packet_t ax25_get_nextp (packet_t this_p)
  *
  *------------------------------------------------------------------*/
 
+// TODO: max len for result.  buffer overflow?
+
 void ax25_format_addrs (packet_t this_p, char *result)
 {
 	int i;
@@ -1591,7 +1672,8 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
  *
  *------------------------------------------------------------------*/
 
-
+// TODO: need someway to ensure caller allocated enough space.
+#define DESC_SIZ 16
 
 ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *desc, int *pf, int *nr, int *ns) 
 {
@@ -1600,14 +1682,14 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
-	strcpy (desc, "????");
+	strlcpy (desc, "????", DESC_SIZ);
 	*pf = -1;
 	*nr = -1;
 	*ns = -1;
 
 	c = ax25_get_control(this_p);
 	if (c < 0) {
-	  strcpy (desc, "Not AX.25");
+	  strlcpy (desc, "Not AX.25", DESC_SIZ);
 	  return (frame_not_AX25);
 	}
 
@@ -1626,7 +1708,7 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	    *pf = (c >> 4) & 1;
 	    *nr = (c >> 5) & 7;
 	  }
-	  strcpy (desc, "I frame");
+	  strlcpy (desc, "I frame", DESC_SIZ);
 	  return (frame_type_I);
 	}
 	else if ((c & 2) == 0) {
@@ -1644,10 +1726,10 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	  }
 	  
 	  switch ((c >> 2) & 3) {
-	    case 0: strcpy (desc, "S frame RR");   return (frame_type_RR);   break;
-	    case 1: strcpy (desc, "S frame RNR");  return (frame_type_RNR);  break;
-	    case 2: strcpy (desc, "S frame REJ");  return (frame_type_REJ);  break;
-	    case 3: strcpy (desc, "S frame SREJ"); return (frame_type_SREJ); break;
+	    case 0: strlcpy (desc, "S frame RR", DESC_SIZ);   return (frame_type_RR);   break;
+	    case 1: strlcpy (desc, "S frame RNR", DESC_SIZ);  return (frame_type_RNR);  break;
+	    case 2: strlcpy (desc, "S frame REJ", DESC_SIZ);  return (frame_type_REJ);  break;
+	    case 3: strlcpy (desc, "S frame SREJ", DESC_SIZ); return (frame_type_SREJ); break;
 	 } 
 	}
 	else {
@@ -1658,16 +1740,16 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	  
 	  switch (c & 0xef) {
 	
-	    case 0x6f: strcpy (desc, "U frame SABME"); return (frame_type_SABME); break;
-	    case 0x2f: strcpy (desc, "U frame SABM");  return (frame_type_SABM);  break;
-	    case 0x43: strcpy (desc, "U frame DISC");  return (frame_type_DISC);  break;
-	    case 0x0f: strcpy (desc, "U frame DM");    return (frame_type_DM);    break;
-	    case 0x63: strcpy (desc, "U frame UA");    return (frame_type_UA);    break;
-	    case 0x87: strcpy (desc, "U frame FRMR");  return (frame_type_FRMR);  break;
-	    case 0x03: strcpy (desc, "U frame UI");    return (frame_type_UI);    break;
-	    case 0xaf: strcpy (desc, "U frame XID");   return (frame_type_XID);   break;
-	    case 0xe3: strcpy (desc, "U frame TEST");  return (frame_type_TEST);  break;
-	    default:   strcpy (desc, "U frame ???");   return (frame_type_U);     break;
+	    case 0x6f: strlcpy (desc, "U frame SABME", DESC_SIZ); return (frame_type_SABME); break;
+	    case 0x2f: strlcpy (desc, "U frame SABM", DESC_SIZ);  return (frame_type_SABM);  break;
+	    case 0x43: strlcpy (desc, "U frame DISC", DESC_SIZ);  return (frame_type_DISC);  break;
+	    case 0x0f: strlcpy (desc, "U frame DM", DESC_SIZ);    return (frame_type_DM);    break;
+	    case 0x63: strlcpy (desc, "U frame UA", DESC_SIZ);    return (frame_type_UA);    break;
+	    case 0x87: strlcpy (desc, "U frame FRMR", DESC_SIZ);  return (frame_type_FRMR);  break;
+	    case 0x03: strlcpy (desc, "U frame UI", DESC_SIZ);    return (frame_type_UI);    break;
+	    case 0xaf: strlcpy (desc, "U frame XID", DESC_SIZ);   return (frame_type_XID);   break;
+	    case 0xe3: strlcpy (desc, "U frame TEST", DESC_SIZ);  return (frame_type_TEST);  break;
+	    default:   strlcpy (desc, "U frame ???", DESC_SIZ);   return (frame_type_U);     break;
 	  }
 	}
 
@@ -1740,26 +1822,28 @@ static void ctrl_to_text (int c, char *out)
 
 /* Text description of protocol id octet. */
 
-static void pid_to_text (int p, char *out)
+#define PID_TEXT_SIZE 80
+
+static void pid_to_text (int p, char out[PID_TEXT_SIZE])
 {
 
-	if      ((p & 0x30) == 0x10) { sprintf (out, "AX.25 layer 3 implemented."); }
-	else if ((p & 0x30) == 0x20) { sprintf (out, "AX.25 layer 3 implemented."); }
-	else if (p == 0x01)          { sprintf (out, "ISO 8208/CCITT X.25 PLP"); }
-	else if (p == 0x06)          { sprintf (out, "Compressed TCP/IP packet. Van Jacobson (RFC 1144)"); }
-	else if (p == 0x07)          { sprintf (out, "Uncompressed TCP/IP packet. Van Jacobson (RFC 1144)"); }
-	else if (p == 0x08)          { sprintf (out, "Segmentation fragment"); }
-	else if (p == 0xC3)          { sprintf (out, "TEXNET datagram protocol"); }
-	else if (p == 0xC4)          { sprintf (out, "Link Quality Protocol"); }
-	else if (p == 0xCA)          { sprintf (out, "Appletalk"); }
-	else if (p == 0xCB)          { sprintf (out, "Appletalk ARP"); }
-	else if (p == 0xCC)          { sprintf (out, "ARPA Internet Protocol"); }
-	else if (p == 0xCD)          { sprintf (out, "ARPA Address resolution"); }
-	else if (p == 0xCE)          { sprintf (out, "FlexNet"); }
-	else if (p == 0xCF)          { sprintf (out, "NET/ROM"); }
-	else if (p == 0xF0)          { sprintf (out, "No layer 3 protocol implemented."); }
-	else if (p == 0xFF)          { sprintf (out, "Escape character. Next octet contains more Level 3 protocol information."); }
-	else                         { sprintf (out, "Unknown protocol id = 0x%02x", p); }
+	if      ((p & 0x30) == 0x10) { snprintf (out, PID_TEXT_SIZE, "AX.25 layer 3 implemented."); }
+	else if ((p & 0x30) == 0x20) { snprintf (out, PID_TEXT_SIZE, "AX.25 layer 3 implemented."); }
+	else if (p == 0x01)          { snprintf (out, PID_TEXT_SIZE, "ISO 8208/CCITT X.25 PLP"); }
+	else if (p == 0x06)          { snprintf (out, PID_TEXT_SIZE, "Compressed TCP/IP packet. Van Jacobson (RFC 1144)"); }
+	else if (p == 0x07)          { snprintf (out, PID_TEXT_SIZE, "Uncompressed TCP/IP packet. Van Jacobson (RFC 1144)"); }
+	else if (p == 0x08)          { snprintf (out, PID_TEXT_SIZE, "Segmentation fragment"); }
+	else if (p == 0xC3)          { snprintf (out, PID_TEXT_SIZE, "TEXNET datagram protocol"); }
+	else if (p == 0xC4)          { snprintf (out, PID_TEXT_SIZE, "Link Quality Protocol"); }
+	else if (p == 0xCA)          { snprintf (out, PID_TEXT_SIZE, "Appletalk"); }
+	else if (p == 0xCB)          { snprintf (out, PID_TEXT_SIZE, "Appletalk ARP"); }
+	else if (p == 0xCC)          { snprintf (out, PID_TEXT_SIZE, "ARPA Internet Protocol"); }
+	else if (p == 0xCD)          { snprintf (out, PID_TEXT_SIZE, "ARPA Address resolution"); }
+	else if (p == 0xCE)          { snprintf (out, PID_TEXT_SIZE, "FlexNet"); }
+	else if (p == 0xCF)          { snprintf (out, PID_TEXT_SIZE, "NET/ROM"); }
+	else if (p == 0xF0)          { snprintf (out, PID_TEXT_SIZE, "No layer 3 protocol implemented."); }
+	else if (p == 0xFF)          { snprintf (out, PID_TEXT_SIZE, "Escape character. Next octet contains more Level 3 protocol information."); }
+	else                         { snprintf (out, PID_TEXT_SIZE, "Unknown protocol id = 0x%02x", p); }
 }
 
 
@@ -1785,17 +1869,17 @@ void ax25_hex_dump (packet_t this_p)
 	  if ( (c & 0x01) == 0 ||				/* I   xxxx xxx0 */
 	     	c == 0x03 || c == 0x13) {			/* UI  000x 0011 */
 
-	    char p_text[100];
+	    char pid_text[PID_TEXT_SIZE];
 
-	    pid_to_text (p, p_text);
+	    pid_to_text (p, pid_text);
 
-	    strcat (cp_text, ", ");
-	    strcat (cp_text, p_text);
+	    strlcat (cp_text, ", ", sizeof(cp_text));
+	    strlcat (cp_text, pid_text, sizeof(cp_text));
 
 	  }
 
-	  sprintf (l_text, ", length = %d", flen);
-	  strcat (cp_text, l_text);
+	  snprintf (l_text, sizeof(l_text), ", length = %d", flen);
+	  strlcat (cp_text, l_text, sizeof(cp_text));
 
 	  dw_printf ("%s\n", cp_text);
 	}
@@ -2097,7 +2181,7 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 	      /* UTF-8 does not use fe and ff except in a possible */
 	      /* "Byte Order Mark" (BOM) at the beginning. */
 
-	      sprintf (safe_str + safe_len, "<0x%02x>", ch);
+	      snprintf (safe_str + safe_len, sizeof(safe_str)-safe_len, "<0x%02x>", ch);
 	      safe_len += 6;	      
 	    }
 	  else {
@@ -2138,6 +2222,8 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
  *			  Comma is to be avoided because one place this 
  *			  ends up is in a CSV format file.
  *
+ *			  size should be AX25_ALEVEL_TO_TEXT_SIZE.
+ *
  * Returns:	True if something to print.  (currently if alevel.original >= 0)
  *		False if not.
  *
@@ -2153,25 +2239,30 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
  *------------------------------------------------------------------*/
 
 
-int ax25_alevel_to_text (alevel_t alevel, char *text)
+int ax25_alevel_to_text (alevel_t alevel, char text[AX25_ALEVEL_TO_TEXT_SIZE])
 {
 	if (alevel.rec < 0) {
-	  strcpy (text, "");
+	  strlcpy (text, "", AX25_ALEVEL_TO_TEXT_SIZE);
 	  return (0);
 	}
 
 // TODO1.2: haven't thought much about non-AFSK cases yet.
 // What should we do for 9600 baud?
-// Possibility: low/high tone for DTMF???
+
+// For DTMF omit the two extra numbers.
 
 	if (alevel.mark >= 0 &&  alevel.space < 0) {		/* baseband */
 
-	  sprintf (text, "%d(%+d/%+d)", alevel.rec, alevel.mark, alevel.space);
+	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d(%+d/%+d)", alevel.rec, alevel.mark, alevel.space);
+	}
+	else if (alevel.mark == -2 &&  alevel.space == -2) {		/* DTMF */
+
+	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d", alevel.rec);
 	}
 	else {		/* AFSK */
 
-	  //sprintf (text, "%d:%d(%d/%d=%05.3f=)", alevel.original, alevel.rec, alevel.mark, alevel.space, alevel.ms_ratio);
-	  sprintf (text, "%d(%d/%d)", alevel.rec, alevel.mark, alevel.space);
+	  //snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d:%d(%d/%d=%05.3f=)", alevel.original, alevel.rec, alevel.mark, alevel.space, alevel.ms_ratio);
+	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d(%d/%d)", alevel.rec, alevel.mark, alevel.space);
 	}
 	return (1);	
 

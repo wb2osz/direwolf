@@ -1,3 +1,4 @@
+
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -38,6 +39,12 @@
  *		http://en.wikipedia.org/wiki/ANSI_escape_code
  *		http://academic.evergreen.edu/projects/biophysics/technotes/program/ansi_esc.htm
  *
+ *
+
+>>>> READ THIS PART!!! <<<<
+
+ *
+ * 
  * Problem:	The ANSI escape sequences, used on Linux, allow 8 basic colors.
  *		Unfortunately, white is not one of them.  We only have dark
  *		white, also known as light gray.  To get brighter colors, 
@@ -110,6 +117,8 @@ static const char clear_eos[]	= "\e[0J";
 /* We need "blink" (5) rather than the */
 /* expected bright/bold (1) to get bright white background. */
 /* Makes no sense but I stumbled across that somewhere. */
+
+/* If you do get blinking, remove all references to "\e[5;47m" */
 
 static const char background_white[] = "\e[5;47m";
 

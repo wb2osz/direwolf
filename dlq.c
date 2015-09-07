@@ -248,6 +248,14 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	  dlq_init ();
 	}
 
+	assert (chan >= 0 && chan < MAX_CHANS);
+
+	if (pp == NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("INTERNAL ERROR:  dlq_append NULL packet pointer. Please report this!\n");
+	  return;
+	}
+
 #if AX25MEMDEBUG
 
 	if (ax25memdebug_get()) {

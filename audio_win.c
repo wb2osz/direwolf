@@ -1,13 +1,8 @@
 
-//#define DEBUGUDP 1
-//#define DEBUG 1
-
-#define STATISTICS 1
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -68,6 +63,7 @@
 
 #include "direwolf.h"
 #include "audio.h"
+#include "audio_stats.h"
 #include "textcolor.h"
 #include "ptt.h"
 #include "demod.h"		/* for alevel_t & demod_get_audio_level() */
@@ -290,14 +286,14 @@ int audio_open (struct audio_s *pa)
 	    if (strcasecmp(pa->adev[a].adevice_in, "stdin") == 0 || strcmp(pa->adev[a].adevice_in, "-") == 0) {
 	      A->g_audio_in_type = AUDIO_IN_TYPE_STDIN;
 	      /* Change - to stdin for readability. */
-	      strcpy (pa->adev[a].adevice_in, "stdin");
+	      strlcpy (pa->adev[a].adevice_in, "stdin", sizeof(pa->adev[a].adevice_in));
 	    }
 	    else if (strncasecmp(pa->adev[a].adevice_in, "udp:", 4) == 0) {
 	      A->g_audio_in_type = AUDIO_IN_TYPE_SDR_UDP;
 	      /* Supply default port if none specified. */
 	      if (strcasecmp(pa->adev[a].adevice_in,"udp") == 0 ||
 	        strcasecmp(pa->adev[a].adevice_in,"udp:") == 0) {
-	        sprintf (pa->adev[a].adevice_in, "udp:%d", DEFAULT_UDP_AUDIO_PORT);
+	        snprintf (pa->adev[a].adevice_in, sizeof(pa->adev[a].adevice_in), "udp:%d", DEFAULT_UDP_AUDIO_PORT);
 	      }
 	    } 
 	    else {
@@ -754,18 +750,6 @@ int audio_get (int a)
 
         A = &(adev[a]); 
 
-#if defined(DEBUGUDP) || defined(STATISTICS)
-	
-	/* Gather numbers for read from UDP stream. */
-	/* Gather numbers for read from audio device. */
-
-#define duration 100			/* report every 100 seconds. */
-	static time_t last_time[MAX_ADEVS];
-	time_t this_time[MAX_ADEVS];
-	static int sample_count[MAX_ADEVS];
-	static int error_count[MAX_ADEVS];
-#endif
-
 	switch (A->g_audio_in_type) {
 
 /*
@@ -791,6 +775,12 @@ int audio_get (int a)
 // TODO1.2: Need more details.  Can we keep going?
 
 	          dw_printf ("Timeout waiting for input from audio device %d.\n", a);
+
+	          audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			0, 
+			save_audio_config_p->statistics_interval);
+
 	          return (-1);
 	        }
 	      }
@@ -800,6 +790,11 @@ int audio_get (int a)
 	      if (p->dwUser == -1) {
 	        waveInUnprepareHeader(A->audio_in_handle, p, sizeof(WAVEHDR));
 	        p->dwUser = 0;	/* Index for next byte. */
+
+	        audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			p->dwBytesRecorded / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
+			save_audio_config_p->statistics_interval);
 	      }
 
 	      if (p->dwUser < p->dwBytesRecorded) {
@@ -841,36 +836,20 @@ int audio_get (int a)
 	        dw_printf ("Can't read from udp socket, errno %d", WSAGetLastError());
 	        A->stream_len = 0;
 	        A->stream_next = 0;
+
+	        audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			0, 
+			save_audio_config_p->statistics_interval);
+
 	        return (-1);
 	      } 
 
-#if DEBUGUDP
+	      audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			res / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
+			save_audio_config_p->statistics_interval);
 
-// TODO: We should collect audio statistics like this for all types of input.  Move to common function.
-
-	      if (last_time[a] == 0) {
-	        last_time[a] = time(NULL);
-	        sample_count[a] = 0;
-	        error_count[a] = 0;
-	      }
-	      else {
-	        if (res > 0) {
-	           sample_count[a] += res/2;
-	        }
-	        else {
-	           error_count[a]++;
-	        }
-	        this_time[a] = time(NULL);
-	        if (this_time[a] >= last_time + duration) {
-	          text_color_set(DW_COLOR_DEBUG);
-	          dw_printf ("\ADEVICE%d: Past %d seconds, %d UDP audio samples processed, %d errors.\n\n", 
-			a, duration, sample_count[a], error_count[a]);
-	          last_time[a] = this_time[a];
-	          sample_count[a] = 0;
-	          error_count[a] = 0;
-	        }      
-	      }
-#endif
 	      A->stream_len = res;
 	      A->stream_next = 0;
 	    }
@@ -892,6 +871,11 @@ int audio_get (int a)
 	        dw_printf ("\nEnd of file on stdin.  Exiting.\n");
 	        exit (0);
 	      }
+
+	      audio_stats (a, 
+			save_audio_config_p->adev[a].num_channels, 
+			res / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
+			save_audio_config_p->statistics_interval);
 	    
 	      A->stream_len = res;
 	      A->stream_next = 0;

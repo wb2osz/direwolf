@@ -76,6 +76,7 @@
 #include "hdlc_rec.h"
 #include "ptt.h"
 #include "dtime_now.h"
+#include "morse.h"
 
 
 
@@ -98,7 +99,7 @@ static int xmit_persist[MAX_CHANS];	/* Sets probability for transmitting after e
 static int xmit_txdelay[MAX_CHANS];	/* After turning on the transmitter, */
 					/* send "flags" for txdelay * 10 mS. */
 
-static int xmit_txtail[MAX_CHANS];		/* Amount of time to keep transmitting after we */
+static int xmit_txtail[MAX_CHANS];	/* Amount of time to keep transmitting after we */
 					/* are done sending the data.  This is to avoid */
 					/* dropping PTT too soon and chopping off the end */
 					/* of the frame.  Again 10 mS units. */
@@ -137,6 +138,7 @@ static dw_mutex_t audio_out_dev_mutex[MAX_ADEVS];
 static int wait_for_clear_channel (int channel, int nowait, int slotttime, int persist);
 static void xmit_ax25_frames (int c, int p, packet_t pp);
 static void xmit_speech (int c, packet_t pp);
+static void xmit_morse (int c, packet_t pp, int wpm);
 
 
 /*-------------------------------------------------------------------
@@ -433,11 +435,18 @@ static void * xmit_thread (void *arg)
 	        if (ok) {
 /*
  * Channel is clear and we have lock on output device. 
+ *
+ * If destination is "SPEECH" send info part to speech synthesizer.
+ * If destination is "MORSE" send as morse code.
  */
 	          char dest[AX25_MAX_ADDR_LEN];
+		  int ssid = 0;
+
 
 	          if (ax25_is_aprs (pp)) { 
-		    ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
+
+		    ax25_get_addr_no_ssid(pp, AX25_DESTINATION, dest);
+		    ssid = ax25_get_ssid(pp, AX25_DESTINATION);
 	 	  }
 	 	  else {
 		    strcpy (dest, "");
@@ -445,6 +454,24 @@ static void * xmit_thread (void *arg)
 
 		  if (strcmp(dest, "SPEECH") == 0) {
 	            xmit_speech (c, pp);
+	          }
+		  else if (strcmp(dest, "MORSE") == 0) {
+
+		    int wpm = ssid * 2;
+		    if (wpm == 0) wpm = MORSE_DEFAULT_WPM;
+
+		    // This is a bit of a hack so we don't respond too quickly for APRStt.
+		    // It will be sent in high priority queue while a beacon wouldn't.  
+		    // Add a little delay so user has time release PTT after sending #.
+		    // This and default txdelay would give us a second.
+
+		    if (p == TQ_PRIO_0_HI) {
+	              //text_color_set(DW_COLOR_DEBUG);
+		      //dw_printf ("APRStt morse xmit delay hack...\n");
+		      SLEEP_MS (700);
+		    }
+
+	            xmit_morse (c, pp, wpm);
 	          }
 	          else {
 	            xmit_ax25_frames (c, p, pp);
@@ -748,12 +775,13 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
 } /* end xmit_ax25_frames */
 
 
+
 /*-------------------------------------------------------------------
  *
- * Name:        xmit_ax25_frames
+ * Name:        xmit_speech
  *
  * Purpose:     After we have a clear channel, and possibly waited a random time,
- *		we transmit one or more frames.
+ *		we transmit information part of frame as speech.
  *
  * Inputs:	c	- Channel number.
  *	
@@ -764,7 +792,6 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
  * Description:	Turn on transmitter.
  *		Invoke the text-to-speech script.
  *		Turn off transmitter.
- *
  *
  *--------------------------------------------------------------------*/
 
@@ -859,6 +886,51 @@ int xmit_speak_it (char *script, int c, char *orig_msg)
 	}
 	return (err);
 }
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        xmit_morse
+ *
+ * Purpose:     After we have a clear channel, and possibly waited a random time,
+ *		we transmit information part of frame as Morse code.
+ *
+ * Inputs:	c	- Channel number.
+ *	
+ *		pp	- Packet object pointer.
+ *			  It will be deleted so caller should not try
+ *			  to reference it after this.	
+ *
+ *		wpm	- Speed in words per minute.
+ *
+ * Description:	Turn on transmitter.
+ *		Send text as Morse code.
+ *		Turn off transmitter.
+ *
+ *--------------------------------------------------------------------*/
+
+
+static void xmit_morse (int c, packet_t pp, int wpm)
+{
+
+
+	int info_len;
+	unsigned char *pinfo;
+
+
+	info_len = ax25_get_info (pp, &pinfo);
+	text_color_set(DW_COLOR_XMIT);
+	dw_printf ("[%d.morse] \"%s\"\n", c, pinfo);
+
+	ptt_set (OCTYPE_PTT, c, 1);
+
+	morse_send (c, (char*)pinfo, wpm, xmit_txdelay[c] * 10, xmit_txtail[c] * 10);
+
+	ptt_set (OCTYPE_PTT, c, 0);
+	ax25_delete (pp);
+
+} /* end xmit_morse */
 
 
 /*-------------------------------------------------------------------
