@@ -32,6 +32,14 @@
 #define MAX_CHANS ((MAX_ADEVS) * 2)
 
 /*
+ * Maximum number of rigs.
+ */
+
+#ifdef USE_HAMLIB
+#define MAX_RIGS MAX_CHANS
+#endif
+
+/*
  * Get audio device number for given channel.
  * and first channel for given device.
  */

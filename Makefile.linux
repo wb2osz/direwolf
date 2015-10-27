@@ -204,6 +204,11 @@ LDLIBS += -lasound
 #LDLIBS += -lgps
 
 
+# Uncomment following lines to enable hamlib support.
+CFLAGS += -DUSE_HAMLIB
+LDLIBS += -lhamlib
+
+
 # Name of current directory.
 # Used to generate zip file name for distribution.
 
