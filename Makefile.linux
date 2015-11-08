@@ -2,7 +2,9 @@
 # Makefile for Linux version of Dire Wolf.
 #
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.desktop direwolf.conf
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
+
+all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo " "
 	@echo "Next step - install with:"
 	@echo " "
@@ -11,6 +13,9 @@ all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx 
 
 CC := gcc
 CFLAGS := -O3 -pthread -Igeotranz
+
+LDFLAGS := -lm -lpthread -lrt
+
 
 
 #
@@ -184,24 +189,27 @@ endif
 #
 # If you are planning to distribute the binary version to other 
 # people (in some ham radio software collection, RPM, or DEB package), 
-# avoid # fine tuning it for your particular computer.  It could
+# avoid fine tuning it for your particular computer.  It could
 # cause compatibility issues for those with older computers.
 #
 
-
-#CFLAGS += -D_FORTIFY_SOURCE
 
 # If you want to use OSS (for FreeBSD, OpenBSD) instead of
 # ALSA (for Linux), comment out (or remove) the two lines below.
 
 CFLAGS += -DUSE_ALSA
-LDLIBS += -lasound
+LDFLAGS += -lasound
 
 
-# Uncomment following lines to enable GPS interface & tracker function.
+# Enable GPS if header file is present.
+# Finding libgps.so* is more difficult because it
+# is in different places on different operating systems.
 
-#CFLAGS += -DENABLE_GPS
-#LDLIBS += -lgps
+enable_gpsd := $(wildcard /usr/include/gps.h)
+ifneq ($(enable_gpsd),)
+CFLAGS += -DENABLE_GPSD
+LDFLAGS += -lgps
+endif
 
 
 # Name of current directory.
@@ -210,7 +218,10 @@ LDLIBS += -lasound
 z := $(notdir ${CURDIR})
 
 
-# Main application.
+
+# --------------------------------  Main application  -----------------------------------------
+
+
 
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
@@ -218,10 +229,17 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hd
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o dtime_now.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o \
+		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o \
 		misc.a geotranz.a
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread -lrt $(LDLIBS) -lm
-
+	$(CC) -o $@ $^ $(LDFLAGS)
+ifneq ($(enable_gpsd),)
+	@echo " "
+	@echo "This includes support for gpsd."
+else
+	@echo " "
+	@echo "This does NOT include support for gpsd."
+endif
 
 # Optimization for slow processors.
 
@@ -231,10 +249,100 @@ demod_afsk.o : fsk_fast_filter.h
 
 
 fsk_fast_filter.h : demod_afsk.c
-	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c -lm
+	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c $(LDFLAGS)
 	./gen_fff > fsk_fast_filter.h
 
 
+#
+# The destination field is often used to identify the manufacturer/model.
+# These are not hardcoded into Dire Wolf.  Instead they are read from
+# a file called tocalls.txt at application start up time.
+#
+# The original permanent symbols are built in but the "new" symbols,
+# using overlays, are often updated.  These are also read from files.
+#
+# You can obtain an updated copy by typing "make tocalls-symbols".
+# This is not part of the normal build process.  You have to do this explicitly.
+#
+# The locations below appear to be the most recent.
+# The copy at http://www.aprs.org/tocalls.txt is out of date.
+#
+
+.PHONY: tocalls-symbols
+tocalls-symbols :
+	cp tocalls.txt tocalls.txt~
+	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
+	-diff tocalls.txt~ tocalls.txt
+	cp symbols-new.txt symbols-new.txt~
+	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
+	-diff symbols-new.txt~ symbols-new.txt
+	cp symbolsX.txt symbolsX.txt~
+	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
+	-diff symbolsX.txt~ symbolsX.txt
+
+
+# ---------------------------------------- Other utilities included ------------------------------
+
+
+# Separate application to decode raw data.
+
+decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
+	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ $(LDFLAGS)
+
+
+
+# Convert between text and touch tone representation.
+
+text2tt : tt_text.c misc.a
+	$(CC) $(CFLAGS) -DENC_MAIN -o $@ $^ $(LDFLAGS)
+
+tt2text : tt_text.c misc.a
+	$(CC) $(CFLAGS) -DDEC_MAIN -o $@ $^ $(LDFLAGS)
+
+
+# Convert between Latitude/Longitude and UTM coordinates.
+
+ll2utm : ll2utm.c geotranz.a textcolor.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+utm2ll : utm2ll.c geotranz.a textcolor.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+# Convert from log file to GPX.
+
+log2gpx : log2gpx.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+# Test application to generate sound.
+
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c misc.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Unit test for AFSK demodulator
+
+atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_9600.c \
+		dsp.o hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o \
+		dwgps.o serial_port.o telemetry.c latlong.c symbols.c tt_text.c textcolor.c \
+		misc.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+# Multiple AGWPE network or serial port clients to test TNCs side by side.
+
+aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -g -o $@ $^ 
+
+
+# Touch Tone to Speech sample application.
+
+ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a
+	$(CC) $(CFLAGS) -g -o $@ $^ 
+
+
+# -----------------------------------------  Libraries  --------------------------------------------
 
 # UTM, USNG, MGRS conversions.
 
@@ -277,7 +385,19 @@ strlcat.o : misc/strlcat.c
 
 
 
+# -------------------------------------  Installation  ----------------------------------
+
+
+
 # Generate apprpriate sample configuration file for this platform.
+# Originally, there was one sample for all platforms.  It got too cluttered
+# and confusing saying, this is for windows, and this is for Linux, and this ...
+# Trying to maintain 3 different versions in parallel is error prone.
+# We now have a single generic version which can be used to generate
+# the various platform specific versions.
+
+# generic.conf should be checked into source control.
+# direwolf.conf should NOT.  It is generated when compiling on the target platform.
 
 direwolf.conf : generic.conf
 	egrep '^C|^L' generic.conf | cut -c2-999 > direwolf.conf
@@ -289,13 +409,17 @@ direwolf.conf : generic.conf
 # from source, that is not a standard part of the operating system,
 # should go in /usr/local/bin.
 
-# However, if you are preparing a "binary" RPM or DEB package, the 
+# However, if you are preparing a "binary" DEB or RPM package, the
 # installation location should be /usr/bin.
 
 # This is a step in the right direction but not sufficient to use /usr instead.
+# Eventually I'd like to have targets here to build the .DEB and .RPM packages.
 
 INSTALLDIR := /usr/local
 
+# Command to "install" to system directories.  Use "ginstall" for Mac.
+
+INSTALL=install
 
 # direwolf.desktop was previously handcrafted for the Raspberry Pi.
 # It was hardcoded with lxterminal, /home/pi, and so on.
@@ -324,49 +448,89 @@ endif
 	@echo 'Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25' >> $@
 
 
-# Optional installation into /usr/local/...
+# Installation into /usr/local/...
 # Needs to be run as root or with sudo.
-# TODO: Review file locations.
 
-install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets \
-		tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop 
-	install direwolf $(INSTALLDIR)/bin
-	install decode_aprs $(INSTALLDIR)/bin
-	install text2tt $(INSTALLDIR)/bin
-	install tt2text $(INSTALLDIR)/bin
-	install ll2utm $(INSTALLDIR)/bin
-	install utm2ll $(INSTALLDIR)/bin
-	install aclients $(INSTALLDIR)/bin
-	install log2gpx $(INSTALLDIR)/bin
-	install gen_packets $(INSTALLDIR)/bin
-	install atest $(INSTALLDIR)/bin
-	install ttcalc $(INSTALLDIR)/bin
-	install dwespeak.sh $(INSTALLDIR)/bin
-	install telemetry-toolkit/*.p[ly] $(INSTALLDIR)/bin
-	install -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
-	install -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
-	install -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
-	install -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
-	install -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
-	install -D --mode=644 README.md $(INSTALLDIR)/share/doc/direwolf/README.md
-	install -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
-	install -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
-	install -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
-	install -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
-	install -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
-	install -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
-	install -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	install -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
-	install -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
-	install -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
-	install -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
-	install -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
-	install -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
-	install -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
-	install -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
-	install -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
-	install -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
-	install -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+
+.PHONY: install
+install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+#
+# Applications, not installed with package manager, normally go in /usr/local/bin.
+# /usr/bin is used instead when installing from .DEB or .RPM package.
+#
+	$(INSTALL) direwolf $(INSTALLDIR)/bin
+	$(INSTALL) decode_aprs $(INSTALLDIR)/bin
+	$(INSTALL) text2tt $(INSTALLDIR)/bin
+	$(INSTALL) tt2text $(INSTALLDIR)/bin
+	$(INSTALL) ll2utm $(INSTALLDIR)/bin
+	$(INSTALL) utm2ll $(INSTALLDIR)/bin
+	$(INSTALL) aclients $(INSTALLDIR)/bin
+	$(INSTALL) log2gpx $(INSTALLDIR)/bin
+	$(INSTALL) gen_packets $(INSTALLDIR)/bin
+	$(INSTALL) atest $(INSTALLDIR)/bin
+	$(INSTALL) ttcalc $(INSTALLDIR)/bin
+	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
+#
+# Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.
+#
+	$(INSTALL) telemetry-toolkit/telem-balloon.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-bits.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-data.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-data91.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-eqns.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-parm.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-unit.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-volts.py $(INSTALLDIR)/bin
+#
+# Misc. data such as "tocall" to system mapping.
+#
+	$(INSTALL) -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
+	$(INSTALL) -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
+	$(INSTALL) -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
+	$(INSTALL) -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
+	$(INSTALL) -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
+#
+# Documentation.  Various plain text files and PDF.
+#
+	$(INSTALL) -D --mode=644 README.md $(INSTALLDIR)/share/doc/direwolf/README.md
+	$(INSTALL) -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
+	$(INSTALL) -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
+	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
+#
+	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
+	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
+	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-SDR-IGate.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
+	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+#
+# Sample config files also go into the doc directory.
+# When building from source, these can be put in home directory with "make install-conf".
+# When installed from .DEB or .RPM package, the user will need to copy these to
+# the home directory or other desired location.
+# Someone suggested that these could go into an "examples" subdirectory under doc.
+#
+	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/direwolf.conf
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/telem-m0xer-3.txt
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/telem-balloon.conf
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-volts.conf $(INSTALLDIR)/share/doc/direwolf/telem-volts.conf
+#
+# "man" pages
+#
+	$(INSTALL) -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
+	$(INSTALL) -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
+	$(INSTALL) -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
+	$(INSTALL) -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
+	$(INSTALL) -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
+	$(INSTALL) -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
+	$(INSTALL) -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
+	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
+	$(INSTALL) -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
+	$(INSTALL) -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+#
 	@echo " "
 	@echo "If this is your first install, not an upgrade, type this to put a copy"
 	@echo "of the sample configuration file (direwolf.conf) in your home directory:"
@@ -374,12 +538,6 @@ install : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	@echo "        make install-conf"
 	@echo " "
 
-
-# TODO:  Should we put the sample direwolf.conf file somewhere like
-# /usr/share/doc/direwolf/examples and add that to the 
-# end of the search path list?
-# That would make it easy to see user customizations compared to the
-# latest sample.
 
 # These would be done as ordinary user.
 
@@ -409,41 +567,123 @@ install-rpi : dw-start.sh
 
 
 
-# Separate application to decode raw data.
-
-decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.c telemetry.o tt_text.o misc.a
-	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^ -lm
+# ----------------------------------  Automated Smoke Test  --------------------------------
 
 
 
-# Convert between text and touch tone representation.
-
-text2tt : tt_text.c
-	$(CC) $(CFLAGS) -DENC_MAIN -o text2tt tt_text.c
-
-tt2text : tt_text.c
-	$(CC) $(CFLAGS) -DDEC_MAIN -o tt2text tt_text.c
+# Combine some unit tests into a single regression sanity check.
 
 
-# Convert between Latitude/Longitude and UTM coordinates.
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600
 
-ll2utm : ll2utm.c geotranz.a textcolor.o misc.a
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+# Can we encode and decode at popular data rates?
 
-utm2ll : utm2ll.c geotranz.a textcolor.o misc.a
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+check-modem1200 : gen_packets atest
+	gen_packets -n 100 -o /tmp/test1.wav
+	atest -F0 -PE -L70 -G71 /tmp/test1.wav
+	atest -F1 -PE -L73 -G75 /tmp/test1.wav
+	#rm /tmp/test1.wav
+
+check-modem300 : gen_packets atest
+	gen_packets -B300 -n 100 -o /tmp/test3.wav
+	atest -B300 -F0 -L68 -G69 /tmp/test3.wav
+	atest -B300 -F1 -L73 -G75 /tmp/test3.wav
+	rm /tmp/test3.wav
+
+check-modem9600 : gen_packets atest
+	gen_packets -B9600 -n 100 -o /tmp/test9.wav
+	atest -B9600 -F0 -L57 -G59 /tmp/test9.wav
+	atest -B9600 -F1 -L66 -G67 /tmp/test9.wav
+	rm /tmp/test9.wav
 
 
-# Convert from log file to GPX.
 
-log2gpx : log2gpx.c textcolor.o misc.a
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+# Unit test for inner digipeater algorithm
+
+.PHONY : dtest
+dtest : digipeater.c pfilter.o ax25_pad.o dedupe.o fcs_calc.o tq.o textcolor.o \
+		decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a
+	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^ $(LDFLAGS)
+	./dtest
+	rm dtest
 
 
-# Test application to generate sound.
+# Unit test for APRStt tone sequence parsing.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c misc.a
-	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) -lm
+.PHONY : ttest
+ttest : aprs_tt.c tt_text.c latlong.o textcolor.o misc.a geotranz.a misc.a
+	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^ $(LDFLAGS)
+	./ttest
+	rm ttest
+
+
+# Unit test for APRStt tone sequence / text conversions.
+
+.PHONY: tttexttest
+tttexttest : tt_text.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DTTT_TEST -o $@ $^ $(LDFLAGS)
+	./tttexttest
+	rm tttexttest
+
+
+# Unit test for Packet Filtering.
+
+.PHONY: pftest
+pftest : pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o symbols.o telemetry.o tt_text.o misc.a 
+	$(CC) $(CFLAGS) -DPFTEST -o $@ $^ $(LDFLAGS)
+	./pftest
+	rm pftest
+
+# Unit test for telemetry decoding.
+
+.PHONY: tlmtest
+tlmtest : telemetry.c ax25_pad.o fcs_calc.o textcolor.o misc.a
+	$(CC) $(CFLAGS) -DTEST -o $@ $^ $(LDFLAGS)
+	./tlmtest
+	rm tlmtest
+
+# Unit test for location coordinate conversion.
+
+.PHONY: lltest
+lltest : latlong.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DLLTEST -o $@ $^ $(LDFLAGS)
+	./lltest
+	rm lltest
+
+# Unit test for encoding position & object report.
+
+.PHONY: enctest
+enctest : encode_aprs.c latlong.c textcolor.c misc.a
+	$(CC) $(CFLAGS) -DEN_MAIN -o $@ $^ $(LDFLAGS)
+	./enctest
+	rm enctest
+
+
+# Unit test for KISS encapsulation.
+
+.PHONY: kisstest
+kisstest : kiss_frame.c
+	$(CC) $(CFLAGS) -DKISSTEST -o $@ $^ $(LDFLAGS)
+	./kisstest
+	rm kisstest
+
+
+
+#  -----------------------------  Manual tests and experiments  ---------------------------
+
+
+# Unit test for IGate
+
+itest : igate.c textcolor.c ax25_pad.c fcs_calc.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DITEST -o $@ $^
+	./itest
+
+# Unit test for UDP reception with AFSK demodulator
+
+udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c 
+		fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	./udptest
 
 demod.o : tune.h
 demod_afsk.o : tune.h
@@ -451,80 +691,19 @@ demod_9600.o : tune.h
 
 testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tune.h textcolor.c misc.a
-	$(CC) $(CFLAGS) -o atest $^ -lm
+	$(CC) $(CFLAGS) -o atest $^ $(LDFLAGS)
 	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
 
 
-# Unit test for AFSK demodulator
 
 
-atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-		fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tt_text.c textcolor.c \
-		misc.a
-	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
-
-# Unit test for inner digipeater algorithm
 
 
-dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c misc.a
-	$(CC) $(CFLAGS) -DTEST -o $@ $^
-	./dtest
+# -------------------------------   Source distribution  ---------------------------------
+
+# probably obsolete and can be removed after move to github.
 
 
-# Unit test for APRStt.
-
-ttest : aprs_tt.c tt_text.c latlong.c textcolor.o misc.a geotranz.a misc.a
-	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^
-
-
-# Unit test for IGate
-
-
-itest : igate.c textcolor.c ax25_pad.c fcs_calc.c textcolor.o misc.a
-	$(CC) $(CFLAGS) -DITEST -o $@ $^
-	./itest
-
-
-# Unit test for UDP reception with AFSK demodulator
-
-udptest : udp_test.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c rrbb.c 
-		fcs_calc.c ax25_pad.c decode_aprs.c symbols.c textcolor.c misc.a
-	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
-	./udptest
-
-
-# Unit test for telemetry decoding.
-
-
-etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.o misc.a regex.a
-	$(CC) $(CFLAGS) -o $@ $^ -lm -lrt
-	./etest
-	
-
-# Multiple AGWPE network or serial port clients to test TNCs side by side.
-
-aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o misc.a
-	$(CC) $(CFLAGS) -g -o $@ $^ 
-
-
-# Touch Tone to Speech sample application.
-
-ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a
-	$(CC) $(CFLAGS) -g -o $@ $^ 
-
-
-depend : $(wildcard *.c)
-	makedepend -f $(lastword $(MAKEFILE_LIST)) -- $(CFLAGS) -- $^
-
-
-.PHONY: clean 
-clean :
-	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc \
-		fsk_fast_filter.h *.o *.a direwolf.desktop
-	echo " " > tune.h
-
-
-# Package it up for distribution.
 
 .PHONY: dist-src
 dist-src : README.md CHANGES.md 
@@ -556,22 +735,17 @@ dist-src : README.md CHANGES.md
 		$z/telemetry-toolkit/* )
 		
 
-#
-# The locations below appear to be the most recent.
-# The copy at http://www.aprs.org/tocalls.txt is out of date.
-#
+# -----------------------------------------------------------------------------------------
 
-.PHONY: tocalls-symbols
-tocalls-symbols :
-	cp tocalls.txt tocalls.txt~
-	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
-	diff tocalls.txt~ tocalls.txt
-	cp symbols-new.txt symbols-new.txt~
-	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
-	diff symbols-new.txt~ symbols-new.txt
-	cp symbolsX.txt symbolsX.txt~
-	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
-	diff symbolsX.txt~ symbolsX.txt
+
+.PHONY: clean
+clean :
+	rm -f $(APPS) fsk_fast_filter.h *.o *.a direwolf.desktop
+	echo " " > tune.h
+
+
+depend : $(wildcard *.c)
+	makedepend -f $(lastword $(MAKEFILE_LIST)) -- $(CFLAGS) -- $^
 
 
 #

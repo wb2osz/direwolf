@@ -98,7 +98,7 @@ static int sample_count[MAX_CHANS][MAX_SUBCHANS];
 
 int demod_init (struct audio_s *pa)
 {
-	int j;
+	//int j;
 	int chan;		/* Loop index over number of radio channels. */
 	char profile;
 	
@@ -184,7 +184,7 @@ int demod_init (struct audio_s *pa)
 
 	          /* This has been optimized for 300 baud. */
 
-	          strcpy (just_letters, "D");
+	          strlcpy (just_letters, "D", sizeof(just_letters));
 
 	        }
 	        else {
@@ -193,7 +193,7 @@ int demod_init (struct audio_s *pa)
 	          /* Previously we would use F if possible otherwise fall back to A. */
 
 	          /* In version 1.2, new default is E+ /3. */
-	          strcpy (just_letters, "E");			// version 1.2 now E.
+	          strlcpy (just_letters, "E", sizeof(just_letters));			// version 1.2 now E.
 	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
 								// If not explicitly turned off.
 	          if (save_audio_config_p->achan[chan].decimate == 0) {
@@ -202,7 +202,7 @@ int demod_init (struct audio_s *pa)
 	            }
 	          }
 #else
-	          strcpy (just_letters, "E");			// version 1.2 changed C to E.
+	          strlcpy (just_letters, "E", sizeof(just_letters));			// version 1.2 changed C to E.
 	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
 								// If not explicitly turned off.
 #endif
@@ -223,12 +223,12 @@ int demod_init (struct audio_s *pa)
 
 	      if (have_plus == -1) have_plus = 0;
 
-	      strcpy (save_audio_config_p->achan[chan].profiles, just_letters);
+	      strlcpy (save_audio_config_p->achan[chan].profiles, just_letters, sizeof(save_audio_config_p->achan[chan].profiles));
 	      
 	      assert (strlen(save_audio_config_p->achan[chan].profiles) >= 1);
 
 	      if (have_plus) {
-	        strcat (save_audio_config_p->achan[chan].profiles, "+");
+	        strlcat (save_audio_config_p->achan[chan].profiles, "+", sizeof(save_audio_config_p->achan[chan].profiles));
 	      }
 
 	      /* These can be increased later for the multi-frequency case. */
@@ -250,7 +250,7 @@ int demod_init (struct audio_s *pa)
 		  text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("Channel %d: Demodulator + option can't be combined with multiple letters.\n", chan);
 
-	          strcpy (save_audio_config_p->achan[chan].profiles, "C+");	// Reduce to one letter.
+	          strlcpy (save_audio_config_p->achan[chan].profiles, "C+", sizeof(save_audio_config_p->achan[chan].profiles));	// Reduce to one letter.
 		  num_letters = 1;
 	          save_audio_config_p->achan[chan].num_demod = 1;
 	          save_audio_config_p->achan[chan].num_subchan = 1;	// Will be set higher later.
@@ -478,7 +478,7 @@ int demod_init (struct audio_s *pa)
 		/* Need to take a look at CPU usage and performance difference. */
 
 #ifndef __arm__
-	        strcpy (save_audio_config_p->achan[chan].profiles, "+");
+	        strlcpy (save_audio_config_p->achan[chan].profiles, "+", sizeof(save_audio_config_p->achan[chan].profiles));
 #endif
 	      }
 
@@ -641,7 +641,8 @@ int demod_get_sample (int a)
 __attribute__((hot))
 void demod_process_sample (int chan, int subchan, int sam)
 {
-	float fsam, abs_fsam;
+	float fsam;
+	//float abs_fsam;
 	int k;
 
 
@@ -650,8 +651,8 @@ void demod_process_sample (int chan, int subchan, int sam)
 	static int seq = 0;			/* for log file name */
 #endif
 
-	int j;
-	int demod_data;
+	//int j;
+	//int demod_data;
 	struct demodulator_state_s *D;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
@@ -786,7 +787,6 @@ alevel_t demod_get_audio_level (int chan, int subchan)
 {
 	struct demodulator_state_s *D;
 	alevel_t alevel;
-	int pk;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);

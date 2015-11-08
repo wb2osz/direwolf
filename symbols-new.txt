@@ -1,15 +1,18 @@
-APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      28 Aug 2014
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      29 Oct 2015
 ---------------------------------------------------------------------
 
 BACKGROUND:  This file addresses new additions proposals (OVERLAYS) 
 to the APRS symbol set after 1 October 2007.  The master symbol 
-document remains on the www.aprs.org/symbols/symbolsX.txt page.
+document remains on the www.aprs.org/symbols/symbolsX.txt page, but
+only has one line per symbol character.  Since each of the symbols
+can have up to 36 overlays, this gives us thousands of symbols codes.
 
 
-NOTE:  There was confusion with different copies of this file on 
-different web pages and links.  THIS file is now assumed to be the
-CORRECT one.
-
+Update 29 Oct 2015:  Reorgainized list to Alphabetical Order.
+  + Added many new Balloons (due to lost DoD radar Blimp yesterday)
+  + Confirmed D^ for Drones was already in there since 2014
+  + Added R^ type aircraft for remotely piloted
+  + Added S^ Solar Powered Aircraft
 
 UPDATES/REVISIONS/CORRECTIONS:
 
@@ -26,12 +29,16 @@ UPDATES/REVISIONS/CORRECTIONS:
 04 Jan 10  added #A to the table (correcting earlier omission)
 12 Oct 09  Added W0 for Yaesu WIRES nodes
 09 Apr 09  Changed APRStt symbol to overlayed BOX (#A)
-21 Aug 08  Added RFID R=, Stroller B], Radios#Y, & skull&Xbones (XH)
-27 Apr 08  Added some definitions of the numbered circle #0.          
-25 Mar 08  Added these new definitions of overlays:
+21 Aug 08  Added RFID R=, Babystroller B], Radio#Y, skull&Xbones XH
 
-Original Alternate Symbol codes being modified for new Overlay Use:
 
+25 Mar 08 Modified these Alternate Symbol codes for expanded Overlays.
+Prior to this, each Alternate Table basic symbol had a unique defini-
+tion, but this was every restrictive.  SO the following alternate 
+base symbols were redefined so that the basic symbol could take on
+dozens of unique overlay definitions:
+
+\0 - Several overlays for the numbered Circle
 \A - (BOX symbol) APRStt(DTMF), RFID users, XO (OLPC) 
 \' - Was Crash Site.  Now expanded to be INCIDENT sites
 \% - is an overlayed Powerplant.  See definitions below
@@ -114,20 +121,28 @@ letting that define a new graphic just for that combination.
 The following tables will attempt to keep track of these and
 any other useful generic applications of overlay characters.
 
+AMPLIFIED some existing ALTERNATE SYMBOL Overlays: (new Aug 2014)
 change Flooding #W to include Avalanche, Mudslide/Landslide
-change \' to crash & incident sites
-change \D to DEPOT family
-change overlayed car to generic with (1-9 overlays)
+Update #' name to crash & incident sites
+Update \D (was available) to DEPOT family
+change overlayed car to generic Vehicle with (1-9 overlays)
+
+ADVISORIES: #<  (new expansion possibilities)
+/< = motorcycle
+\< = Advisory (single gale flag)
 
 AIRCRAFT
 /^ = LARGE Aircraft
 \^ = top-view originally intended to point in direction of flight
+A^ = Autonomous (2015)
 D^ = Drone   (new may 2014)
-E^ = Enemy aircraft (too bad I cant use the original Hostile)
+E^ = Electric aircraft (2015)
 H^ = Hovercraft    (new may 2014)
 J^ = JET     (new may 2014)
 M^ = Missle   (new may 2014)
 P^ = Prop (new Aug 2014)
+R^ = Remotely Piloted (new 2015)
+S^ = Solar Powered  (new 2015)
 V^ = Vertical takeoff   (new may 2014)
 X^ = Experimental (new Aug 2014)
 
@@ -137,6 +152,60 @@ ATM Machine or CURRENCY:  #$
 U$ = US dollars
 L$ = Brittish Pound
 Y$ = Japanese Yen
+
+ARRL or DIAMOND: #a
+/a = Ambulance
+Aa = ARES
+Da = DSTAR (had been ARES Dutch)
+Ga = RSGB Radio Society of Great Brittan
+Ra = RACES
+Sa = SATERN Salvation Army
+Wa = WinLink
+
+BALLOONS and lighter than air #O (All new Oct 2015)
+/O = Original Balloon (think Ham balloon)
+\O = ROCKET (amateur)(2007)
+BO = Blimp           (2015)
+MO = Manned Balloon  (2015)
+TO = Teathered       (2015)
+CO = Constant Pressure - Long duration (2015)
+RO = Rocket bearing Balloon (Rockoon)  (2015)
+
+BOX SYMBOL: #A (and other system inputted symbols)
+/A = Aid station
+\A = numbered box
+9A = Mobile DTMF user
+7A = HT DTMF user
+HA = House DTMF user
+EA = Echolink DTMF report
+IA = IRLP DTMF report
+RA = RFID report
+AA = AllStar DTMF report
+DA = D-Star report
+XA = OLPC Laptop XO
+etc
+
+BUILDINGS: #h
+/h = Hospital
+\h = Ham Store       ** <= now used for HAMFESTS
+Fh = HamFest (new Aug 2014)
+Hh = Home Dept etc..
+
+CARS: #> (Vehicles)
+/> = normal car (side view)
+\> = Top view and symbol POINTS in direction of travel
+#> = Reserve overlays 1-9 for numbered cars (new Aug 2014)
+E> = Electric 
+H> = Hybrid
+S> = Solar powered
+V> = GM Volt
+
+CIVIL DEFENSE or TRIANGLE: #c
+/c = Incident Command Post
+\c = Civil Defense
+Dc = Decontamination (new Aug 2014)
+Rc = RACES
+Sc = SATERN mobile canteen
 
 DEPOT
 /D = was originally undefined
@@ -155,17 +224,14 @@ EMERGENCY: #!
 E! = ELT or EPIRB  (new Aug 2014)
 V! = Volcanic Eruption or Lava  (new Aug 2014)
 
-POWER PLANT: #%  
-/% = DX cluster  <= the original primary table definition
-C% = Coal
-E% = Emergency  (new Aug 2014)
-G% = Geothermal
-H% = Hydroelectric
-N% = Nuclear
-P% = Portable (new Aug 2014)
-S% = Solar
-T% = Turbine
-W% = Wind
+EYEBALL (EVENT) and VISIBILITY  #E
+/E = Eyeball for special live events
+\E = (existing smoke) the symbol with no overlay
+HE = (H overlay) Haze
+SE = (S overlay) Smoke
+BE = (B overlay) Blowing Snow         was \B
+DE = (D overlay) blowing Dust or sand was \b
+FE = (F overlay) Fog                  was \{
 
 GATEWAYS: #&
 /& = HF Gateway  <= the original primary table definition
@@ -174,14 +240,17 @@ R& = Receive only IGate (do not send msgs back to RF)
 T& = TX igate with path set to 1 hop only)
 2& = TX igate with path set to 2 hops (not generally good idea)
 
-INCIDENT SITES: #'
-/' = Small Aircraft (original primary symbol)
-\' = Airplane Crash Site  <= the original alternate deifinition
-A' = Automobile crash site
-H' = Hazardous incident
-M' = Multi-Vehicle crash site
-P' = Pileup
-T' = Truck wreck
+GPS devices: #\
+/\ = Triangle DF primary symbol
+\\ = was undefined alternate symbol
+A\ = Avmap G5      * <= Recommend special symbol
+
+HAZARDS: #H
+/H = hotel
+\H = Haze
+RH = Radiation detector (new mar 2011)
+WH = Hazardous Waste
+XH = Skull&Crossbones
 
 HUMAN SYMBOL: #[
 /[ = Human
@@ -205,6 +274,15 @@ O- = Operator Present
 S- = Solar Powered
 W- = Wind powered
 
+INCIDENT SITES: #'
+/' = Small Aircraft (original primary symbol)
+\' = Airplane Crash Site  <= the original alternate deifinition
+A' = Automobile crash site
+H' = Hazardous incident
+M' = Multi-Vehicle crash site
+P' = Pileup
+T' = Truck wreck
+
 NUMBERED CIRCLES: #0
 E0 = Echolink Node (E0)
 I0 = IRLP repeater (I0)
@@ -223,48 +301,17 @@ I; = Islands on the air
 S; = Summits on the air
 W; = WOTA
 
-ADVISORIES: #<  (new expansion possibilities)
-/< = motorcycle
-\< = Advisory (single gale flag)
-
-CARS: #> (Vehicles)
-/> = normal car (side view)
-\> = Top view and symbol POINTS in direction of travel
-#> = Reserve overlays 1-9 for numbered cars (new Aug 2014)
-E> = Electric 
-H> = Hybrid
-S> = Solar powered
-V> = GM Volt
-
-BOX SYMBOL: #A (and other system inputted symbols)
-/A = Aid station
-\A = numbered box
-9A = Mobile DTMF user
-7A = HT DTMF user
-HA = House DTMF user
-EA = Echolink DTMF report
-IA = IRLP DTMF report
-RA = RFID report
-AA = AllStar DTMF report
-DA = D-Star report
-XA = OLPC Laptop XO
-etc
-
-EYEBALL and VISIBILITY  #E
-/E = Eyeball for special live events
-\E = (existing smoke) the symbol with no overlay
-HE = (H overlay) Haze
-SE = (S overlay) Smoke
-BE = (B overlay) Blowing Snow         was \B
-DE = (D overlay) blowing Dust or sand was \b
-FE = (F overlay) Fog                  was \{
-
-HAZARDS: #H
-/H = hotel
-\H = Haze
-RH = Radiation detector (new mar 2011)
-WH = Hazardous Waste
-XH = Skull&Crossbones
+POWER or ENERGY: #%  
+/% = DX cluster  <= the original primary table definition
+C% = Coal
+E% = Emergency  (new Aug 2014)
+G% = Geothermal
+H% = Hydroelectric
+N% = Nuclear
+P% = Portable (new Aug 2014)
+S% = Solar
+T% = Turbine
+W% = Wind
 
 RESTAURANTS: #R 
 \R = Restaurant (generic)
@@ -282,41 +329,20 @@ IY = Icom
 KY = Kenwood       * <= Recommend special symbol
 YY = Yaesu/Standard* <= Recommend special symbol
 
-GPS devices: #\
-/\ = Triangle DF primary symbol
-\\ = was undefined alternate symbol
-A\ = Avmap G5      * <= Recommend special symbol
-
-ARRL or DIAMOND: #a
-/a = Ambulance
-Aa = ARES
-Da = DSTAR (had been ARES Dutch)
-Ga = RSGB Radio Society of Great Brittan
-Ra = RACES
-Sa = SATERN Salvation Army
-Wa = WinLink
-
-CIVIL DEFENSE or TRIANGLE: #c
-/c = Incident Command Post
-\c = Civil Defense
-Dc = Decontamination (new Aug 2014)
-Rc = RACES
-Sc = SATERN mobile canteen
-
-BUILDINGS: #h
-/h = Hospital
-\h = Ham Store       ** <= now used for HAMFESTS
-Fh = HamFest (new Aug 2014)
-Hh = Home Dept etc..
-Mh = Morgue
-Ch = Clinic
-Th = Triage
 
 SPECIAL VEHICLES: #k
 /k = truck
 \k = SUV
 4k = 4x4
 Ak = ATV (all terrain vehicle)
+
+SHELTERS: #z
+/z = was available
+\z = overlayed shelter
+Cz = Clinic (new Aug 2014)
+Gz = Government building  (new Aug 2014)
+Mz = Morgue (new Aug 2014)
+Tz = Triage (new Aug 2014)
 
 SHIPS: #s 
 /s = Power boat (ship) side view
@@ -341,11 +367,10 @@ Ws = Wing-in-Ground effect (or Hovercraft)
 Xs = Passenger (paX)(ferry)
 Ys = Sailing (large ship)
 
-
 TRUCKS: #u
 /u = Truck (18 wheeler)
 \u = truck with overlay
-Bu = Buldozer/construction  (new Aug 2014)
+Bu = Buldozer/construction/Backhoe  (new Aug 2014)
 Gu = Gas
 Pu = Plow or SnowPlow (new Aug 2014)
 Tu = Tanker

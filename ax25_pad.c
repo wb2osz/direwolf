@@ -44,22 +44,27 @@
  * Description:	
  *
  *
- *	A UI frame starts with 2-10 addressses (14-70 octets):
+ *	APRS uses only UI frames.
+ *	Each starts with 2-10 addressses (14-70 octets):
  *
- *	* Destination Address
+ *	* Destination Address  (note: opposite order in printed format)
+ *
  *	* Source Address
- *	* 0-8 Digipeater Addresses  (Could there ever be more as a result of 
- *					digipeaters inserting their own call
- *					and decrementing the remaining count in
- *					WIDEn-n, TRACEn-n, etc.?   
- *					NO.  The limit is 8 when transmitting AX.25 over the radio.
- *					However, communication with an IGate server could have 
- *					a longer VIA path but that is only in text form, not here.)
+ *
+ *	* 0-8 Digipeater Addresses  (Could there ever be more as a result of
+ *					digipeaters inserting their own call for
+ *					the tracing feature?
+ *					NO.  The limit is 8 when transmitting AX.25 over the
+ *					radio.
+ *					Communication with an IGate server could
+ *					have a longer VIA path but that is only in text form,
+ *					not as an AX.25 frame.)
  *
  *	Each address is composed of:
  *
  *	* 6 upper case letters or digits, blank padded.
- *		These are shifted left one bit, leaving the the LSB always 0.
+ *		These are shifted left one bit, leaving the LSB always 0.
+ *
  *	* a 7th octet containing the SSID and flags.
  *		The LSB is always 0 except for the last octet of the address field.
  *
@@ -96,8 +101,12 @@
  *		have the "H" bit set to 1.  
  *		The "H" bit would be set to 1 in the repeated frame.
  *
- *	When monitoring, an asterisk is displayed after the last digipeater with 
- *	the "H" bit set.  No asterisk means the source is being heard directly.
+ *	In standard monitoring format, an asterisk is displayed after the last
+ *	digipeater with the "H" bit set.  That indicates who you are hearing
+ *	over the radio.
+ *	(That is if digipeaters update the via path properly.  Some don't so
+ *	we don't know who we are hearing.  This is discussed in the User Guide.)
+ *	No asterisk means the source is being heard directly.
  *
  *	Example, if we can hear all stations involved,
  *
@@ -117,6 +126,10 @@
  *	Finally the Information Field of 1-256 bytes.
  *
  *	And, of course, the 2 byte CRC.
+ *
+ * 	The descriptions above, for the C, H, and RR bits, are for APRS usage.
+ *	When operating as a KISS TNC we just pass everything along and don't
+ *	interpret or change them.
  *
  *
  * Constructors: ax25_init		- Clear everything.
@@ -569,11 +582,11 @@ packet_t ax25_from_frame_debug (unsigned char *fbuf, int flen, alevel_t alevel, 
 packet_t ax25_from_frame (unsigned char *fbuf, int flen, alevel_t alevel)
 #endif
 {
-	unsigned char *pf;
+	//unsigned char *pf;
 	packet_t this_p;
 
-	int a;
-	int addr_bytes;
+	//int a;
+	//int addr_bytes;
 	
 /*
  * First make sure we have an acceptable length:
@@ -908,7 +921,6 @@ void ax25_set_addr (packet_t this_p, int n, char *ad)
 
 void ax25_insert_addr (packet_t this_p, int n, char *ad)
 {
-	int k;
 	int ssid_temp, heard_temp;
 	char atemp[AX25_MAX_ADDR_LEN];
 	int i;
@@ -979,7 +991,6 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 
 void ax25_remove_addr (packet_t this_p, int n)
 {
-	int k;
 	int expect; 
 
 	assert (this_p->magic1 == MAGIC);
@@ -1025,7 +1036,7 @@ void ax25_remove_addr (packet_t this_p, int n)
 
 int ax25_get_num_addr (packet_t this_p)
 {
-	unsigned char *pf;
+	//unsigned char *pf;
 	int a;
 	int addr_bytes;
 
@@ -1178,7 +1189,6 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 
 void ax25_get_addr_no_ssid (packet_t this_p, int n, char *station)
 {	
-	int ssid;
 	int i;
 
 	assert (this_p->magic1 == MAGIC);
@@ -1801,23 +1811,23 @@ static void hex_dump (unsigned char *p, int len)
 
 // TODO: use ax25_frame_type() instead.
 
-static void ctrl_to_text (int c, char *out)
+static void ctrl_to_text (int c, char *out, size_t outsiz)
 {
-	if      ((c & 1) == 0)       { sprintf (out, "I frame: n(r)=%d, p=%d, n(s)=%d",  (c>>5)&7, (c>>4)&1, (c>>1)&7); }
-	else if ((c & 0xf) == 0x01)  { sprintf (out, "S frame RR: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
-	else if ((c & 0xf) == 0x05)  { sprintf (out, "S frame RNR: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
-	else if ((c & 0xf) == 0x09)  { sprintf (out, "S frame REJ: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
-	else if ((c & 0xf) == 0x0D)  { sprintf (out, "S frame sREJ: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
-	else if ((c & 0xef) == 0x6f) { sprintf (out, "U frame SABME: p=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0x2f) { sprintf (out, "U frame SABM: p=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0x43) { sprintf (out, "U frame DISC: p=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0x0f) { sprintf (out, "U frame DM: f=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0x63) { sprintf (out, "U frame UA: f=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0x87) { sprintf (out, "U frame FRMR: f=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0x03) { sprintf (out, "U frame UI: p/f=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0xAF) { sprintf (out, "U frame XID: p/f=%d", (c>>4)&1); }
-	else if ((c & 0xef) == 0xe3) { sprintf (out, "U frame TEST: p/f=%d", (c>>4)&1); }
-	else                         { sprintf (out, "Unknown frame type for control = 0x%02x", c); }
+	if      ((c & 1) == 0)       { snprintf (out, outsiz, "I frame: n(r)=%d, p=%d, n(s)=%d",  (c>>5)&7, (c>>4)&1, (c>>1)&7); }
+	else if ((c & 0xf) == 0x01)  { snprintf (out, outsiz, "S frame RR: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xf) == 0x05)  { snprintf (out, outsiz, "S frame RNR: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xf) == 0x09)  { snprintf (out, outsiz, "S frame REJ: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xf) == 0x0D)  { snprintf (out, outsiz, "S frame sREJ: n(r)=%d, p/f=%d",  (c>>5)&7, (c>>4)&1); }
+	else if ((c & 0xef) == 0x6f) { snprintf (out, outsiz, "U frame SABME: p=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x2f) { snprintf (out, outsiz, "U frame SABM: p=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x43) { snprintf (out, outsiz, "U frame DISC: p=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x0f) { snprintf (out, outsiz, "U frame DM: f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x63) { snprintf (out, outsiz, "U frame UA: f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x87) { snprintf (out, outsiz, "U frame FRMR: f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0x03) { snprintf (out, outsiz, "U frame UI: p/f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0xAF) { snprintf (out, outsiz, "U frame XID: p/f=%d", (c>>4)&1); }
+	else if ((c & 0xef) == 0xe3) { snprintf (out, outsiz, "U frame TEST: p/f=%d", (c>>4)&1); }
+	else                         { snprintf (out, outsiz, "Unknown frame type for control = 0x%02x", c); }
 }
 
 /* Text description of protocol id octet. */
@@ -1864,7 +1874,7 @@ void ax25_hex_dump (packet_t this_p)
 	  c = fptr[this_p->num_addr*7];
 	  p = fptr[this_p->num_addr*7+1];
 
-	  ctrl_to_text (c, cp_text); // TODO: use ax25_frame_type() instead.
+	  ctrl_to_text (c, cp_text, sizeof(cp_text)); // TODO: use ax25_frame_type() instead.
 
 	  if ( (c & 0x01) == 0 ||				/* I   xxxx xxx0 */
 	     	c == 0x03 || c == 0x13) {			/* UI  000x 0011 */

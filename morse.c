@@ -36,7 +36,7 @@
 #include <assert.h>
 #include <string.h>
 #include <ctype.h>
-#include <sys/time.h>
+#include <time.h>
 #include <math.h>
 
 

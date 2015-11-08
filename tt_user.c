@@ -427,8 +427,10 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	int i;
 
 
-	//text_color_set(DW_COLOR_DEBUG);
-	//dw_printf ("tt_user_heard (%s, %d, %c, %c, %s, ...)\n", callsign, ssid, overlay, symbol, loc_text);
+// TODO: remove debug
+
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("tt_user_heard (%s, %d, %c, %c, %s, ...)\n", callsign, ssid, overlay, symbol, loc_text);
 
 /*
  * At this time all messages are expected to contain a callsign.
@@ -766,7 +768,7 @@ static void xmit_object_report (int i, int first_time)
 
 	encode_object (object_name, 0, tt_user[i].last_heard, olat, olong, 
 		tt_user[i].overlay, tt_user[i].symbol, 
-		0,0,0,NULL, 0,0,	/* PHGD, C/S */
+		0,0,0,NULL, G_UNKNOWN, G_UNKNOWN,	/* PHGD, Course/Speed */
 		atof(tt_user[i].freq), 0, 0, info_comment, object_info, sizeof(object_info));
 
 	strlcat (stemp, object_info, sizeof(stemp));

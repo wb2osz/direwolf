@@ -364,8 +364,8 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 #else
 	pthread_t connect_listen_tid;
 	pthread_t cmd_listen_tid[MAX_NET_CLIENTS];
-#endif
 	int e;
+#endif
 	int server_port = mc->agwpe_port;		/* Usually 8000 but can be changed. */
 
 
@@ -475,7 +475,7 @@ static THREAD_F connect_listen_thread (void *arg)
 	if (err != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("WSAStartup failed: %d\n", err);
-	    return (NULL);		// TODO: what should this be for Windows?
+	    return (0);
 	}
 
 	if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
@@ -483,7 +483,7 @@ static THREAD_F connect_listen_thread (void *arg)
           dw_printf("Could not find a usable version of Winsock.dll\n");
           WSACleanup();
 	  //sleep (1);
-          return (NULL);		// TODO: what should this be for Windows?
+          return (0);
 	}
 
 	memset (&hints, 0, sizeof(hints));
@@ -498,14 +498,14 @@ static THREAD_F connect_listen_thread (void *arg)
 	    dw_printf("getaddrinfo failed: %d\n", err);
 	    //sleep (1);
 	    WSACleanup();
-	    return (NULL);		// TODO: what should this be for Windows?
+	    return (0);
 	}
 
 	listen_sock= socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 	if (listen_sock == INVALID_SOCKET) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("connect_listen_thread: Socket creation failed, err=%d", WSAGetLastError());
-	  return (NULL);		// TODO: what should this be for Windows?
+	  return (0);
 	}
 
 #if DEBUG
@@ -522,7 +522,7 @@ static THREAD_F connect_listen_thread (void *arg)
           freeaddrinfo(ai);
           closesocket(listen_sock);
           WSACleanup();
-          return (NULL);		// TODO: what should this be for Windows?
+          return (0);
         }
 
 	freeaddrinfo(ai);
@@ -553,7 +553,7 @@ static THREAD_F connect_listen_thread (void *arg)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf("Listen failed with error: %d\n", WSAGetLastError());
-	      return (NULL);		// TODO: what should this be for Windows?
+	      return (0);
 	    }
 	
 	    text_color_set(DW_COLOR_INFO);
@@ -566,7 +566,7 @@ static THREAD_F connect_listen_thread (void *arg)
               dw_printf("Accept failed with error: %d\n", WSAGetLastError());
               closesocket(listen_sock);
               WSACleanup();
-              return (NULL);		// TODO: what should this be for Windows?
+              return (0);
             }
 
 	    text_color_set(DW_COLOR_INFO);
@@ -779,7 +779,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    struct tm *tm;
 
 	    clock = time(NULL);
-	    tm = localtime(&clock);
+	    tm = localtime(&clock);	// TODO: should use localtime_r
 
 	    memset (&agwpe_msg.hdr, 0, sizeof(agwpe_msg.hdr));
 
@@ -1017,7 +1017,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    close (client_sock[client]);
 #endif
 	    client_sock[client] = -1;
-	    return NULL;		// TODO: what should this be for Windows?
+	    return (0);
 	  }
 
 	  cmd.data[0] = '\0';
@@ -1035,7 +1035,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      close (client_sock[client]);
 #endif
 	      client_sock[client] = -1;
-	      return NULL;
+	      return (0);
 	    }
 	    if (n > 0) {
 		cmd.data[cmd.hdr.data_len] = '\0';
@@ -1196,7 +1196,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    case 'H':				/* Ask about recently heard stations. */
 
 	      {
-#if 0
+#if 0						/* This information is not being collected. */
 		struct {
 		  struct agwpe_s hdr;
 	 	  char info[100];
@@ -1239,23 +1239,21 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      break;
 
 
-	    case 'V':				/* Transmit UI data frame */
+	    case 'V':				/* Transmit UI data frame (with digipeater path) */
 	      {
 	      	// Data format is:
 	      	//	1 byte for number of digipeaters.
 	      	//	10 bytes for each digipeater.
 	      	//	data part of message.
 
-	      	char stemp[512];
+	      	char stemp[AX25_MAX_PACKET_LEN+2];
 		char *p;
 		int ndigi;
 		int k;
 	      
 		packet_t pp;
-    		//unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
-    		//int flen;
 
-		// We have already assured these do not exceed 9 characters.
+		// We have already verified these do not exceed 9 characters. (?)
 
 	      	strlcpy (stemp, cmd.hdr.call_from, sizeof(stemp));
 	      	strlcat (stemp, ">", sizeof(stemp));
@@ -1396,13 +1394,13 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	      break;
 
-#if 0
-	    case 'M': 				/* Send UNPROTO Information */
 
-		Not sure what we might want to do here.  
+	    case 'M': 				/* Send UNPROTO Information (no digipeater path) */
+
+		/* 
+		Added in version 1.3.
+		This is the same as 'V' except there is no provision for digipeaters.
 		AGWterminal sends this for beacon or ask QRA.
-		None of the other tested applications use it.
-
 
 		<<< Send UNPROTO Information from AGWPE client application 0, total length = 253
 		        portx = 0, port_hi_reserved = 0
@@ -1420,31 +1418,55 @@ static THREAD_F cmd_listen_thread (void *arg)
 		        data_len = 1, user_reserved = 32218432, data =
 		  000:  0d                                               .
 
+		There is also a report of it coming from UISS.
+
+		<<< Send UNPROTO Information from AGWPE client application 0, total length = 50
+			portx = 0, port_hi_reserved = 0
+			kind_lo = 77 = 'M', kind_hi = 0
+			call_from = "JH4XSY", call_to = "APRS"
+			data_len = 14, user_reserved = 0, data =
+		  000:  21 22 3c 43 2e 74 71 6c 48 72 71 21 21 5f        !"<C.tqlHrq!!_
+		*/
 	      {
 	      
-		packet_t pp;
-		int pid = cmd.datakind_hi & 0xff;
+		int pid = cmd.hdr.kind_hi & 0xff;
+		(void)(pid);
+			/* The AGW protocol spec says, */
 			/* "AX.25 PID 0x00 or 0xF0 for AX.25 0xCF NETROM and others" */
 
+			/* BUG: In theory, the AX.25 PID octet should be set from this. */
+			/* All examples seen (above) have 0. */
+			/* The AX.25 protocol spec doesn't list 0 as a valid value. */
+			/* We always send 0xf0, meaning no layer 3. */
+			/* Maybe we should have an ax25_set_pid function for cases when */
+			/* it is neither 0 nor 0xf0. */
 
-		This is not right.
-		It needs to be more like "V" Transmit UI data frame
-		except there are no digipeaters involved.
+	      	char stemp[AX25_MAX_PACKET_LEN];
+		packet_t pp;
 
-		pp = ax25_from_frame ((unsigned char *)cmd.data, cmd.hdr.data_len, -1);
+	      	strlcpy (stemp, cmd.hdr.call_from, sizeof(stemp));
+	      	strlcat (stemp, ">", sizeof(stemp));
+	      	strlcat (stemp, cmd.hdr.call_to, sizeof(stemp));
 
-		if (pp != NULL) {
-		  tq_append (cmd.hdr.portx, TQ_PRIO_1_LO, pp);
-		  ax25_set_pid (pp, pid);
-	        }
-	        else {
+		cmd.data[cmd.hdr.data_len] = '\0';
+
+		strlcat (stemp, ":", sizeof(stemp));
+		strlcat (stemp, cmd.data, sizeof(stemp));
+
+	        //text_color_set(DW_COLOR_DEBUG);
+		//dw_printf ("Transmit '%s'\n", stemp);
+
+		pp = ax25_from_text (stemp, 1);
+
+		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("Failed to create frame from AGW 'M' message.\n");
 		}
+		else {
+		  tq_append (cmd.hdr.portx, TQ_PRIO_1_LO, pp);
+		}
 	      }
 	      break;
-
-#endif
 
 
 	    case 'y':				/* Ask Outstanding frames waiting on a Port  */

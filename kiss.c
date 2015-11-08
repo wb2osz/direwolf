@@ -303,7 +303,7 @@ void kiss_init (struct misc_config_s *mc)
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf ("Converted nullmodem device '%s'", mc->nullmodem);
 	    if (n < 1) n = 1;
-	    sprintf (mc->nullmodem, "/dev/ttyS%d", n-1);
+	    snprintf (mc->nullmodem, sizeof(mc->nullmodem), "/dev/ttyS%d", n-1);
 	    dw_printf (" to Linux equivalent '%s'\n", mc->nullmodem);
 	  }
 #endif
@@ -374,7 +374,7 @@ static MYFDTYPE kiss_open_pt (void)
 	  return (MYFDERROR);
 	}
 
-	strcpy (pt_slave_name, pts);
+	strlcpy (pt_slave_name, pts, sizeof(pt_slave_name));
 
 	e = tcgetattr (fd, &ts);
 	if (e != 0) { 
@@ -512,13 +512,13 @@ static MYFDTYPE kiss_open_nullmodem (char *devicename)
 // Bug fix in release 1.1 - Need to munge name for COM10 and up.
 // http://support.microsoft.com/kb/115831
 
-	strcpy (bettername, devicename);
+	strlcpy (bettername, devicename, sizeof(bettername));
 	if (strncasecmp(devicename, "COM", 3) == 0) {
 	  int n;
 	  n = atoi(devicename+3);
 	  if (n >= 10) {
-	    strcpy (bettername, "\\\\.\\");
-	    strcat (bettername, devicename);
+	    strlcpy (bettername, "\\\\.\\", sizeof(bettername));
+	    strlcat (bettername, devicename, sizeof(bettername));
 	  }
 	}
 	
@@ -667,7 +667,7 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 	  if (kiss_debug) {
 	    kiss_debug_print (TO_CLIENT, "Fake command prompt", fbuf, flen);
 	  }
-	  strcpy ((char *)kiss_buff, (char *)fbuf);
+	  strlcpy ((char *)kiss_buff, (char *)fbuf, sizeof(kiss_buff));
 	  kiss_len = strlen((char *)kiss_buff);
 	}
 	else {

@@ -27,6 +27,8 @@
 char *strsep(char **stringp, const char *delim);
 #endif
 
+#include "direwolf.h"
+
 
 /*
  * Information we gather for each thing.
@@ -228,6 +230,20 @@ static void read_csv(FILE *fp)
 	  ptelemetry = strsep(&next,"\t");	/* Currently unused.  Add to description? */
 	  pcomment = strsep(&next,"\t");
 
+	  /* Suppress the 'set but not used' warnings. */
+	  /* Alternatively, we might use __attribute__((unused)) */
+
+	  (void)(ptelemetry);
+	  (void)(psystem);
+	  (void)(psymbol);
+	  (void)(pdti);
+	  (void)(perror);
+	  (void)(plevel);
+	  (void)(pheard);
+	  (void)(psource);
+	  (void)(putime);
+
+
 /*
  * Skip header line with names of fields.
  */
@@ -265,42 +281,42 @@ static void read_csv(FILE *fp)
 
 	    if (pfreq != NULL && strlen(pfreq) > 0) {
 	      freq = atof(pfreq);
-	      sprintf (desc, "%.3f MHz", freq);
+	      snprintf (desc, sizeof(desc), "%.3f MHz", freq);
 	    }
 	    else {
-	      strcpy (desc, "");
+	      strlcpy (desc, "", sizeof(desc));
 	    }
 
 	    if (poffset != NULL && strlen(poffset) > 0) {
 	      offset = atoi(poffset);
 	      if (offset != 0 && offset % 1000 == 0) {
-	        sprintf (stemp, "%+dM", offset / 1000);
+	        snprintf (stemp, sizeof(stemp), "%+dM", offset / 1000);
 	      }
 	      else {
-	        sprintf (stemp, "%+dk", offset);
+	        snprintf (stemp, sizeof(stemp), "%+dk", offset);
 	      }
-	      if (strlen(desc) > 0) strcat (desc, " ");
-	      strcat (desc, stemp);
+	      if (strlen(desc) > 0) strlcat (desc, " ", sizeof(desc));
+	      strlcat (desc, stemp, sizeof(desc));
 	    }
 
 	    if (ptone != NULL && strlen(ptone) > 0) {
 	      if (*ptone == 'D') {
-	        sprintf (stemp, "DCS %s", ptone+1);
+	        snprintf (stemp, sizeof(stemp), "DCS %s", ptone+1);
 	      }
 	      else {
-	        sprintf (stemp, "PL %s", ptone);
+	        snprintf (stemp, sizeof(stemp), "PL %s", ptone);
 	      }
-	      if (strlen(desc) > 0) strcat (desc, " ");
-	      strcat (desc, stemp);
+	      if (strlen(desc) > 0) strlcat (desc, " ", sizeof(desc));
+	      strlcat (desc, stemp, sizeof(desc));
 	    }
 
-	    strcpy (comment, "");
+	    strlcpy (comment, "", sizeof(comment));
 	    if (pstatus != NULL && strlen(pstatus) > 0) {
-	      strcpy (comment, pstatus);
+	      strlcpy (comment, pstatus, sizeof(comment));
 	    }
 	    if (pcomment != NULL && strlen(pcomment) > 0) {
-	      if (strlen(comment) > 0) strcat (comment, ", ");
-	      strcat (comment, pcomment);
+	      if (strlen(comment) > 0) strlcat (comment, ", ", sizeof(comment));
+	      strlcat (comment, pcomment, sizeof(comment));
 	    }
 	    
 	    if (num_things == max_things) {

@@ -113,6 +113,17 @@ static int calcbufsize(int rate, int chans, int bits)
 	dw_printf ("audio_open: calcbufsize (rate=%d, chans=%d, bits=%d) calc size=%d, round up to %d\n",
 		rate, chans, bits, size1, size2);
 #endif
+
+	/* Version 1.3 - add a sanity check. */
+	if (size2 < 256 || size2 > 32768) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Audio buffer has unexpected extreme size of %d bytes.\n", size2);
+	  dw_printf ("Detected at %s, line %d.\n", __FILE__, __LINE__);
+	  dw_printf ("This might be caused by unusual audio device configuration values.\n"); 
+	  size2 = 2048;
+	  dw_printf ("Using %d to attempt recovery.\n", size2);
+	}
+
 	return (size2);
 }
 

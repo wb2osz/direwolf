@@ -42,10 +42,8 @@
 #include <ctype.h>
 #include <math.h>
 
-#if __WIN32__
-//#include "pthreads/pthread.h"
-#else
-#include <pthread.h>
+#if ENABLE_GPSD
+#include <gps.h>		/* for DEFAULT_GPSD_PORT  (2947) */
 #endif
 
 #include "ax25_pad.h"
@@ -184,12 +182,11 @@ static int alllettersorpm(char *p)
 /* Acceptable symbols to separate degrees & minutes. */
 /* Degree symbol is not in ASCII so documentation says to use "^" instead. */
 /* Some wise guy will try to use degree symbol. */
+/* UTF-8 is more difficult because it is a two byte sequence, c2 b0. */
 
 #define DEG1 '^'
 #define DEG2 0xb0	/* ISO Latin1 */
 #define DEG3 0xf8	/* Microsoft code page 437 */
-
-// TODO: recognize UTF-8 degree symbol.
 
 
 enum parse_ll_which_e { LAT, LON };
@@ -484,7 +481,6 @@ static char *split (char *string, int rest_of_line)
 {
 	static char cmd[MAXCMDLEN];
 	static char token[MAXCMDLEN];
-	static char *nextp = NULL;
 	static char *c;		// current position in cmd.
 	char *s, *t;
 	int in_quotes;
@@ -756,6 +752,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	
 	//strlcpy (p_misc_config->nullmodem, DEFAULT_NULLMODEM, sizeof(p_misc_config->nullmodem));
 	strlcpy (p_misc_config->nullmodem, "", sizeof(p_misc_config->nullmodem));
+	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
 	strlcpy (p_misc_config->nmea_port, "", sizeof(p_misc_config->nmea_port));
 	strlcpy (p_misc_config->logdir, "", sizeof(p_misc_config->logdir));
 
@@ -869,12 +866,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    /* First channel of device is valid. */
 	    p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
 
-	    strncpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in)-1);
-	    strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);
+	    strlcpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in));
+	    strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));
 
 	    t = split(NULL,0);
 	    if (t != NULL) {
-	      strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);
+	      strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));
 	    }
 	  }
 
@@ -924,7 +921,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  /* First channel of device is valid. */
 		  p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
 
-		  strncpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in)-1);
+		  strlcpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in));
 	  }
 	  else if (strcasecmp(t, "PAODEVICE") == 0) {
 		  adevice = 0;
@@ -951,7 +948,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  /* First channel of device is valid. */
 		  p_audio_config->achan[ADEVFIRSTCHAN(adevice)].valid = 1;
 
-		  strncpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out)-1);		  
+		  strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));		  
 	  }
 
 
@@ -1074,7 +1071,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	          char *p;
 
-	          strncpy (p_audio_config->achan[c].mycall, t, sizeof(p_audio_config->achan[c].mycall)-1);
+	          strlcpy (p_audio_config->achan[c].mycall, t, sizeof(p_audio_config->achan[c].mycall));
 
 	          for (p = p_audio_config->achan[c].mycall; *p != '\0'; p++) {
 	            if (islower(*p)) {
@@ -1082,6 +1079,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	            }
 	          }
 	          // TODO: additional checks if valid.
+		  //  Should have a function to check for valid callsign[-ssid]
 	        }
 	      }
 	    }
@@ -1231,7 +1229,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		    }
 		  }    
 		
-		  strncpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
+		  strlcpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
 	          t = split(NULL,0);
 		  if (strlen(p_audio_config->achan[channel].profiles) > 1 && t != NULL) {
 	            text_color_set(DW_COLOR_ERROR);
@@ -1328,7 +1326,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        else if (alllettersorpm(t)) {		/* profile of letter(s) + - */
 
 		  // Will be validated later.
-		  strncpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
+		  strlcpy (p_audio_config->achan[channel].profiles, t, sizeof(p_audio_config->achan[channel].profiles));
 	        }
 
 		else if (*t == '/') {		/* /div */
@@ -1354,7 +1352,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      /* A later place catches disallowed combination of + and @. */
 	      /* A later place sets /n for 300 baud if not specified by user. */
 
-	      //printf ("debug: div = %d\n", p_audio_config->achan[channel].decimate);
+	      //dw_printf ("debug: div = %d\n", p_audio_config->achan[channel].decimate);
 
 	    }
 	  }
@@ -1440,7 +1438,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "PTT") == 0 || strcasecmp(t, "DCD") == 0) {
-	    //int n;
 	    int ot;
 	    char otname[8];
 
@@ -1729,7 +1726,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "SPEECH") == 0) {
-	    int n;
+
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -1895,8 +1892,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "regen") == 0) {
 	    int from_chan, to_chan;
-	    int e;
-	    char message[100];
 	    	    
 
 	    t = split(NULL,0);
@@ -1957,8 +1952,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "FILTER") == 0) {
 	    int from_chan, to_chan;
-	    int e;
-	    char message[100];
 	    	    
 
 	    t = split(NULL,0);
@@ -2036,7 +2029,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "TTCORRAL") == 0) {
-	    //int n;
+
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2371,8 +2364,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    struct ttloc_s *tl;
 	    int j;
-	    int znum;
-	    char *zlet;
 	    double dlat, dlon;
 	    long lerr;
 
@@ -2485,8 +2476,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    struct ttloc_s *tl;
 	    int j;
-	    int znum;
-	    char *zlet;
 	    int num_x, num_y;
 	    double lat, lon;
 	    long lerr;
@@ -2679,7 +2668,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        p_tt_config->ttloc_len--;
 	        continue;
 	      }
-	      if (tt_mhead_to_text(t, 0, mh) != 0) {
+	      if (tt_mhead_to_text(t, 0, mh, sizeof(mh)) != 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTMHEAD prefix not a valid DTMF sequence.\n", line);
 	        p_tt_config->ttloc_len--;
@@ -2802,7 +2791,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    struct ttloc_s *tl;
 	    int j;
-	    //char ch;
 	    int p_count[3], d_count[3];
 	    int tt_error = 0;
 
@@ -2959,8 +2947,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        if (*pi == '}') {
 	          char symtab;
 	          char symbol;
-	          char overlay;
-	          char symdest[8];
 
 	          *ps = '\0';
 
@@ -2975,7 +2961,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 		  // Convert symtab(overlay) & symbol to tone sequence.
 
-		  symbols_to_tones (symtab, symbol, ttemp);
+		  symbols_to_tones (symtab, symbol, ttemp, sizeof(ttemp));
 
 	          //text_color_set(DW_COLOR_DEBUG);
 	          //dw_printf ("DEBUG config file Line %d: AB{%s} -> %s\n", line, stemp, ttemp);
@@ -3129,7 +3115,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t != NULL) {
 
 	      // TODO: Should do some validity checking on the path.
-	      strncpy (p_tt_config->obj_xmit_via, t, sizeof(p_tt_config->obj_xmit_via));
+	      strlcpy (p_tt_config->obj_xmit_via, t, sizeof(p_tt_config->obj_xmit_via));
 	    }
 	  }
 
@@ -3246,9 +3232,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  
 	    while (*t == ' ' || *t == '\t') t++;   // remove leading white space.
 
-	    strncpy (p_tt_config->status[status_num], t, TT_MTEXT_LEN);
-	    p_tt_config->status[status_num][TT_MTEXT_LEN-1] = '\0';
-
+	    strlcpy (p_tt_config->status[status_num], t, sizeof(p_tt_config->status[status_num]));
 	  }
 
 
@@ -3260,7 +3244,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "TTCMD") == 0) {
-	    int status_num;
 
 	    t = split(NULL,1);
 	    if (t == NULL) {
@@ -3269,9 +3252,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    
-	    strncpy (p_tt_config->ttcmd, t, sizeof(p_tt_config->ttcmd));
-	    p_tt_config->ttcmd[sizeof(p_tt_config->ttcmd)-1] = '\0';
-
+	    strlcpy (p_tt_config->ttcmd, t, sizeof(p_tt_config->ttcmd));
 	  }
 
 
@@ -3294,7 +3275,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Line %d: Missing IGate server name for IGSERVER command.\n", line);
 	      continue;
 	    }
-	    strncpy (p_igate_config->t2_server_name, t, sizeof(p_igate_config->t2_server_name)-1);
+	    strlcpy (p_igate_config->t2_server_name, t, sizeof(p_igate_config->t2_server_name));
 
 	    /* If there is a : in the name, split it out as the port number. */
 
@@ -3329,7 +3310,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 			line, p_igate_config->t2_server_port);
    	      }
 	    }
-	    //printf ("DEBUG  server=%s   port=%d\n", p_igate_config->t2_server_name, p_igate_config->t2_server_port);
+	    //dw_printf ("DEBUG  server=%s   port=%d\n", p_igate_config->t2_server_name, p_igate_config->t2_server_port);
 	    //exit (0);
 	  }
 
@@ -3347,7 +3328,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    // TODO: Wouldn't hurt to do validity checking of format.
-	    strncpy (p_igate_config->t2_login, t, sizeof(p_igate_config->t2_login)-1);
+	    strlcpy (p_igate_config->t2_login, t, sizeof(p_igate_config->t2_login));
 
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -3355,7 +3336,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Line %d: Missing passcode for IGLOGIN command.\n", line);
 	      continue;
 	    }
-	    strncpy (p_igate_config->t2_passcode, t, sizeof(p_igate_config->t2_passcode)-1);
+	    strlcpy (p_igate_config->t2_passcode, t, sizeof(p_igate_config->t2_passcode));
 	  }
 
 /*
@@ -3387,7 +3368,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t != NULL) {
 	      char *p;
 	      p_igate_config->tx_via[0] = ',';
-	      strncpy (p_igate_config->tx_via + 1, t, sizeof(p_igate_config->tx_via)-2);
+	      strlcpy (p_igate_config->tx_via + 1, t, sizeof(p_igate_config->tx_via)-1);
 	      for (p = p_igate_config->tx_via; *p != '\0'; p++) {
 	        if (islower(*p)) {
 		  *p = toupper(*p);	/* silently force upper case. */
@@ -3403,7 +3384,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "IGFILTER") == 0) {
-	    //int n;
 
 	    t = split(NULL,1);		/* Take rest of line as one string. */
 
@@ -3524,12 +3504,74 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    else {
-	      strncpy (p_misc_config->nullmodem, t, sizeof(p_misc_config->nullmodem)-1);
+	      strlcpy (p_misc_config->nullmodem, t, sizeof(p_misc_config->nullmodem));
 	    }
 	  }
 
 /*
+ * GPSNMEA		- Device name for reading from GPS receiver.
+ */
+	  else if (strcasecmp(t, "gpsnmea") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Missing serial port name for GPS receiver.\n", line);
+	      continue;
+	    }
+	    else {
+	      strlcpy (p_misc_config->gpsnmea_port, t, sizeof(p_misc_config->gpsnmea_port));
+	    }
+	  }
+
+/*
+ * GPSD		- Use GPSD server.
+ *
+ * GPSD [ host [ port ] ]
+ */
+	  else if (strcasecmp(t, "gpsd") == 0) {
+
+#if __WIN32__
+
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Config file, line %d: The GPSD interface is not available for Windows.\n", line);
+	    continue;
+
+#elif ENABLE_GPSD
+
+	    strlcpy (p_misc_config->gpsd_host, "localhost", sizeof(p_misc_config->gpsd_host));
+	    p_misc_config->gpsd_port = atoi(DEFAULT_GPSD_PORT);
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      strlcpy (p_misc_config->gpsd_host, t, sizeof(p_misc_config->gpsd_host));
+
+	      t = split(NULL,0);
+	      if (t != NULL) {
+
+	        int n = atoi(t);
+                if ((n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) || n == 0) {
+	          p_misc_config->gpsd_port = n;
+	        }
+	        else {
+	          p_misc_config->gpsd_port = atoi(DEFAULT_GPSD_PORT);
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("Line %d: Invalid port number for GPSD Socket Interface. Using default of %d.\n", 
+			line, p_misc_config->gpsd_port);
+	        }
+	      }
+	    }
+#else
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Config file, line %d: The GPSD interface has not been enabled.\n", line);
+	    dw_printf ("Install gpsd and libgps-dev packages then rebuild direwolf.\n");
+	    continue;
+#endif
+
+	  }
+
+/*
  * NMEA		- Device name for communication with NMEA device.
+ *		  Wasn't documented will probably use WAYPOINT instead.
  */
 	  else if (strcasecmp(t, "nmea") == 0) {
 	    t = split(NULL,0);
@@ -3539,7 +3581,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    else {
-	      strncpy (p_misc_config->nmea_port, t, sizeof(p_misc_config->nmea_port)-1);
+	      strlcpy (p_misc_config->nmea_port, t, sizeof(p_misc_config->nmea_port));
 	    }
 	  }
 
@@ -3554,7 +3596,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    else {
-	      strncpy (p_misc_config->logdir, t, sizeof(p_misc_config->logdir)-1);
+	      strlcpy (p_misc_config->logdir, t, sizeof(p_misc_config->logdir));
 	    }
 	    t = split(NULL,0);
 	    if (t != NULL) {
@@ -3591,21 +3633,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		   strcasecmp(t, "OBEACON") == 0 ||
 		   strcasecmp(t, "TBEACON") == 0 ||
 		   strcasecmp(t, "CBEACON") == 0) {
-#if __WIN32__
-	    if (strcasecmp(t, "TBEACON") == 0) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file, line %d: TBEACON is available only in Linux version.\n", line);
-	      continue;
-	    }
-#endif
 
-#ifndef ENABLE_GPS
-	    if (strcasecmp(t, "TBEACON") == 0) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file, line %d: Rebuild with GPS support for TBEACON to be available.\n", line);
-	      continue;
-	    }
-#endif
 	    if (p_misc_config->num_beacons < MAX_BEACONS) {
 
 	      memset (&(p_misc_config->beacon[p_misc_config->num_beacons]), 0, sizeof(struct beacon_s));
@@ -3638,7 +3666,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * SMARTBEACONING fast_speed fast_rate slow_speed slow_rate turn_time turn_angle turn_slope
+ * SMARTBEACONING [ fast_speed fast_rate slow_speed slow_rate turn_time turn_angle turn_slope ]
+ *
+ * Parameters must be all or nothing.
  */
 
 	  else if (strcasecmp(t, "SMARTBEACON") == 0 ||	
@@ -3647,8 +3677,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    int n;
 
 #define SB_NUM(name,sbvar,minn,maxx,unit)  							\
-	    t = split(NULL,0);							\
+	    t = split(NULL,0);									\
 	    if (t == NULL) {									\
+	      if (strcmp(name, "fast speed") == 0) {						\
+	        p_misc_config->sb_configured = 1;						\
+	        continue;									\
+	      }											\
 	      text_color_set(DW_COLOR_ERROR);							\
 	      dw_printf ("Line %d: Missing %s for SmartBeaconing.\n", line, name);		\
 	      continue;										\
@@ -3664,7 +3698,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
    	    }
 
 #define SB_TIME(name,sbvar,minn,maxx,unit)  							\
-	    t = split(NULL,0);							\
+	    t = split(NULL,0);									\
 	    if (t == NULL) {									\
 	      text_color_set(DW_COLOR_ERROR);							\
 	      dw_printf ("Line %d: Missing %s for SmartBeaconing.\n", line, name);		\
@@ -3787,11 +3821,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_s *p_audio_config)
 {
-	char options[1000];
-	char *o;
 	char *t;
-	char *p;
-	int q;
 	char temp_symbol[100];
 	int ok;
 	char zone[8];
@@ -3901,7 +3931,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    b->custom_infocmd = strdup(value);
 	  }
 	  else if (strcasecmp(keyword, "OBJNAME") == 0) {
-	    strncpy(b->objname, value, 9);
+	    strlcpy(b->objname, value, sizeof(b->objname));
 	  }
 	  else if (strcasecmp(keyword, "LAT") == 0) {
 	    b->lat = parse_ll (value, LAT, line);
@@ -3913,7 +3943,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    b->alt_m = atof(value);
 	  }
 	  else if (strcasecmp(keyword, "ZONE") == 0) {
-	    strncpy(zone, value, sizeof(zone));
+	    strlcpy(zone, value, sizeof(zone));
 	  }
 	  else if (strcasecmp(keyword, "EAST") == 0 || strcasecmp(keyword, "EASTING") == 0) {
 	    easting = atof(value);
@@ -3944,7 +3974,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    b->gain = atoi(value);
 	  }
 	  else if (strcasecmp(keyword, "DIR") == 0 || strcasecmp(keyword, "DIRECTION") == 0) {
-	    strncpy(b->dir, value, 2);
+	    strlcpy(b->dir, value, sizeof(b->dir));
 	  }
 	  else if (strcasecmp(keyword, "FREQ") == 0) {
 	    b->freq = atof(value);

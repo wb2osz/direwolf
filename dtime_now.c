@@ -1,5 +1,5 @@
 
-
+#include "direwolf.h"
 #include "textcolor.h"
 #include "dtime_now.h"
 
@@ -17,9 +17,7 @@
 #include <sys/time.h>
 #endif
 
-#if __WIN32__
-#include <windows.h>
-#endif
+
 
 
 

@@ -237,7 +237,7 @@ int main (int argc, char *argv[])
  * Convert to AX.25 frame.
  * Notice that the special destination will cause it to be spoken.
  */
-	      sprintf (reply_text, "N0CALL>SPEECH:%d", n);
+	      snprintf (reply_text, sizeof(reply_text), "N0CALL>SPEECH:%d", n);
 	      reply_pp = ax25_from_text(reply_text, 1);
 
 /*
@@ -508,7 +508,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 	  case AF_INET:
 	    sa4 = (struct sockaddr_in *)pAddr;
 #if __WIN32__
-	    sprintf (pStringBuf, "%d.%d.%d.%d", sa4->sin_addr.S_un.S_un_b.s_b1,
+	    snprintf (pStringBuf, StringBufSize, "%d.%d.%d.%d", sa4->sin_addr.S_un.S_un_b.s_b1,
 						sa4->sin_addr.S_un.S_un_b.s_b2,
 						sa4->sin_addr.S_un.S_un_b.s_b3,
 						sa4->sin_addr.S_un.S_un_b.s_b4);
@@ -519,7 +519,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 	  case AF_INET6:
 	    sa6 = (struct sockaddr_in6 *)pAddr;
 #if __WIN32__
-	    sprintf (pStringBuf, "%x:%x:%x:%x:%x:%x:%x:%x",  
+	    snprintf (pStringBuf, StringBufSize, "%x:%x:%x:%x:%x:%x:%x:%x",
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[0]),
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[1]),
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[2]),
@@ -533,9 +533,9 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 #endif
 	    break;
 	  default:
-	    sprintf (pStringBuf, "Invalid address family!");
+	    snprintf (pStringBuf, StringBufSize, "Invalid address family!");
 	}
-	assert (strlen(pStringBuf) < StringBufSize);
+
 	return pStringBuf;
 
 } /* end ia_to_text */

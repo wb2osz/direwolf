@@ -919,7 +919,7 @@ static void print_error (pfstate_t *pf, char *msg)
 
 
 
-#if TEST
+#if PFTEST
 
 
 /*-------------------------------------------------------------------
@@ -928,7 +928,7 @@ static void print_error (pfstate_t *pf, char *msg)
  *    
  * Purpose:     Unit test for packet filtering.
  *
- * Usage:	gcc -Wall -o pftest -DTEST pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o latlong.o symbols.o telemetry.o tt_text.c misc.a regex.a && ./pftest
+ * Usage:	gcc -Wall -o pftest -DPFTEST pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o latlong.o symbols.o telemetry.o tt_text.c misc.a regex.a && ./pftest
  *		
  *
  *--------------------------------------------------------------------*/
@@ -939,6 +939,9 @@ static void pftest (int test_num, char *filter, char *packet, int expected);
 
 int main ()
 {
+
+	dw_printf ("Quick test for packet filtering.\n");
+	dw_printf ("Some error messages are normal.  Look at the final success/fail message.\n");
 
 	pftest (1, "", "WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
 	pftest (2, "0", "WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
@@ -1057,12 +1060,12 @@ int main ()
 
 	if (error_count > 0) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("Packet Filtering Test - FAILED!\n");
-	  exit (1);
+	  dw_printf ("\nPacket Filtering Test - FAILED!\n");
+	  exit (EXIT_FAILURE);
 	}
-	text_color_set (DW_COLOR_DEBUG );
-	dw_printf ("Packet Filtering Test - SUCCESS!\n");
-	exit (0);
+	text_color_set (DW_COLOR_REC);
+	dw_printf ("\nPacket Filtering Test - SUCCESS!\n");
+	exit (EXIT_SUCCESS);
 
 }
 

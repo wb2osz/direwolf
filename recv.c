@@ -302,7 +302,7 @@ void recv_process (void)
 #endif
 	  
 
-	  ok = dlq_remove (&type, &chan, &subchan, &pp, &alevel, &retries, spectrum);
+	  ok = dlq_remove (&type, &chan, &subchan, &pp, &alevel, &retries, spectrum, sizeof(spectrum));
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("recv_process: dlq_remove() returned ok=%d, type=%d, chan=%d, pp=%p\n", 

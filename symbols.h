@@ -13,7 +13,7 @@ void symbols_get_description (char symtab, char symbol, char *description, size_
 
 int symbols_code_from_description (char overlay, char *description, char *symtab, char *symbol);
 
-void symbols_to_tones (char symtab, char symbol, char *tones);
+void symbols_to_tones (char symtab, char symbol, char *tones, size_t tonessize);
 
 
 /* end symbols.h */

@@ -714,6 +714,27 @@ int audio_open (struct audio_s *pa)
 			 * Finally allocate buffer for each direction.
 			 */
 
+	                /* Version 1.3 - Add sanity check on buffer size. */
+	                /* There was a reported case of assert failure on buffer size in audio_get(). */
+
+	                if (adev[a].inbuf_size_in_bytes < 256 || adev[a].inbuf_size_in_bytes > 32768) {
+	                  text_color_set(DW_COLOR_ERROR);
+	                  dw_printf ("Audio input buffer has unexpected extreme size of %d bytes.\n", adev[a].inbuf_size_in_bytes);
+	                  dw_printf ("Detected at %s, line %d.\n", __FILE__, __LINE__);
+	                  dw_printf ("This might be caused by unusual audio device configuration values.\n"); 
+	                  adev[a].inbuf_size_in_bytes = 2048;
+	                  dw_printf ("Using %d to attempt recovery.\n", adev[a].inbuf_size_in_bytes);
+	                }
+
+	                if (adev[a].outbuf_size_in_bytes < 256 || adev[a].outbuf_size_in_bytes > 32768) {
+	                  text_color_set(DW_COLOR_ERROR);
+	                  dw_printf ("Audio output buffer has unexpected extreme size of %d bytes.\n", adev[a].outbuf_size_in_bytes);
+	                  dw_printf ("Detected at %s, line %d.\n", __FILE__, __LINE__);
+	                  dw_printf ("This might be caused by unusual audio device configuration values.\n"); 
+	                  adev[a].outbuf_size_in_bytes = 2048;
+	                  dw_printf ("Using %d to attempt recovery.\n", adev[a].outbuf_size_in_bytes);
+	                }
+
 			adev[a].inbuf_ptr = malloc(adev[a].inbuf_size_in_bytes);
 			assert (adev[a].inbuf_ptr != NULL);
 			adev[a].inbuf_len = 0;

@@ -116,7 +116,8 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
  *		height	- Feet.
  *		gain	- dBi.
  *
- * 		course	- Degress, 1 - 360.  0 means none or unknown.
+ * 		course	- Degress, 0 - 360 (360 equiv. to 0).  
+ *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.
  *
  *
@@ -129,6 +130,9 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
  *		course/speed	- takes priority (this implementation)
  *		radio range	- calculated from PHG
  *		altitude	- not implemented yet.
+ *
+ *		Some conversion must be performed for course from
+ *		the API definition to what is sent over the air.
  *
  *----------------------------------------------------------------*/
 
@@ -198,13 +202,18 @@ static int set_comp_position (char symtab, char symbol, double dlat, double dlon
  * When c is '{', s is range ...
  */
 
-	if (course || speed) {
+	if (speed > 0) {
 	  int c;
 	  int s;
-
-	  c = (course + 1) / 4;
-	  if (c < 0) c += 90;
-	  if (c >= 90) c -= 90;
+	  
+	  if (course != G_UNKNOWN) {
+	    c = (course + 2) / 4;
+	    if (c < 0) c += 90;
+	    if (c >= 90) c -= 90;
+	  }
+	  else {
+	    c = 0;
+	  }
 	  presult->c = c + '!';
 
 	  s = (int)round(log(speed+1.0) / log(1.08));
@@ -251,7 +260,10 @@ static int set_comp_position (char symtab, char symbol, double dlat, double dlon
  *
  * Inputs: 	power	- Watts.
  *		height	- Feet.
- *		gain	- dB.  Not clear if it is dBi or dBd.
+ *		gain	- dB.  Protocol spec doesn't mention whether it is dBi or dBd.
+ *				This says dBi:
+ *				http://www.tapr.org/pipermail/aprssig/2008-September/027034.html
+
  *		dir	- Directivity: N, NE, etc., omni.
  *
  * Outputs:	presult	- Stored here.  
@@ -259,6 +271,11 @@ static int set_comp_position (char symtab, char symbol, double dlat, double dlon
  * Returns:     Number of characters in result.
  *
  *----------------------------------------------------------------*/
+
+// TODO (bug):  Doesn't check for G_UNKNOWN.
+// could have a case where some, but not all, values were specified.
+// Callers originally checked for any not zero. 
+// now they check for any > 0.
 
 
 typedef struct phg_s {
@@ -317,12 +334,18 @@ static int phg_data_extension (int power, int height, int gain, char *dir, char 
  *
  * Purpose:     Fill in parts of the course & speed data extension.
  *
- * Inputs: 	course	- Degress, 1 - 360.
+ * Inputs: 	course	- Degress, 0 - 360 (360 equiv. to 0).
+ *			  Use G_UNKNOWN for none or unknown.
+ *
  *		speed	- knots.
  *
  * Outputs:	presult	- Stored here.  
  *
  * Returns:     Number of characters in result.
+ *
+ * Description: Over the air we use:
+ *			0 	for unknown or not relevant.
+ *			1 - 360	for valid course.  (360 for north)
  *
  *----------------------------------------------------------------*/
 
@@ -340,16 +363,23 @@ static int cse_spd_data_extension (int course, int speed, char *presult)
 	char stemp[8];
 	int x;
 
-	x = course;
-	if (x < 0) x = 0;
-	if (x > 360) x = 360;
+	if (course != G_UNKNOWN) {
+	  x = course;
+	  while (x < 1) x += 360;
+	  while (x > 360) x -= 360;
+	  // Should now be in range of 1 - 360. */
+	  // Original value of 0 for north is transmitted as 360. */
+	}
+	else {
+	  x = 0;
+	}
 	snprintf (stemp, sizeof(stemp), "%03d", x);
 	memcpy (r->cse, stemp, 3);
 
 	r->slash = '/';
 
 	x = speed;
-	if (x < 0) x = 0;
+	if (x < 0) x = 0;		// would include G_UNKNOWN
 	if (x > 999) x = 999;
 	snprintf (stemp, sizeof(stemp), "%03d", x);
 	memcpy (r->spd, stemp, 3);
@@ -459,8 +489,9 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *		gain	- dB.  Not clear if it is dBi or dBd.
  *		dir	- Directivity: N, NE, etc., omni.
  *
- * 		course	- Degress, 1 - 360.  0 means none or unknown.
- *		speed	- knots.
+ *		course	- Degress, 0 - 360 (360 equiv. to 0).
+ *			  Use G_UNKNOWN for none or unknown.
+ *		speed	- knots.		// TODO:  should distinguish unknown(not revevant) vs. known zero.
  *
  * 	 	freq	- MHz.
  *		tone	- Hz.
@@ -486,6 +517,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *		Afer that, 
  *
  *----------------------------------------------------------------*/
+
 
 typedef struct aprs_ll_pos_s {
 	  char dti;			/* ! or = */
@@ -533,10 +565,10 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 /* Optional data extension. (singular) */
 /* Can't have both course/speed and PHG.  Former gets priority. */
 
-	  if (course || speed) {
+	  if (course != G_UNKNOWN || speed > 0) {
 	    result_len += cse_spd_data_extension (course, speed, presult + result_len);
 	  }
-	  else if (power || height || gain) {
+	  else if (power > 0 || height > 0 || gain > 0) {
  	    result_len += phg_data_extension (power, height, gain, dir, presult + result_len);
 	  }
 	}
@@ -598,7 +630,8 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *		gain	- dB.  Not clear if it is dBi or dBd.
  *		dir	- Direction: N, NE, etc., omni.
  *
- * 		course	- Degress, 1 - 360.  0 means none or unknown.
+ *		course	- Degress, 0 - 360 (360 equiv. to 0).
+ *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.
  *
  * 	 	freq	- MHz.
@@ -614,7 +647,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *				36 for fixed part,
  *				7 for optional extended data,
  *				~20 for freq, etc.,
- *				comment ...
+ *				comment could be very long...
  *
  * Returns:     Number of characters in result.
  *
@@ -694,10 +727,10 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 /* Optional data extension. (singular) */
 /* Can't have both course/speed and PHG.  Former gets priority. */
 
-	  if (course || speed) {
+	  if (course != G_UNKNOWN || speed > 0) {
 	    result_len += cse_spd_data_extension (course, speed, presult + result_len);
 	  }
-	  else if (power || height || gain) {
+	  else if (power > 0 || height > 0 || gain > 0) {
  	    result_len += phg_data_extension (power, height, gain, dir, presult + result_len);
 	  }
 	}
@@ -746,93 +779,97 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 int main (int argc, char *argv[])
 {
 	char result[100];
-
+	int errors = 0;
 
 
 /***********  Position  ***********/
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result, sizeof(result));
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+		0, 0, 0, NULL, G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!4234.61ND07126.47W&") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with PHG. */
+// TODO:  Need to test specifying some but not all.
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result, sizeof(result));
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+		50, 100, 6, "N", G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with freq. */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with course/speed, freq, and comment! */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* Course speed, no tone, + offset */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* Course speed, no tone, + offset + altitude */
 
-	encode_position (0, 42+34.61/60, -(71+26.47/60), 12345, 'D', '&', 
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 12345, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 /A=012345River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 /A=012345River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
+// TODO: try boundary conditions of course = 0, 359, 360
 
 /*********** Compressed position. ***********/
 
-	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result, sizeof(result));
+	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+		0, 0, 0, NULL, G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!D8yKC<Hn[&  !") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!D8yKC<Hn[&  !") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 
 /* with PHG. In this case it is converted to precomputed radio range.  TODO: check on this.  Is 27.4 correct? */
 
-	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
-		50, 100, 6, "N", 0, 0, 0, 0, 0, NULL, result, sizeof(result));
+	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+		50, 100, 6, "N", G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!D8yKC<Hn[&{CG") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, "!D8yKC<Hn[&{CG") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
-/* with course/speed, freq, and comment!  TODO:  check on this 55 knots should be 63 MPH.  we get 62. */
+/* with course/speed, freq, and comment!  Roundoff. 55 knots should be 63 MPH.  we get 62. */
 
-	encode_position (1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&', 
+	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!D8yKC<Hn[&  !146.955MHz T074 -060 River flooding") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
-
-//$ echo 'A>B:!D8yKC<Hn[&NUG146.955MHz T074 -060 River flooding' | decode_aprs
-
-//A>B:!D8yKC<Hn[&NUG146.955MHz T074 -060 River flooding
-//Position, I=Igte IGate R=RX T=1hopTX 2=2hopTX w/overlay D
-//N 42 34.6100, W 071 26.4700, 62 MPH, course 180, 146.955 MHz, -600k, PL 74.4
-// River flooding
+	if (strcmp(result, "!D8yKC<Hn[&NUG146.955MHz T074 -060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 // TODO:  test alt; cs+alt
 
+
 /*********** Object. ***********/
 
-	encode_object ("WB1GOF-C", 0, 0, 42+34.61/60, -(71+26.47/60), 'D', '&', 
-		0, 0, 0, NULL, 0, 0, 0, 0, 0, NULL, result, sizeof(result));
+	encode_object ("WB1GOF-C", 0, 0, 42+34.61/60, -(71+26.47/60), 'D', '&',
+		0, 0, 0, NULL, G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, ";WB1GOF-C *111111z4234.61ND07126.47W&") != 0) dw_printf ("ERROR!  line %d\n", __LINE__);
+	if (strcmp(result, ";WB1GOF-C *111111z4234.61ND07126.47W&") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 // TODO: need more tests.
 
-	return(0);
+	if (errors > 0) {
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Encode APRS test FAILED with %d errors.\n", errors);
+	  exit (EXIT_FAILURE);
+	}
+
+	text_color_set (DW_COLOR_REC);
+	dw_printf ("Encode APRS test PASSED with no errors.\n");
+	exit (EXIT_SUCCESS);
 
 }  /* end main */
 

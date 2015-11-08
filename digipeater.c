@@ -532,6 +532,9 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  * Returns:	None.
  *
  * Description:	TODO...
+ *
+ *		Initial reports were favorable.
+ *		Should document what this is all about if there is still interest...
  *		
  *------------------------------------------------------------------------------*/
 
@@ -569,7 +572,7 @@ void digi_regen (int from_chan, packet_t pp)
  *
  *------------------------------------------------------------------------*/
 
-#if TEST
+#if DIGITEST
 
 static char mycall[] = "WB2OSZ-9";
 
@@ -594,6 +597,7 @@ static void test (char *in, char *out)
 	int info_len;
 	unsigned char frame[AX25_MAX_PACKET_LEN];
 	int frame_len;
+	alevel_t alevel;
 
 	dw_printf ("\n");
 
@@ -606,7 +610,7 @@ static void test (char *in, char *out)
 
 	ax25_format_addrs (pp, rec);
 	info_len = ax25_get_info (pp, &pinfo);
-	strcat (rec, (char*)pinfo);
+	strlcat (rec, (char*)pinfo, sizeof(rec));
 
 	if (strcmp(in, rec) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -621,11 +625,15 @@ static void test (char *in, char *out)
 	frame_len = ax25_pack (pp, frame);
 	ax25_delete (pp);
 
-	pp = ax25_from_frame (frame, frame_len, 50);
+	alevel.rec = 50;
+	alevel.mark = 50;
+	alevel.space = 50;
+
+	pp = ax25_from_frame (frame, frame_len, alevel);
 	assert (pp != NULL);
 	ax25_format_addrs (pp, rec);
 	info_len = ax25_get_info (pp, &pinfo);
-	strcat (rec, (char*)pinfo);
+	strlcat (rec, (char*)pinfo, sizeof(rec));
 
 	if (strcmp(in, rec) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -648,11 +656,11 @@ static void test (char *in, char *out)
 	  dedupe_remember (result, 0);
 	  ax25_format_addrs (result, xmit);
 	  info_len = ax25_get_info (result, &pinfo);
-	  strcat (xmit, (char*)pinfo);
+	  strlcat (xmit, (char*)pinfo, sizeof(xmit));
 	  ax25_delete (result);
 	}
 	else {
-	  strcpy (xmit, "");
+	  strlcpy (xmit, "", sizeof(xmit));
 	}
 
 	text_color_set(DW_COLOR_XMIT);
@@ -894,7 +902,7 @@ int main (int argc, char *argv[])
  * Filtering integrated with rest of process...
  */
 
-	strcpy (typefilter, "w");
+	strlcpy (typefilter, "w", sizeof(typefilter));
 
 	test (	"N8VIM>APN391,WIDE2-1:$ULTW00000000010E097D2884FFF389DC000102430002033400000000",
 		"N8VIM>APN391,WB2OSZ-9*:$ULTW00000000010E097D2884FFF389DC000102430002033400000000");
@@ -902,7 +910,7 @@ int main (int argc, char *argv[])
 	test (	"AB1OC-10>APWW10,WIDE1-1,WIDE2-1:>FN42er/# Hollis, NH iGate Operational",
 		"");
  
-	strcpy (typefilter, "s");
+	strlcpy (typefilter, "s", sizeof(typefilter));
 
 	test (	"AB1OC-10>APWW10,WIDE1-1,WIDE2-1:>FN42er/# Hollis, NH iGate Operational",
 		"AB1OC-10>APWW10,WB2OSZ-9*,WIDE2-1:>FN42er/# Hollis, NH iGate Operational");
@@ -910,12 +918,12 @@ int main (int argc, char *argv[])
 	test (	"K1ABC-9>TR4R8R,WIDE1-1:`c6LlIb>/`\"4K}_%",
 		"");
 
-	strcpy (typefilter, "up");
+	strlcpy (typefilter, "up", sizeof(typefilter));
 
 	test (	"K1ABC-9>TR4R8R,WIDE1-1:`c6LlIb>/`\"4K}_%",
 		"K1ABC-9>TR4R8R,WB2OSZ-9*:`c6LlIb>/`\"4K}_%");
 
-	strcpy (typefilter, "");
+	strlcpy (typefilter, "", sizeof(typefilter));
 #endif
 
 /* 
@@ -934,6 +942,6 @@ int main (int argc, char *argv[])
 
 } /* end main */
 
-#endif  /* if TEST */
+#endif  /* if DIGITEST */
 
 /* end digipeater.c */

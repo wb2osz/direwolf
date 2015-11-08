@@ -53,7 +53,7 @@
 #include "textcolor.h"
 #include "symbols.h"
 #include "latlong.h"
-//#include "nmea.h"
+#include "dwgpsnmea.h"
 #include "decode_aprs.h"
 #include "telemetry.h"
 
@@ -143,7 +143,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  * Outputs:	A->	g_symbol_table, g_symbol_code,
  *			g_lat, g_lon, 
- *			g_speed, g_course, g_altitude,
+ *			g_speed_mph, g_course, g_altitude_ft,
  *			g_comment
  *			... and many others...
  *
@@ -174,7 +174,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	A->g_lat = G_UNKNOWN;
 	A->g_lon = G_UNKNOWN;
 
-	A->g_speed = G_UNKNOWN;
+	A->g_speed_mph = G_UNKNOWN;
 	A->g_course = G_UNKNOWN;
 
 	A->g_power = G_UNKNOWN;
@@ -182,7 +182,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	A->g_gain = G_UNKNOWN;
 
 	A->g_range = G_UNKNOWN;
-	A->g_altitude = G_UNKNOWN;
+	A->g_altitude_ft = G_UNKNOWN;
 	A->g_freq = G_UNKNOWN;
 	A->g_tone = G_UNKNOWN;
 	A->g_dcs = G_UNKNOWN;
@@ -416,6 +416,11 @@ void decode_aprs_print (decode_aprs_t *A) {
 	if (A->g_power > 0) {
 	  char phg[100];
 
+	  /* Protcol spec doesn't mention whether this is dBd or dBi.  */
+	  /* Clarified later. */
+	  /* http://eng.usna.navy.mil/~bruninga/aprs/aprs11.html */
+	  /* "The Antenna Gain in the PHG format on page 28 is in dBi." */
+
 	  snprintf (phg, sizeof(phg), ", %d W height=%d %ddBi %s", A->g_power, A->g_height, A->g_gain, A->g_directivity);
 	  strlcat (stemp, phg, sizeof(stemp));
 	}
@@ -507,11 +512,11 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  strlcat (stemp, A->g_aprstt_loc, sizeof(stemp));
 	};
 
-	if (A->g_speed != G_UNKNOWN) {
+	if (A->g_speed_mph != G_UNKNOWN) {
 	  char spd[20];
 
 	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
-	  snprintf (spd, sizeof(spd), "%.0f MPH", A->g_speed);
+	  snprintf (spd, sizeof(spd), "%.0f MPH", A->g_speed_mph);
 	  strlcat (stemp, spd, sizeof(stemp));
 	};
 
@@ -523,11 +528,11 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  strlcat (stemp, cse, sizeof(stemp));
 	};
 
-	if (A->g_altitude != G_UNKNOWN) {
+	if (A->g_altitude_ft != G_UNKNOWN) {
 	  char alt[20];
 
 	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
-	  snprintf (alt, sizeof(alt), "alt %.0f ft", A->g_altitude);
+	  snprintf (alt, sizeof(alt), "alt %.0f ft", A->g_altitude_ft);
 	  strlcat (stemp, alt, sizeof(stemp));
 	};
 
@@ -662,7 +667,7 @@ void decode_aprs_print (decode_aprs_t *A) {
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
+ * Outputs:	A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed_mph, A->g_course, A->g_altitude_ft.
  *
  * Description:	Type identifier '=' has APRS messaging.
  *		Type identifier '!' does not have APRS messaging.
@@ -758,7 +763,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
+ * Outputs:	A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed_mph, A->g_course, A->g_altitude_ft.
  *
  * Description:	Type identifier '@' has APRS messaging.
  *		Type identifier '/' does not have APRS messaging.
@@ -850,6 +855,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	  }
 	}
 
+	(void)(ts);	// suppress 'set but not used' warning.
 }
 
 
@@ -862,7 +868,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	??? TBD
+ * Outputs:	A-> ...
  *
  * Description:	APRS recognizes raw ASCII data strings conforming to the NMEA 0183
  *		Version 2.0 specification, originating from navigation equipment such 
@@ -875,286 +881,37 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
  *		VTG Velocity and Track Data
  *		WPL Way Point Location
  *
+ *		We presently recognize only RMC and GGA.
+ *
  * Examples:	$GPGGA,102705,5157.9762,N,00029.3256,W,1,04,2.0,75.7,M,47.6,M,,*62
  *		$GPGLL,2554.459,N,08020.187,W,154027.281,A
  *		$GPRMC,063909,A,3349.4302,N,11700.3721,W,43.022,89.3,291099,13.6,E*52
  *		$GPVTG,318.7,T,,M,35.1,N,65.0,K*69
  *
- *
  *------------------------------------------------------------------*/
 
-static void nmea_checksum (decode_aprs_t *A, char *sent)
-{
-        char *p;
-        char *next;
-        unsigned char cs;
-
-
-// Do we have valid checksum?
-
-        cs = 0;
-        for (p = sent+1; *p != '*' && *p != '\0'; p++) {
-          cs ^= *p;
-        }
-
-        p = strchr (sent, '*');
-        if (p == NULL) {
-	  if ( ! A->g_quiet) {
-	    text_color_set (DW_COLOR_INFO);
-            dw_printf("Missing GPS checksum.\n");
-	  }
-          return;
-        }
-        if (cs != strtoul(p+1, NULL, 16)) {
-	  if ( ! A->g_quiet) {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("GPS checksum error. Expected %02x but found %s.\n", cs, p+1);
-	  }
-          return;
-        }
-        *p = '\0';      // Remove the checksum.
-}
 
 static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
-	char stemp[256];
-	char *ptype;
-	char *next;
-
-
-	strlcpy (A->g_msg_type, "Raw NMEA", sizeof(A->g_msg_type));
-
-	strlcpy (stemp, (char *)info, sizeof(stemp));
-	nmea_checksum (A, stemp);
-
-	next = stemp;
-	ptype = strsep(&next, ",");
-
-	if (strcmp(ptype, "$GPGGA") == 0) 
+	if (strncmp((char*)info, "$GPRMC,", 7) == 0)
 	{
-	  char *ptime;			/* Time, hhmmss[.sss] */
-	  char *plat;			/* Latitude */
-	  char *pns;			/* North/South */
-	  char *plon;			/* Longitude */
-	  char *pew;			/* East/West */
-	  char *pquality;		/* Fix Quality: 0=invalid, 1=GPS, 2=DGPS */
-	  char *pnsat;			/* Number of satellites. */
-	  char *phdop;			/* Horizontal dilution of precision. */
-	  char *paltitude;		/* Altitude, meters above mean sea level. */
-   	  char *pm;			/* "M" = meters */
-					/* Various other stuff... */
+	  float speed_knots = G_UNKNOWN;
 
-
-	  ptime = strsep(&next, ",");	
-	  plat = strsep(&next, ",");
-	  pns = strsep(&next, ",");
-	  plon = strsep(&next, ",");
-	  pew = strsep(&next, ",");
-	  pquality = strsep(&next, ",");
-	  pnsat = strsep(&next, ",");
-	  phdop = strsep(&next, ",");
-	  paltitude = strsep(&next, ",");
-	  pm = strsep(&next, ",");
-
-	  /* Process time??? */
-
-	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
-	    A->g_lat = latitude_from_nmea(plat, pns);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete latitude in sentence.\n");
-	  }
-
-	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
-	    A->g_lon = longitude_from_nmea(plon, pew);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete longitude in sentence.\n");
-	  }
-
-	  if (paltitude != NULL && strlen(paltitude) > 0) {
-	    A->g_altitude = DW_METERS_TO_FEET(atof(paltitude));
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete altitude in sentence.\n");
-	  }
-
+	  (void) dwgpsnmea_gprmc ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &speed_knots, &(A->g_course));
+	  A->g_speed_mph = DW_KNOTS_TO_MPH(speed_knots);
 	}
-	else if (strcmp(ptype, "$GPGLL") == 0)
+	else if (strncmp((char*)info, "$GPGGA,", 7) == 0)
 	{
-	  char *plat;		/* Latitude */
-	  char *pns;		/* North/South */
-	  char *plon;		/* Longitude */
-	  char *pew;		/* East/West */
-				/* optional Time hhmmss[.sss] */
-				/* optional 'A' for data valid */
+	  float alt_meters = G_UNKNOWN;
+	  int num_sat = 0;
 
-	  plat = strsep(&next, ",");
-	  pns = strsep(&next, ",");
-	  plon = strsep(&next, ",");
-	  pew = strsep(&next, ",");
-
-	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
-	    A->g_lat = latitude_from_nmea(plat, pns);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete latitude in sentence.\n");
-	  }
-
-	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
-	    A->g_lon = longitude_from_nmea(plon, pew);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete longitude in sentence.\n");
-	  }
-
+	  (void) dwgpsnmea_gpgga ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &alt_meters, &num_sat);
+	  A->g_altitude_ft = DW_METERS_TO_FEET(alt_meters);
 	}
-	else if (strcmp(ptype, "$GPRMC") == 0)
-	{
-	  //char *ptime, *pstatus, *plat, *pns, *plon, *pew, *pspeed, *ptrack, *pdate;
 
-	  char *ptime;			/* Time, hhmmss[.sss] */
-	  char *pstatus;		/* Status, A=Active (valid position), V=Void */
-	  char *plat;			/* Latitude */
-	  char *pns;			/* North/South */
-	  char *plon;			/* Longitude */
-	  char *pew;			/* East/West */
-	  char *pknots;			/* Speed over ground, knots. */
-	  char *pcourse;		/* True course, degrees. */
-	  char *pdate;			/* Date, ddmmyy */
-					/* Magnetic variation */
-					/* In version 3.00, mode is added: A D E N (see below) */
-					/* Checksum */
+	// TODO (low): add a few other sentence types.
 
-	  ptime = strsep(&next, ",");
-	  pstatus = strsep(&next, ",");	
-	  plat = strsep(&next, ",");
-	  pns = strsep(&next, ",");
-	  plon = strsep(&next, ",");
-	  pew = strsep(&next, ",");
-	  pknots = strsep(&next, ",");
-	  pcourse = strsep(&next, ",");
-	  pdate = strsep(&next, ",");	
-
-	  /* process time ??? date ??? */
-
-	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
-	    A->g_lat = latitude_from_nmea(plat, pns);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete latitude in sentence.\n");
-	  }
-
-	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
-	    A->g_lon = longitude_from_nmea(plon, pew);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete longitude in sentence.\n");
-	  }
-
-	  if (pknots != NULL && strlen(pknots) > 0) {
-	    A->g_speed = DW_KNOTS_TO_MPH(atof(pknots));
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete speed in sentence.\n");
-	  }
-
-	  if (pcourse != NULL && strlen(pcourse) > 0) {
-	    A->g_course = atof(pcourse);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete course in sentence.\n");
-	  }
-
-	}
-	else if (strcmp(ptype, "$GPVTG") == 0)
-	{
-
-	  /* Speed and direction but NO location! */
-
-	  char *ptcourse;		/* True course, degrees. */
-	  char *pt;			/* "T" */
-	  char *pmcourse;		/* Magnetic course, degrees. */
-	  char *pm;			/* "M" */
-	  char *pknots;			/* Ground speed, knots. */
-	  char *pn;			/* "N" = Knots */
-	  char *pkmh;			/* Ground speed, km/hr */
-	  char *pk;			/* "K" = Kilometers per hour */
-	  char *pmode;			/* New in NMEA 0183 version 3.0 */
-					/* Mode: A=Autonomous, D=Differential, */
-	
-	  ptcourse = strsep(&next, ",");
-	  pt = strsep(&next, ",");
-	  pmcourse = strsep(&next, ",");
-	  pm = strsep(&next, ",");
-	  pknots = strsep(&next, ",");
-	  pn = strsep(&next, ",");
-	  pkmh = strsep(&next, ",");
-	  pk = strsep(&next, ",");
-	  pmode	 = strsep(&next, ",");	
-
-	  if (pknots != NULL && strlen(pknots) > 0) {
-	    A->g_speed = DW_KNOTS_TO_MPH(atof(pknots));
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete speed in sentence.\n");
-	  }
-
-	  if (ptcourse != NULL && strlen(ptcourse) > 0) {
-	    A->g_course = atof(ptcourse);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete course in sentence.\n");
-	  }
-
-	}
-	else if (strcmp(ptype, "$GPWPL") == 0)
-	{
-
-	  char *plat;			/* Latitude */
-	  char *pns;			/* North/South */
-	  char *plon;			/* Longitude */
-	  char *pew;			/* East/West */
-	  char *pident;			/* Identifier for Waypoint.  rules??? */
-					/* checksum */
-
-	  plat = strsep(&next, ",");
-	  pns = strsep(&next, ",");
-	  plon = strsep(&next, ",");
-	  pew = strsep(&next, ",");
-	  pident = strsep(&next, ",");
-
-	  if (plat != NULL && strlen(plat) > 0 && pns != NULL && strlen(pns) > 0) {
-	    A->g_lat = latitude_from_nmea(plat, pns);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete latitude in sentence.\n");
-	  }
-
-	  if (plon != NULL && strlen(plon) > 0 && pew != NULL && strlen(pew) > 0) {
-	    A->g_lon = longitude_from_nmea(plon, pew);
-	  }
-	  else {
-	    text_color_set (DW_COLOR_ERROR);
-            dw_printf("Incomplete longitude in sentence.\n");
-	  }
-
-	  /* do something with identifier? */
-
-	}
-}
+} /* end aprs_raw_nmea */
 
 
 
@@ -1535,7 +1292,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	n = ((p->speed_course[0] - 28) * 10) + ((p->speed_course[1] - 28) / 10);
 	if (n >= 800) n -= 800;
 
-	A->g_speed = DW_KNOTS_TO_MPH(n); 
+	A->g_speed_mph = DW_KNOTS_TO_MPH(n);
 
 	n = ((p->speed_course[1] - 28) % 10) * 100 + (p->speed_course[2] - 28);
 	if (n >= 400) n -= 400;
@@ -1627,16 +1384,16 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 	if (plast > pfirst && pfirst[3] == '}') {
 
-	  A->g_altitude = DW_METERS_TO_FEET((pfirst[0]-33)*91*91 + (pfirst[1]-33)*91 + (pfirst[2]-33) - 10000);
+	  A->g_altitude_ft = DW_METERS_TO_FEET((pfirst[0]-33)*91*91 + (pfirst[1]-33)*91 + (pfirst[2]-33) - 10000);
 
 	  if ( ! isdigit91(pfirst[0]) || ! isdigit91(pfirst[1]) || ! isdigit91(pfirst[2])) 
 	  {
 	    if ( ! A->g_quiet) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.\n");
-	      dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude);
+	      dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude_ft);
 	    }
-	    A->g_altitude = G_UNKNOWN;
+	    A->g_altitude_ft = G_UNKNOWN;
 	  }
 	  
 	  pfirst += 4;
@@ -1776,7 +1533,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	A->g_object_name, A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
+ * Outputs:	A->g_object_name, A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed_mph, A->g_course, A->g_altitude_ft.
  *
  * Description:	Message has a 9 character object name which could be quite different than
  *		the source station.
@@ -1878,7 +1635,9 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	  }
 	}
 
-}
+	(void)(ts);
+
+} /* end aprs_object */
 
 
 /*------------------------------------------------------------------
@@ -1890,7 +1649,7 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *
- * Outputs:	A->g_object_name, A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed, A->g_course, A->g_altitude.
+ * Outputs:	A->g_object_name, A->g_lat, A->g_lon, A->g_symbol_table, A->g_symbol_code, A->g_speed_mph, A->g_course, A->g_altitude_ft.
  *
  * Description:	An "item" is very much like an "object" except 
  *
@@ -1928,13 +1687,13 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	} *q;
 
 
-	time_t ts = 0;
 	int i;
 	char *ppos;
 
 
 	p = (struct aprs_item_s *)info;
 	q = (struct aprs_compressed_item_s *)info;
+	(void)(q);
 
 	memset (A->g_name, 0, sizeof(A->g_name));
 	i = 0;
@@ -2209,10 +1968,13 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	      erp = (p - '0') * (p - '0') * 10;
 	    }
 
-	// TODO:  put result somewhere.
+	// TODO (low):  put result somewhere.
 	// could use A->g_directivity and need new variable for erp.
 
 	    *hp = '\0';
+
+	    (void)(beam);
+	    (void)(erp);
 	  }
 	}
 
@@ -2406,10 +2168,10 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
 
 static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet)
 {
-	char query_type[20];		/* Does the query type always need to be exactly 5 characters? */
+	//char query_type[20];		/* Does the query type always need to be exactly 5 characters? */
 					/* If not, how would we know where the extra optional information starts? */
 
-	char callsign[AX25_MAX_ADDR_LEN];
+	//char callsign[AX25_MAX_ADDR_LEN];
 
 	//if (strlen(query) < 5) ...
 
@@ -2428,7 +2190,8 @@ static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char
  *		ilen 	- Information field length.
  *		quiet	- suppress error messages.
  *
- * Outputs:	???
+ * Outputs:	A->g_telemetry
+ *		A->g_comment
  *
  * Description:	TBD.
  *
@@ -2444,7 +2207,7 @@ static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet)
 
 	strlcpy (A->g_msg_type, "Telemetry", sizeof(A->g_msg_type));
 
-	telemetry_data_original (A->g_src, info, quiet, A->g_telemetry, A->g_comment);
+	telemetry_data_original (A->g_src, info, quiet, A->g_telemetry, sizeof(A->g_telemetry), A->g_comment, sizeof(A->g_comment));
 
 
 } /* end aprs_telemetry */
@@ -2542,7 +2305,7 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
 
 	strlcpy (A->g_msg_type, "Positionless Weather Report", sizeof(A->g_msg_type));
 
-	time_t ts = 0;
+	//time_t ts = 0;
 
 
 	p = (struct aprs_positionless_weather_s *)info;
@@ -2569,7 +2332,7 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
  * TODO: call this context instead and have 3 enumerated values.
  *
  * Global In:	A->g_course	- Wind info for compressed location.
- *		A->g_speed
+ *		A->g_speed_mph
  *
  * Outputs:	A->g_weather
  *
@@ -2578,7 +2341,7 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
  *		For human-readable locations, we expect wind direction
  *		and speed in a format like this:  999/999.
  *		For compressed location, this has already been 
- * 		processed and put in A->g_course and A->g_speed.
+ * 		processed and put in A->g_course and A->g_speed_mph.
  *		Otherwise, for positionless weather data, the 
  *		wind is in the form c999s999.
  *
@@ -2661,11 +2424,11 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	  }
 	  if (sscanf (wp+4, "%3d", &n))
 	  {
-	    A->g_speed = DW_KNOTS_TO_MPH(n);  /* yes, in knots */
+	    A->g_speed_mph = DW_KNOTS_TO_MPH(n);  /* yes, in knots */
 	  }
 	  wp += 7;
 	}
-	else if ( A->g_speed == G_UNKNOWN) {
+	else if ( A->g_speed_mph == G_UNKNOWN) {
 
 	  if ( ! getwdata (&wp, 'c', 3, &A->g_course)) {
 	    if ( ! A->g_quiet) {
@@ -2673,7 +2436,7 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	      dw_printf("Didn't find wind direction in form c999.\n");
 	    }
 	  }
-	  if ( ! getwdata (&wp, 's', 3, &A->g_speed)) {	/* MPH here */
+	  if ( ! getwdata (&wp, 's', 3, &A->g_speed_mph)) {	/* MPH here */
 	    if ( ! A->g_quiet) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Didn't find wind speed in form s999.\n");
@@ -2684,9 +2447,9 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 // At this point, we should have the wind direction and speed
 // from one of three methods.
 
-	if (A->g_speed != G_UNKNOWN) {
+	if (A->g_speed_mph != G_UNKNOWN) {
 
-	  snprintf (A->g_weather, sizeof(A->g_weather), "wind %.1f mph", A->g_speed);
+	  snprintf (A->g_weather, sizeof(A->g_weather), "wind %.1f mph", A->g_speed_mph);
 	  if (A->g_course != G_UNKNOWN) {
 	    char ctemp[40];
 	    snprintf (ctemp, sizeof(ctemp), ", direction %.0f", A->g_course);
@@ -2695,7 +2458,7 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	}
 
 	/* We don't want this to show up on the location line. */
-	A->g_speed = G_UNKNOWN;
+	A->g_speed_mph = G_UNKNOWN;
 	A->g_course = G_UNKNOWN;
 
 /*
@@ -3041,7 +2804,6 @@ static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen)
 
 static void third_party_header (decode_aprs_t *A, char *info, int ilen) 
 {
-	int n;
 
 	strlcpy (A->g_msg_type, "Third Party Header", sizeof(A->g_msg_type));
 
@@ -3095,7 +2857,7 @@ static void decode_position (decode_aprs_t *A, position_t *ppos)
  *
  *		One of the following:
  *			A->g_course & A->g_speeed
- *			A->g_altitude
+ *			A->g_altitude_ft
  *			A->g_range
  *
  * Description:	The compressed position provides resolution of around ???
@@ -3169,7 +2931,7 @@ static void decode_compressed_position (decode_aprs_t *A, compressed_position_t 
 	  ; /* ignore other two bytes */
 	}
 	else if (((pcpos->t - 33) & 0x18) == 0x10) {
-	  A->g_altitude = pow(1.002, (pcpos->c - 33) * 91 + pcpos->s - 33);
+	  A->g_altitude_ft = pow(1.002, (pcpos->c - 33) * 91 + pcpos->s - 33);
 	}
 	else if (pcpos->c == '{')
 	{
@@ -3179,7 +2941,7 @@ static void decode_compressed_position (decode_aprs_t *A, compressed_position_t 
 	{
 	  /* For a weather station, this is wind information. */
 	  A->g_course = (pcpos->c - 33) * 4;
-	  A->g_speed = DW_KNOTS_TO_MPH(pow(1.08, pcpos->s - 33) - 1.0);
+	  A->g_speed_mph = DW_KNOTS_TO_MPH(pow(1.08, pcpos->s - 33) - 1.0);
 	}
 
 }
@@ -3720,7 +3482,7 @@ int get_maidenhead (decode_aprs_t *A, char *p)
  * Outputs:	One or more of the following, depending the data found:
  *	
  *			A->g_course
- *			A->g_speed
+ *			A->g_speed_mph
  *			A->g_power 
  *			A->g_height 
  *			A->g_gain 
@@ -3771,7 +3533,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	  }
 	  if (sscanf (pdext+4, "%3d", &n))
 	  {
-	    A->g_speed = DW_KNOTS_TO_MPH(n);
+	    A->g_speed_mph = DW_KNOTS_TO_MPH(n);
 	  }
 
 	  /* Bearing and Number/Range/Quality? */
@@ -3878,8 +3640,11 @@ static const char *search_locations[] = {
 	(const char *) NULL
 };
 
-static int tocall_cmp (const struct tocalls_s *x, const struct tocalls_s *y) 
+static int tocall_cmp (const void *px, const void *py)
 {
+	const struct tocalls_s *x = (struct tocalls_s *)px;
+	const struct tocalls_s *y = (struct tocalls_s *)py;
+
 	if (x->len != y->len) return (y->len - x->len);
 	return (strcmp(x->prefix, y->prefix));
 }
@@ -3933,7 +3698,7 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	        *p-- = '\0';
 	      }
 
-	      // printf("debug: %s\n", stuff);
+	      // dw_printf("debug: %s\n", stuff);
 
 	      if (stuff[0] == ' ' && 
 		  stuff[4] == ' ' &&
@@ -4065,7 +3830,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		clen		- Length of comment or -1 to take it all.
  *
  * Outputs:	A->g_telemetry	- Base 91 telemetry |ss1122|
- *		A->g_altitude	- from /A=123456
+ *		A->g_altitude_ft	- from /A=123456
  *		A->g_lat	- Might be adjusted from !DAO!
  *		A->g_lon	- Might be adjusted from !DAO!
  *		A->g_aprstt_loc	- Private extension to !DAO!
@@ -4381,7 +4146,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  }
 	  else if (regexec (&std_toff_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
-	    printf ("NO tone\n");
+	    dw_printf ("NO tone\n");
 	    A->g_tone = 0;
 
 	    strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
@@ -4390,8 +4155,6 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  else if (regexec (&std_dcs_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
 	    char sttemp[10];	/* three octal digits */
-	    int f;
-	    int i;
 
 	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
 
@@ -4403,7 +4166,6 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  else if (regexec (&std_offset_re, A->g_comment, MAXMATCH, match, 0) == 0) {
 
 	    char sttemp[10];	/* includes leading sign */
-	    int f;
 
 	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
 
@@ -4416,7 +4178,6 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
 	    char sttemp[10];	/* should be two digits */
 	    char sutemp[10];	/* m for miles or k for km */
-	    int f;
 
 	    substr_se (sttemp, A->g_comment, match[1].rm_so, match[1].rm_eo);
 	    substr_se (sutemp, A->g_comment, match[2].rm_so, match[2].rm_eo);
@@ -4453,7 +4214,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
           //dw_printf("compressed telemetry data = \"%s\"\n", tdata);
 
-	  telemetry_data_base91 (A->g_src, tdata, A->g_telemetry);
+	  telemetry_data_base91 (A->g_src, tdata, A->g_telemetry, sizeof(A->g_telemetry));
 
 	  strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
 	  strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
@@ -4558,7 +4319,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  strlcpy (temp, A->g_comment + match[0].rm_eo, sizeof(temp));
 
 	  A->g_comment[match[0].rm_eo] = '\0';
-          A->g_altitude = atoi(A->g_comment + match[0].rm_so + 3);
+          A->g_altitude_ft = atoi(A->g_comment + match[0].rm_so + 3);
 
 	  strlcpy (A->g_comment + match[0].rm_so, temp, sizeof(A->g_comment)-match[0].rm_so);
 	}
@@ -4586,7 +4347,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	      (x >= 902 && x <= 928)) { 
 
 	    if ( ! A->g_quiet) {
-	      sprintf (good, "%07.3fMHz", x);
+	      snprintf (good, sizeof(good), "%07.3fMHz", x);
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("\"%s\" in comment looks like a frequency in non-standard format.\n", bad);
 	      dw_printf("For most systems to recognize it, use exactly this form \"%s\" at beginning of comment.\n", good);
@@ -4680,7 +4441,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  *
  * Description:	Compile like this to make a standalone test program.
  *
- *		gcc -o decode_aprs -DTEST decode_aprs.c ax25_pad.c	
+ *		gcc -o decode_aprs -DDECAMAIN decode_aprs.c ax25_pad.c ...
  *
  *		./decode_aprs < decode_aprs.txt
  *
@@ -4709,7 +4470,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  *
  *------------------------------------------------------------------*/
 
-#if TEST
+#if DECAMAIN
 
 /* Stub for stand-alone decoder. */
 
@@ -4809,6 +4570,6 @@ int main (int argc, char *argv[])
 	return (0);
 }
 
-#endif /* TEST */
+#endif /* DECAMAIN */
 
 /* end decode_aprs.c */

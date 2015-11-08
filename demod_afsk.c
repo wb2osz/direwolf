@@ -72,7 +72,7 @@
 /* Should help with microcomputer platform. */
 
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline float z (float x, float y)
 {
         x = fabsf(x);
@@ -88,7 +88,7 @@ static inline float z (float x, float y)
 
 /* Add sample to buffer and shift the rest down. */
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline void push_sample (float val, float *buff, int size)
 {
 	memmove(buff+1,buff,(size-1)*sizeof(float));
@@ -98,7 +98,7 @@ static inline void push_sample (float val, float *buff, int size)
 
 /* FIR filter kernel. */
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline float convolve (const float *__restrict__ data, const float *__restrict__ filter, int filter_size)
 {
 	float sum = 0.0f;
@@ -113,10 +113,12 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	float *d = __builtin_assume_aligned(data, 16);
 	float *f = __builtin_assume_aligned(filter, 16);
 
+#pragma GCC ivdep
 	for (j=0; j<filter_size; j++) {
 	    sum += f[j] * d[j];
 	}
 #else
+#pragma GCC ivdep				// ignored until gcc 4.9
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}
@@ -127,7 +129,7 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 /* Automatic gain control. */
 /* Result should settle down to 1 unit peak to peak.  i.e. -0.5 to +0.5 */
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline float agc (float in, float fast_attack, float slow_decay, float *ppeak, float *pvalley)
 {
 	if (in >= *ppeak) {
@@ -795,7 +797,8 @@ static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator
 __attribute__((hot))
 void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
 {
-	float fsam, abs_fsam;
+	float fsam;
+	//float abs_fsam;
 	float m_sum1, m_sum2, s_sum1, s_sum2;
 	float m_amp, s_amp;
 	float m_norm, s_norm;
@@ -806,7 +809,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 #endif
 
 
-	int j;
+	//int j;
 	int demod_data;
 
 
@@ -827,7 +830,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 	fsam = sam / 16384.0f;
 
-	abs_fsam = fsam >= 0.0f ? fsam : -fsam;
+	//abs_fsam = fsam >= 0.0f ? fsam : -fsam;
 
 
 /*
@@ -1049,7 +1052,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	  
 	  if (demod_log_fp == NULL) {
 	    seq++;
-	    sprintf (fname, "demod/%04d.csv", seq);
+	    snprintf (fname, sizeof(fname), "demod/%04d.csv", seq);
 	    if (seq == 1) mkdir ("demod", 0777);
 
 	    demod_log_fp = fopen (fname, "w");

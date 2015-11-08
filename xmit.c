@@ -59,13 +59,6 @@
 #include <math.h>
 #include <errno.h>
 
-//#include <sys/time.h>
-//#include <time.h>
-
-//#if __WIN32__
-//#include <windows.h>
-//#endif
-
 #include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
@@ -449,7 +442,7 @@ static void * xmit_thread (void *arg)
 		    ssid = ax25_get_ssid(pp, AX25_DESTINATION);
 	 	  }
 	 	  else {
-		    strcpy (dest, "");
+		    strlcpy (dest, "", sizeof(dest));
 	          }
 
 		  if (strcmp(dest, "SPEECH") == 0) {
@@ -852,16 +845,16 @@ int xmit_speak_it (char *script, int c, char *orig_msg)
 
 /* Remove any quotes because it will mess up command line argument parsing. */
 
-	strcpy (msg, orig_msg);
+	strlcpy (msg, orig_msg, sizeof(msg));
 
 	for (p=msg; *p!='\0'; p++) {
 	  if (*p == '"') *p = ' ';
 	}
 
 #if __WIN32__
-	sprintf (cmd, "%s %d \"%s\" >nul", script, c, msg);
+	snprintf (cmd, sizeof(cmd), "%s %d \"%s\" >nul", script, c, msg);
 #else
-	sprintf (cmd, "%s %d \"%s\"", script, c, msg);
+	snprintf (cmd, sizeof(cmd), "%s %d \"%s\"", script, c, msg);
 #endif
 
 	//text_color_set(DW_COLOR_DEBUG);
@@ -878,7 +871,7 @@ int xmit_speak_it (char *script, int c, char *orig_msg)
 	  dw_printf ("Failed to run text-to-speech script, %s\n", script);
 
 	  ignore = getcwd (cwd, sizeof(cwd));
-	  strcpy (path, getenv("PATH"));
+	  strlcpy (path, getenv("PATH"), sizeof(path));
 
 	  dw_printf ("CWD = %s\n", cwd);
 	  dw_printf ("PATH = %s\n", path);

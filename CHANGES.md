@@ -3,6 +3,22 @@
 
 ----------
 
+## Version 1.3  -- Development snapshot G  --  November 2015 ##
+
+### New Feature: ###
+
+- GPS Tracker beacons are now available for the Windows version.  Previously this was only in the Linux version.
+
+- Implemented AGW network protocol 'M' message for sending UNPROTO information without digipeater path.
+
+### Bugs Fixed: ###
+
+- Tracker beacons were not always updating the location properly.
+
+- In Mac OSX version:  Assertion failed: (adev[a].inbuf_size_in_bytes >= 100 && adev[a].inbuf_size_in_bytes <= 32768), function audio_get, file audio_portaudio.c, line 917.
+
+----------
+
 ## Version 1.3  -- Development snapshot F  --  September 2015 ##
 
 ### New Feature: ###

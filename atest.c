@@ -141,7 +141,11 @@ static int decimate = 0;		/* Reduce that sampling rate if set. */
 
 static struct audio_s my_audio_config;
 
-static int error_if_less_than = 0;	/* Exit with error status if this minimum not reached. */
+static int error_if_less_than = -1;	/* Exit with error status if this minimum not reached. */
+					/* Can be used to check that performance has not decreased. */
+
+static int error_if_greater_than = -1;	/* Exit with error status if this maximum exceeded. */
+					/* Can be used to check that duplicate removal is not broken. */
 
 
 
@@ -161,6 +165,8 @@ extern float space_gain[MAX_SUBCHANS];
 static void usage (void);
 
 
+static int decode_only = 0;		/* Set to 0 or 1 to decode only one channel.  2 for both.  */
+
 
 int main (int argc, char *argv[])
 {
@@ -169,7 +175,6 @@ int main (int argc, char *argv[])
 	int c;
 	int channel;
 	time_t start_time;
-
 
 
 #if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
@@ -245,7 +250,7 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[channel].space_freq = DEFAULT_SPACE_FREQ;		
 	  my_audio_config.achan[channel].baud = DEFAULT_BAUD;	
 
-	  strcpy (my_audio_config.achan[channel].profiles, "E");	
+	  strlcpy (my_audio_config.achan[channel].profiles, "E", sizeof(my_audio_config.achan[channel].profiles));
  		
 	  my_audio_config.achan[channel].num_freq = 1;				
 	  my_audio_config.achan[channel].offset = 0;	
@@ -261,7 +266,7 @@ int main (int argc, char *argv[])
 	}
 
 	while (1) {
-          int this_option_optind = optind ? optind : 1;
+          //int this_option_optind = optind ? optind : 1;
           int option_index = 0;
           static struct option long_options[] = {
             {"future1", 1, 0, 0},
@@ -272,7 +277,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "B:P:D:F:e:",
+          c = getopt_long(argc, argv, "B:P:D:F:L:G:012",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -297,12 +302,13 @@ int main (int argc, char *argv[])
                 my_audio_config.achan[0].modem_type = MODEM_AFSK;
                 my_audio_config.achan[0].mark_freq = 1600;
                 my_audio_config.achan[0].space_freq = 1800;
-	        strcpy (my_audio_config.achan[0].profiles, "D");	      }
+	        strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	      }
 	      else if (my_audio_config.achan[0].baud > 2400) {
                 my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
                 my_audio_config.achan[0].mark_freq = 0;
                 my_audio_config.achan[0].space_freq = 0;
-	        strcpy (my_audio_config.achan[0].profiles, " ");	// avoid getting default later.
+	        strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
                 dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
 	      }
 	      else {
@@ -315,7 +321,7 @@ int main (int argc, char *argv[])
 	    case 'P':				/* -P for modem profile. */
 
 	      dw_printf ("Demodulator profile set to \"%s\"\n", optarg);
-	      strcpy (my_audio_config.achan[0].profiles, optarg); 
+	      strlcpy (my_audio_config.achan[0].profiles, optarg, sizeof(my_audio_config.achan[0].profiles)); 
 	      break;	
 
 	    case 'D':				/* -D reduce sampling rate for lower CPU usage. */
@@ -343,10 +349,30 @@ int main (int argc, char *argv[])
 	      }
 	      break;	
 
-	    case 'e':				/* -e error if less than this number decoded. */
+	    case 'L':				/* -L error if less than this number decoded. */
 
 	      error_if_less_than = atoi(optarg);
 	      break;	
+
+	    case 'G':				/* -G error if greater than this number decoded. */
+
+	      error_if_greater_than = atoi(optarg);
+	      break;
+
+	     case '0':				/* channel 0, left from stereo */
+
+	       decode_only = 0;
+	       break;
+
+	     case '1':				/* channel 1, right from stereo */
+
+	       decode_only = 1;
+	       break;
+
+	     case '2':				/* decode both from stereo */
+
+	       decode_only = 2;
+	       break;
 
              case '?':
 
@@ -363,6 +389,9 @@ int main (int argc, char *argv[])
 	    }
         }
     
+	memcpy (&my_audio_config.achan[1], &my_audio_config.achan[0], sizeof(my_audio_config.achan[0]));
+
+
 	if (optind >= argc) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Specify .WAV file name on command line.\n");
@@ -386,6 +415,7 @@ int main (int argc, char *argv[])
  */
 
         err= fread (&header, (size_t)12, (size_t)1, fp);
+	(void)(err);
 
 	if (strncmp(header.riff, "RIFF", 4) != 0 || strncmp(header.wave, "WAVE", 4) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -421,6 +451,7 @@ int main (int argc, char *argv[])
 	  exit(1);
 	}
 
+	// TODO: Should have proper message, not abort.
 	assert (format.nchannels == 1 || format.nchannels == 2);
 	assert (format.wbitspersample == 8 || format.wbitspersample == 16);
 
@@ -462,13 +493,10 @@ int main (int argc, char *argv[])
             audio_sample = demod_get_sample (ACHAN2ADEV(c));
 
             if (audio_sample >= 256 * 256)
-              e_o_f = 1;
+               e_o_f = 1;
 
-#define ONE_CHAN 1              /* only use one audio channel. */
-
-#if ONE_CHAN
-            if (c != 0) continue;
-#endif
+            if (decode_only == 0 && c != 0) continue;
+            if (decode_only == 1 && c != 1) continue;
 
             multi_modem_process_sample(c,audio_sample);
           }
@@ -495,9 +523,14 @@ int main (int argc, char *argv[])
 #endif
 	dw_printf ("%d packets decoded in %d seconds.\n", packets_decoded, (int)(time(NULL) - start_time));
 
-	if (packets_decoded < error_if_less_than) {
+	if (error_if_less_than != -1 && packets_decoded < error_if_less_than) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\n * * * TEST FAILED to achieve minimum of %d * * * \n", error_if_less_than);
+	  dw_printf ("\n * * * TEST FAILED: number decoded is less than %d * * * \n", error_if_less_than);
+	  exit (1);
+	}
+	if (error_if_greater_than != -1 && packets_decoded > error_if_greater_than) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\n * * * TEST FAILED: number decoded is greater than %d * * * \n", error_if_greater_than);
 	  exit (1);
 	}
 
@@ -564,11 +597,10 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	unsigned char *pinfo;
 	int info_len;
 	int h;
-	char heard[20];
+	char heard[AX25_MAX_ADDR_LEN];
 	char alevel_text[AX25_ALEVEL_TO_TEXT_SIZE];
 
 	packets_decoded++;
-
 
 	ax25_format_addrs (pp, stemp);
 
@@ -585,7 +617,7 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	if (ax25_get_num_addr(pp) == 0) {
 	  /* Not AX.25. No station to display below. */
 	  h = -1;
-	  strcpy (heard, "");
+	  strlcpy (heard, "", sizeof(heard));
 	}
 	else {
 	  h = ax25_get_heard(pp);
@@ -675,6 +707,10 @@ static void usage (void) {
 	dw_printf ("\n");
 	dw_printf ("        -P m   Select  the  demodulator  type such as A, B, C, D (default for 300 baud),\n");
 	dw_printf ("               E (default for 1200 baud), F, A+, B+, C+, D+, E+, F+.\n");
+	dw_printf ("\n");
+	dw_printf ("        -0     Use channel 0 (left) of stereo audio (default).\n");
+	dw_printf ("        -1     use channel 1 (right) of stereo audio.\n");
+	dw_printf ("        -1     decode both channels of stereo audio.\n");
 	dw_printf ("\n");
 	dw_printf ("        wav-file-in is a WAV format audio file.\n");
 	dw_printf ("\n");

@@ -1,4 +1,4 @@
-APRS SYMBOLS (Icons)                                        28 Aug 2014
+APRS SYMBOLS (Icons)                                        23 Jun 2015
 -----------------------------------------------------------------------
                                                                  WB4APR
 
@@ -28,6 +28,7 @@ http://aprs.org/symbols/symbols-background.txt
 
 UPDATE CHRONOLOGY:
 
+23 Jun 15: Changed Aircraft to SSID-11 and Human to SSID-7
 28 Aug 14: Added notation on newly availble BASE codes (begun in 2007)
            Old WX versions of these: Bb{*:DFegJp were moved to ovlays
            Expanded #w Flooding to include Avalanches, Mud/Landslides
@@ -178,7 +179,7 @@ for the stand-alone trackers described above.
 /$ BE  PHONE                     \$  OEO Bank or ATM  (green box) 
 /% BF  DX CLUSTER                \%  OFO Power Plant with overlay
 /& BG  HF GATEway                \&  OG# I=Igte R=RX T=1hopTX 2=2hopTX
-/' BH  Small AIRCRAFT (SSID = 7) \'  OHO Crash (& now Incident sites)
+/' BH  Small AIRCRAFT (SSID-11)  \'  OHO Crash (& now Incident sites)
 /( BI  Mobile Satellite Station  \(  OIO CLOUDY (other clouds w ovrly)
 /) BJ  Wheelchair (handicapped)  \)  OJO Firenet MEO, MODIS Earth Obs.
 /* BK  SnowMobile                \*  OK  AVAIL (SNOW moved to ` ovly S)
@@ -203,9 +204,9 @@ for the stand-alone trackers described above.
 /9 P9  TBD (as mobiles at events)\9  A9  Gas Station (blue pump)  
 /: MR  FIRE                      \:  NR  AVAIL (Hail ==> ` ovly H)                    
 /; MS  Campground (Portable ops) \;  NSO Park/Picnic + overlay events 
-/< MT  Motorcycle     (SSID =10) \<  NTO ADVISORY (one WX flag)
+/< MT  Motorcycle     (SSID-10)  \<  NTO ADVISORY (one WX flag)
 /= MU  RAILROAD ENGINE           \=  NUO APRStt Touchtone (DTMF users)
-/> MV  CAR            (SSID = 9) \>  NV# OVERLAYED CARs & Vehicles
+/> MV  CAR            (SSID-9)   \>  NV# OVERLAYED CARs & Vehicles
 /? MW  SERVER for Files          \?  NW  INFO Kiosk  (Blue box with ?)
 /@ MX  HC FUTURE predict (dot)   \@  NX  HURICANE/Trop-Storm
 /A PA  Aid Station               \A  AA# overlayBOX DTMF & RFID & XO
@@ -222,19 +223,19 @@ for the stand-alone trackers described above.
 /L PL  PC user (Jan 03)          \L  AL  Lighthouse                     
 /M PM  MacAPRS                   \M  AMO MARS (A=Army,N=Navy,F=AF) 
 /N PN  NTS Station               \N  AN  Navigation Buoy          
-/O PO  BALLOON        (SSID =11) \O  AO  Overlay Balloon (Rocket = \O)
+/O PO  BALLOON        (SSID-11)  \O  AO  Overlay Balloon (Rocket = \O)
 /P PP  Police                    \P  AP  Parking                    
 /Q PQ  TBD                       \Q  AQ  QUAKE                       
-/R PR  REC. VEHICLE   (SSID =13) \R  ARO Restaurant                   
+/R PR  REC. VEHICLE   (SSID-13)  \R  ARO Restaurant                   
 /S PS  SHUTTLE                   \S  AS  Satellite/Pacsat
 /T PT  SSTV                      \T  AT  Thunderstorm        
-/U PU  BUS            (SSID = 2) \U  AU  SUNNY                       
+/U PU  BUS            (SSID-2)   \U  AU  SUNNY                       
 /V PV  ATV                       \V  AV  VORTAC Nav Aid              
 /W PW  National WX Service Site  \W  AW# # NWS site (NWS options)
-/X PX  HELO           (SSID = 6) \X  AX  Pharmacy Rx (Apothicary)
-/Y PY  YACHT (sail)   (SSID = 5) \Y  AYO Radios and devices
+/X PX  HELO           (SSID-6)   \X  AX  Pharmacy Rx (Apothicary)
+/Y PY  YACHT (sail)   (SSID-5)   \Y  AYO Radios and devices
 /Z PZ  WinAPRS                   \Z  AZ  AVAIL
-/[ HS  Human/Person (HT)         \[  DSO W.Cloud (& humans w Ovrly)
+/[ HS  Human/Person   (SSID-7)   \[  DSO W.Cloud (& humans w Ovrly)
 /\ HT  TRIANGLE(DF station)      \\  DTO New overlayable GPS symbol
 /] HU  MAIL/PostOffice(was PBBS) \]  DU  AVAIL
 /^ HV  LARGE AIRCRAFT            \^  DV# other Aircraft ovrlys (2014)
@@ -243,17 +244,17 @@ for the stand-alone trackers described above.
 
 /$ XYZ LOWER CASE SYMBOL TABLE   \$  XYZ SECONDARY SYMBOL TABLE (\)
 -- --- ------------------------  --  --- --------------------------
-/a LA  AMBULANCE     (SSID = 1)  \a  SA#O ARRL,ARES,WinLINK,Dstar, etc
-/b LB  BIKE          (SSID = 4)  \b  SB  AVAIL(Blwng Dst/Snd => E ovly)
+/a LA  AMBULANCE     (SSID-1)    \a  SA#O ARRL,ARES,WinLINK,Dstar, etc
+/b LB  BIKE          (SSID-4)    \b  SB  AVAIL(Blwng Dst/Snd => E ovly)
 /c LC  Incident Command Post     \c  SC#O CD triangle RACES/SATERN/etc
 /d LD  Fire dept                 \d  SD  DX spot by callsign
 /e LE  HORSE (equestrian)        \e  SE  Sleet (& future ovrly codes)
-/f LF  FIRE TRUCK    (SSID = 3)  \f  SF  Funnel Cloud                
+/f LF  FIRE TRUCK    (SSID-3)    \f  SF  Funnel Cloud                
 /g LG  Glider                    \g  SG  Gale Flags                     
 /h LH  HOSPITAL                  \h  SHO Store. or HAMFST Hh=HAM store
 /i LI  IOTA (islands on the air) \i  SI# BOX or points of Interest
 /j LJ  JEEP          (SSID-12)   \j  SJ  WorkZone (Steam Shovel)
-/k LK  TRUCK         (SSID = 14) \k  SKO Special Vehicle SUV,ATV,4x4
+/k LK  TRUCK         (SSID-14)   \k  SKO Special Vehicle SUV,ATV,4x4
 /l LL  Laptop (Jan 03)  (Feb 07) \l  SL  Areas      (box,circles,etc)
 /m LM  Mic-E Repeater            \m  SM  Value Sign (3 digit display)   
 /n LN  Node (black bulls-eye)    \n  SN# OVERLAY TRIANGLE         
@@ -264,7 +265,7 @@ for the stand-alone trackers described above.
 /s LS  SHIP (pwr boat)  (SSID-8) \s  SS# OVERLAY SHIP/boats
 /t LT  TRUCK STOP                \t  ST  Tornado                  
 /u LU  TRUCK (18 wheeler)        \u  SU# OVERLAYED TRUCK
-/v LV  VAN           (SSID = 15) \v  SV# OVERLAYED Van
+/v LV  VAN           (SSID-15)   \v  SV# OVERLAYED Van
 /w LW  WATER station             \w  SWO Flooding (Avalanches/Slides)   
 /x LX  xAPRS (Unix)              \x  SX  Wreck or Obstruction ->X<-
 /y LY  YAGI @ QTH                \y  SY  Skywarn

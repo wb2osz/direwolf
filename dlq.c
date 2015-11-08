@@ -276,9 +276,9 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	pnew->alevel = alevel;
 	pnew->retries = retries;
 	if (spectrum == NULL) 
-	  strcpy(pnew->spectrum, "");
+	  strlcpy(pnew->spectrum, "", sizeof(pnew->spectrum));
 	else
-	  strcpy(pnew->spectrum, spectrum);
+	  strlcpy(pnew->spectrum, spectrum, sizeof(pnew->spectrum));
 
 #if DEBUG1
 	text_color_set(DW_COLOR_DEBUG);
@@ -524,7 +524,7 @@ void dlq_wait_while_empty (void)
  *
  *--------------------------------------------------------------------*/
 
-int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_t *alevel, retry_t *retries, char *spectrum)
+int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_t *alevel, retry_t *retries, char *spectrum, size_t spectrumsize)
 {
 
 	struct dlq_item_s *phead;
@@ -562,7 +562,7 @@ int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_
 	  memset (alevel, 0xff, sizeof(*alevel));
 
 	  *retries = -1;
-	  strcpy(spectrum,"");
+	  strlcpy(spectrum, "", spectrumsize);
 	  result = 0;
 	}
 	else {
@@ -576,7 +576,7 @@ int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_
 	  *pp = phead->pp;
 	  *alevel = phead->alevel;
 	  *retries = phead->retries;
-	  strcpy (spectrum, phead->spectrum);
+	  strlcpy (spectrum, phead->spectrum, spectrumsize);
 	  result = 1;
 	}
 	 

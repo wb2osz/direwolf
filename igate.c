@@ -377,7 +377,6 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	pthread_t cmd_listen_tid;
 	int e;
 #endif
-	int j;
 
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
@@ -924,6 +923,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  */
 
 	info_len = ax25_get_info (pp, &pinfo);
+	(void)(info_len);
 
 	if ((p = strchr ((char*)pinfo, '\r')) != NULL) {
 #if DEBUGx
@@ -1314,6 +1314,7 @@ static void xmit_packet (char *message)
 
 	ax25_format_addrs (pp3, payload);
 	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
+	(void)(info_len);
 	strlcat (payload, pinfo, sizeof(payload));
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);

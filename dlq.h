@@ -22,7 +22,7 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 
 void dlq_wait_while_empty (void);
 
-int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_t *alevel, retry_t *retries, char *spectrum); 
+int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_t *alevel, retry_t *retries, char *spectrum, size_t spectrumsize); 
 
 
 #endif

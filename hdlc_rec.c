@@ -634,8 +634,6 @@ void dcd_change (int chan, int subchan, int state)
 
 int hdlc_rec_data_detect_any (int chan)
 {
-	int subchan;
-
 	assert (chan >= 0 && chan < MAX_CHANS);
 
 	return (composite_dcd[chan] != 0);

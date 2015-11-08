@@ -275,7 +275,7 @@ static void * connect_listen_thread (void *arg)
 	SOCKET listen_sock;  
 	WSADATA wsadata;
 
-	sprintf (kiss_port_str, "%d", (int)(long)arg);
+	snprintf (kiss_port_str, sizeof(kiss_port_str), "%d", (int)(long)arg);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
         dw_printf ("DEBUG: kissnet port = %d = '%s'\n", (int)(long)arg, kiss_port_str);
@@ -493,7 +493,7 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 	  if (kiss_debug) {
 	    kiss_debug_print (TO_CLIENT, "Fake command prompt", fbuf, flen);
 	  }
-	  strcpy ((char *)kiss_buff, (char *)fbuf);
+	  strlcpy ((char *)kiss_buff, (char *)fbuf, sizeof(kiss_buff));
 	  kiss_len = strlen((char *)kiss_buff);
 	}
 	else {

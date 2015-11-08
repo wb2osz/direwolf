@@ -71,6 +71,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
+#include <time.h>
 
 
 #include "direwolf.h"
@@ -115,7 +116,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 	  case AF_INET:
 	    sa4 = (struct sockaddr_in *)pAddr;
 #if __WIN32__
-	    sprintf (pStringBuf, "%d.%d.%d.%d", sa4->sin_addr.S_un.S_un_b.s_b1,
+	    snprintf (pStringBuf, StringBufSize, "%d.%d.%d.%d", sa4->sin_addr.S_un.S_un_b.s_b1,
 						sa4->sin_addr.S_un.S_un_b.s_b2,
 						sa4->sin_addr.S_un.S_un_b.s_b3,
 						sa4->sin_addr.S_un.S_un_b.s_b4);
@@ -126,7 +127,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 	  case AF_INET6:
 	    sa6 = (struct sockaddr_in6 *)pAddr;
 #if __WIN32__
-	    sprintf (pStringBuf, "%x:%x:%x:%x:%x:%x:%x:%x",  
+	    snprintf (pStringBuf, StringBufSize, "%x:%x:%x:%x:%x:%x:%x:%x",
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[0]),
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[1]),
 					ntohs(((unsigned short *)(&(sa6->sin6_addr)))[2]),
@@ -140,7 +141,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 #endif
 	    break;
 	  default:
-	    sprintf (pStringBuf, "Invalid address family!");
+	    snprintf (pStringBuf, StringBufSize, "Invalid address family!");
 	}
 	assert (strlen(pStringBuf) < StringBufSize);
 	return pStringBuf;
@@ -222,20 +223,20 @@ int main (int argc, char *argv[])
 	  char stemp[100];
 	  char *p;
 	
-	  strcpy (stemp, argv[j+1]);
+	  strlcpy (stemp, argv[j+1], sizeof(stemp));
 	  p = strtok (stemp, "=");
 	  if (p == NULL) {
 	    printf ("Internal error 1\n");
 	    exit (1);
 	  }
-	  strcpy (hostname[j], "localhost");
-	  strcpy (port[j], p);
+	  strlcpy (hostname[j], "localhost", sizeof(hostname[j]));
+	  strlcpy (port[j], p, sizeof(port[j]));
 	  p = strtok (NULL, "=");
 	  if (p == NULL) {
 	    printf ("Missing description after %s\n", port[j]);
 	    exit (1);
 	  }
-	  strcpy (description[j], p);
+	  strlcpy (description[j], p, sizeof(description[j]));
 	}
 	
 	//printf ("_WIN32_WINNT = %04x\n", _WIN32_WINNT);
@@ -579,14 +580,14 @@ static void * client_thread_net (void *arg)
 
 	    //printf ("server %d, portx = %d\n", my_index, mon_cmd.portx);
 
-	    use_chan == mon_cmd.portx;
+	    use_chan = mon_cmd.portx;
 	    memset (&alevel, 0xff, sizeof(alevel));
 	    pp = ax25_from_frame ((unsigned char *)(data+1), mon_cmd.data_len-1, alevel);
 	    assert (pp != NULL);
 	    ax25_format_addrs (pp, result);
 	    info_len = ax25_get_info (pp, (unsigned char **)(&pinfo));
 	    pinfo[info_len] = '\0';
-	    strcat (result, pinfo);
+	    strlcat (result, pinfo, sizeof(result));
 	    for (p=result; *p!='\0'; p++) {
 	      if (! isprint(*p)) *p = ' ';
 	    }

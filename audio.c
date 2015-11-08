@@ -661,6 +661,16 @@ static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *
 	dw_printf ("audio buffer size = %d (bytes per frame) x %d (frames per period) = %d \n", adev[a].bytes_per_frame, (int)fpp, buf_size_in_bytes);
 #endif
 
+	/* Version 1.3 - after a report of this situation for Mac OSX version. */
+	if (buf_size_in_bytes < 256 || buf_size_in_bytes > 32768) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Audio buffer has unexpected extreme size of %d bytes.\n", buf_size_in_bytes);
+	  dw_printf ("Detected at %s, line %d.\n", __FILE__, __LINE__);
+	  dw_printf ("This might be caused by unusual audio device configuration values.\n"); 
+	  buf_size_in_bytes = 2048;
+	  dw_printf ("Using %d to attempt recovery.\n", buf_size_in_bytes);
+	}
+
 	return (buf_size_in_bytes);
 
 
@@ -787,9 +797,20 @@ static int set_oss_params (int fd, struct audio_s *pa)
 	dw_printf ("audio_open(): using block size of %d\n", ossbuf_size_in_bytes);	
 #endif
 
+#if 0
+	/* Original - dies without good explanation. */
 	assert (ossbuf_size_in_bytes >= 256 && ossbuf_size_in_bytes <= 32768);
-
-
+#else
+	/* Version 1.3 - after a report of this situation for Mac OSX version. */
+	if (ossbuf_size_in_bytes < 256 || ossbuf_size_in_bytes > 32768) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Audio buffer has unexpected extreme size of %d bytes.\n", ossbuf_size_in_bytes);
+	  dw_printf ("Detected at %s, line %d.\n", __FILE__, __LINE__);
+	  dw_printf ("This might be caused by unusual audio device configuration values.\n");
+	  ossbuf_size_in_bytes = 2048;
+	  dw_printf ("Using %d to attempt recovery.\n", ossbuf_size_in_bytes);
+	}
+#endif
 	return (ossbuf_size_in_bytes);
 
 } /* end set_oss_params */

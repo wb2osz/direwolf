@@ -46,7 +46,6 @@
 #include <assert.h>
 #include <string.h>
 
-//#include <sys/time.h>
 #include <time.h>
 
 #if __WIN32__

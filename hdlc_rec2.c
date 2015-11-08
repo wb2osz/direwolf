@@ -226,7 +226,6 @@ void hdlc_rec2_block (rrbb_t block)
 	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
 	int passall = save_audio_config_p->achan[chan].passall;
 	int ok;
-	int n;
 
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
@@ -332,7 +331,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, alevel_t a
 	int ok;
 	int len, i,j;
 	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
-	int passall = save_audio_config_p->achan[chan].passall;
+	//int passall = save_audio_config_p->achan[chan].passall;
 
 
 	len = rrbb_get_len(block);
@@ -881,7 +880,9 @@ static int try_decode (rrbb_t block, int chan, int subchan, alevel_t alevel, ret
 	int blen;			/* Block length in bits. */
 	int i;
 	unsigned int raw;			/* From demodulator. */
+#if DEBUGx
 	int crc_failed = 1;
+#endif
 	int retry_conf_mode = retry_conf.mode;
 	int retry_conf_type = retry_conf.type;
 	int retry_conf_retry = retry_conf.retry;
@@ -1119,7 +1120,9 @@ static int try_decode (rrbb_t block, int chan, int subchan, alevel_t alevel, ret
               goto failure;
           }
 	} else {
+#if DEBUGx
               crc_failed = 0;
+#endif
               goto failure;
 	}
 failure:
@@ -1151,8 +1154,8 @@ failure:
 	  }
 	  dw_printf ("\n");
         }
-#endif
 end:
+#endif
 	return 0;	/* failure. */
 
 } /* end try_decode */
