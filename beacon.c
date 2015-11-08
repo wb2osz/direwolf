@@ -621,7 +621,7 @@ static time_t sb_calculate_next_time (time_t now,
 	    if (g_tracker_debug_level >= 2) {
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("SmartBeaconing: Send now for heading change of %.0f\n", change);
-	    } 
+	    }
 
 	    next_time = now;
 	  }

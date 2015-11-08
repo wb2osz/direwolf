@@ -228,7 +228,7 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hd
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
-		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
+		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o \
 		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o \
 		misc.a geotranz.a
@@ -286,7 +286,7 @@ tocalls-symbols :
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
+decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ $(LDFLAGS)
 
 
@@ -325,7 +325,7 @@ gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c
 atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_9600.c \
 		dsp.o hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o \
-		dwgps.o serial_port.o telemetry.c latlong.c symbols.c tt_text.c textcolor.c \
+		dwgps.o dwgpsd.o serial_port.o telemetry.c latlong.c symbols.c tt_text.c textcolor.c \
 		misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -492,11 +492,14 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 #
 # Documentation.  Various plain text files and PDF.
 #
-	$(INSTALL) -D --mode=644 README.md $(INSTALLDIR)/share/doc/direwolf/README.md
 	$(INSTALL) -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
 	$(INSTALL) -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
 	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
 #
+# ./README.md is an overview for the project main page.
+# doc/README.md contains an overview of the PDF file contents and is more useful here.
+#
+	$(INSTALL) -D --mode=644 doc/README.md $(INSTALLDIR)/share/doc/direwolf/README.md
 	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
@@ -602,7 +605,7 @@ check-modem9600 : gen_packets atest
 
 .PHONY : dtest
 dtest : digipeater.c pfilter.o ax25_pad.o dedupe.o fcs_calc.o tq.o textcolor.o \
-		decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a
+		decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^ $(LDFLAGS)
 	./dtest
 	rm dtest
@@ -629,7 +632,7 @@ tttexttest : tt_text.c textcolor.o misc.a
 # Unit test for Packet Filtering.
 
 .PHONY: pftest
-pftest : pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o symbols.o telemetry.o tt_text.o misc.a 
+pftest : pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o symbols.o telemetry.o tt_text.o misc.a 
 	$(CC) $(CFLAGS) -DPFTEST -o $@ $^ $(LDFLAGS)
 	./pftest
 	rm pftest
