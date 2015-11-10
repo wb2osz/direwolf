@@ -510,16 +510,17 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
 	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
 #
-# Sample config files also go into the doc directory.
+# Various sample config and other files go into examples under the doc directory.
 # When building from source, these can be put in home directory with "make install-conf".
 # When installed from .DEB or .RPM package, the user will need to copy these to
 # the home directory or other desired location.
-# Someone suggested that these could go into an "examples" subdirectory under doc.
 #
-	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/direwolf.conf
-	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/telem-m0xer-3.txt
-	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/telem-balloon.conf
-	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-volts.conf $(INSTALLDIR)/share/doc/direwolf/telem-volts.conf
+	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/examples/direwolf.conf
+	$(INSTALL) -D --mode=644 dw-start.sh $(INSTALLDIR)/share/doc/direwolf/examples/dw-start.sh
+	$(INSTALL) -D --mode=644 sdr.conf $(INSTALLDIR)/share/doc/direwolf/examples/sdr.conf
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/examples/telem-m0xer-3.txt
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/examples/telem-balloon.conf
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-volts.conf $(INSTALLDIR)/share/doc/direwolf/examples/telem-volts.conf
 #
 # "man" pages
 #
@@ -552,6 +553,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 .PHONY: install-conf
 install-conf : direwolf.conf
 	cp direwolf.conf ~
+	cp sdr.conf ~
 	cp telemetry-toolkit/telem-m0xer-3.txt ~
 	cp telemetry-toolkit/telem-*.conf ~
 ifneq ($(wildcard $(HOME)/Desktop),)
