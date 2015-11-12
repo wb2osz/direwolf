@@ -42,6 +42,13 @@
 #include "demod_9600.h"		/* for descramble() */
 #include "ptt.h"
 
+#if __WIN32__
+#else
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+#endif
+
 
 //#define TEST 1				/* Define for unit testing. */
 
@@ -125,6 +132,8 @@ static void dcd_change (int chan, int subchan, int state);
  *
  ***********************************************************************************/
 
+static struct audio_s *save_audio_config_p;
+
 static int was_init = 0;
 
 void hdlc_rec_init (struct audio_s *pa)
@@ -136,6 +145,8 @@ void hdlc_rec_init (struct audio_s *pa)
 	//dw_printf ("hdlc_rec_init (%p) \n", pa);
 
 	assert (pa != NULL);
+	
+	save_audio_config_p = pa;
 	
 	for (j=0; j<MAX_CHANS; j++)
 	{
@@ -632,10 +643,46 @@ static void dcd_change (int chan, int subchan, int state)
 int hdlc_rec_data_detect_any (int chan)
 {
 	int subchan;
+	int busy;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 
-	return (composite_dcd[chan] != 0);
+	if (composite_dcd[chan] != 0) busy = 1;
+
+#if __WIN32__
+#else
+
+	if (save_audio_config_p->achan[chan].txinh.enabled) {
+	  int fd;
+	  char stemp[80];
+
+	  sprintf (stemp, "/sys/class/gpio/gpio%d/value", save_audio_config_p->achan[chan].txinh.gpio);
+
+	  fd = open(stemp, O_RDONLY);
+	  if (fd < 0) {
+	    int e = errno;
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error opening %s to check TXINH.\n", stemp);
+	    dw_printf ("%s\n", strerror(e));
+	    return;
+	  }
+
+	  if (read (fd, stemp, 1) != 1) {
+	    int e = errno;
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error getting GPIO %d value for TXINH\n", save_audio_config_p->achan[chan].txinh.gpio);
+	    dw_printf ("%s\n", strerror(e));
+	  }
+	  close (fd);
+
+	  char vtemp[2];
+	  sprintf (vtemp, "%d", save_audio_config_p->achan[chan].txinh.invert);
+
+	  if (!strcmp (stemp, vtemp)) busy = 1; 
+	}
+#endif
+
+	return busy;
 
 } /* end hdlc_rec_data_detect_any */
 
