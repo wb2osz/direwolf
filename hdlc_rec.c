@@ -45,6 +45,7 @@
 #if __WIN32__
 #else
 #include <fcntl.h>
+#include <unistd.h>
 #include <errno.h>
 #include <string.h>
 #endif
@@ -664,7 +665,7 @@ int hdlc_rec_data_detect_any (int chan)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error opening %s to check TXINH.\n", stemp);
 	    dw_printf ("%s\n", strerror(e));
-	    return;
+	    return busy;
 	  }
 
 	  if (read (fd, stemp, 1) != 1) {
@@ -682,7 +683,7 @@ int hdlc_rec_data_detect_any (int chan)
 	}
 #endif
 
-	return busy;
+	return (busy != 1);
 
 } /* end hdlc_rec_data_detect_any */
 
