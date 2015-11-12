@@ -665,7 +665,7 @@ int hdlc_rec_data_detect_any (int chan)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error opening %s to check TXINH.\n", stemp);
 	    dw_printf ("%s\n", strerror(e));
-	    return busy;
+	    return (busy != 1);
 	  }
 
 	  if (read (fd, stemp, 1) != 1) {
