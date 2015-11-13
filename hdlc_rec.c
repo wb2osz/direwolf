@@ -678,7 +678,7 @@ int hdlc_rec_data_detect_any (int chan)
 	  }
 	  close (fd);
 
-	  if (atoi(vtemp) == save_audio_config_p->achan[chan].txinh.invert) busy = 1; 
+	  if (atoi(vtemp) != save_audio_config_p->achan[chan].txinh.invert) busy = 1; 
 	}
 #endif
 
