@@ -48,6 +48,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 #endif
 
 
@@ -644,7 +645,7 @@ static void dcd_change (int chan, int subchan, int state)
 int hdlc_rec_data_detect_any (int chan)
 {
 	int subchan;
-	int busy;
+	int busy = 0;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 
@@ -668,7 +669,8 @@ int hdlc_rec_data_detect_any (int chan)
 	    return (busy != 1);
 	  }
 
-	  if (read (fd, stemp, 1) != 1) {
+	  char vtemp[2];
+	  if (read (fd, vtemp, 1) != 1) {
 	    int e = errno;
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error getting GPIO %d value for TXINH\n", save_audio_config_p->achan[chan].txinh.gpio);
@@ -676,14 +678,11 @@ int hdlc_rec_data_detect_any (int chan)
 	  }
 	  close (fd);
 
-	  char vtemp[2];
-	  sprintf (vtemp, "%d", save_audio_config_p->achan[chan].txinh.invert);
-
-	  if (!strcmp (stemp, vtemp)) busy = 1; 
+	  if (atoi(vtemp) == save_audio_config_p->achan[chan].txinh.invert) busy = 1; 
 	}
 #endif
 
-	return (busy != 1);
+	return (busy != 0);
 
 } /* end hdlc_rec_data_detect_any */
 
