@@ -111,19 +111,19 @@ static const char clear_eos[]	= "\e[0J";
 /* expected bright/bold (1) to get bright white background. */
 /* Makes no sense but I stumbled across that somewhere. */
 
-static const char background_white[] = "\e[49m";
+static const char background_white[] = "\e[5;47m";
 
 /* Whenever a dark color is used, the */
 /* background is reset and needs to be set again. */
 
-static const char black[]	= "\e[0;39m" "\e[49m";
-static const char red[] 	= "\e[1;31m" "\e[49m";
-static const char green[] 	= "\e[1;32m" "\e[49m";
-static const char yellow[] 	= "\e[1;33m" "\e[49m";
-static const char blue[] 	= "\e[1;34m" "\e[49m";
-static const char magenta[] 	= "\e[1;35m" "\e[49m";
-static const char cyan[] 	= "\e[1;36m" "\e[49m";
-static const char dark_green[]	= "\e[0;32m" "\e[49m";
+static const char black[]	= "\e[0;30m" "\e[5;47m";
+static const char red[] 	= "\e[1;31m" "\e[5;47m";
+static const char green[] 	= "\e[1;32m" "\e[5;47m";
+static const char yellow[] 	= "\e[1;33m" "\e[5;47m";
+static const char blue[] 	= "\e[1;34m" "\e[5;47m";
+static const char magenta[] 	= "\e[1;35m" "\e[5;47m";
+static const char cyan[] 	= "\e[1;36m" "\e[5;47m";
+static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
 
 /* Clear from cursor to end of screen. */
 
