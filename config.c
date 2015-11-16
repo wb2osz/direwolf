@@ -1450,6 +1450,30 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  }  /* end of PTT */
 
+/*
+ * TXINH		- Input for TX inhibit signal
+ */
+
+	  else if (strcasecmp(t, "TXINH") == 0) {
+	    t = strtok (NULL, " ,\t\n\r");
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: Missing GPIO number for TXINH.\n",
+		    line);
+	      continue;
+	    }
+	    
+	    p_audio_config->achan[channel].txinh.enabled = 1;
+
+	    if (*t == '-') {
+	      p_audio_config->achan[channel].txinh.gpio = atoi(t+1);
+	      p_audio_config->achan[channel].txinh.invert = 1;
+	    }
+	    else {
+	      p_audio_config->achan[channel].txinh.gpio = atoi(t);
+	      p_audio_config->achan[channel].txinh.invert = 0;
+	    }
+	  }  /* end of TXINH */
 
 /*
  * DWAIT 		- Extra delay for receiver squelch.

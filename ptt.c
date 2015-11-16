@@ -155,6 +155,102 @@ static HANDLE ptt_fd[MAX_CHANS][NUM_OCTYPES];
 
 static char otnames[NUM_OCTYPES][8];
 
+void export_gpio(int gpio, int invert, int direction)
+{
+	HANDLE fd;
+	char stemp[80];
+	struct stat finfo;
+	int err;
+
+	fd = open("/sys/class/gpio/export", O_WRONLY);
+	if (fd < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
+	  dw_printf ("Log in as root and type this command:\n");
+	  dw_printf ("    chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport\n");
+	  exit (1);
+	}
+	sprintf (stemp, "%d", gpio);
+	if (write (fd, stemp, strlen(stemp)) != strlen(stemp)) {
+	  int e = errno;
+	  /* Ignore EBUSY error which seems to mean */
+	  /* the device node already exists. */
+	  if (e != EBUSY) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error writing \"%s\" to /sys/class/gpio/export, errno=%d\n", stemp, e);
+	    dw_printf ("%s\n", strerror(e));
+	    exit (1);
+	  }
+	}
+	close (fd);
+
+/*
+ * We will have the same permission problem if not root.
+ * We only care about "direction" and "value".
+ */
+	sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", gpio);
+	err = system (stemp);
+	sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/value", gpio);
+	err = system (stemp);
+
+	sprintf (stemp, "/sys/class/gpio/gpio%d/value", gpio);
+
+	if (stat(stemp, &finfo) < 0) {
+	  int e = errno;
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Failed to get status for %s \n", stemp);
+	  dw_printf ("%s\n", strerror(e));
+	  exit (1);
+	}
+
+	if (geteuid() != 0) {
+	  if ( ! (finfo.st_mode & S_IWOTH)) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
+	    dw_printf ("Log in as root and type these commands:\n");
+	    dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/direction", gpio);
+	    dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/value", gpio);
+	    exit (1);
+	  }
+	}
+
+/*
+ * Set direction and initial value.
+ */
+
+	sprintf (stemp, "/sys/class/gpio/gpio%d/direction", gpio);
+	fd = open(stemp, O_WRONLY);
+	if (fd < 0) {
+	  int e = errno;
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Error opening %s\n", stemp);
+	  dw_printf ("%s\n", strerror(e));
+	  exit (1);
+	}
+
+	char gpio_val[8];
+	if (direction) {
+	  if (invert) {
+	    strcpy (gpio_val, "high");
+	  }
+	  else {
+	    strcpy (gpio_val, "low");
+	  }
+	}
+	else {
+	  strcpy (gpio_val, "in");
+	}
+
+	if (write (fd, gpio_val, strlen(gpio_val)) != strlen(gpio_val)) {
+	  int e = errno;
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Error writing direction to %s\n", stemp);
+	  dw_printf ("%s\n", strerror(e));
+	  exit (1);
+	}
+	close (fd);
+}
+
 void ptt_init (struct audio_s *audio_config_p)
 {
 	int ch;
@@ -326,6 +422,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	        using_gpio = 1;
 	      }
 	    }
+	    if (audio_config_p->achan[ch].txinh.enabled) using_gpio = 1;
 	  }
 	}
 
@@ -343,7 +440,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	  if (stat("/sys/class/gpio/export", &finfo) < 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("This system is not configured with the GPIO user interface.\n");
-	    dw_printf ("Use a different method for PTT control.\n");
+	    dw_printf ("Use a different method for PTT, DCD, or TXINH control.\n");
 	    exit (1);
 	  }
 
@@ -367,7 +464,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	        /* Unexpected because we could do it before. */
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("This system is not configured with the GPIO user interface.\n");
-	        dw_printf ("Use a different method for PTT control.\n");
+	        dw_printf ("Use a different method for PTT, DCD, or TXINH control.\n");
 	        exit (1);
 	      }
 
@@ -392,92 +489,11 @@ void ptt_init (struct audio_s *audio_config_p)
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIO) {
-	        char stemp[80];
-	        struct stat finfo;
-	        int err;
-
-	        fd = open("/sys/class/gpio/export", O_WRONLY);
-	        if (fd < 0) {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
-	          dw_printf ("Log in as root and type this command:\n");
-	          dw_printf ("    chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport\n");
-	          exit (1);
-	        }
-	        sprintf (stemp, "%d", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        if (write (fd, stemp, strlen(stemp)) != strlen(stemp)) {
-	          int e = errno;
-	          /* Ignore EBUSY error which seems to mean */
-	          /* the device node already exists. */
-	          if (e != EBUSY) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Error writing \"%s\" to /sys/class/gpio/export, errno=%d\n", stemp, e);
-	            dw_printf ("%s\n", strerror(e));
-	            exit (1);
-	          }
-	        }
-	        close (fd);
-
-/*
- * We will have the same permission problem if not root.
- * We only care about "direction" and "value".
- */
-	        sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        err = system (stemp);
-	        sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        err = system (stemp);
-
-	        sprintf (stemp, "/sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-
-	        if (stat(stemp, &finfo) < 0) {
-	          int e = errno;
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Failed to get status for %s \n", stemp);
-	          dw_printf ("%s\n", strerror(e));
-	          exit (1);
-	        }
-
-	        if (geteuid() != 0) {
-	          if ( ! (finfo.st_mode & S_IWOTH)) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
-	            dw_printf ("Log in as root and type these commands:\n");
-	            dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	            dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	            exit (1);
-	          }
-	        }
-
-/*
- * Set output direction with initial state off.
- */
-
-	        sprintf (stemp, "/sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        fd = open(stemp, O_WRONLY);
-	        if (fd < 0) {
-	          int e = errno;
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Error opening %s\n", stemp);
-	          dw_printf ("%s\n", strerror(e));
-	          exit (1);
-	        }
-
-	        char hilo[8];
-	        if (audio_config_p->achan[ch].octrl[ot].ptt_invert) {
-	          strcpy (hilo, "high");
-	        }
-	        else {
-	          strcpy (hilo, "low");
-	        }
-	        if (write (fd, hilo, strlen(hilo)) != strlen(hilo)) {
-	          int e = errno;
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Error writing initial state to %s\n", stemp);
-	          dw_printf ("%s\n", strerror(e));
-	          exit (1);
-	        }
-	        close (fd);
+	        export_gpio(audio_config_p->achan[ch].octrl[ot].ptt_gpio, audio_config_p->achan[ch].octrl[ot].ptt_invert, 1);
 	      }
+	    }
+	    if (audio_config_p->achan[ch].txinh.enabled) {
+	      export_gpio(audio_config_p->achan[ch].txinh.gpio, audio_config_p->achan[ch].txinh.invert, 0);
 	    }
 	  }
 	}
