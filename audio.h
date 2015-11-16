@@ -198,6 +198,12 @@ struct audio_s {
 
 	    } octrl[NUM_OCTYPES];
 
+	    struct {
+	    	int enabled;
+	    	int gpio;
+		int invert;
+	    } txinh;
+
 	/* Transmit timing. */
 
 	    int dwait;			/* First wait extra time for receiver squelch. */
