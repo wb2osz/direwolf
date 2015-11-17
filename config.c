@@ -1641,6 +1641,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        p_audio_config->achan[channel].ictrl[it].gpio = atoi(t);
 		p_audio_config->achan[channel].ictrl[it].invert = 0;
 	      }
+	      p_audio_config->achan[channel].ictrl[it].method = PTT_METHOD_GPIO;
 #endif
 	    }
 	  }

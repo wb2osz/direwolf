@@ -147,6 +147,120 @@ void ptt_set_debug(int debug)
 	ptt_debug_level = debug;
 }
 
+void export_gpio(int gpio, int invert, int direction)
+{
+	HANDLE fd;
+	char stemp[80];
+	struct stat finfo;
+	int err;
+
+	fd = open("/sys/class/gpio/export", O_WRONLY);
+	if (fd < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
+	  dw_printf ("Log in as root and type this command:\n");
+	  dw_printf ("    chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport\n");
+	  exit (1);
+	}
+	snprintf (stemp, sizeof(stemp), "%d", gpio);
+	if (write (fd, stemp, strlen(stemp)) != strlen(stemp)) {
+	  int e = errno;
+	  /* Ignore EBUSY error which seems to mean */
+	  /* the device node already exists. */
+	  if (e != EBUSY) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error writing \"%s\" to /sys/class/gpio/export, errno=%d\n", stemp, e);
+	    dw_printf ("%s\n", strerror(e));
+	    exit (1);
+	  }
+	}
+	close (fd);
+
+/*
+	Idea for future:
+
+	On the RPi, the device path for GPIO number XX is /sys/class/gpio/gpioXX.
+	There was a report that it is different for the Cubieboard.  For instance
+	GPIO 61 has gpio61_pi13 in the path.  This indicates connector "i" pin 13.
+
+	For another similar single board computer, we find the same thing:
+	https://www.olimex.com/wiki/A20-OLinuXino-LIME#GPIO_under_Linux
+
+	How should we deal with this?  Some possibilities:
+
+	(1) The user might explicitly mention the name in direwolf.conf.
+	(2) We might be able to find the names in some system device config file.
+	(3) Get a directory listing of /sys/class/gpio then search for a 
+		matching name.  Suppose we wanted GPIO 61.  First look for an exact
+		match to "gpio61".  If that is not found, look for something
+		matching the pattern "gpio61_*".
+*/
+
+/*
+ * We will have the same permission problem if not root.
+ * We only care about "direction" and "value".
+ */
+	snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", gpio);
+	err = system (stemp);
+	snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/value", gpio);
+	err = system (stemp);
+
+	snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/value", gpio);
+
+	if (stat(stemp, &finfo) < 0) {
+	  int e = errno;
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Failed to get status for %s \n", stemp);
+	  dw_printf ("%s\n", strerror(e));
+	  exit (1);
+	}
+
+	if (geteuid() != 0) {
+	  if ( ! (finfo.st_mode & S_IWOTH)) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
+	    dw_printf ("Log in as root and type these commands:\n");
+	    dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/direction", gpio);
+	    dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/value", gpio);
+	    exit (1);
+	  }
+	}
+
+/*
+ * Set output direction and initial state
+ */
+
+	snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/direction", gpio);
+	fd = open(stemp, O_WRONLY);
+	if (fd < 0) {
+	  int e = errno;
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Error opening %s\n", stemp);
+	  dw_printf ("%s\n", strerror(e));
+	  exit (1);
+	}
+
+	char gpio_val[8];
+	if (direction) {
+	  if (invert) {
+	    strlcpy (gpio_val, "high", sizeof(gpio_val));
+	  }
+	  else {
+	    strlcpy (gpio_val, "low", sizeof(gpio_val));
+	  }
+	}
+	else {
+	  strlcpy (gpio_val, "in", sizeof(gpio_val));
+	}
+	if (write (fd, gpio_val, strlen(gpio_val)) != strlen(gpio_val)) {
+	  int e = errno;
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Error writing initial state to %s\n", stemp);
+	  dw_printf ("%s\n", strerror(e));
+	  exit (1);
+	}
+	close (fd);
+}
 
 /*-------------------------------------------------------------------
  *
@@ -368,6 +482,11 @@ void ptt_init (struct audio_s *audio_config_p)
 	        using_gpio = 1;
 	      }
 	    }
+	    for (ot = 0; ot < NUM_ICTYPES; ot++) {
+	      if (audio_config_p->achan[ch].ictrl[ot].method == PTT_METHOD_GPIO) {
+	        using_gpio = 1;
+	      }
+	    }
 	  }
 	}
 
@@ -434,111 +553,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIO) {
-	        char stemp[80];
-	        struct stat finfo;
-	        int err;
-
-	        fd = open("/sys/class/gpio/export", O_WRONLY);
-	        if (fd < 0) {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
-	          dw_printf ("Log in as root and type this command:\n");
-	          dw_printf ("    chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport\n");
-	          exit (1);
-	        }
-	        snprintf (stemp, sizeof(stemp), "%d", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        if (write (fd, stemp, strlen(stemp)) != strlen(stemp)) {
-	          int e = errno;
-	          /* Ignore EBUSY error which seems to mean */
-	          /* the device node already exists. */
-	          if (e != EBUSY) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Error writing \"%s\" to /sys/class/gpio/export, errno=%d\n", stemp, e);
-	            dw_printf ("%s\n", strerror(e));
-	            exit (1);
-	          }
-	        }
-	        close (fd);
-
-/*
-	Idea for future:
-
-	On the RPi, the device path for GPIO number XX is /sys/class/gpio/gpioXX.
-	There was a report that it is different for the Cubieboard.  For instance
-	GPIO 61 has gpio61_pi13 in the path.  This indicates connector "i" pin 13.
-
-	For another similar single board computer, we find the same thing:
-	https://www.olimex.com/wiki/A20-OLinuXino-LIME#GPIO_under_Linux
-
-	How should we deal with this?  Some possibilities:
-
-	(1) The user might explicitly mention the name in direwolf.conf.
-	(2) We might be able to find the names in some system device config file.
-	(3) Get a directory listing of /sys/class/gpio then search for a 
-		matching name.  Suppose we wanted GPIO 61.  First look for an exact
-		match to "gpio61".  If that is not found, look for something
-		matching the pattern "gpio61_*".
-*/
-
-/*
- * We will have the same permission problem if not root.
- * We only care about "direction" and "value".
- */
-	        snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        err = system (stemp);
-	        snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        err = system (stemp);
-
-	        snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-
-	        if (stat(stemp, &finfo) < 0) {
-	          int e = errno;
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Failed to get status for %s \n", stemp);
-	          dw_printf ("%s\n", strerror(e));
-	          exit (1);
-	        }
-
-	        if (geteuid() != 0) {
-	          if ( ! (finfo.st_mode & S_IWOTH)) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Permissions do not allow ordinary users to access GPIO.\n");
-	            dw_printf ("Log in as root and type these commands:\n");
-	            dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	            dw_printf ("    chmod go+rw /sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	            exit (1);
-	          }
-	        }
-
-/*
- * Set output direction with initial state off.
- */
-
-	        snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
-	        fd = open(stemp, O_WRONLY);
-	        if (fd < 0) {
-	          int e = errno;
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Error opening %s\n", stemp);
-	          dw_printf ("%s\n", strerror(e));
-	          exit (1);
-	        }
-
-	        char hilo[8];
-	        if (audio_config_p->achan[ch].octrl[ot].ptt_invert) {
-	          strlcpy (hilo, "high", sizeof(hilo));
-	        }
-	        else {
-	          strlcpy (hilo, "low", sizeof(hilo));
-	        }
-	        if (write (fd, hilo, strlen(hilo)) != strlen(hilo)) {
-	          int e = errno;
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Error writing initial state to %s\n", stemp);
-	          dw_printf ("%s\n", strerror(e));
-	          exit (1);
-	        }
-	        close (fd);
+	        export_gpio(audio_config_p->achan[ch].octrl[ot].ptt_gpio, audio_config_p->achan[ch].octrl[ot].ptt_invert, 1);
 	      }
 	    }
 	  }

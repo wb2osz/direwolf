@@ -206,7 +206,7 @@ struct audio_s {
 #define NUM_ICTYPES 1
 
 	    struct {
-	    	int enable;		/* should we bother checking this input? */
+		ptt_method_t method;	/* none, serial port, GPIO, LPT. */
 		int gpio;		/* GPIO number */
 		int invert;		/* 1 = active low */
 	    } ictrl[NUM_ICTYPES];
