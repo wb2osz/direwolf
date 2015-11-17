@@ -556,6 +556,11 @@ void ptt_init (struct audio_s *audio_config_p)
 	        export_gpio(audio_config_p->achan[ch].octrl[ot].ptt_gpio, audio_config_p->achan[ch].octrl[ot].ptt_invert, 1);
 	      }
 	    }
+	    for (ot = 0; ot < NUM_ICTYPES; ot++) {
+	      if (audio_config_p->achan[ch].ictrl[ot].method == PTT_METHOD_GPIO) {
+	        export_gpio(audio_config_p->achan[ch].ictrl[ot].gpio, audio_config_p->achan[ch].ictrl[ot].invert, 0);
+	      }
+	    }
 	  }
 	}
 #endif
