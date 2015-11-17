@@ -147,6 +147,21 @@ void ptt_set_debug(int debug)
 	ptt_debug_level = debug;
 }
 
+/*-------------------------------------------------------------------
+ *
+ * Name:	export_gpio
+ *
+ * Purpose:	Tell the GPIO subsystem to export a GPIO line for
+ * 	us to use, and set the initial state of the GPIO.
+ *
+ * Inputs:	gpio		- GPIO line to export
+ *		invert:		- Is the GPIO active low?
+ *		direction:	- 0 for input, 1 for output
+ *
+ * Outputs:	None.
+ *
+ *------------------------------------------------------------------*/
+
 void export_gpio(int gpio, int invert, int direction)
 {
 	HANDLE fd;
@@ -843,7 +858,67 @@ void ptt_set (int ot, int chan, int ptt_signal)
 
 } /* end ptt_set */
 
+/*-------------------------------------------------------------------
+ *
+ * Name:	get_input
+ *
+ * Purpose:	Read the value of an input line
+ *
+ * Inputs:	it	- Input type (ICTYPE_TCINH supported so far)
+ * 		chan	- Audio channel number
+ * 
+ * Outputs:	0 = inactive, 1 = active, -1 = error
+ *
+ * ------------------------------------------------------------------*/
 
+int get_input (int it, int chan)
+{
+	assert (it >= 0 && it < NUM_ICTYPES);
+	assert (chan >= 0 && chan < MAX_CHANS);
+
+	if ( ! save_audio_config_p->achan[chan].valid) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error, get_input ( %d, %d ), did not expect invalid channel.\n", it, chan);
+	  return -1;
+	}
+	
+#if __WIN32__
+#else
+	if (save_audio_config_p->achan[chan].ictrl[it].method == PTT_METHOD_GPIO) {
+	  int fd;
+	  char stemp[80];
+
+	  snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/value", save_audio_config_p->achan[chan].ictrl[it].gpio);
+
+	  fd = open(stemp, O_RDONLY);
+	  if (fd < 0) {
+	    int e = errno;
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error opening %s to check input.\n", stemp);
+	    dw_printf ("%s\n", strerror(e));
+	    return -1;
+	  }
+
+	  char vtemp[2];
+	  if (read (fd, vtemp, 1) != 1) {
+	    int e = errno;
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Error getting GPIO %d value\n", save_audio_config_p->achan[chan].ictrl[it].gpio);
+	    dw_printf ("%s\n", strerror(e));
+	  }
+	  close (fd);
+
+	  if (atoi(vtemp) != save_audio_config_p->achan[chan].ictrl[it].invert) {
+	    return 1;
+	  }
+	  else {
+	    return 0;
+	  }
+	}
+#endif
+
+	return -1;	/* Method was none, or something went wrong */
+}
 
 /*-------------------------------------------------------------------
  *

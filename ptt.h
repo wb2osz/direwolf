@@ -15,6 +15,7 @@ void ptt_set (int octype, int chan, int ptt);
 
 void ptt_term (void);
 
+int get_input (int it, int chan);
 
 #endif
 
