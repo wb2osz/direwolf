@@ -1598,6 +1598,52 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  }  /* end of PTT */
 
+/*
+ * INPUTS
+ *
+ * TXINH - TX holdoff input
+ *
+ * xxx GPIO [-]gpio-num (only type supported yet)
+ */
+
+	  else if (strcasecmp(t, "TXINH") == 0) {
+	    int it;
+	    char itname[8];
+
+	    it = ICTYPE_TXINH;
+	    strlcpy (itname, "TXINH", sizeof(itname));
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: Missing input type name for %s command.\n", line, itname);
+	      continue;
+	    }
+
+	    if (strcasecmp(t, "GPIO") == 0) {
+
+#if __WIN32__
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: %s with GPIO is only available on Linux.\n", line, itname);
+#else
+	      t = split(NULL,0);
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Config file line %d: Missing GPIO number for %s.\n", line, itname);
+		continue;
+	      }
+
+	      if (*t == '-') {
+	        p_audio_config->achan[channel].ictrl[it].gpio = atoi(t+1);
+		p_audio_config->achan[channel].ictrl[it].invert = 1;
+	      }
+	      else {
+	        p_audio_config->achan[channel].ictrl[it].gpio = atoi(t);
+		p_audio_config->achan[channel].ictrl[it].invert = 0;
+	      }
+#endif
+	    }
+	  }
 
 /*
  * DWAIT 		- Extra delay for receiver squelch.
