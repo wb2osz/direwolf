@@ -184,7 +184,7 @@ int main (int argc, char *argv[])
 	int d_t_opt = 0;	/* "-d t" option for Tracker.  Can be repeated for more detail. */	
 	int d_g_opt = 0;	/* "-d g" option for GPS. Can be repeated for more detail. */
 	int d_o_opt = 0;	/* "-d o" option for output control such as PTT and DCD. */	
-	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */			
+	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */
 	
 
 	strlcpy(l_opt, "", sizeof(l_opt));
@@ -447,7 +447,7 @@ int main (int argc, char *argv[])
 	      case 'w':	 nmea_set_debug (1); break;		// not documented yet.
 	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      case 'o':  d_o_opt++; ptt_set_debug(d_o_opt); break;	
-	      case 'i':  d_i_opt++; break;	
+	      case 'i':  d_i_opt++; break;
 #if AX25MEMDEBUG
 	      case 'm':  ax25memdebug_set(); break;		// Track down memory leak.  Not documented.		
 #endif
@@ -695,7 +695,7 @@ int main (int argc, char *argv[])
  * log the tracker beacon transmissions with fake channel 999.
  */
 
-	log_init(misc_config.logdir);	
+	log_init(misc_config.logdir);
 	beacon_init (&audio_config, &misc_config);
 
 
