@@ -171,7 +171,7 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 	  dwgps_info_t info;
 
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Unable to connect to GPSD stream.\n");
+	  dw_printf ("Unable to connect to GPSD stream at %s:%s.\n", pconfig->gpsd_host, sport);
 	  dw_printf ("%s\n", gps_errstr(errno));
 
 	  return (-1);

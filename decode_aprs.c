@@ -193,6 +193,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	A->g_footprint_radius = G_UNKNOWN;
 
 
+
 /*
  * Extract source and destination including the SSID.
  */
@@ -4551,6 +4552,12 @@ int main (int argc, char *argv[])
 	      //Print it all out in human readable format.
 
 	      decode_aprs_print (&A);
+
+	      /*
+	       * Perform validity check on each address.
+	       * This should print an error message if any issues.
+	       */
+	      (void)ax25_check_addresses(pp);
 
 	      // Send to log file?
 

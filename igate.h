@@ -55,13 +55,24 @@ struct igate_config_s {
 	int tx_limit_5;			/* Max. packets to transmit in 5 minutes. */
 };
 
+
+#define IGATE_TX_LIMIT_1_DEFAULT 6
+#define IGATE_TX_LIMIT_1_MAX     20
+
+#define IGATE_TX_LIMIT_5_DEFAULT 20
+#define IGATE_TX_LIMIT_5_MAX     80
+
+
 /* Call this once at startup */
 
-void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config);
+void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config, int debug_level);
 
 /* Call this with each packet received from the radio. */
 
 void igate_send_rec_packet (int chan, packet_t recv_pp);
 
+/* This when digipeater transmits.  Set bydigi to 1 . */
+
+void ig_to_tx_remember (packet_t pp, int chan, int bydigi);
 
 #endif

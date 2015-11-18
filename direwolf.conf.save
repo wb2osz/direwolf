@@ -318,7 +318,7 @@ TBEACON delay=0:30 every=0:20 SYMBOL=car  FREQ=146.955  OFFSET=-0.600  TONE=74.4
 # the "#" from the beginning of the line below.  
 #
 
-#DIGIPEAT 0 0 ^WIDE[3-7]-[1-7]$|^TEST$ ^WIDE[12]-[12]$ TRACE 
+DIGIPEAT 0 0 ^WIDE[3-7]-[1-7]$|^TEST$ ^WIDE[12]-[12]$ TRACE 
 
 # See User Guide for more explanation of what this means and how
 # it can be customized for your particular needs.
@@ -346,12 +346,12 @@ TBEACON delay=0:30 every=0:20 SYMBOL=car  FREQ=146.955  OFFSET=-0.600  TONE=74.4
 #	asia.aprs2.net 		- for Asia
 #	aunz.aprs2.net		- for Oceania 
 
-#IGSERVER noam.aprs2.net
+IGSERVER noam.aprs2.net
 
 # You also need to specify your login name and passcode. 
 # Contact the author if you can't figure out how to generate the passcode.
  
-#IGLOGIN WB2OSZ-5 123456
+IGLOGIN WB2OSZ-14 17845
 
 # That's all you need for a receive only IGate which relays
 # messages from the local radio channel to the global servers.
@@ -361,25 +361,27 @@ TBEACON delay=0:30 every=0:20 SYMBOL=car  FREQ=146.955  OFFSET=-0.600  TONE=74.4
 # forward it to an IGate server.  This is done by using sendto=IG rather
 # than a radio channel number. Overlay R for receive only, T for two way.
 
-#PBEACON sendto=IG delay=0:30 every=60:00 symbol="igate" overlay=R lat=42^37.14N long=071^20.83W 
+PBEACON sendto=IG delay=1:00 every=60:00 symbol="igate" overlay=R lat=42^37.14N long=071^20.83W 
 #PBEACON sendto=IG delay=0:30 every=60:00 symbol="igate" overlay=T lat=42^37.14N long=071^20.83W 
 
 
 # To relay messages from the Internet to radio, you need to add
 # one more option with the transmit channel number and a VIA path.
 
-#IGTXVIA 0 WIDE1-1
+IGTXVIA 0 WIDE1-1
 
 # You might want to apply a filter for what packets will be obtained from the server.
 # Read about filters here:  http://www.aprs-is.net/javaprsfilter.aspx
 # Example, positions and objects within 50 km of my location:
 
-#IGFILTER m/50 
+IGFILTER m/100 
 
 # That is known as a server-side filter.  It is processed by the IGate server.
 # You can also apply local filtering to limit what will be transmitted on the 
 # RF side.  For example, transmit only "messages" on channel 0 and weather 
 # reports on channel 1. 
+
+filter 0 ig t/p
 
 #FILTER IG 0 t/m
 #FILTER IG 1 t/wn
@@ -389,7 +391,7 @@ TBEACON delay=0:30 every=0:20 SYMBOL=car  FREQ=146.955  OFFSET=-0.600  TONE=74.4
 # during 1 minute and 5 minute intervals.   If a limit would 
 # be exceeded, the packet is dropped and message is displayed in red.
 
-IGTXLIMIT 6 10
+IGTXLIMIT 20 100
 
 
 #############################################################

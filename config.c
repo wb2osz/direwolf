@@ -742,8 +742,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	memset (p_igate_config, 0, sizeof(struct igate_config_s));
 	p_igate_config->t2_server_port = DEFAULT_IGATE_PORT;
 	p_igate_config->tx_chan = -1;			/* IS->RF not enabled */
-	p_igate_config->tx_limit_1 = 6;
-	p_igate_config->tx_limit_5 = 20;
+	p_igate_config->tx_limit_1 = IGATE_TX_LIMIT_1_DEFAULT;
+	p_igate_config->tx_limit_5 = IGATE_TX_LIMIT_5_DEFAULT;
 
 
 	/* People find this confusing. */
@@ -3165,7 +3165,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      if (islower(*p)) *p = toupper(*p);
 	    }
 
-	    if ( ! ax25_parse_addr(t, 1, method, &ssid, &heard)) {
+	    if ( ! ax25_parse_addr(-1, t, 1, method, &ssid, &heard)) {
 	       continue;  // function above prints any error message
 	    }
 
@@ -3409,17 +3409,21 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    
-	    /* limits of 20 and 100 are unfriendly but not insane. */
-
 	    n = atoi(t);
-            if (n >= 1 && n <= 20) {
+            if (n < 1) {
+	      p_igate_config->tx_limit_1 = 1;
+	    }
+            else if (n <= IGATE_TX_LIMIT_1_MAX) {
 	      p_igate_config->tx_limit_1 = n;
 	    }
 	    else {
+	      p_igate_config->tx_limit_1 = IGATE_TX_LIMIT_1_MAX;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid one minute transmit limit. Using %d.\n", 
+              dw_printf ("Line %d: One minute transmit limit has been reduced to %d.\n",
 				line, p_igate_config->tx_limit_1);
+	      dw_printf ("You won't make friends by setting a limit this high.\n");
    	    }
+
 
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -3429,13 +3433,18 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    
 	    n = atoi(t);
-            if (n >= 1 && n <= 100) {
+            if (n < 1) {
+	      p_igate_config->tx_limit_5 = 1;
+	    }
+            else if (n <= IGATE_TX_LIMIT_5_MAX) {
 	      p_igate_config->tx_limit_5 = n;
 	    }
 	    else {
+	      p_igate_config->tx_limit_5 = IGATE_TX_LIMIT_5_MAX;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid one minute transmit limit. Using %d.\n", 
+              dw_printf ("Line %d: Five minute transmit limit has been reduced to %d.\n",
 				line, p_igate_config->tx_limit_5);
+	      dw_printf ("You won't make friends by setting a limit this high.\n");
    	    }
 	  }
 

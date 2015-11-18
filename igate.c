@@ -107,16 +107,15 @@ static void * connnect_thread (void *arg);
 static void * igate_recv_thread (void *arg);
 #endif
 
-static void send_msg_to_server (char *msg);
-static void xmit_packet (char *message);
+static void send_msg_to_server (const char *msg);
+static void xmit_packet (char *message, int chan);
 
 static void rx_to_ig_init (void);
 static void rx_to_ig_remember (packet_t pp);
 static int rx_to_ig_allow (packet_t pp);
 
 static void ig_to_tx_init (void);
-static void ig_to_tx_remember (packet_t pp);
-static int ig_to_tx_allow (packet_t pp);
+static int ig_to_tx_allow (packet_t pp, int chan);
 
 
 /* 
@@ -256,7 +255,7 @@ int main (int argc, char *argv[])
 	  SLEEP_SEC (20);
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Send received packet\n");
-	  send_msg_to_server ("W1ABC>APRS:?\r\n");
+	  send_msg_to_server ("W1ABC>APRS:?");
 	}
 #endif
 	return 0;
@@ -277,6 +276,8 @@ int main (int argc, char *argv[])
 static struct audio_s		*save_audio_config_p;
 static struct igate_config_s	*save_igate_config_p;
 static struct digi_config_s 	*save_digi_config_p;
+static int 			s_debug;
+
 
 /*
  * Statistics.  
@@ -359,6 +360,13 @@ static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
  *		p_digi_config	- Digipeater configuration.  
  *				  All we care about here is the packet filtering options.
  *
+ *		debug_level	- 0  print packets FROM APRS-IS,
+ *				     establishing connection with sergver, and
+ *				     and anything rejected by client side filtering.
+ *				  1  plus packets sent TO server or why not.
+ *				  2  plus duplicate detection overview.
+ *				  3  plus duplicate detection details.
+ *
  * Description:	This starts two threads:
  *
  *		  *  to establish and maintain a connection to the server.
@@ -367,7 +375,7 @@ static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
  *--------------------------------------------------------------------*/
 
 
-void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config)
+void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config, int debug_level)
 {
 #if __WIN32__
 	HANDLE connnect_th;
@@ -377,6 +385,7 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	pthread_t cmd_listen_tid;
 	int e;
 #endif
+	s_debug = debug_level;
 
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
@@ -738,7 +747,6 @@ static void * connnect_thread (void *arg)
 	        strlcat (stemp, " filter ", sizeof(stemp));
 	        strlcat (stemp, save_igate_config_p->t2_filter, sizeof(stemp));
 	      }
-	      strlcat (stemp, "\r\n", sizeof(stemp));
 	      send_msg_to_server (stemp);
 
 /* Delay until it is ok to start sending packets. */
@@ -766,7 +774,7 @@ static void * connnect_thread (void *arg)
 
 	    char heartbeat[10];
 
-	    strlcpy (heartbeat, "#\r\n", sizeof(heartbeat));
+	    strlcpy (heartbeat, "#", sizeof(heartbeat));
 
 	    /* This will close the socket if any error. */
 	    send_msg_to_server (heartbeat);
@@ -800,13 +808,15 @@ static void * connnect_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
+#define IGATE_MAX_MSG 520	/* Message to IGate max 512 characters. */
+
 void igate_send_rec_packet (int chan, packet_t recv_pp)
 {
 	packet_t pp;
 	int n;
 	unsigned char *pinfo;
 	char *p;
-	char msg[520];		/* Message to IGate max 512 characters. */
+	char msg[IGATE_MAX_MSG];
 	int info_len;
 	
 
@@ -826,11 +836,9 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp) != 1) {
 
-// TODO1.2: take out debug message.  
-//#if DEBUG
-	    text_color_set(DW_COLOR_DEBUG);
+	    text_color_set(DW_COLOR_INFO);
 	    dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
-//#endif
+
 	    return;
 	  }
 	}
@@ -862,19 +870,22 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	        strcmp(via, "TCPXX") == 0 ||
 	        strcmp(via, "RFONLY") == 0 ||
 	        strcmp(via, "NOGATE") == 0) {
-#if DEBUGx
-	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("Rx IGate: Do not relay with TCPIP etc. in path.\n");
-#endif
+
+	      if (s_debug >= 1) {
+	        text_color_set(DW_COLOR_DEBUG);
+	        dw_printf ("Rx IGate: Do not relay with %s in path.\n", via);
+	      }
+
 	      ax25_delete (pp);
 	      return;
 	    }
 	  }
 
-#if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Rx IGate: Unwrap third party message.\n");
-#endif
+	  if (s_debug >= 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Rx IGate: Unwrap third party message.\n");
+	  }
+
 	  inner_pp = ax25_unwrap_third_party(pp);
 	  if (inner_pp == NULL) {
 	    ax25_delete (pp);
@@ -896,10 +907,12 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	      strcmp(via, "TCPXX") == 0 ||
 	      strcmp(via, "RFONLY") == 0 ||
 	      strcmp(via, "NOGATE") == 0) {
-#if DEBUGx
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("Rx IGate: Do not relay with TCPIP etc. in path.\n");
-#endif
+
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Rx IGate: Do not relay with %s in path.\n", via);
+	    }
+
 	    ax25_delete (pp);
 	    return;
 	  }
@@ -909,10 +922,10 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  * Do not relay generic query.
  */
 	if (ax25_get_dti(pp) == '?') {
-#if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Rx IGate: Do not relay generic query.\n");
-#endif
+	  if (s_debug >= 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Rx IGate: Do not relay generic query.\n");
+	  }
 	  ax25_delete (pp);
 	  return;
 	}
@@ -926,18 +939,18 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	(void)(info_len);
 
 	if ((p = strchr ((char*)pinfo, '\r')) != NULL) {
-#if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Rx IGate: Truncated information part at CR.\n");
-#endif
+	  if (s_debug >= 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Rx IGate: Truncated information part at CR.\n");
+	  }
           *p = '\0';
 	}
 
 	if ((p = strchr ((char*)pinfo, '\n')) != NULL) {
-#if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Rx IGate: Truncated information part at LF.\n");
-#endif
+	  if (s_debug >= 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Rx IGate: Truncated information part at LF.\n");
+	  }
           *p = '\0';
 	}
 
@@ -947,10 +960,10 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  */
 	if (strlen((char*)pinfo) == 0) {
 
-#if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Rx IGate: Information part length is zero.\n");
-#endif
+	  if (s_debug >= 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Rx IGate: Information part length is zero.\n");
+	  }
 	  ax25_delete (pp);
 	  return;
 	}
@@ -962,10 +975,10 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  */
 
 	if ( ! rx_to_ig_allow(pp)) {
-#if DEBUG
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Rx IGate: Drop duplicate of same packet seen recently.\n");
-#endif
+	  if (s_debug >= 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Rx IGate: Drop duplicate of same packet seen recently.\n");
+	  }
 	  ax25_delete (pp);
 	  return;
 	}
@@ -980,7 +993,6 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	strlcat (msg, save_audio_config_p->achan[chan].mycall, sizeof(msg));
 	strlcat (msg, ":", sizeof(msg));
 	strlcat (msg, (char*)pinfo, sizeof(msg));
-	strlcat (msg, "\r\n", sizeof(msg));
 
 	send_msg_to_server (msg);
 	stats_rx_igate_packets++;
@@ -1006,7 +1018,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  *		This one function should be used for login, hearbeats,
  *		and packets.
  *
- * Inputs:	msg	- Message.  Should end with CR/LF.
+ * Inputs:	imsg	- Message.  We will add CR/LF.
  *		
  *
  * Description:	Send message to IGate Server if connected.
@@ -1015,26 +1027,30 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  *--------------------------------------------------------------------*/
 
 
-static void send_msg_to_server (char *msg)
+static void send_msg_to_server (const char *imsg)
 {
 	int err;
-
+	char stemp[IGATE_MAX_MSG];
 
 	if (igate_sock == -1) {
 	  return;	/* Silently discard if not connected. */
 	}
 
-	stats_uplink_bytes += strlen(msg);
+	strlcpy(stemp, imsg, sizeof(stemp));
 
-#if DEBUG
-	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[ig] ");
-	ax25_safe_print (msg, strlen(msg), 0);
-	dw_printf ("\n");
-#endif
+	if (s_debug >= 1) {
+	  text_color_set(DW_COLOR_XMIT);
+	  dw_printf ("[rx>ig] ");
+	  ax25_safe_print (stemp, strlen(stemp), 0);
+	  dw_printf ("\n");
+	}
+
+	strlcat (stemp, "\r\n", sizeof(stemp));
+
+	stats_uplink_bytes += strlen(stemp);
 
 #if __WIN32__	
-        err = send (igate_sock, msg, strlen(msg), 0);
+        err = send (igate_sock, stemp, strlen(stemp), 0);
 	if (err == SOCKET_ERROR)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -1045,7 +1061,7 @@ static void send_msg_to_server (char *msg)
 	  WSACleanup();
 	}
 #else
-        err = write (igate_sock, msg, strlen(msg));
+        err = write (igate_sock, stemp, strlen(stemp));
 	if (err <= 0)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -1169,7 +1185,31 @@ static void * igate_recv_thread (void *arg)
 
 /*
  * We have a complete message terminated by LF.
+ *
+ * Remove CR LF from end.
+ * This is a record separator for the protocol, not part of the data.
+ * Should probably have an error if we don't have this.
  */
+	  if (len >=2 && message[len-1] == '\n') { message[len-1] = '\0'; len--; }
+	  if (len >=1 && message[len-1] == '\r') { message[len-1] = '\0'; len--; }
+
+/*
+ * I've seen a case where the original RF packet had a trailing CR but
+ * after someone else sent it to the server and it came back to me, that
+ * CR was now a trailing space.
+ * At first I was tempted to trim a trailing space as well.
+ * By fixing this one case it might corrupt the data in other cases.
+ * We compensate for this by ignoring trailing spaces when performing
+ * the duplicate detection and removal.
+ */
+
+/*
+ * I've also seen a multiple trailing spaces like this.
+ * Notice how safe_print shows a trailing space in hexadecimal to make it obvious.
+ *
+ * W1CLA-1>APVR30,TCPIP*,qAC,T2TOKYO3:;IRLP-4942*141503z4218.46NI07108.24W0446325-146IDLE    <0x20>
+ */
+
 	  if (len == 0) 
 	  {
 /* 
@@ -1184,35 +1224,33 @@ static void * igate_recv_thread (void *arg)
  * That way we can see login confirmation but not 
  * be bothered by the heart beat messages.
  */
-#ifndef DEBUG
+
 	    if ( ! ok_to_send) {
-#endif
 	      text_color_set(DW_COLOR_REC);
 	      dw_printf ("[ig] ");
 	      ax25_safe_print ((char *)message, len, 0);
 	      dw_printf ("\n");
-#ifndef DEBUG
 	    }
-#endif
 	  }
 	  else 
 	  {
 /*
  * Convert to third party packet and transmit.
+ *
+ * Future: might have ability to configure multiple transmit
+ * channels, each with own client side filtering and via path.
+ * Loop here over all configured channels.
  */
-	    
 	    text_color_set(DW_COLOR_REC);
-	    dw_printf ("\n[ig] ");
+	    dw_printf ("\n[ig>tx] ");		// formerly just [ig]
 	    ax25_safe_print ((char *)message, len, 0);
 	    dw_printf ("\n");
 
-/*
- * Remove CR LF from end.
- */
-	    if (len >=2 && message[len-1] == '\n') { message[len-1] = '\0'; len--; }
-	    if (len >=1 && message[len-1] == '\r') { message[len-1] = '\0'; len--; }
+	    int to_chan = save_igate_config_p->tx_chan;
 
-	    xmit_packet ((char*)message);
+	    if (to_chan >= 0) {
+	      xmit_packet ((char*)message, to_chan);
+	    }
 	  }
 
 	}  /* while (1) */
@@ -1229,31 +1267,43 @@ static void * igate_recv_thread (void *arg)
  *		packet and send to transmit queue.
  *
  * Inputs:	message		- As sent by the server.  
+ *				  Any trailing CRLF should have been removed.
+ *				  Typical examples:
+ *
+ *				KA1BTK-5>APDR13,TCPIP*,qAC,T2IRELAND:=4237.62N/07040.68W$/A=-00054 http://aprsdroid.org/
+ *				N1HKO-10>APJI40,TCPIP*,qAC,N1HKO-JS:<IGATE,MSG_CNT=0,LOC_CNT=0
+ *				K1RI-2>APWW10,WIDE1-1,WIDE2-1,qAS,K1RI:/221700h/9AmA<Ct3_ sT010/002g005t045r000p023P020h97b10148
+ *				KC1BOS-2>T3PQ3S,WIDE1-1,WIDE2-1,qAR,W1TG-1:`c)@qh\>/"50}TinyTrak4 Mobile
+ *
+ *				  Notice how the final address in the header might not
+ *				  be a valid AX.25 address.  We see a 9 character address
+ *				  (with no ssid) and an ssid of two letters.
+ *				  We don't care because we end up discarding them before
+ *				  repackaging to go over the radio.
+ *
+ *				  The "q construct"  ( http://www.aprs-is.net/q.aspx ) provides
+ *				  a clue about the journey taken but I don't think we care here.
+ *
+ *		to_chan		- Radio channel for transmitting.
  *
  *--------------------------------------------------------------------*/
 
-static void xmit_packet (char *message)
+static void xmit_packet (char *message, int to_chan)
 {
 	packet_t pp3;
 	char payload[AX25_MAX_PACKET_LEN];	/* what is max len? */
 	char *pinfo = NULL;
 	int info_len;
-	int to_chan = save_igate_config_p->tx_chan;	/* Should be -1 if not configured for xmit!!! */
-							/* Future:  Array of boolean to allow multiple xmit channels? */
-
-/*
- * Is IGate to Radio direction enabled?
- */
-	if (to_chan == -1) {
-	  return;
-	}
-
-	stats_tx_igate_packets++;
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
+
 /*
  * Try to parse it into a packet object.
+ * This will contain "q constructs" and we might see an address
+ * with two alphnumeric characters in the SSID so we must use
+ * the non-strict parsing.
+ *
  * Bug:  Up to 8 digipeaters are allowed in radio format.
  * There is a potential of finding a larger number here.
  */
@@ -1268,6 +1318,9 @@ static void xmit_packet (char *message)
 
 /*
  * Apply our own packet filtering if configured.
+ * Do we want to do this before or after removing the VIA path?
+ * I suppose by doing it first, we have the possibility of
+ * filtering by stations along the way or the q construct.
  */
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
@@ -1276,27 +1329,29 @@ static void xmit_packet (char *message)
 
 	  if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3) != 1) {
 
-// TODO1.2: take out debug message.  One person liked it as a confirmation of what was going on.
-// Maybe it should be part of a more comprehensive debug facility?
-//#if DEBUG
-	    text_color_set(DW_COLOR_DEBUG);
+	    text_color_set(DW_COLOR_INFO);
 	    dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
-//#endif
+
 	    ax25_delete (pp3);
 	    return;
 	  }
 	}
 
-/*
- * TODO: Discard if qAX in path???  others?
- */
 
 /*
  * Remove the VIA path.
+ *
+ * For example, we might get something like this from the server.
+ *	K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
+ *
+ * We want to reduce it to this before wrapping it as third party traffic.
+ *	K1USN-1>APWW10:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
  */
+
 	while (ax25_get_num_repeaters(pp3) > 0) {
 	  ax25_remove_addr (pp3, AX25_REPEATER_1);
 	}
+
 
 /* 
  * Replace the VIA path with TCPIP and my call.
@@ -1304,7 +1359,7 @@ static void xmit_packet (char *message)
  */
 	ax25_set_addr (pp3, AX25_REPEATER_1, "TCPIP");
 	ax25_set_h (pp3, AX25_REPEATER_1);
-	ax25_set_addr (pp3, AX25_REPEATER_2, save_audio_config_p->achan[save_igate_config_p->tx_chan].mycall); 
+	ax25_set_addr (pp3, AX25_REPEATER_2, save_audio_config_p->achan[to_chan].mycall);
 	ax25_set_h (pp3, AX25_REPEATER_2);
 
 /*
@@ -1324,12 +1379,12 @@ static void xmit_packet (char *message)
 /*
  * Encapsulate for sending over radio if no reason to drop it.
  */
-	if (ig_to_tx_allow (pp3)) {
+	if (ig_to_tx_allow (pp3, to_chan)) {
 	  char radio [500];
 	  packet_t pradio;
 
 	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
-				save_audio_config_p->achan[save_igate_config_p->tx_chan].mycall,
+				save_audio_config_p->achan[to_chan].mycall,
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
 				save_igate_config_p->tx_via,
 				payload);
@@ -1341,16 +1396,18 @@ static void xmit_packet (char *message)
 
 	  if (pradio != NULL) {
 
+	    stats_tx_igate_packets++;
+
 #if ITEST
 	    text_color_set(DW_COLOR_XMIT);
 	    dw_printf ("Xmit: %s\n", radio);
 	    ax25_delete (pradio);
 #else
 	    /* This consumes packet so don't reference it again! */
-	    tq_append (save_igate_config_p->tx_chan, TQ_PRIO_1_LO, pradio);
+	    tq_append (to_chan, TQ_PRIO_1_LO, pradio);
 #endif
 	    stats_rf_xmit_packets++;
-	    ig_to_tx_remember (pp3);
+	    ig_to_tx_remember (pp3, save_igate_config_p->tx_chan, 0);	// correct. version before encapsulating it.
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
@@ -1381,7 +1438,8 @@ static void xmit_packet (char *message)
  *
  * Name:	rx_to_ig_allow
  * 
- * Purpose:	Check whether this is a duplicate of another sent recently.
+ * Purpose:	Check whether this is a duplicate of another
+ *		recently received from RF and sent to the Server
  *
  * Input:	pp	- Pointer to packet object.
  *		
@@ -1427,8 +1485,27 @@ static void rx_to_ig_init (void)
 
 static void rx_to_ig_remember (packet_t pp)
 {
+
        	rx2ig_time_stamp[rx2ig_insert_next] = time(NULL);
         rx2ig_checksum[rx2ig_insert_next] = ax25_dedupe_crc(pp);
+
+	if (s_debug >= 3) {
+	  char src[AX25_MAX_ADDR_LEN];
+	  char dest[AX25_MAX_ADDR_LEN];
+	  unsigned char *pinfo;
+	  int info_len;
+
+	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
+	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
+	  info_len = ax25_get_info (pp, &pinfo);
+
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("rx_to_ig_remember [%d] = %d %d \"%s>%s:%s\"\n",
+			rx2ig_insert_next,
+			(int)(rx2ig_time_stamp[rx2ig_insert_next]),
+			rx2ig_checksum[rx2ig_insert_next],
+			src, dest, pinfo);
+	}
 
         rx2ig_insert_next++;
         if (rx2ig_insert_next >= RX2IG_HISTORY_MAX) {
@@ -1442,10 +1519,34 @@ static int rx_to_ig_allow (packet_t pp)
 	time_t now = time(NULL);
 	int j;
 
+	if (s_debug >= 2) {
+	  char src[AX25_MAX_ADDR_LEN];
+	  char dest[AX25_MAX_ADDR_LEN];
+	  unsigned char *pinfo;
+	  int info_len;
+
+	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
+	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
+	  info_len = ax25_get_info (pp, &pinfo);
+
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("rx_to_ig_allow? %d \"%s>%s:%s\"\n", crc, src, dest, pinfo);
+	}
+
 	for (j=0; j<RX2IG_HISTORY_MAX; j++) {
-	  if (rx2ig_time_stamp[j] >= now - RX2IG_DEDUPE_TIME && rx2ig_checksum[j] == crc) {
+	  if (rx2ig_checksum[j] == crc && rx2ig_time_stamp[j] >= now - RX2IG_DEDUPE_TIME) {
+	    if (s_debug >= 2) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      // could be multiple entries and this might not be the most recent.
+	      dw_printf ("rx_to_ig_allow? NO. Seen %d seconds ago.\n", (int)(now - rx2ig_time_stamp[j]));
+	    }
 	    return 0;
 	  }
+	}
+
+	if (s_debug >= 2) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("rx_to_ig_allow? YES\n");
 	}
 	return 1;
 
@@ -1462,6 +1563,12 @@ static int rx_to_ig_allow (packet_t pp)
  *
  * Inputs:	pp	- Pointer to a packet object.
  *
+ *		chan	- Channel number where it is being transmitted.
+ *			  Duplicate detection needs to be separate for each radio channel.
+ *
+ *		bydigi	- True if transmitted by digipeater function.  False for IGate.
+ *			  Why do we care about digpeating here?  See discussion below.
+ *
  *------------------------------------------------------------------------------
  *
  * Name:	ig_to_tx_allow
@@ -1470,6 +1577,8 @@ static int rx_to_ig_allow (packet_t pp)
  *		or if we exceed the transmit rate limits.
  *
  * Input:	pp	- Pointer to packet object.
+ *
+ *		chan	- Radio channel number where we want to transmit.
  *		
  * Returns:	True if it is OK to send.
  *		
@@ -1488,8 +1597,8 @@ static int rx_to_ig_allow (packet_t pp)
  *		This is the essentially the same as the pair of functions
  *		above with one addition restriction.  
  *
- *		The typical residential Internet connection is about 10,000
- *		times faster than the radio links we are using.  It would
+ *		The typical residential Internet connection is around 10,000
+ *		to 50,000 times faster than the radio links we are using.  It would
  *		be easy to completely saturate the radio channel if we are
  *		not careful.
  *
@@ -1497,26 +1606,155 @@ static int rx_to_ig_allow (packet_t pp)
  *		number of packets sent during the past minute and past 5
  *		minutes and stop sending if a limit is reached.
  *
- * Future?	We might also want to avoid transmitting if the same packet
- *		was heard on the radio recently.  If everything is kept in
- *		the same table, we'd need to distinguish between those from
- *		the IGate server and those heard on the radio.
- *		Those heard on the radio would not count toward the
- *		1 and 5 minute rate limiting.
- *		Maybe even provide informative information such as -
- *		Tx IGate: Same packet heard recently from W1ABC and W9XYZ.
+ * More Discussion:
  *
- *		Of course, the radio encapsulation would need to be removed
- *		and only the 3rd party packet inside compared.
+ *		Consider the following example.
+ *		I hear a packet from W1TG-1 three times over the radio then get the
+ *		(almost) same thing twice from APRS-IS.
  *
+ *
+ *		Digipeater N3LEE-10 audio level = 23(10/6)   [NONE]   __|||||||
+ *		[0.5] W1TG-1>APU25N,N3LEE-10*,WIDE2-1:<IGATE,MSG_CNT=30,LOC_CNT=61<0x0d>
+ *		Station Capabilities, Ambulance, UIview 32 bit apps
+ *		IGATE,MSG_CNT=30,LOC_CNT=61
+ *
+ *		[0H] W1TG-1>APU25N,N3LEE-10,WB2OSZ-14*:<IGATE,MSG_CNT=30,LOC_CNT=61<0x0d>
+ *
+ *		Digipeater WIDE2 (probably N3LEE-4) audio level = 22(10/6)   [NONE]   __|||||||
+ *		[0.5] W1TG-1>APU25N,N3LEE-10,N3LEE-4,WIDE2*:<IGATE,MSG_CNT=30,LOC_CNT=61<0x0d>
+ *		Station Capabilities, Ambulance, UIview 32 bit apps
+ *		IGATE,MSG_CNT=30,LOC_CNT=61
+ *
+ *		Digipeater WIDE2 (probably AB1OC-10) audio level = 31(14/11)   [SINGLE]   ____:____
+ *		[0.4] W1TG-1>APU25N,N3LEE-10,AB1OC-10,WIDE2*:<IGATE,MSG_CNT=30,LOC_CNT=61<0x0d>
+ *		Station Capabilities, Ambulance, UIview 32 bit apps
+ *		IGATE,MSG_CNT=30,LOC_CNT=61
+ *
+ *		[ig] W1TG-1>APU25N,WIDE2-2,qAR,W1GLO-11:<IGATE,MSG_CNT=30,LOC_CNT=61
+ *		[0L] WB2OSZ-14>APDW13,WIDE1-1:}W1TG-1>APU25N,TCPIP,WB2OSZ-14*:<IGATE,MSG_CNT=30,LOC_CNT=61
+ *
+ *		[ig] W1TG-1>APU25N,K1FFK,WIDE2*,qAR,WB2ZII-15:<IGATE,MSG_CNT=30,LOC_CNT=61<0x20>
+ *		[0L] WB2OSZ-14>APDW13,WIDE1-1:}W1TG-1>APU25N,TCPIP,WB2OSZ-14*:<IGATE,MSG_CNT=30,LOC_CNT=61<0x20>
+ *
+ *
+ *		The first one gets retransmitted by digipeating.
+ *
+ *		Why are we getting the same thing twice from APRS-IS?  Shouldn't remove duplicates?
+ *		Look closely.  The original packet, on RF, had a CR character at the end.
+ *		At first I thought duplicate removal was broken but it turns out they
+ *		are not exactly the same.
+ *
+ *		The receive IGate spec says a packet should be cut at a CR.
+ *		In one case it is removed as expected   In another case, it is replaced by a trailing
+ *		space character.  Maybe someone thought non printable characters should be
+ *		replaced by spaces???
+ *
+ *		At first I was tempted to remove any trailing spaces to make up for the other
+ *		IGate adding it.  Two wrongs don't make a right.   Trailing spaces are not that
+ *		rare and removing them would corrupt the data.  My new strategy is for
+ *		the duplicate detection compare to ignore trailing space, CR, and LF.
+ *
+ *		We already transmitted the same thing by the digipeater function so this should
+ *		also go into memory for avoiding duplicates out of the transmit IGate.
+ *
+ * Future:
+ *		Should the digipeater function avoid transmitting something if it
+ *		was recently transmitted by the IGate funtion?
+ *		This code is pretty much the same as dedupe.c. Maybe it could all
+ *		be combined into one.  Need to ponder this some more.
+ * 
  *--------------------------------------------------------------------*/
+
+/*
+Here is another complete example, with the "-diii" debugging option to show details.
+
+
+We receive the signal directly from the source: (zzz.log 1011)
+
+	N1ZKO-7 audio level = 33(16/10)   [NONE]   ___||||||
+	[0.5] N1ZKO-7>T2TS7X,WIDE1-1,WIDE2-1:`c6wl!i[/>"4]}[scanning]=<0x0d>
+	MIC-E, Human, Kenwood TH-D72, In Service
+	N 42 43.7800, W 071 26.9100, 0 MPH, course 177, alt 230 ft
+	[scanning]
+
+We did not send it to the IS server recently.
+
+	Rx IGate: Truncated information part at CR.
+	rx_to_ig_allow? 57185 "N1ZKO-7>T2TS7X:`c6wl!i[/>"4]}[scanning]="
+	rx_to_ig_allow? YES
+
+Send it now and remember that fact.
+
+	[rx>ig] N1ZKO-7>T2TS7X,WIDE1-1,WIDE2-1,qAR,WB2OSZ-14:`c6wl!i[/>"4]}[scanning]=
+	rx_to_ig_remember [21] = 1447683040 57185 "N1ZKO-7>T2TS7X:`c6wl!i[/>"4]}[scanning]="
+
+Digipeat it.  Notice how it has a trailing CR.
+TODO:  Why is the CRC different?  Content looks the same.
+
+	ig_to_tx_remember [38] = ch0 d1 1447683040 27598 "N1ZKO-7>T2TS7X:`c6wl!i[/>"4]}[scanning]="
+	[0H] N1ZKO-7>T2TS7X,WB2OSZ-14*,WIDE2-1:`c6wl!i[/>"4]}[scanning]=<0x0d>
+
+Now we hear it again, thru a digipeater.
+Not sure who.   Was it UNCAN or was it someone else who doesn't use tracing?
+See my rant in the User Guide about this.
+
+	Digipeater WIDE2 (probably UNCAN) audio level = 30(15/10)   [NONE]   __|||::__
+	[0.4] N1ZKO-7>T2TS7X,KB1POR-2,UNCAN,WIDE2*:`c6wl!i[/>"4]}[scanning]=<0x0d>
+	MIC-E, Human, Kenwood TH-D72, In Service
+	N 42 43.7800, W 071 26.9100, 0 MPH, course 177, alt 230 ft
+	[scanning]
+
+Was sent to server recently so don't do it again.
+
+	Rx IGate: Truncated information part at CR.
+	rx_to_ig_allow? 57185 "N1ZKO-7>T2TS7X:`c6wl!i[/>"4]}[scanning]="
+	rx_to_ig_allow? NO. Seen 1 seconds ago.
+	Rx IGate: Drop duplicate of same packet seen recently.
+
+We hear it a third time, by a different digipeater.
+
+	Digipeater WIDE1 (probably N3LEE-10) audio level = 23(12/6)   [NONE]   __|||||||
+	[0.5] N1ZKO-7>T2TS7X,N3LEE-10,WIDE1*,WIDE2-1:`c6wl!i[/>"4]}[scanning]=<0x0d>
+	MIC-E, Human, Kenwood TH-D72, In Service
+	N 42 43.7800, W 071 26.9100, 0 MPH, course 177, alt 230 ft
+	[scanning]
+
+It's a duplicate, so don't send to server.
+
+	Rx IGate: Truncated information part at CR.
+	rx_to_ig_allow? 57185 "N1ZKO-7>T2TS7X:`c6wl!i[/>"4]}[scanning]="
+	rx_to_ig_allow? NO. Seen 2 seconds ago.
+	Rx IGate: Drop duplicate of same packet seen recently.
+	Digipeater: Drop redundant packet to channel 0.
+
+The server sends it to us.
+NOTICE: The CR at the end has been replaced by a space.
+
+	[ig>tx] N1ZKO-7>T2TS7X,K1FFK,WA2MJM-15*,qAR,WB2ZII-15:`c6wl!i[/>"4]}[scanning]=<0x20>
+
+Should we transmit it?
+No, we sent it recently by the digipeating function (note "bydigi=1").
+
+	DEBUG:  ax25_dedupe_crc ignoring trailing space.
+	ig_to_tx_allow? ch0 27598 "N1ZKO-7>T2TS7X:`c6wl!i[/>"4]}[scanning]= "
+	ig_to_tx_allow? NO. Sent 4 seconds ago. bydigi=1
+	Tx IGate: Drop duplicate packet transmitted recently.
+	[0L] WB2OSZ-14>APDW13,WIDE1-1:}W1AST>TRPR4T,TCPIP,WB2OSZ-14*:`d=Ml!3>/"4N}
+	[rx>ig] #
+*/
+
 
 #define IG2TX_DEDUPE_TIME 60		/* Do not send duplicate within 60 seconds. */
 #define IG2TX_HISTORY_MAX 50		/* Remember the last 50 sent from server to radio. */
 
+/* Ideally this should be a critical region because */
+/* it is being written by two threads but I'm not that concerned. */
+
 static int ig2tx_insert_next;
 static time_t ig2tx_time_stamp[IG2TX_HISTORY_MAX];
 static unsigned short ig2tx_checksum[IG2TX_HISTORY_MAX];
+static unsigned char ig2tx_chan[IG2TX_HISTORY_MAX];
+static unsigned short ig2tx_bydigi[IG2TX_HISTORY_MAX];
 
 static void ig_to_tx_init (void)
 {
@@ -1524,15 +1762,40 @@ static void ig_to_tx_init (void)
 	for (n=0; n<IG2TX_HISTORY_MAX; n++) {
 	  ig2tx_time_stamp[n] = 0;
 	  ig2tx_checksum[n] = 0;
+	  ig2tx_chan[n] = 0xff;
+	  ig2tx_bydigi[n] = 0;
 	}
 	ig2tx_insert_next = 0;
 }
 	
 
-static void ig_to_tx_remember (packet_t pp)
+void ig_to_tx_remember (packet_t pp, int chan, int bydigi)
 {
-       	ig2tx_time_stamp[ig2tx_insert_next] = time(NULL);
-        ig2tx_checksum[ig2tx_insert_next] = ax25_dedupe_crc(pp);
+	time_t now = time(NULL);
+	unsigned short crc = ax25_dedupe_crc(pp);
+
+	if (s_debug >= 3) {
+	  char src[AX25_MAX_ADDR_LEN];
+	  char dest[AX25_MAX_ADDR_LEN];
+	  unsigned char *pinfo;
+	  int info_len;
+
+	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
+	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
+	  info_len = ax25_get_info (pp, &pinfo);
+
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ig_to_tx_remember [%d] = ch%d d%d %d %d \"%s>%s:%s\"\n",
+			ig2tx_insert_next,
+			chan, bydigi,
+			(int)(now), crc,
+			src, dest, pinfo);
+	}
+
+	ig2tx_time_stamp[ig2tx_insert_next] = now;
+	ig2tx_checksum[ig2tx_insert_next] = crc;
+	ig2tx_chan[ig2tx_insert_next] = chan;
+	ig2tx_bydigi[ig2tx_insert_next] = bydigi;
 
         ig2tx_insert_next++;
         if (ig2tx_insert_next >= IG2TX_HISTORY_MAX) {
@@ -1540,25 +1803,51 @@ static void ig_to_tx_remember (packet_t pp)
         }
 }
 
-static int ig_to_tx_allow (packet_t pp)
+static int ig_to_tx_allow (packet_t pp, int chan)
 {
 	unsigned short crc = ax25_dedupe_crc(pp);
 	time_t now = time(NULL);
 	int j;
 	int count_1, count_5;
 
+	if (s_debug >= 2) {
+	  char src[AX25_MAX_ADDR_LEN];
+	  char dest[AX25_MAX_ADDR_LEN];
+	  unsigned char *pinfo;
+	  int info_len;
+
+	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
+	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
+	  info_len = ax25_get_info (pp, &pinfo);
+
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ig_to_tx_allow? ch%d %d \"%s>%s:%s\"\n", chan, crc, src, dest, pinfo);
+	}
+
+	/* Consider transmissions on this channel only by either digi or IGate. */
+
 	for (j=0; j<IG2TX_HISTORY_MAX; j++) {
-	  if (ig2tx_time_stamp[j] >= now - IG2TX_DEDUPE_TIME && ig2tx_checksum[j] == crc) {
+	  if (ig2tx_checksum[j] == crc && ig2tx_chan[j] == chan && ig2tx_time_stamp[j] >= now - IG2TX_DEDUPE_TIME) {
+	    if (s_debug >= 2) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      // could be multiple entries and this might not be the most recent.
+	      dw_printf ("ig_to_tx_allow? NO. Sent %d seconds ago. bydigi=%d\n", (int)(now - ig2tx_time_stamp[j]), ig2tx_bydigi[j]);
+	    }
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf ("Tx IGate: Drop duplicate packet transmitted recently.\n");
 	    return 0;
 	  }
 	}
+
+	/* IGate transmit counts must not include digipeater transmissions. */
+
 	count_1 = 0;
 	count_5 = 0;
 	for (j=0; j<IG2TX_HISTORY_MAX; j++) {
-	  if (ig2tx_time_stamp[j] >= now - 60) count_1++;
-	  if (ig2tx_time_stamp[j] >= now - 300) count_5++;
+	  if (ig2tx_chan[j] == chan && ig2tx_bydigi[j] == 0) {
+	    if (ig2tx_time_stamp[j] >= now - 60) count_1++;
+	    if (ig2tx_time_stamp[j] >= now - 300) count_5++;
+	  }
 	}
 
 	if (count_1 >= save_igate_config_p->tx_limit_1) {
@@ -1570,6 +1859,11 @@ static int ig_to_tx_allow (packet_t pp)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 5 minutes.\n", save_igate_config_p->tx_limit_5);
 	  return 0;
+	}
+
+	if (s_debug >= 2) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("ig_to_tx_allow? YES\n");
 	}
 
 	return 1;

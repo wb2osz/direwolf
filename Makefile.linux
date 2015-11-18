@@ -584,21 +584,21 @@ check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-mode
 # Can we encode and decode at popular data rates?
 
 check-modem1200 : gen_packets atest
-	gen_packets -n 100 -o /tmp/test1.wav
-	atest -F0 -PE -L70 -G71 /tmp/test1.wav
-	atest -F1 -PE -L73 -G75 /tmp/test1.wav
+	./gen_packets -n 100 -o /tmp/test1.wav
+	./atest -F0 -PE -L70 -G71 /tmp/test1.wav
+	./atest -F1 -PE -L73 -G75 /tmp/test1.wav
 	#rm /tmp/test1.wav
 
 check-modem300 : gen_packets atest
-	gen_packets -B300 -n 100 -o /tmp/test3.wav
-	atest -B300 -F0 -L68 -G69 /tmp/test3.wav
-	atest -B300 -F1 -L73 -G75 /tmp/test3.wav
+	./gen_packets -B300 -n 100 -o /tmp/test3.wav
+	./atest -B300 -F0 -L68 -G69 /tmp/test3.wav
+	./atest -B300 -F1 -L73 -G75 /tmp/test3.wav
 	rm /tmp/test3.wav
 
 check-modem9600 : gen_packets atest
-	gen_packets -B9600 -n 100 -o /tmp/test9.wav
-	atest -B9600 -F0 -L57 -G59 /tmp/test9.wav
-	atest -B9600 -F1 -L66 -G67 /tmp/test9.wav
+	./gen_packets -B9600 -n 100 -o /tmp/test9.wav
+	./atest -B9600 -F0 -L57 -G59 /tmp/test9.wav
+	./atest -B9600 -F1 -L66 -G67 /tmp/test9.wav
 	rm /tmp/test9.wav
 
 
@@ -606,7 +606,8 @@ check-modem9600 : gen_packets atest
 # Unit test for inner digipeater algorithm
 
 .PHONY : dtest
-dtest : digipeater.c pfilter.o ax25_pad.o dedupe.o fcs_calc.o tq.o textcolor.o \
+dtest : digipeater.c dedupe.c \
+		pfilter.o ax25_pad.o fcs_calc.o tq.o textcolor.o \
 		decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^ $(LDFLAGS)
 	./dtest

@@ -476,7 +476,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  return (NULL);
 	}
 
-	if ( ! ax25_parse_addr (pa, strict, atemp, &ssid_temp, &heard_temp)) {
+	if ( ! ax25_parse_addr (AX25_SOURCE, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Failed to create packet from text.  Bad source address\n");
 	  ax25_delete (this_p);
@@ -500,7 +500,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  return (NULL);
 	}
 
-	if ( ! ax25_parse_addr (pa, strict, atemp, &ssid_temp, &heard_temp)) {
+	if ( ! ax25_parse_addr (AX25_DESTINATION, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Failed to create packet from text.  Bad destination address\n");
 	  ax25_delete (this_p);
@@ -524,7 +524,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 	  // JWL 10:38 this_p->num_addr++;
 
-	  if ( ! ax25_parse_addr (pa, strict, atemp, &ssid_temp, &heard_temp)) {
+	  if ( ! ax25_parse_addr (k, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Failed to create packet from text.  Bad digipeater address\n");
 	    ax25_delete (this_p);
@@ -582,12 +582,9 @@ packet_t ax25_from_frame_debug (unsigned char *fbuf, int flen, alevel_t alevel, 
 packet_t ax25_from_frame (unsigned char *fbuf, int flen, alevel_t alevel)
 #endif
 {
-	//unsigned char *pf;
 	packet_t this_p;
 
-	//int a;
-	//int addr_bytes;
-	
+
 /*
  * First make sure we have an acceptable length:
  *
@@ -687,7 +684,10 @@ packet_t ax25_dup (packet_t copy_from)
  * 
  * Purpose:	Parse address with optional ssid.
  *
- * Inputs:	in_addr		- Input such as "WB2OSZ-15*"
+ * Inputs:	position	- AX25_DESTINATION, AX25_SOURCE, AX25_REPEATER_1...
+ *				  Used for more specific error message.  -1 if not used.
+ *
+ *		in_addr		- Input such as "WB2OSZ-15*"
  *
  * 		strict		- TRUE for strict checking (6 characters, no lower case,
  *				  SSID must be in range of 0 to 15).
@@ -710,8 +710,12 @@ packet_t ax25_dup (packet_t copy_from)
  *
  *------------------------------------------------------------------------------*/
 
+static const char *position_name[1 + AX25_MAX_ADDRS] = {
+	"", "Destination ", "Source ",
+	"Digi1 ", "Digi2 ", "Digi3 ", "Digi4 ",
+	"Digi5 ", "Digi6 ", "Digi7 ", "Digi8 " };
 
-int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, int *out_heard)
+int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, int *out_ssid, int *out_heard)
 {
 	char *p;
 	char sstr[8];		/* Should be 1 or 2 digits for SSID. */
@@ -722,7 +726,18 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	*out_ssid = 0;
 	*out_heard = 0;
 
+	if (strict && strlen(in_addr) >= 2 && strncmp(in_addr, "qA", 2) == 0) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("%sAddress \"%s\" is a \"q-construct\" used for communicating\n", position_name[position], in_addr);
+	  dw_printf ("with APRS Internet Servers.  It was not expected here.\n");
+	}
+
 	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
+
+	if (position < -1) position = -1;
+	if (position > AX25_REPEATER_8) position = AX25_REPEATER_8;
+	position++;	/* Adjust for position_name above. */
 
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
@@ -730,14 +745,14 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	for (p = in_addr; isalnum(*p); p++) {
 	  if (i >= maxlen) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Address is too long. \"%s\" has more than %d characters.\n", in_addr, maxlen);
+	    dw_printf ("%sAddress is too long. \"%s\" has more than %d characters.\n", position_name[position], in_addr, maxlen);
 	    return 0;
 	  }
 	  out_addr[i++] = *p;
 	  out_addr[i] = '\0';
 	  if (strict && islower(*p)) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Address has lower case letters. \"%s\" must be all upper case.\n", in_addr);
+	    dw_printf ("%sAddress has lower case letters. \"%s\" must be all upper case.\n", position_name[position], in_addr);
 	    return 0;
 	  }
 	}
@@ -748,21 +763,21 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	  for (p++; isalnum(*p); p++) {
 	    if (j >= 2) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("SSID is too long. SSID part of \"%s\" has more than 2 characters.\n", in_addr);
+	      dw_printf ("%sSSID is too long. SSID part of \"%s\" has more than 2 characters.\n", position_name[position], in_addr);
 	      return 0;
 	    }
 	    sstr[j++] = *p;
 	    sstr[j] = '\0';
 	    if (strict && ! isdigit(*p)) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("SSID must be digits. \"%s\" has letters in SSID.\n", in_addr);
+	      dw_printf ("%sSSID must be digits. \"%s\" has letters in SSID.\n", position_name[position], in_addr);
 	      return 0;
 	    }
 	  }
 	  k = atoi(sstr);
 	  if (k < 0 || k > 15) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("SSID out of range. SSID of \"%s\" not in range of 0 to 15.\n", in_addr);
+	    dw_printf ("%sSSID out of range. SSID of \"%s\" not in range of 0 to 15.\n", position_name[position], in_addr);
 	    return 0;
 	  }
 	  *out_ssid = k;
@@ -775,7 +790,7 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 
 	if (*p != '\0') {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Invalid character \"%c\" found in address \"%s\".\n", *p, in_addr);
+	    dw_printf ("Invalid character \"%c\" found in %saddress \"%s\".\n", *p, position_name[position], in_addr);
 	  return 0;
 	}
 
@@ -784,6 +799,73 @@ int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, i
 	return (1);
 
 } /* end ax25_parse_addr */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        ax25_check_addresses
+ *
+ * Purpose:     Check addresses of given packet and print message if any issues.
+ *		We call this when receiving and transmitting.
+ *
+ * Inputs:	pp	- packet object pointer.
+ *
+ * Errors:	Print error message.
+ *
+ * Returns:	1 for all valid.  0 if not.
+ *
+ * Examples:	I was surprised to get this from an APRS-IS server with
+ *		a lower case source address.
+ *
+ *			n1otx>APRS,TCPIP*,qAC,THIRD:@141335z4227.48N/07111.73W_348/005g014t044r000p000h60b10075.wview_5_20_2
+ *
+ *		I haven't gotten to the bottom of this yet but it sounds
+ *		like "q constructs" are somehow getting on to the air when
+ *		they should only appear in conversations with IGate servers.
+ *
+ *			https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/topics/678
+ *
+ *			WB0VGI-7>APDW12,W0YC-5*,qAR,AE0RF-10:}N0DZQ-10>APWW10,TCPIP,WB0VGI-7*:;145.230MN*080306z4607.62N/09230.58WrKE0ACL/R 145.230- T146.2 (Pine County ARES)	
+ *
+ * Typical result:
+ *
+ *			Digipeater WIDE2 (probably N3LEE-4) audio level = 28(10/6)   [NONE]   __|||||||
+ *			[0.5] VE2DJE-9>P_0_P?,VE2PCQ-3,K1DF-7,N3LEE-4,WIDE2*:'{S+l <0x1c>>/
+ *			Invalid character "_" in MIC-E destination/latitude.
+ *			Invalid character "_" in MIC-E destination/latitude.
+ *			Invalid character "?" in MIC-E destination/latitude.
+ *			Invalid MIC-E N/S encoding in 4th character of destination.
+ *			Invalid MIC-E E/W encoding in 6th character of destination.
+ *			MIC-E, normal car (side view), Unknown manufacturer, Returning
+ *			N 00 00.0000, E 005 55.1500, 0 MPH
+ *			Invalid character "_" found in Destination address "P_0_P?".
+ *
+ *			*** The origin and journey of this packet should receive some scrutiny. ***
+ *
+ *--------------------------------------------------------------------*/
+
+int ax25_check_addresses (packet_t pp)
+{
+	int n;
+	char addr[AX25_MAX_ADDR_LEN];
+	char ignore1[AX25_MAX_ADDR_LEN];
+	int ignore2, ignore3;
+	int all_ok = 1;
+
+	for (n = 0; n < ax25_get_num_addr(pp); n++) {
+	  ax25_get_addr_with_ssid (pp, n, addr);
+	  all_ok &= ax25_parse_addr (n, addr, 1, ignore1, &ignore2, &ignore3);
+	}
+
+	if (! all_ok) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\n");
+	  dw_printf ("*** The origin and journey of this packet should receive some scrutiny. ***\n");
+	  dw_printf ("\n");
+	}
+
+	return (all_ok);
+} /* end ax25_check_addresses */
 
 
 /*------------------------------------------------------------------------------
@@ -862,7 +944,7 @@ void ax25_set_addr (packet_t this_p, int n, char *ad)
 /* 
  * Set existing address position. 
  */
-	  ax25_parse_addr (ad, 0, atemp, &ssid_temp, &heard_temp);
+	  ax25_parse_addr (n, ad, 0, atemp, &ssid_temp, &heard_temp);
 
 	  memset (this_p->frame_data + n*7, ' ' << 1, 6);
 
@@ -951,7 +1033,11 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 
 	SET_LAST_ADDR_FLAG;
 
-	ax25_parse_addr (ad, 0, atemp, &ssid_temp, &heard_temp);
+	// Why aren't we setting 'strict' here?
+	// Messages from IGate have q-constructs.
+	// We use this to parse it and later remove unwanted parts.
+
+	ax25_parse_addr (n, ad, 0, atemp, &ssid_temp, &heard_temp);
 	memset (this_p->frame_data + n*7, ' ' << 1, 6);
 	for (i=0; i<6 && atemp[i] != '\0'; i++) {
 	  this_p->frame_data[n*7+i] = atemp[i] << 1;
@@ -1160,8 +1246,9 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	if (ssid != 0) {
 	  snprintf (sstr, sizeof(sstr), "-%d", ssid);
 	  strlcat (station, sstr, 10);
-	}   
-}
+	}
+
+} /* end ax25_get_addr_with_ssid */
 
 
 /*------------------------------------------------------------------------------
@@ -2064,6 +2151,27 @@ int ax25_get_pid (packet_t this_p)
  *		There is a very very small probability that two unrelated 
  *		packets will result in the same checksum, and the
  *		undesired dropping of the packet.
+ *
+ *		There is a 1 / 65536 chance of getting a false positive match
+ *		which is good enough for this application.
+ *		We could reduce that with a 32 bit CRC instead of reusing
+ *		code from the AX.25 frame CRC calculation.
+ *
+ * Version 1.3:	We exclude any trailing CR/LF at the end of the info part
+ *		so we can detect duplicates that are received only over the
+ *		air and those which have gone thru an IGate where the process
+ *		removes any trailing CR/LF.   Example:
+ *
+ *		Original via RF only:
+ *		W1TG-1>APU25N,N3LEE-10*,WIDE2-1:<IGATE,MSG_CNT=30,LOC_CNT=61<0x0d>
+ *
+ *		When we get the same thing via APRS-IS:
+ *		W1TG-1>APU25N,K1FFK,WIDE2*,qAR,WB2ZII-15:<IGATE,MSG_CNT=30,LOC_CNT=61
+ *
+ *		(Actually there is a trailing space.  Maybe some systems
+ *		change control characters to space???)
+ *		Hmmmm.  I guess we should ignore trailing space as well for 
+ *		duplicate detection and suppression.
  *		
  *------------------------------------------------------------------------------*/
 
@@ -2078,6 +2186,20 @@ unsigned short ax25_dedupe_crc (packet_t pp)
 	ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	info_len = ax25_get_info (pp, &pinfo);
+
+	while (info_len >= 1 && (pinfo[info_len-1] == '\r' ||
+	                         pinfo[info_len-1] == '\n' ||
+	                         pinfo[info_len-1] == ' ')) {
+
+	// Temporary for debugging!
+
+	//  if (pinfo[info_len-1] == ' ') {
+	//    text_color_set(DW_COLOR_ERROR);
+	//    dw_printf ("DEBUG:  ax25_dedupe_crc ignoring trailing space.\n");
+	//  }
+
+	  info_len--;
+	}
 
 	crc = 0xffff;
 	crc = crc16((unsigned char *)src, strlen(src), crc);
@@ -2159,6 +2281,11 @@ unsigned short ax25_m_m_crc (packet_t pp)
  *		as hexadecimal for troubleshooting? Maybe an option so the
  *		packet raw data is in hexadecimal but an extracted 
  *		comment displays UTF-8?  Or a command line option for only ASCII?
+ *
+ * Trailing space:
+ *		I recently noticed a case where a packet has space character
+ *		at the end.  If the last character of the line is a space,
+ *		this will be displayed in hexadecimal to make it obvious.
  *			
  *------------------------------------------------------------------*/
 
@@ -2184,7 +2311,12 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 	{
 	  ch = *((unsigned char *)pstr);
 
-	  if (ch < ' ' || ch == 0x7f || ch == 0xfe || ch == 0xff ||
+	  if (ch == ' ' && (len == 1 || pstr[1] == '\0')) {
+
+	      snprintf (safe_str + safe_len, sizeof(safe_str)-safe_len, "<0x%02x>", ch);
+	      safe_len += 6;
+	  }
+	  else if (ch < ' ' || ch == 0x7f || ch == 0xfe || ch == 0xff ||
 			(ascii_only && ch >= 0x80) ) {
 
 	      /* Control codes and delete. */
@@ -2192,7 +2324,7 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 	      /* "Byte Order Mark" (BOM) at the beginning. */
 
 	      snprintf (safe_str + safe_len, sizeof(safe_str)-safe_len, "<0x%02x>", ch);
-	      safe_len += 6;	      
+	      safe_len += 6;
 	    }
 	  else {
 	    /* Let everything else thru so we can handle UTF-8 */

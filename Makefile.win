@@ -283,7 +283,8 @@ atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c 
 # Unit test for inner digipeater algorithm
 
 .PHONY: dtest
-dtest : digipeater.c pfilter.o ax25_pad.o dedupe.o fcs_calc.o tq.o textcolor.o \
+dtest : digipeater.c dedupe.c \
+		pfilter.o ax25_pad.o fcs_calc.o tq.o textcolor.o \
 		decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a regex.a
 	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^
 	./dtest

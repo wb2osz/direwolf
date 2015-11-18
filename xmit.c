@@ -289,7 +289,6 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 
 
 
-
 /*-------------------------------------------------------------------
  *
  * Name:        xmit_set_txdelay
@@ -606,6 +605,7 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
 	dw_printf ("%s", stemp);			/* stations followed by : */
 	ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	dw_printf ("\n");
+	(void)ax25_check_addresses (pp);
 
 /* Optional hex dump of packet. */
 
@@ -669,6 +669,7 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
 	 dw_printf ("%s", stemp);			/* stations followed by : */
 	 ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	 dw_printf ("\n");
+	 (void)ax25_check_addresses (pp);
 
 	 if (g_debug_xmit_packet) {
 	    text_color_set(DW_COLOR_DEBUG);

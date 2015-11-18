@@ -177,13 +177,14 @@ int main (int argc, char *argv[])
 	char input_file[80];
 	
 	int t_opt = 1;		/* Text color option. */				
+	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
+
 	int d_k_opt = 0;	/* "-d k" option for serial port KISS.  Can be repeated for more detail. */					
 	int d_n_opt = 0;	/* "-d n" option for Network KISS.  Can be repeated for more detail. */	
 	int d_t_opt = 0;	/* "-d t" option for Tracker.  Can be repeated for more detail. */	
 	int d_g_opt = 0;	/* "-d g" option for GPS. Can be repeated for more detail. */
 	int d_o_opt = 0;	/* "-d o" option for output control such as PTT and DCD. */	
-	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
-			
+	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */			
 	
 
 	strlcpy(l_opt, "", sizeof(l_opt));
@@ -232,6 +233,14 @@ int main (int argc, char *argv[])
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
 	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+
+#if defined(ENABLE_GPSD) 	// later or hamlib ...
+	dw_printf ("Includes optional support for: ");
+#if defined(ENABLE_GPSD)
+	dw_printf (" gpsd");
+#endif
+	dw_printf ("\n");
+#endif
 
 
 #if __WIN32__
@@ -438,6 +447,7 @@ int main (int argc, char *argv[])
 	      case 'w':	 nmea_set_debug (1); break;		// not documented yet.
 	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      case 'o':  d_o_opt++; ptt_set_debug(d_o_opt); break;	
+	      case 'i':  d_i_opt++; break;	
 #if AX25MEMDEBUG
 	      case 'm':  ax25memdebug_set(); break;		// Track down memory leak.  Not documented.		
 #endif
@@ -653,7 +663,7 @@ int main (int argc, char *argv[])
  * Initialize the digipeater and IGate functions.
  */
 	digipeater_init (&audio_config, &digi_config);
-	igate_init (&audio_config, &igate_config, &digi_config);
+	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
 
 /*
  * Provide the AGW & KISS socket interfaces for use by a client application.
@@ -681,17 +691,18 @@ int main (int argc, char *argv[])
 
 /*
  * Enable beaconing.
+ * Open log file first because "-dttt" (along with -l...) will
+ * log the tracker beacon transmissions with fake channel 999.
  */
 
+	log_init(misc_config.logdir);	
 	beacon_init (&audio_config, &misc_config);
 
-	log_init(misc_config.logdir);	
 
 /*
  * Get sound samples and decode them.
  * Use hot attribute for all functions called for every audio sample.
  */
-
 
 	recv_init (&audio_config);
 	recv_process ();
@@ -898,6 +909,12 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
 
 	  decode_aprs_print (&A);
 
+	  /*
+	   * Perform validity check on each address.
+	   * This should print an error message if any issues.
+	   */
+	  (void)ax25_check_addresses(pp);
+
 	  // Send to log file.
 
 	  log_write (chan, &A, pp, alevel, retries);
@@ -1038,6 +1055,7 @@ static void usage (char **argv)
 	dw_printf ("       g             g = GPS interface.\n");
 	dw_printf ("       t             t = Tracker beacon.\n");
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
+	dw_printf ("       i             i = IGate.\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
