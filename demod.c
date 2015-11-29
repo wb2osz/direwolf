@@ -119,6 +119,21 @@ int demod_init (struct audio_s *pa)
 	  int num_letters;
 	  int have_plus;
 
+	  /*
+	   * These are derived from config file parameters.
+	   *
+	   * num_subchan is number of demodulators.
+	   * This can be increased by:
+	   *	Multiple frequencies.
+	   *	Multiple letters (not sure if I will continue this).
+	   *	New interleaved decoders.
+	   *
+	   * num_slicers is set to max by the "+" option.
+	   */
+
+	  save_audio_config_p->achan[chan].num_subchan = 1;
+	  save_audio_config_p->achan[chan].num_slicers = 1;
+
 	  switch (save_audio_config_p->achan[chan].modem_type) {
 
 	    case MODEM_OFF:
@@ -234,8 +249,7 @@ int demod_init (struct audio_s *pa)
 	      /* These can be increased later for the multi-frequency case. */
 
 	      save_audio_config_p->achan[chan].num_subchan = num_letters;
-	      save_audio_config_p->achan[chan].num_demod = num_letters;		
-	   
+	      save_audio_config_p->achan[chan].num_slicers = 1;
 
 /*
  * Some error checking - Can use only one of these:
@@ -245,24 +259,10 @@ int demod_init (struct audio_s *pa)
  *	- Multiple frequencies.
  */
 
-	      if (have_plus && num_letters > 1) {
-
-		  text_color_set(DW_COLOR_ERROR);
-		  dw_printf ("Channel %d: Demodulator + option can't be combined with multiple letters.\n", chan);
-
-	          strlcpy (save_audio_config_p->achan[chan].profiles, "C+", sizeof(save_audio_config_p->achan[chan].profiles));	// Reduce to one letter.
-		  num_letters = 1;
-	          save_audio_config_p->achan[chan].num_demod = 1;
-	          save_audio_config_p->achan[chan].num_subchan = 1;	// Will be set higher later.
-	          save_audio_config_p->achan[chan].num_freq = 1;
-	      }
-
 	      if (have_plus && save_audio_config_p->achan[chan].num_freq > 1) {
 
 		  text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("Channel %d: Demodulator + option can't be combined with multiple frequencies.\n", chan);
-
-	          save_audio_config_p->achan[chan].num_demod = 1;
 	          save_audio_config_p->achan[chan].num_subchan = 1;	// Will be set higher later.
 	          save_audio_config_p->achan[chan].num_freq = 1;
 	      }
@@ -302,6 +302,7 @@ int demod_init (struct audio_s *pa)
  * We have 3 cases to consider.
  */
 
+// TODO1.3: revisit this logic now that it is less restrictive.
 
 	      if (num_letters > 1) {
 	        int d;
@@ -311,17 +312,58 @@ int demod_init (struct audio_s *pa)
  * Each one corresponds to a demodulator and subchannel.
  *
  * An interesting experiment but probably not too useful.
- * Can't have multiple frequency pairs or the + option.
+ * Can't have multiple frequency pairs.
+ * In version 1.3 this can be combined with the + option.
  */
 
 	        save_audio_config_p->achan[chan].num_subchan = num_letters;
-	        save_audio_config_p->achan[chan].num_demod = num_letters;
 		
+/*
+ * Quick hack with special case for another experiment.
+ * Do this in a more general way if it turns out to be useful.
+ */
+	        save_audio_config_p->achan[chan].interleave = 1;
+	        if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EE") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 2;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EEE") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 3;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EEEE") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 4;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EEEEE") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 5;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GG") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 2;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGG") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 3;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGG+") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 3;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGGG") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 4;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
+	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGGGG") == 0) {
+	          save_audio_config_p->achan[chan].interleave = 5;
+	          save_audio_config_p->achan[chan].decimate = 1;
+	        }
 
-		if (save_audio_config_p->achan[chan].num_demod != num_letters) {
+		if (save_audio_config_p->achan[chan].num_subchan != num_letters) {
 		  text_color_set(DW_COLOR_ERROR);
-		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_demod(%d) != strlen(\"%s\")\n",
-				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_demod, save_audio_config_p->achan[chan].profiles);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_subchan(%d) != strlen(\"%s\")\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_subchan, save_audio_config_p->achan[chan].profiles);
 		}
 
 	        if (save_audio_config_p->achan[chan].num_freq != 1) {
@@ -329,9 +371,8 @@ int demod_init (struct audio_s *pa)
 		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_freq(%d) != 1\n",
 				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq);
 		}
-	  
-	        for (d = 0; d < save_audio_config_p->achan[chan].num_demod; d++) {
 
+	        for (d = 0; d < save_audio_config_p->achan[chan].num_subchan; d++) {
 	          int mark, space;
 	          assert (d >= 0 && d < MAX_SUBCHANS);
 
@@ -342,17 +383,25 @@ int demod_init (struct audio_s *pa)
 	          mark = save_audio_config_p->achan[chan].mark_freq;
 	          space = save_audio_config_p->achan[chan].space_freq;
 
-	          if (save_audio_config_p->achan[chan].num_demod != 1) {
+	          if (save_audio_config_p->achan[chan].num_subchan != 1) {
 	            text_color_set(DW_COLOR_DEBUG);
 	            dw_printf ("        %d.%d: %c %d & %d\n", chan, d, profile, mark, space);
 	          }
-      
-	          demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
+
+	          demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / (save_audio_config_p->achan[chan].decimate * save_audio_config_p->achan[chan].interleave), 
 			    save_audio_config_p->achan[chan].baud,
 		            mark, 
 	                    space,
 			    profile,
 			    D);
+
+	          if (have_plus) {
+		    /* I'm not happy about putting this hack here. */
+		    /* should pass in as a parameter rather than adding on later. */
+
+	            save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
+		    D->num_slicers = MAX_SLICERS;
+	          }
 
 	          /* For siginal level reporting, we want a longer term view. */
 		  // TODO: Should probably move this into the init functions.
@@ -364,7 +413,7 @@ int demod_init (struct audio_s *pa)
 	      else if (have_plus) {
 	       
 /*
- * PLUS - which implies we have only one letter and one frequency pair.
+ * PLUS - which (formerly) implies we have only one letter and one frequency pair.
  *
  * One demodulator feeds multiple slicers, each a subchannel.
  */
@@ -381,12 +430,11 @@ int demod_init (struct audio_s *pa)
 				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq);
 		}
 
-	        if (save_audio_config_p->achan[chan].num_demod != save_audio_config_p->achan[chan].num_demod) {
+	        if (save_audio_config_p->achan[chan].num_freq != save_audio_config_p->achan[chan].num_subchan) {
 		  text_color_set(DW_COLOR_ERROR);
-		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_freq(%d) != num_demod(%d)\n",
-				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq, save_audio_config_p->achan[chan].num_demod);
+		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_freq(%d) != num_subchan(%d)\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].num_freq, save_audio_config_p->achan[chan].num_subchan);
 		}
-	  
 
 	        struct demodulator_state_s *D;
 	        D = &demodulator_state[chan][0];
@@ -394,8 +442,7 @@ int demod_init (struct audio_s *pa)
 		/* I'm not happy about putting this hack here. */
 		/* This belongs in demod_afsk_init but it doesn't have access to the audio config. */
 
-	        save_audio_config_p->achan[chan].num_demod = 1;
-	        save_audio_config_p->achan[chan].num_subchan = MAX_SUBCHANS;
+	        save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
      
 	        demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
 			save_audio_config_p->achan[chan].baud,
@@ -404,10 +451,13 @@ int demod_init (struct audio_s *pa)
 			save_audio_config_p->achan[chan].profiles[0],
 			D);
 
-		/* I'm not happy about putting this hack here. */
-		/* should pass in as a parameter rather than adding on later. */
+	        if (have_plus) {
+		  /* I'm not happy about putting this hack here. */
+		  /* should pass in as a parameter rather than adding on later. */
 
-		D->num_slicers = MAX_SUBCHANS;
+	          save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
+		  D->num_slicers = MAX_SLICERS;
+	        }
 
 	        /* For siginal level reporting, we want a longer term view. */
 
@@ -427,7 +477,6 @@ int demod_init (struct audio_s *pa)
 				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].profiles);
 		}
 
-	        save_audio_config_p->achan[chan].num_demod = save_audio_config_p->achan[chan].num_freq;
 	        save_audio_config_p->achan[chan].num_subchan = save_audio_config_p->achan[chan].num_freq;
 
 	        for (d = 0; d < save_audio_config_p->achan[chan].num_freq; d++) {
@@ -454,6 +503,14 @@ int demod_init (struct audio_s *pa)
 			mark, space,
 			profile,
 			D);
+
+	          if (have_plus) {
+		    /* I'm not happy about putting this hack here. */
+		    /* should pass in as a parameter rather than adding on later. */
+
+	            save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
+		    D->num_slicers = MAX_SLICERS;
+	          }
 
 	          /* For siginal level reporting, we want a longer term view. */
 
@@ -495,15 +552,14 @@ int demod_init (struct audio_s *pa)
 	      D = &demodulator_state[chan][0];	// first subchannel
 
 	      save_audio_config_p->achan[chan].num_subchan = 1;
-	      save_audio_config_p->achan[chan].num_demod = 1;		
+              save_audio_config_p->achan[chan].num_slicers = 1;
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
 
 		/* I'm not happy about putting this hack here. */
 		/* This belongs in demod_9600_init but it doesn't have access to the audio config. */
 
-	        save_audio_config_p->achan[chan].num_demod = 1;
-	        save_audio_config_p->achan[chan].num_subchan = MAX_SUBCHANS;
+	        save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
      	      }
 	        
 	      demod_9600_init (UPSAMPLE * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
@@ -513,7 +569,8 @@ int demod_init (struct audio_s *pa)
 		/* I'm not happy about putting this hack here. */
 		/* should pass in as a parameter rather than adding on later. */
 
-		D->num_slicers = MAX_SUBCHANS;
+	        save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
+		D->num_slicers = MAX_SLICERS;
 	      }
 
 	      /* For siginal level reporting, we want a longer term view. */

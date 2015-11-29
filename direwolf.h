@@ -48,6 +48,17 @@
 
 #define MAX_SUBCHANS 9
 
+/*
+ * Each one of these can have multiple slicers, at
+ * different levels, to compensate for different
+ * amplitudes of the AFSK tones.
+ * Intially used same number as subchannels but
+ * we could probably trim this down a little
+ * without impacting performance.
+ */
+
+#define MAX_SLICERS 9
+
 
 #if __WIN32__
 #include <windows.h>

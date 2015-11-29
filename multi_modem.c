@@ -98,23 +98,15 @@ static struct audio_s          *save_audio_config_p;
 // Candidates for further processing.
 
 static struct {
-
 	packet_t packet_p;
 	alevel_t alevel;
 	retry_t retries;
 	int age;
 	unsigned int crc;
 	int score;
+} candidate[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
 
-} candidate[MAX_CHANS][MAX_SUBCHANS];
-#define MAX_STORED_CRC 256
 
-typedef struct crc_s {
-	struct crc_s* nextp;	/* Next pointer to maintain a queue. */
-	unsigned int crc;
-} *crc_t;
-
-static crc_t crc_queue_of_last_to_app[MAX_CHANS];
 
 #define PROCESS_AFTER_BITS 2
 
@@ -163,11 +155,13 @@ void multi_modem_init (struct audio_s *pa)
 	      save_audio_config_p->achan[chan].baud = DEFAULT_BAUD;
 	    }
 	    process_age[chan] = PROCESS_AFTER_BITS * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].baud;
-	    crc_queue_of_last_to_app[chan] = NULL;
+	    //crc_queue_of_last_to_app[chan] = NULL;
 	  }
 	}
 
 }
+
+#if 0
 
 //Add a crc to the end of the queue and returns the numbers of CRC stored in the queue
 int crc_queue_append (unsigned int crc, unsigned int chan) {
@@ -257,6 +251,7 @@ unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) {
 	}
 	return 0;
 }
+#endif /* if 0 */
 
 /*------------------------------------------------------------------------------
  *
@@ -281,7 +276,12 @@ unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) {
  *		slicers, using different levels, each with its own HDLC decoder.
  *		We now have a separate variable, num_demod, which could be 1
  *		while num_subchan is larger.
- *		
+ *
+ * Version 1.3:	Go back to num_subchan with single meaning of number of demodulators.
+ *		We now have separate independent variable, num_slicers, for the
+ *		mark/space imbalance compensation.
+ *		num_demod, while probably more descriptive, should not exist anymore.
+ *
  *------------------------------------------------------------------------------*/
 
 
@@ -290,25 +290,48 @@ void multi_modem_process_sample (int chan, int audio_sample)
 {
 	int d;
 	int subchan;
+	static int i = 0;	/* for interleaving among multiple demodulators. */
+
+// TODO: temp debug, remove this.
+
+	assert (save_audio_config_p->achan[chan].num_subchan > 0 && save_audio_config_p->achan[chan].num_subchan <= MAX_SUBCHANS);
+	assert (save_audio_config_p->achan[chan].num_slicers > 0 && save_audio_config_p->achan[chan].num_slicers <= MAX_SLICERS);
+
 
 	/* Formerly one loop. */
 	/* 1.2: We can feed one demodulator but end up with multiple outputs. */
 
 
-	for (d = 0; d < save_audio_config_p->achan[chan].num_demod; d++) {
+	if (save_audio_config_p->achan[chan].interleave > 1) {
 
-	  demod_process_sample(chan, d, audio_sample);
+// TODO: temp debug, remove this.
+
+	  assert (save_audio_config_p->achan[chan].interleave == save_audio_config_p->achan[chan].num_subchan);
+	  demod_process_sample(chan, i, audio_sample);
+	  i++;
+	  if (i >= save_audio_config_p->achan[chan].interleave) i = 0;
+	}
+	else {
+	  /* Send same thing to all. */
+	  for (d = 0; d < save_audio_config_p->achan[chan].num_subchan; d++) {
+	    demod_process_sample(chan, d, audio_sample);
+	  }
 	}
 
 	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
+	  int slice;
 
-	  if (candidate[chan][subchan].packet_p != NULL) {
-	    candidate[chan][subchan].age++;
-	    if (candidate[chan][subchan].age > process_age[chan]) {
-	      pick_best_candidate (chan);
+	  for (slice = 0; slice < save_audio_config_p->achan[chan].num_slicers; slice++) {
+
+	    if (candidate[chan][subchan][slice].packet_p != NULL) {
+	      candidate[chan][subchan][slice].age++;
+	      if (candidate[chan][subchan][slice].age > process_age[chan]) {
+	        pick_best_candidate (chan);
+	      }
 	    }
-	  }  
-	}}
+	  }
+	}
+}
 
 
 
@@ -320,7 +343,8 @@ void multi_modem_process_sample (int chan, int audio_sample)
  *		FCS and acceptable size.
  *
  * Inputs:	chan	- Audio channel number, 0 or 1.
- *		subchan	- Which modem/decoder found it.
+ *		subchan	- Which modem found it.
+ *		slice	- Which slice found it.
  *		fbuf	- Pointer to first byte in HDLC frame.
  *		flen	- Number of bytes excluding the FCS.
  *		alevel	- Audio level, range of 0 - 100.
@@ -414,73 +438,31 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	than one.
 */
 
-void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries)  
-{	
+void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries)
+{
 	packet_t pp;
 
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
+	assert (slice >= 0 && slice < MAX_SUBCHANS);
 
 	pp = ax25_from_frame (fbuf, flen, alevel);
 
 	if (pp == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unexpected internal problem, %s %d\n", __FILE__, __LINE__);
 	  return;	/* oops!  why would it fail? */
 	}
 
 
 /*
- * If single modem/deocder, push it thru and forget about all this foolishness.
+ * If only one demodulator/slicer, push it thru and forget about all this foolishness.
  */
-	if (save_audio_config_p->achan[chan].num_subchan == 1) {
-	  dlq_append (DLQ_REC_FRAME, chan, subchan, pp, alevel, retries, "");
-	  return;
-	}
+	if (save_audio_config_p->achan[chan].num_subchan == 1 &&
+	    save_audio_config_p->achan[chan].num_slicers == 1) {
 
-/*
- * Special handing for two separated bit errors.
- * See description earlier.
- *
- * Not combined with others to find the best score.
- * Either pass it along or drop if duplicate.
- */
-
-	if (retries >= RETRY_SWAP_TWO_SEP) {
-	  int mycrc;
-	  char spectrum[MAX_SUBCHANS+1];
-	  int dropped = 0;
-
-	  memset (spectrum, 0, sizeof(spectrum));
-	  memset (spectrum, '_', (size_t)save_audio_config_p->achan[chan].num_subchan);
-	  spectrum[subchan] = '.';
-
-	  mycrc = ax25_m_m_crc(pp);
-/* Smetimes recovered packet is not the latest one send to the app:
- * It can be a packet sent to the app before the latest one because of the processing time ...
- * So we check if the crc of current packet has already been received in the queue of others crc
- */
-	  dropped = is_crc_in_queue(chan, mycrc);
-
-#if DEBUG
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("\n%s\n%d.%d: ptr=%p, retry=%d, age=, crc=%04x, score=  , dropped =%d\n", 
-		spectrum, chan, subchan, pp, (int)retries, mycrc,dropped);
-#endif	   
-	  if (dropped) {
-	     /* Same as last one.  Drop it. */
-	     ax25_delete (pp);
-#if DEBUG
-	     dw_printf ("Drop duplicate.\n");
-#endif
-	     return;
-	   }
-
-#if DEBUG
-	  dw_printf ("Send the best one along.\n");
-#endif
-	  dlq_append (DLQ_REC_FRAME, chan, subchan, pp, alevel, retries, spectrum);
-	  if (crc_queue_append(mycrc, chan) > MAX_STORED_CRC)
-	    crc_queue_remove(chan);
+	  dlq_append (DLQ_REC_FRAME, chan, subchan, slice, pp, alevel, retries, "");
 	  return;
 	}
 
@@ -488,17 +470,17 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
 /*
  * Otherwise, save them up for a few bit times so we can pick the best.
  */
-	if (candidate[chan][subchan].packet_p != NULL) {
+	if (candidate[chan][subchan][slice].packet_p != NULL) {
 	  /* Oops!  Didn't expect it to be there. */
-	  ax25_delete (candidate[chan][subchan].packet_p);
-	  candidate[chan][subchan].packet_p = NULL;
+	  ax25_delete (candidate[chan][subchan][slice].packet_p);
+	  candidate[chan][subchan][slice].packet_p = NULL;
 	}
 
-	candidate[chan][subchan].packet_p = pp;
-	candidate[chan][subchan].alevel = alevel;
-	candidate[chan][subchan].retries = retries;
-	candidate[chan][subchan].age = 0;
-	candidate[chan][subchan].crc = ax25_m_m_crc(pp);
+	candidate[chan][subchan][slice].packet_p = pp;
+	candidate[chan][subchan][slice].alevel = alevel;
+	candidate[chan][subchan][slice].retries = retries;
+	candidate[chan][subchan][slice].age = 0;
+	candidate[chan][subchan][slice].crc = ax25_m_m_crc(pp);
 }
 
 
@@ -519,56 +501,82 @@ void multi_modem_process_rec_frame (int chan, int subchan, unsigned char *fbuf, 
  *
  *--------------------------------------------------------------------*/
 
+/* This is a suitable order for interleaved "G" demodulators. */
+/* Opposite order would be suitable for multi-frequency although */
+/* multiple slicers are of questionable value for HF SSB. */
+
+#define subchan_from_n(x) ((x) % save_audio_config_p->achan[chan].num_subchan)
+#define slice_from_n(x)   ((x) / save_audio_config_p->achan[chan].num_subchan)
+
 
 static void pick_best_candidate (int chan) 
 {
-	int subchan;
-	int best_subchan, best_score;
-	char spectrum[MAX_SUBCHANS+1];
-	int k;
+	int best_n, best_score;
+	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];
+	int n, j, k;
+	int num_bars = save_audio_config_p->achan[chan].num_slicers * save_audio_config_p->achan[chan].num_subchan;
 
 	memset (spectrum, 0, sizeof(spectrum));
 
-	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
+	for (n = 0; n < num_bars; n++) {
+	  j = subchan_from_n(n);
+	  k = slice_from_n(n);
 
 	  /* Build the spectrum display. */
 
-	  if (candidate[chan][subchan].packet_p == NULL) {
-	    spectrum[subchan] = '_';
+	  if (candidate[chan][j][k].packet_p == NULL) {
+	    spectrum[n] = '_';
 	  }
-	  else if (candidate[chan][subchan].retries == RETRY_NONE) {
-	    spectrum[subchan] = '|';
+	  else if (candidate[chan][j][k].retries == RETRY_NONE) {
+	    spectrum[n] = '|';
 	  }
-	  else if (candidate[chan][subchan].retries == RETRY_SWAP_SINGLE) {
-	    spectrum[subchan] = ':';
+	  else if (candidate[chan][j][k].retries == RETRY_INVERT_SINGLE) {
+	    spectrum[n] = ':';
 	  }
 	  else  {
-	    spectrum[subchan] = '.';
+	    spectrum[n] = '.';
 	  }
 
 	  /* Begining score depends on effort to get a valid frame CRC. */
 
-	  candidate[chan][subchan].score = RETRY_MAX * 1000 - ((int)candidate[chan][subchan].retries * 1000);
+	  candidate[chan][j][k].score = RETRY_MAX * 1000 - ((int)candidate[chan][j][k].retries * 1000);
+	}
 
-	  /* Bump it up slightly if others nearby have the same CRC. */
-	  
-	  for (k = 0; k < save_audio_config_p->achan[chan].num_subchan; k++) {
-	    if (k != subchan && candidate[chan][k].packet_p != NULL) {
-	      if (candidate[chan][k].crc == candidate[chan][subchan].crc) {
-	        candidate[chan][subchan].score += (MAX_SUBCHANS+1) - abs(subchan-k);
+	/* Bump it up slightly if others nearby have the same CRC. */
+
+	for (n = 0; n < num_bars; n++) {
+	  int m;
+
+	  j = subchan_from_n(n);
+	  k = slice_from_n(n);
+
+	  if (candidate[chan][j][k].packet_p != NULL) {
+
+	    for (m = 0; m < num_bars; m++) {
+
+	      int mj = subchan_from_n(m);
+	      int mk = slice_from_n(m);
+
+	      if (m != n && candidate[chan][mj][mk].packet_p != NULL) {
+	        if (candidate[chan][j][k].crc == candidate[chan][mj][mk].crc) {
+	          candidate[chan][j][k].score += (num_bars+1) - abs(m-n);
+	        }
 	      }
 	    }
 	  }
 	}
   
-	best_subchan = 0;
+	best_n = 0;
 	best_score = 0;
 
-	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
-	  if (candidate[chan][subchan].packet_p != NULL) {
-	    if (candidate[chan][subchan].score > best_score) {
-	       best_score = candidate[chan][subchan].score;
-	       best_subchan = subchan;
+	for (n = 0; n < num_bars; n++) {
+	  j = subchan_from_n(n);
+	  k = slice_from_n(n);
+
+	  if (candidate[chan][j][k].packet_p != NULL) {
+	    if (candidate[chan][j][k].score > best_score) {
+	       best_score = candidate[chan][j][k].score;
+	       best_n = n;
 	    }
 	  }
 	}
@@ -577,20 +585,22 @@ static void pick_best_candidate (int chan)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n%s\n", spectrum);
 
-	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
+	for (n = 0; n < num_bars; n++) {
+	  j = subchan_from_n(n);
+	  k = slice_from_n(n);
 
-	  if (candidate[chan][subchan].packet_p == NULL) {
-	    dw_printf ("%d.%d: ptr=%p\n", chan, subchan,
-		candidate[chan][subchan].packet_p);
+	  if (candidate[chan][j][k].packet_p == NULL) {
+	    dw_printf ("%d.%d.%d: ptr=%p\n", chan, j, k,
+		candidate[chan][j][k].packet_p);
 	  }
 	  else {
-	    dw_printf ("%d.%d: ptr=%p, retry=%d, age=%3d, crc=%04x, score=%d  %s\n", chan, subchan,
-		candidate[chan][subchan].packet_p, 
-		(int)(candidate[chan][subchan].retries), 
-		candidate[chan][subchan].age,
-		candidate[chan][subchan].crc,
-		candidate[chan][subchan].score,
-		subchan == best_subchan ? "***" : "");
+	    dw_printf ("%d.%d.%d: ptr=%p, retry=%d, age=%3d, crc=%04x, score=%d  %s\n", chan, j, k,
+		candidate[chan][j][k].packet_p,
+		(int)(candidate[chan][j][k].retries),
+		candidate[chan][j][k].age,
+		candidate[chan][j][k].crc,
+		candidate[chan][j][k].score,
+		(n == best_n) ? "***" : "");
 	  }
 	}
 #endif
@@ -599,75 +609,38 @@ static void pick_best_candidate (int chan)
  * send the best one along.
  */
 
-#if 1		// v1.2 dev F, Reverse original order.  Delete rejects THEN process the best one.
-
 
 	/* Delete those not chosen. */
 
-	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
-	  if (subchan != best_subchan && candidate[chan][subchan].packet_p != NULL) {
-	    ax25_delete (candidate[chan][subchan].packet_p);
-	    candidate[chan][subchan].packet_p = NULL;
+	for (n = 0; n < num_bars; n++) {
+	  j = subchan_from_n(n);
+	  k = slice_from_n(n);
+	  if (n != best_n && candidate[chan][j][k].packet_p != NULL) {
+	    ax25_delete (candidate[chan][j][k].packet_p);
+	    candidate[chan][j][k].packet_p = NULL;
 	  }
 	}
 
 	/* Pass along one. */
 
-	dlq_append (DLQ_REC_FRAME, chan, best_subchan, 
-		candidate[chan][best_subchan].packet_p, 
-		candidate[chan][best_subchan].alevel, 
-		(int)(candidate[chan][best_subchan].retries), 
+
+	j = subchan_from_n(best_n);
+	k = slice_from_n(best_n);
+
+	dlq_append (DLQ_REC_FRAME, chan, j, k,
+		candidate[chan][j][k].packet_p,
+		candidate[chan][j][k].alevel,
+		(int)(candidate[chan][j][k].retries),
 		spectrum);
-	if (crc_queue_append(candidate[chan][best_subchan].crc, chan) > MAX_STORED_CRC)
-	    crc_queue_remove(chan);
 
 	/* Someone else owns it now and will delete it later. */
-	candidate[chan][best_subchan].packet_p = NULL;
+	candidate[chan][j][k].packet_p = NULL;
 
 	/* Clear in preparation for next time. */
 
-	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
+	memset (candidate, 0, sizeof(candidate));
 
-	  candidate[chan][subchan].alevel.rec = 0;
-	  candidate[chan][subchan].alevel.mark = 0;
-	  candidate[chan][subchan].alevel.space = 0;
-
-	  candidate[chan][subchan].retries = 0;
-	  candidate[chan][subchan].age = 0;
-	  candidate[chan][subchan].crc = 0;
-	}
-#else
-
-	dlq_append (DLQ_REC_FRAME, chan, best_subchan, 
-		candidate[chan][best_subchan].packet_p, 
-		candidate[chan][best_subchan].alevel, 
-		(int)(candidate[chan][best_subchan].retries), 
-		spectrum);
-	if (crc_queue_append(candidate[chan][best_subchan].crc, chan) > MAX_STORED_CRC)
-	    crc_queue_remove(chan);
-	/* Someone else will delete so don't do it below. */
-	candidate[chan][best_subchan].packet_p = NULL;
-
-	/* Clear out in preparation for next time. */
-
-	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
-	  if (candidate[chan][subchan].packet_p != NULL) {
-	    ax25_delete (candidate[chan][subchan].packet_p);
-	    candidate[chan][subchan].packet_p = NULL;
-	  }
-
-	  candidate[chan][subchan].alevel.rec = 0;
-	  candidate[chan][subchan].alevel.mark = 0;
-	  candidate[chan][subchan].alevel.space = 0;
-
-	  candidate[chan][subchan].retries = 0;
-	  candidate[chan][subchan].age = 0;
-	  candidate[chan][subchan].crc = 0;
-	}
-
-#endif
-
-}
+} /* end pick_best_candidate */
 
 
 /* end multi_modem.c */

@@ -3,6 +3,15 @@
 
 ----------
 
+## Version 1.3  -- Development snapshot H  --  November 2015 ##
+
+### New Feature: ###
+
+- New experimental demodulator.  More details later.
+
+
+----------
+
 ## Version 1.3  -- Development snapshot G  --  November 2015 ##
 
 ### New Feature: ###

@@ -1390,15 +1390,27 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= RETRY_NONE && n <= RETRY_REMOVE_TWO_SEP) {
+            if (n >= RETRY_NONE && n < RETRY_MAX) {		// MAX is actually last valid +1
 	      p_audio_config->achan[channel].fix_bits = (retry_t)n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].fix_bits = DEFAULT_FIX_BITS;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid value for FIX_BITS. Using %d.\n", 
-			line, p_audio_config->achan[channel].fix_bits);
-   	    }
+              dw_printf ("Line %d: Invalid value %d for FIX_BITS. Using default of %d.\n",
+			line, n, p_audio_config->achan[channel].fix_bits);
+	    }
+
+	    if (p_audio_config->achan[channel].fix_bits > RETRY_INVERT_SINGLE) {
+	      text_color_set(DW_COLOR_INFO);
+              dw_printf ("Line %d: Using a FIX_BITS value greater than %d is not recommended for normal operation.\n",
+			line, RETRY_INVERT_SINGLE);
+	    }
+
+	    if (p_audio_config->achan[channel].fix_bits >= RETRY_INVERT_TWO_SEP) {
+	      text_color_set(DW_COLOR_INFO);
+              dw_printf ("Line %d: Using a FIX_BITS value of %d will waste a lot of CPU power and produce wrong results.\n",
+			line, RETRY_INVERT_TWO_SEP);
+	    }
 
 	    t = split(NULL,0);
 	    while (t != NULL) {

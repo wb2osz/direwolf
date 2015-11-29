@@ -231,7 +231,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "H", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) 	// later or hamlib ...
@@ -721,6 +721,7 @@ int main (int argc, char *argv[])
  * Inputs:	chan	- Audio channel number, 0 or 1.
  *		subchan	- Which modem caught it.  
  *			  Special case -1 for DTMF decoder.
+ *		slice	- Slicer which caught it.
  *		pp	- Packet handle.
  *		alevel	- Audio level, range of 0 - 100.
  *				(Special case, use negative to skip
@@ -737,8 +738,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-
-void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)  
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -751,6 +751,7 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= -1 && subchan < MAX_SUBCHANS);
+	assert (slice >= 0 && slice < MAX_SLICERS);
 	assert (pp != NULL);	// 1.1J+
      
 	strlcpy (display_retries, "", sizeof(display_retries));
@@ -848,8 +849,15 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
 	  else {
 	    text_color_set(DW_COLOR_DEBUG);
 	  }
-	  if (audio_config.achan[chan].num_subchan > 1) {
+
+	  if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers == 1) {
 	    dw_printf ("[%d.%d] ", chan, subchan);
+	  }
+	  else if (audio_config.achan[chan].num_subchan == 1 && audio_config.achan[chan].num_slicers > 1) {
+	    dw_printf ("[%d.%d] ", chan, slice);
+	  }
+	  else if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers > 1) {
+	    dw_printf ("[%d.%d.%d] ", chan, subchan, slice);
 	  }
 	  else {
 	    dw_printf ("[%d] ", chan);

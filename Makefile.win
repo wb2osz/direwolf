@@ -238,6 +238,7 @@ strlcat.o : misc/strlcat.c
 check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600 
 
 # Can we encode and decode at popular data rates?
+# Verify that single bit fixup increases the count.
 
 check-modem1200 : gen_packets atest
 	gen_packets -n 100 -o test1.wav
@@ -361,14 +362,13 @@ demod_9600.o : tune.h
 demod_afsk.o : tune.h
 
 
-testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c fsk_demod_agc.h \
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.o fsk_demod_agc.h \
 		hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o latlong.o symbols.o textcolor.o telemetry.o \
-		regex.a misc.a \
-		
+		dwgpsnmea.o dwgps.o serial_port.o tt_text.o regex.a misc.a
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
-	./atest -P E ../02_Track_2.wav | grep "packets decoded in" >atest.out
+	./atest -P GGG- -F 0 ../02_Track_2.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
 
 

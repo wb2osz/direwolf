@@ -167,6 +167,10 @@ static void usage (void);
 
 static int decode_only = 0;		/* Set to 0 or 1 to decode only one channel.  2 for both.  */
 
+static int sample_number = -1;		/* Sample number from the file. */
+					/* Incremented only for channel 0. */
+					/* Use to print timestamp, relative to beginning */
+					/* of file, when frame was decoded. */
 
 int main (int argc, char *argv[])
 {
@@ -495,6 +499,8 @@ int main (int argc, char *argv[])
             if (audio_sample >= 256 * 256)
                e_o_f = 1;
 
+	    if (c == 0) sample_number++;
+
             if (decode_only == 0 && c != 0) continue;
             if (decode_only == 1 && c != 1) continue;
 
@@ -572,16 +578,16 @@ int audio_get (int a)
 
 void rdq_append (rrbb_t rrbb)
 {
-	int chan;
+	int chan, subchan, slice;
 	alevel_t alevel;
-	int subchan;
 
 
 	chan = rrbb_get_chan(rrbb);
 	subchan = rrbb_get_subchan(rrbb);
+	slice = rrbb_get_slice(rrbb);
 	alevel = rrbb_get_audio_level(rrbb);
 
-	hdlc_rec2_try_to_fix_later (rrbb, chan, subchan, alevel);
+	hdlc_rec2_try_to_fix_later (rrbb, chan, subchan, slice, alevel);
 	rrbb_delete (rrbb);
 }
 
@@ -590,7 +596,7 @@ void rdq_append (rrbb_t rrbb)
  * This is called when we have a good frame.
  */
 
-void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)  
+void dlq_append (dlq_type_t type, int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -627,6 +633,15 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n");
 	dw_printf("DECODED[%d] ", packets_decoded );
+
+	/* Insert time stamp relative to start of file. */
+
+	double sec = (double)sample_number / my_audio_config.adev[0].samples_per_sec;
+	int min = (int)(sec / 60.);
+	sec -= min * 60;
+
+	dw_printf ("%d:%07.4f ", min, sec);
+
 	if (h != AX25_SOURCE) {
 	  dw_printf ("Digipeater ");
 	}
@@ -641,27 +656,38 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 
 #endif
 
-#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
-	int j;
-
-	for (j=0; j<MAX_SUBCHANS; j++) {
-	  if (spectrum[j] == '|') {
-	    count[j]++;
-	  }
-	}
-#endif
+//#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
+//	int j;
+//
+//	for (j=0; j<MAX_SUBCHANS; j++) {
+//	  if (spectrum[j] == '|') {
+//	    count[j]++;
+//	  }
+//	}
+//#endif
 
 
 // Display non-APRS packets in a different color.
 
-// TODO: display subchannel if appropriate.
+// Display channel with subchannel/slice if applicable.
 
 	if (ax25_is_aprs(pp)) {
 	  text_color_set(DW_COLOR_REC);
-	  dw_printf ("[%d] ", chan);
 	}
 	else {
 	  text_color_set(DW_COLOR_DEBUG);
+	}
+
+	if (my_audio_config.achan[chan].num_subchan > 1 && my_audio_config.achan[chan].num_slicers == 1) {
+	  dw_printf ("[%d.%d] ", chan, subchan);
+	}
+	else if (my_audio_config.achan[chan].num_subchan == 1 && my_audio_config.achan[chan].num_slicers > 1) {
+	  dw_printf ("[%d.%d] ", chan, slice);
+	}
+	else if (my_audio_config.achan[chan].num_subchan > 1 && my_audio_config.achan[chan].num_slicers > 1) {
+	  dw_printf ("[%d.%d.%d] ", chan, subchan, slice);
+	}
+	else {
 	  dw_printf ("[%d] ", chan);
 	}
 
@@ -671,7 +697,7 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 
 	ax25_delete (pp);
 
-} /* end app_process_rec_packet */
+} /* end fake dlq_append */
 
 
 void ptt_set (int ot, int chan, int ptt_signal)

@@ -198,6 +198,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	int j;
 	
 	memset (D, 0, sizeof(struct demodulator_state_s));
+	D->num_slicers = 1;
 
 #if DEBUG1
 	dw_printf ("demod_afsk_init (rate=%d, baud=%d, mark=%d, space=%d, profile=%c\n",
@@ -332,7 +333,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  case 'E':
 
 		/* 1200 baud - Started out similar to C but add prefilter. */
-		/* Version 1.2 - EXPERIMENTAL - Needs more fine tuning. */
+		/* Version 1.2 */
 		/* Enhancements: 					*/
 		/*  + Add prefilter.  Previously used for 300 baud D, but not 1200. */
 		/*  + Prefilter length now independent of M/S filters.	*/
@@ -364,6 +365,34 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    //D->pll_searching_inertia = 0.33;
 	    D->pll_locked_inertia = 0.74;
 	    D->pll_searching_inertia = 0.50;
+	    break;
+
+	  case 'G':
+
+		/* 1200 baud - Started out same as E but add 3 way interleave. */
+		/* Version 1.3 - EXPERIMENTAL - Needs more fine tuning. */
+
+	    //D->bp_window = BP_WINDOW_COSINE;	/* The name says BP but it is used for all of them. */
+
+	    D->use_prefilter = 1;		/* first, a bandpass filter. */
+	    D->prefilter_baud = 0.15;
+	    D->pre_filter_len_bits = 128 * 1200. / (44100. / 3.);
+	    D->pre_window = BP_WINDOW_TRUNCATED;
+
+	    D->ms_filter_len_bits = 25 * 1200. / (44100. / 3.);
+	    D->ms_window = BP_WINDOW_COSINE;
+
+	    D->lpf_use_fir = 1;
+	    D->lpf_baud = 1.16;
+	    D->lp_filter_len_bits = 21 * 1200. / (44100. / 3.);
+	    D->lp_window = BP_WINDOW_TRUNCATED;
+
+	    D->agc_fast_attack = 0.130;
+	    D->agc_slow_decay = 0.00013;
+	    D->hysteresis = 0.01;
+
+	    D->pll_locked_inertia = 0.73;
+	    D->pll_searching_inertia = 0.64;
 	    break;
 
 	  default:
@@ -719,8 +748,8 @@ int main ()
 	modem.achan[0].mark_freq = DEFAULT_MARK_FREQ;
 	modem.achan[0].space_freq = DEFAULT_SPACE_FREQ;
 	modem.achan[0].baud = DEFAULT_BAUD;
- 	modem.achan[0].num_demod = 1;
  	modem.achan[0].num_subchan = 1;
+ 	modem.achan[0].num_slicers = 1;
 
 
 	demod_afsk_init (modem.adev[0].samples_per_sec, modem.achan[0].baud,
@@ -792,7 +821,7 @@ int main ()
  *
  *--------------------------------------------------------------------*/
 
-static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D);
+static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
@@ -1023,24 +1052,16 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	  else {
 	    demod_data = D->slicer[subchan].prev_demod_data;
 	  }
-
-	  nudge_pll (chan, subchan, demod_data, D);
+	  nudge_pll (chan, subchan, 0, demod_data, D);
 	}
 	else {
-	  int s;
+	  int slice;
 
-	  assert (subchan == 0);
-
-	  /* "G" profile with one demodulator and multiple slicers */
-	  /* each feeding its own HDLC decoder. */
-
-	  for (s=0; s<D->num_slicers; s++) {
-	    demod_data = m_amp > s_amp * space_gain[s];
-	    nudge_pll (chan, s, demod_data, D);		
+	  for (slice=0; slice<D->num_slicers; slice++) {
+	    demod_data = m_amp > s_amp * space_gain[slice];
+	    nudge_pll (chan, subchan, slice, demod_data, D);
 	  }
 	}
-
-
 
 
 #if DEBUG4
@@ -1080,11 +1101,14 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 
 __attribute__((hot))
-static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D)
+static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D)
 {
 
 /*
  * Finally, a PLL is used to sample near the centers of the data bits.
+ *
+ * D points to a demodulator for a channel/subchannel pair so we don't
+ * have to keep recalculating it.
  *
  * D->data_clock_pll is a SIGNED 32 bit variable.
  * When it overflows from a large positive value to a negative value, we 
@@ -1109,33 +1133,34 @@ static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator
  * I don't think the optimal value will depend on the audio sample rate
  * because this happens for each transition from the demodulator.
  */
-	D->slicer[subchan].prev_d_c_pll = D->slicer[subchan].data_clock_pll;
-	D->slicer[subchan].data_clock_pll += D->pll_step_per_sample;
+
+	D->slicer[slice].prev_d_c_pll = D->slicer[slice].data_clock_pll;
+	D->slicer[slice].data_clock_pll += D->pll_step_per_sample;
 
 	  //text_color_set(DW_COLOR_DEBUG);
 	  // dw_printf ("prev = %lx, new data clock pll = %lx\n" D->prev_d_c_pll, D->data_clock_pll);
 
-	if (D->slicer[subchan].data_clock_pll < 0 && D->slicer[subchan].prev_d_c_pll > 0) {
+	if (D->slicer[slice].data_clock_pll < 0 && D->slicer[slice].prev_d_c_pll > 0) {
 
 	  /* Overflow. */
 
-	  hdlc_rec_bit (chan, subchan, demod_data, 0, -1);
+	  hdlc_rec_bit (chan, subchan, slice, demod_data, 0, -1);
 	}
 
-        if (demod_data != D->slicer[subchan].prev_demod_data) {
+        if (demod_data != D->slicer[slice].prev_demod_data) {
 
-	  if (hdlc_rec_gathering (chan, subchan)) {
-	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_locked_inertia);
+	  if (hdlc_rec_gathering (chan, subchan, slice)) {
+	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_locked_inertia);
 	  }
 	  else {
-	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_searching_inertia);
+	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_searching_inertia);
 	  }
 	}
 
 /*
  * Remember demodulator output so we can compare next time.
  */
-	D->slicer[subchan].prev_demod_data = demod_data;
+	D->slicer[slice].prev_demod_data = demod_data;
 
 } /* end nudge_pll */
 

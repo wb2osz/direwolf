@@ -180,7 +180,28 @@ struct demodulator_state_s
  * Each slicer has its own PLL and HDLC decoder.
  */
 
-#if 1
+/*
+ * Version 1.3: Clean up subchan vs. slicer.
+ *
+ * Originally some number of CHANNELS (originally 2, later 6)
+ * which can have multiple parallel demodulators called SUB-CHANNELS.
+ * This was originally for staggered frequencies for HF SSB.
+ * It can also be used for multiple demodulators with the same
+ * frequency but other differing parameters.
+ * Each subchannel has its own demodulator and HDLC decoder.
+ *
+ * In version 1.2 we added multiple SLICERS.
+ * The data structure, here, has multiple slicers per
+ * demodulator (subchannel).  Due to fuzzy thinking or
+ * expediency, the multiple slicers got mapped into subchannels.
+ * This means we can't use both multiple decoders and
+ * multiple slicers at the same time.
+ *
+ * Clean this up in 1.3 and keep the concepts separate.
+ * This means adding a third variable many places
+ * we are passing around the origin.
+ *
+ */
 	struct {
 
 		signed int data_clock_pll;		// PLL for data clock recovery.
@@ -197,25 +218,13 @@ struct demodulator_state_s
 
 		int lfsr;				// Descrambler shift register.
 
-	} slicer [MAX_SUBCHANS];
-
-#else
-	signed int data_clock_pll;		// PLL for data clock recovery.
-						// It is incremented by pll_step_per_sample
-						// for each audio sample.
-
-	signed int prev_d_c_pll;		// Previous value of above, before
-						// incrementing, to detect overflows.
-
-	int prev_demod_data;			// Previous data bit detected.
-						// Used to look for transitions.
-#endif
-
-
+	} slicer [MAX_SLICERS];				// Actual number in use is num_slicers.
+							// Should be in range 1 .. MAX_SLICERS,
 
 /* 
  * Special for Rino decoder only.
  * One for each possible signal polarity.
+ * The project showed promise but fell by the wayside.
  */
 
 #if 0
