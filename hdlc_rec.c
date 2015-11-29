@@ -626,10 +626,13 @@ void dcd_change (int chan, int subchan, int slice, int state)
  *		at the same time.  The channel is busy if ANY of them
  *		thinks the channel is busy.
  *
+ * Version 1.3: New option for input signal to inhibit transmit.
+ *
  *--------------------------------------------------------------------*/
 
 int hdlc_rec_data_detect_any (int chan)
 {
+
 	int sc;
 	assert (chan >= 0 && chan < MAX_CHANS);
 
@@ -637,6 +640,9 @@ int hdlc_rec_data_detect_any (int chan)
 	  if (composite_dcd[chan][sc] != 0)
 	    return (1);
 	}
+
+	if (get_input(ICTYPE_TXINH, chan) == 1) return (1);
+
 	return (0);
 
 } /* end hdlc_rec_data_detect_any */
