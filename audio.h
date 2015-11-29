@@ -191,6 +191,16 @@ struct audio_s {
 
 	    } octrl[NUM_OCTYPES];
 
+#define ICTYPE_TXINH 0
+
+#define NUM_ICTYPES 1
+
+	    struct {
+		ptt_method_t method;	/* none, serial port, GPIO, LPT. */
+		int gpio;		/* GPIO number */
+		int invert;		/* 1 = active low */
+	    } ictrl[NUM_ICTYPES];
+
 	/* Transmit timing. */
 
 	    int dwait;			/* First wait extra time for receiver squelch. */

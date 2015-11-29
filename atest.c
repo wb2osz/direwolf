@@ -705,6 +705,10 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	return;
 }
 
+int get_input (int it, int chan)
+{
+	return -1;
+}
 
 static void usage (void) {
 
