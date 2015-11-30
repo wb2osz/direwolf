@@ -273,7 +273,7 @@ char dtmf_sample (int c, float input)
 
 	    // Update Data Carrier Detect Indicator.
 
-	    dcd_change (c, MAX_SUBCHANS, decoded != ' ');
+	    dcd_change (c, MAX_SUBCHANS, 0, decoded != ' ');
 
 	    /* Reset timeout timer. */
 	    if (decoded != ' ') {

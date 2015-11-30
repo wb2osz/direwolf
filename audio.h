@@ -41,19 +41,12 @@ enum audio_in_type_e {
 
 typedef enum retry_e {
 		RETRY_NONE=0,
-		RETRY_SWAP_SINGLE=1,
-		RETRY_SWAP_DOUBLE=2,
-		RETRY_SWAP_TRIPLE=3,
-		RETRY_REMOVE_SINGLE=4,
-		RETRY_REMOVE_DOUBLE=5,
-		RETRY_REMOVE_TRIPLE=6,
-		RETRY_INSERT_SINGLE=7,
-		RETRY_INSERT_DOUBLE=8,
-		RETRY_SWAP_TWO_SEP=9,
-		RETRY_SWAP_MANY=10,
-		RETRY_REMOVE_MANY=11,
-		RETRY_REMOVE_TWO_SEP=12,
-		RETRY_MAX = 13}  retry_t;
+		RETRY_INVERT_SINGLE=1,
+		RETRY_INVERT_DOUBLE=2,
+		RETRY_INVERT_TRIPLE=3,
+		RETRY_INVERT_TWO_SEP=4,
+		RETRY_MAX = 5}  retry_t;
+
 
 typedef enum sanity_e { SANITY_APRS, SANITY_AX25, SANITY_NONE } sanity_t;
 			 
@@ -126,6 +119,9 @@ struct audio_s {
 	    int decimate;		/* Reduce AFSK sample rate by this factor to */
 					/* decrease computational requirements. */
 
+	    int interleave;		/* If > 1, interleave samples among multiple decoders. */
+					/* Quick hack for experiment. */
+
             int mark_freq;		/* Two tones for AFSK modulation, in Hz. */
 	    int space_freq;		/* Standard tones are 1200 and 2200 for 1200 baud. */
 
@@ -140,19 +136,13 @@ struct audio_s {
 
 	    int offset;			/* Spacing between filter frequencies. */
 
-	/* Next two are derived from 3 above by demod_init. */
+	    int num_slicers;		/* Number of different threshold points to decide */
+					/* between mark or space. */
 
-	    int num_demod;		/* Number of different demodulators (filters). */
-					/* Previously this was same as num_subchan but we add */
-					/* a new variation in version 1.2 where a single modem */
-					/* can feed multiple slicers and HDLC decoders. */
+	/* This is derived from above by demod_init. */
 
-					/* num_slicers could be added to be more general but */
-					/* for the intial experiment, we can just examine profiles. */
+	    int num_subchan;		/* Total number of modems for each channel. */
 
-	    int num_subchan;		/* Total number of modems / hdlc decoders for each channel. */
-					/* Potentially it could be product of strlen(profiles) * num_freq. */
-					/* Currently can't use both at once. */
 
 	/* These are for dealing with imperfect frames. */
 
@@ -267,7 +257,7 @@ struct audio_s {
 
 #define DEFAULT_BITS_PER_SAMPLE	16
 
-#define DEFAULT_FIX_BITS RETRY_SWAP_SINGLE
+#define DEFAULT_FIX_BITS RETRY_INVERT_SINGLE
 
 /* 
  * Standard for AFSK on VHF FM. 

@@ -118,7 +118,7 @@ static void send_packet (char *str)
 int main(int argc, char **argv)
 {
 	int c;
-	int digit_optind = 0;
+	//int digit_optind = 0;
 	int err;
 	int packet_count = 0;
 	int i;
@@ -156,14 +156,14 @@ int main(int argc, char **argv)
 	char output_file[256];		/* -o option */
 	FILE *input_fp = NULL;		/* File or NULL for built-in message */
 
-	strcpy (output_file, "");
+	strlcpy (output_file, "", sizeof(output_file));
 
 /*
  * Parse the command line options.
  */
 
 	while (1) {
-          int this_option_optind = optind ? optind : 1;
+          //int this_option_optind = optind ? optind : 1;
           int option_index = 0;
           static struct option long_options[] = {
             {"future1", 1, 0, 0},
@@ -333,7 +333,7 @@ int main(int argc, char **argv)
 
             case 'o':				/* -o for Output file */
 
-              strcpy (output_file, optarg);
+              strlcpy (output_file, optarg, sizeof(output_file));
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Output file set to %s\n", output_file);
               break;
@@ -398,9 +398,6 @@ int main(int argc, char **argv)
         assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
         assert (modem.adev[0].num_channels == 1 || modem.adev[0].num_channels == 2);
         assert (modem.adev[0].samples_per_sec >= MIN_SAMPLES_PER_SEC && modem.adev[0].samples_per_sec <= MAX_SAMPLES_PER_SEC);
-
-
-
 
 /*
  * Get user packets(s) from file or stdin if specified.
@@ -472,12 +469,16 @@ int main(int argc, char **argv)
 	    if (modem.achan[0].modem_type == MODEM_SCRAMBLE) {
 	      g_noise_level = 0.33 * (amplitude / 200.0) * ((float)i / packet_count);
 	    }
+	    else if (modem.achan[0].baud < 600) {
+		/* About 2/3 should be decoded properly. */
+	      g_noise_level = amplitude *.0048 * ((float)i / packet_count);
+	    }
 	    else {
 		/* About 2/3 should be decoded properly. */
 	      g_noise_level = amplitude *.0023 * ((float)i / packet_count);
 	    }
 
-	    sprintf (stemp, "WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  %04d of %04d", i, packet_count);
+	    snprintf (stemp, sizeof(stemp), "WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  %04d of %04d", i, packet_count);
 
 	    send_packet (stemp);
 
@@ -689,6 +690,14 @@ static int audio_file_open (char *fname, struct audio_s *pa)
  *
  *----------------------------------------------------------------*/
 
+#define MY_RAND_MAX 0x7fffffff
+
+static int seed = 1;
+
+static int my_rand (void) {
+	seed = ((seed * 1103515245) + 12345) & MY_RAND_MAX;
+	return (seed);
+}
 
 int audio_put (int a, int c)
 {
@@ -711,8 +720,13 @@ int audio_put (int a, int c)
 
 /* Add random noise to the signal. */
 /* r should be in range of -1 .. +1. */
-	    
-	    r = (rand() - RAND_MAX/2.0) / (RAND_MAX/2.0);
+
+/* Use own function instead of rand() from the C library. */
+/* Windows and Linux have different results, messing up my self test procedure. */
+/* No idea what Mac OSX and BSD might do. */
+ 
+
+	    r = (my_rand() - MY_RAND_MAX/2.0) / (MY_RAND_MAX/2.0);
 
 	    s += 5 * r * g_noise_level * 32767;
 

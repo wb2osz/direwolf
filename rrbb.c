@@ -23,16 +23,13 @@
  * File:	rrbb.c
  *
  * Purpose:	Raw Received Bit Buffer.
- *		Implementation of an array of bits used to hold data out of
+ *		An array of bits used to hold data out of
  *		the demodulator before feeding it into the HLDC decoding.
- *
- * Version 1.0:	Let's try something new.
- *		Rather than storing a single bit from the demodulator
- *		output, let's store a value which we can try later
- *		comparing to threshold values besides 0.
  *
  * Version 1.2: Save initial state of 9600 baud descrambler so we can
  *		attempt bit fix up on G3RUH/K9NG scrambled data.
+ *
+ * Version 1.3:	Store as bytes rather than packing 8 bits per byte.
  *
  *******************************************************************************/
 
@@ -49,44 +46,9 @@
 #include "rrbb.h"
 
 
-
-
 #define MAGIC1 0x12344321
 #define MAGIC2 0x56788765
 
-static const unsigned int masks[SOI] = {
-	0x00000001,
-	0x00000002,
-	0x00000004,
-	0x00000008,
-	0x00000010,
-	0x00000020,
-	0x00000040,
-	0x00000080,
-	0x00000100,
-	0x00000200,
-	0x00000400,
-	0x00000800,
-	0x00001000,
-	0x00002000,
-	0x00004000,
-	0x00008000,
-	0x00010000,
-	0x00020000,
-	0x00040000,
-	0x00080000,
-	0x00100000,
-	0x00200000,
-	0x00400000,
-	0x00800000,
-	0x01000000,
-	0x02000000,
-	0x04000000,
-	0x08000000,
-	0x10000000,
-	0x20000000,
-	0x40000000,
-	0x80000000 };
 
 static int new_count = 0;
 static int delete_count = 0;
@@ -102,6 +64,8 @@ static int delete_count = 0;
  *
  *		subchan	- Which demodulator of the channel.
  *
+ *		slice	- multiple thresholds per demodulator.
+ *
  *		is_scrambled - Is data scrambled? (true, false)
  *
  *		descram_state - State of data descrambler.
@@ -114,21 +78,20 @@ static int delete_count = 0;
  *
  ***********************************************************************************/
 
-rrbb_t rrbb_new (int chan, int subchan, int is_scrambled, int descram_state, int prev_descram)
+rrbb_t rrbb_new (int chan, int subchan, int slice, int is_scrambled, int descram_state, int prev_descram)
 {
 	rrbb_t result;
 
-	assert (SOI == 8 * sizeof(unsigned int));
-
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
+	assert (slice >= 0 && slice < MAX_SLICERS);
 
 	result = malloc(sizeof(struct rrbb_s));
 
 	result->magic1 = MAGIC1;
 	result->chan = chan;
 	result->subchan = subchan;
+	result->slice = slice;
 	result->magic2 = MAGIC2;
 
 	new_count++;
@@ -181,6 +144,7 @@ void rrbb_clear (rrbb_t b, int is_scrambled, int descram_state, int prev_descram
 	b->prev_descram = prev_descram;
 }
 
+
 /***********************************************************************************
  *
  * Name:	rrbb_append_bit	
@@ -192,35 +156,7 @@ void rrbb_clear (rrbb_t b, int is_scrambled, int descram_state, int prev_descram
  *
  ***********************************************************************************/
 
-
-// TODO:  Forget about bit packing and just use bytes.
-//  We have hundreds of MB.  Why waste time to save a couple KB?
-
-
-void rrbb_append_bit (rrbb_t b, int val)
-{
-	unsigned int di, mi;
-	
-	assert (b != NULL);
-	assert (b->magic1 == MAGIC1);
-	assert (b->magic2 == MAGIC2);
-
-	if (b->len >= MAX_NUM_BITS) {
-	  return;	/* Silently discard if full. */
-	}
-
-	di = b->len / SOI;
-	mi = b->len % SOI;
-
-	if (val) {
-	  b->data[di] |= masks[mi];
-	}
-	else {
-	  b->data[di] &= ~ masks[mi];
-	}
-
-	b->len++;
-}
+/* Definition in header file so it can be inlined. */
 
 
 /***********************************************************************************
@@ -279,46 +215,9 @@ int rrbb_get_len (rrbb_t b)
  *		
  ***********************************************************************************/
 
-int rrbb_get_bit (rrbb_t b, unsigned int ind)
-{
-	assert (b != NULL);
-	assert (b->magic1 == MAGIC1);
-	assert (b->magic2 == MAGIC2);
+/* Definition in header file so it can be inlined. */
 
-	assert (ind < b->len);
 
-	if (b->data[ind / SOI] & masks[ind % SOI]) {
-	  return 1;
-	}
-	else {
-	  return 0;
-	}
-}
-
-unsigned int rrbb_get_computed_bit (rrbb_t b, unsigned int ind)
-{
-	return b->computed_data[ind];
-}
-
-int rrbb_compute_bits (rrbb_t b)
-{
-	unsigned int i,val;
-
-	assert (b != NULL);
-	assert (b->magic1 == MAGIC1);
-	assert (b->magic2 == MAGIC2);
-
-	for (i=0;i<b->len;i++) {
-	  if (b->data[i / SOI] & masks[i % SOI]) {
-	    val = 1;
-	  }
-	  else {
-	    val = 0;
-	  }
-	  b->computed_data[i] = val;
-	}
-	return 0;
-}
 
 
 /***********************************************************************************
@@ -454,6 +353,28 @@ int rrbb_get_subchan (rrbb_t b)
 	assert (b->subchan >= 0 && b->subchan < MAX_SUBCHANS);
 
 	return (b->subchan);
+}
+
+
+/***********************************************************************************
+ *
+ * Name:	rrbb_get_slice	
+ *
+ * Purpose:	Get slice number from which bit buffer was received.
+ *
+ * Inputs:	b	Handle for bit array.
+ *		
+ ***********************************************************************************/
+
+int rrbb_get_slice (rrbb_t b)
+{
+	assert (b != NULL);
+	assert (b->magic1 == MAGIC1);
+	assert (b->magic2 == MAGIC2);
+
+	assert (b->slice >= 0 && b->slice < MAX_SLICERS);
+
+	return (b->slice);
 }
 
 

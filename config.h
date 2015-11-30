@@ -38,11 +38,21 @@ struct misc_config_s {
 				/* Want this to be off by default because it hangs */
 				/* after a while if nothing is reading from other end. */
 
-	char nullmodem[40];	/* Serial port name for our end of the */
+	char nullmodem[20];	/* Serial port name for our end of the */
 				/* virtual null modem for native Windows apps. */
 
-	char nmea_port[40];	/* Serial port name for NMEA communication with GPS */
-				/* receiver and/or mapping application. */
+	char gpsnmea_port[20];	/* Serial port name for reading NMEA sentences from GPS. */
+				/* e.g. COM22, /dev/ttyACM0 */
+
+	char gpsd_host[20];	/* Host for gpsd server. */
+				/* e.g. localhost, 192.168.1.2 */
+
+	int gpsd_port;		/* Port number for gpsd server. */
+				/* Default is  2947. */
+
+				/* e.g. COM22, /dev/ttyACM0 */
+	char nmea_port[20];	/* Serial port name for NMEA communication with GPS */
+				/* receiver and/or mapping application. Change this. */
 
 	char logdir[80];	/* Directory for saving activity logs. */
 

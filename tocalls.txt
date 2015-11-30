@@ -1,6 +1,9 @@
-APRS TO-CALL VERSION NUMBERS                            27 Apr 2015
+APRS TO-CALL VERSION NUMBERS                            26 Oct 2015
 -------------------------------------------------------------------
                                                              WB4APR
+26 Oct 15 added APZ247 for UPRS
+09 Sep 15 added APHTxx for HMTracker by IU0AAC 
+06 Aug 15 added APMTxx for LZ1PPL for tracker
 27 Apr 15 added APZMAJ for Martyn M1MAJ DeLorme inReach Tracker
 21 Apr 15 added APB2MF & APR2MF DL2MF - MF2APRS Radiosonde   
 06 Apr 15 added APAVT5 SainSonic AP510 - a 1watt tracker 
@@ -9,26 +12,7 @@ APRS TO-CALL VERSION NUMBERS                            27 Apr 2015
 21 Aug 14 added APSMSx Paul Defrusne's SMS gateway
 11 Aug 14 added APCWP8 John GM7HHB, WinphoneAPRS
 18 Dec 13 added APZWKR GM1WKR NetSked application
-22 Oct 13 added APFIxx APRS.FI OH7LZB, Hessu
-23 Aug 13 added APOxxx OSCAR satellites for AMSAT-LU by LU9DO
-22 Feb 13 added APNWxx SQ3FYK.com & SQ3PLX http://microsat.com.pl/
-            and APMIxx SQ3PLX http://microsat.com.pl/
-29 Jan 13 added APICxx for HA9MCQ Pic IGate
-23 Jan 13 added APWAxx APRSISCE Android version
-18 Jan 13 added APDGxx,APDHxx,APDOxx,APDDxx,APDKxx,APD4xx for Dstar
-13 Jan 13 added APLMxx WA0TQG transceiver controller
-17 Dec 12 added APAMxx Altus Metrum GPS trackers
-03 Dec 12 added APUDRx NW Digital Radio's UDR (APRS/Dstar)
-03 Nov 12 added APHAXn SM2APRS by PY2UEP
-17 Sep 12 added APSCxx aprsc APRS-IS core server (OH7LZB, OH2MQK)
-12 Sep 12 added APSARx for ZL4FOX's SARTRACK
-02 Jul 12 added APDGxx D-Star Gateways by G4KLX
-28 Jun 12 added APDInn DIXPRS - Bela, HA5DI
-27 jun 12 added APMGxx MiniGate - Alex, AB0TJ
-17 Feb 12 added APJYnn KA2DDO yet another APRS system
-20 Jan 12 added APDSXX SP9UOB for dsDigi and ds-tracker
-                       APBPQx  John G8BPQ Digipeater/IGate
-                       APLQRU Charlie - QRU Server
+
 11 Jan 12 added APYTxx for YagTracker and updated Yaesu APY008/350
 
 In APRS, the AX.25  Destination address is not used for packet 
@@ -92,6 +76,7 @@ a TOCALL number series:
       APGOxx  for AA3NJ PDA application
  APH  APHKxx  for LA1BR tracker/digipeater
       APHAXn  SM2APRS by PY2UEP
+      APHTxx  HMTracker by IU0AAC 
  API  APICQx  for ICQ
       APICxx  for HA9MCQ Pic IGate
  APJ  APJAxx  JavAPRS
@@ -109,6 +94,7 @@ a TOCALL number series:
  APM  APMxxx  MacAPRS, 
       APMGxx  MiniGate - Alex, AB0TJ
       APMIxx  SQ3PLX http://microsat.com.pl/
+      APMTxx  LZ1PPL for tracker
  APN  APNxxx  Network nodes, digis, etc
       APN3xx  Kantronics KPC-3 rom versions
       APN9xx  Kantronics KPC-9612 Roms
@@ -180,6 +166,7 @@ a TOCALL number series:
       APY350  Yaesu FTM-350 series
       APYTxx  for YagTracker
  APZ  APZxxx  Experimental
+      APZ247  for UPRS NR0Q
       APZ0xx  Xastir (old versions. See APX)
       APZMAJ  Martyn M1MAJ DeLorme inReach Tracker
       APZMDR  for HaMDR trackers - hessu * hes.iki.fi]

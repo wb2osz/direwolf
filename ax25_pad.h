@@ -307,7 +307,8 @@ extern void ax25_delete (packet_t pp);
 #endif
 
 
-extern int ax25_parse_addr (char *in_addr, int strict, char *out_addr, int *out_ssid, int *out_heard);
+extern int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, int *out_ssid, int *out_heard);
+extern int ax25_check_addresses (packet_t pp);
 
 extern packet_t ax25_unwrap_third_party (packet_t from_pp);
 

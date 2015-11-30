@@ -287,11 +287,11 @@ void recv_process (void)
 	dlq_type_t type;
 	int chan;
 	int subchan;
+	int slice;
 	packet_t pp;
 	alevel_t alevel;
 	retry_t retries;
-	char spectrum[MAX_SUBCHANS+1];
-
+	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];
 
 	while (1) {
 
@@ -299,18 +299,17 @@ void recv_process (void)
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("recv_process: woke up\n");
-#endif
-	  
+#endif 
 
-	  ok = dlq_remove (&type, &chan, &subchan, &pp, &alevel, &retries, spectrum);
+	  ok = dlq_remove (&type, &chan, &subchan, &slice, &pp, &alevel, &retries, spectrum, sizeof(spectrum));
+
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("recv_process: dlq_remove() returned ok=%d, type=%d, chan=%d, pp=%p\n", 
 				ok, (int)type, chan, pp);
 #endif
 	  if (ok) {
-	   
-		app_process_rec_packet (chan, subchan, pp, alevel, retries, spectrum);  
+		app_process_rec_packet (chan, subchan, slice, pp, alevel, retries, spectrum);
 	  }
 #if DEBUG
 	  else {

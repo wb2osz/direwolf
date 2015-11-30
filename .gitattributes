@@ -28,8 +28,14 @@
 *.desktop	text
 *.conf		text
 *.rc		text
+*.spec		text
+*.bat		text
+*.1		text
+*.md		text
+COPYING		text
+Makefile*	text
+README*		text
 
 *.ico		binary
 *.png		binary
 
-Makefile*	text

@@ -178,7 +178,7 @@ long Set_Polar_Stereographic_Parameters (double a,
   double essin;
   double one_PLUS_es, one_MINUS_es;
   double pow_es;
-  double temp, temp_northing;
+  double temp, temp_northing = 0;
   double inv_f = 1 / f;
   double mc;                    
 //  const double  epsilon = 1.0e-2;

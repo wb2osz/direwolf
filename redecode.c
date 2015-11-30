@@ -46,7 +46,6 @@
 #include <assert.h>
 #include <string.h>
 
-//#include <sys/time.h>
 #include <time.h>
 
 #if __WIN32__
@@ -98,6 +97,8 @@ static void * redecode_thread (void *arg);
 
 void redecode_init (struct audio_s *p_audio_config)
 {
+
+#if 0
 
 #if __WIN32__
 	HANDLE redecode_th;
@@ -151,7 +152,7 @@ void redecode_init (struct audio_s *p_audio_config)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("redecode_init: finished \n");
 #endif
-
+#endif
 
 } /* end redecode_init */
 
@@ -174,6 +175,8 @@ void redecode_init (struct audio_s *p_audio_config)
  *
  *
  *--------------------------------------------------------------------*/
+
+#if 0
 
 #if __WIN32__
 static unsigned redecode_thread (void *arg)
@@ -242,7 +245,7 @@ static void * redecode_thread (void *arg)
 
 } /* end redecode_thread */
 
-
+#endif
 
 
 

@@ -2,9 +2,9 @@
 
 /* telemetry.h */
 
-void telemetry_data_original (char *station, char *info, int quiet, char *output, char *comment);
+void telemetry_data_original (char *station, char *info, int quiet, char *output, size_t outputsize, char *comment, size_t commentsize);
  
-void telemetry_data_base91 (char *station, char *cdata, char *output);
+void telemetry_data_base91 (char *station, char *cdata, char *output, size_t outputsize);
  
 void telemetry_name_message (char *station, char *msg);
  

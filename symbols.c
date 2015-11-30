@@ -35,6 +35,8 @@
 #include "direwolf.h"
 #include "textcolor.h"
 #include "symbols.h"
+#include "tt_text.h"
+
 
 //#if __WIN32__
 	char *strcasestr(const char *S, const char *FIND);
@@ -460,7 +462,7 @@ void symbols_list (void)
 	  int symbol = new_sym_ptr[n].symbol;
 	  char tones[12];
 
-	  symbols_to_tones (overlay, symbol, tones);
+	  symbols_to_tones (overlay, symbol, tones, sizeof(tones));
 
 	  if (overlay == '/') {
 
@@ -900,6 +902,7 @@ int symbols_code_from_description (char overlay, char *description, char *symtab
  *
  * Inputs:	symtab/overlay
  *		symbol
+ *		tonessiz	- Amount of space available for result.
  *
  * Output:	tones	- string of AB...		
  *		
@@ -912,13 +915,12 @@ int symbols_code_from_description (char overlay, char *description, char *symtab
  *
  *------------------------------------------------------------------*/
 
-void symbols_to_tones (char symtab, char symbol, char *tones)
+void symbols_to_tones (char symtab, char symbol, char *tones, size_t tonessiz)
 {
 
 	if (symtab == '/') {
 
-	  // TODO: potential buffer overflow.
-	  sprintf (tones, "AB1%02d", symbol - ' ');
+	  snprintf (tones, tonessiz, "AB1%02d", symbol - ' ');
 	}
 	else if (isupper(symtab) || isdigit(symtab)) {
 
@@ -930,11 +932,11 @@ void symbols_to_tones (char symtab, char symbol, char *tones)
 
 	  tt_text_to_two_key (text, 0, tt);
 
-	  sprintf (tones, "AB0%02d%s", symbol - ' ', tt);
+	  snprintf (tones, tonessiz, "AB0%02d%s", symbol - ' ', tt);
 	}
 	else {
 	 
-	  sprintf (tones, "AB2%02d", symbol - ' ');
+	  snprintf (tones, tonessiz, "AB2%02d", symbol - ' ');
 	}
 
 }  /* end symbols_to_tones */

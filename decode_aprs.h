@@ -64,7 +64,7 @@ typedef struct decode_aprs_s {
 					/* Also for Directed Station Query which is a */
 					/* special case of message. */
 
-        float g_speed;			/* Speed in MPH.  */
+        float g_speed_mph;		/* Speed in MPH.  */
 
         float g_course;			/* 0 = North, 90 = East, etc. */
 	
@@ -78,7 +78,7 @@ typedef struct decode_aprs_s {
 
         float g_range;			/* Precomputed radio range in miles. */
 
-        float g_altitude;		/* Feet above median sea level.  */
+        float g_altitude_ft;		/* Feet above median sea level.  */
 
         char g_mfr[80];			/* Manufacturer or application. */
 

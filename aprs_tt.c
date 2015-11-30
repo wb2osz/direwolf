@@ -22,9 +22,14 @@
  *
  * Module:      aprs_tt.c
  *
- * Purpose:   	APRStt gateway.
+ * Purpose:   	First half of APRStt gateway.
+ *
+ * Description: This file contains functions to parse the tone sequences
+ *		and extract meaning from them.
+ *
+ *		tt_user.c maintains information about users and
+ *		generates the APRS Object Reports.
  *		
- * Description: Transfer touch tone messages into the APRS network.
  *
  * References:	This is based upon APRStt (TM) documents with some
  *		artistic freedom.
@@ -38,7 +43,7 @@
 
 // TODO:  clean up terminolgy.  
 // "Message" has a specific meaning in APRS and this is not it.  
-// Touch Tone sequence might be appropriate.
+// Touch Tone sequence should be appropriate.
 // What do we call the parts separated by * key?   Entry?  Field?
 
 
@@ -67,9 +72,7 @@
 #include "tq.h"
 
 
-#if __WIN32__
-char *strtok_r(char *str, const char *delim, char **saveptr);
-#endif
+
 
 // geotranz
 
@@ -103,9 +106,11 @@ static int parse_location (char *e);
 static int parse_comment (char *e);
 static int expand_macro (char *e);
 static void raw_tt_data_to_app (int chan, char *msg);
-static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *bstr, char *dstr);
+static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *bstr, char *dstr, size_t valstrsize);
 
-
+#if TT_MAIN
+static void check_result (void);
+#endif
 
 
 /*------------------------------------------------------------------
@@ -285,8 +290,8 @@ void aprs_tt_button (int chan, char button)
  *
  * Returns:     None
  *
- * Description:	Process a complete message.
- *		It should have one or more fields separatedy by *
+ * Description:	Process a complete tone sequence.
+ *		It should have one or more fields separated by *
  *		and terminated by a final # like these:
  *
  *		callsign #
@@ -312,27 +317,22 @@ static char m_callsign[20];	/* really object name */
  */
 
 static char m_symtab_or_overlay;
-static char m_symbol_code;
+static char m_symbol_code;		// Default 'A'
 
 static char m_loc_text[24];
-static double m_longitude;
-static double m_latitude;
+static double m_longitude;		// Set to G_UNKNOWN if not defined.
+static double m_latitude;		// Set to G_UNKNOWN if not defined.
 static char m_comment[200];
 static char m_freq[12];
 static char m_mic_e;
 static char m_dao[6];
-static int m_ssid;
-
-//#define G_UNKNOWN -999999
+static int m_ssid;			// Default 12 for APRStt user.
 
 
 
 void aprs_tt_sequence (int chan, char *msg)
 {
 	int err;
-	char audible_response[1000];
-	packet_t pp;
-	char script_response[1000];
 
 
 #if DEBUG
@@ -367,37 +367,40 @@ void aprs_tt_sequence (int chan, char *msg)
  */
 	err = parse_fields (msg);
 
-#if defined(DEBUG) || defined(TT_MAIN)
+#if defined(DEBUG)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("callsign=\"%s\", ssid=%d, symbol=\"%c%c\", freq=\"%s\", comment=\"%s\", lat=%.4f, lon=%.4f, dao=\"%s\"\n", 
 		m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, m_freq, m_comment, m_latitude, m_longitude, m_dao);
 #endif
 
+#if TT_MAIN
+	check_result ();	// for unit testing.
+#else
+
+/*
+ * If digested successfully.  Add to our list of users and schedule transmissions.
+ */
 
 	if (err == 0) {
 
-/*
- * Digested successfully.  Add to our list of users and schedule transmissions.
- */
-
-#ifndef TT_MAIN
 	  err = tt_user_heard (m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, 
 		m_loc_text, m_latitude, m_longitude,
 		m_freq, m_comment, m_mic_e, m_dao);
-#endif
 	}
 
 
 /*
  * If a command / script was supplied, run it now.
  * This can do additional processing and provide a custom audible response.
+ * This is done even for the error case.
  */
+	char script_response[1000];
 
 	strlcpy (script_response, "", sizeof(script_response));
 
 	if (strlen(tt_config.ttcmd) > 0) {
 
-	  dw_run_cmd (tt_config.ttcmd, 1, script_response, (int)sizeof(script_response));
+	  dw_run_cmd (tt_config.ttcmd, 1, script_response, sizeof(script_response));
 
 	}
 
@@ -407,10 +410,14 @@ void aprs_tt_sequence (int chan, char *msg)
  * Use high priority queue for consistent timing.  
  */
 
+	char audible_response[1000];
+
 	snprintf (audible_response, sizeof(audible_response), 
 					"APRSTT>%s:%s", 
 					tt_config.response[err].method,
 					(strlen(script_response) > 0) ? script_response : tt_config.response[err].mtext);
+
+	packet_t pp;
 
 	pp = ax25_from_text (audible_response, 0);
 
@@ -422,6 +429,7 @@ void aprs_tt_sequence (int chan, char *msg)
 
 	tq_append (chan, TQ_PRIO_0_HI, pp);
 
+#endif  /* ifndef TT_MAIN */
 
 } /* end aprs_tt_sequence */
 
@@ -461,14 +469,14 @@ static int parse_fields (char *msg)
 
 
 	//text_color_set(DW_COLOR_DEBUG);
-	//printf ("parse_fields (%s).\n", msg);
+	//dw_printf ("parse_fields (%s).\n", msg);
 
 	strlcpy (stemp, msg, sizeof(stemp));
 	e = strtok_r (stemp, "*#", &save);
 	while (e != NULL) {
 
 	  //text_color_set(DW_COLOR_DEBUG);
-	  //printf ("parse_fields () field = %s\n", e);
+	  //dw_printf ("parse_fields () field = %s\n", e);
 
 	  switch (*e) {
 
@@ -539,7 +547,7 @@ static int parse_fields (char *msg)
 	}
 
 	//text_color_set(DW_COLOR_DEBUG);
-	//printf ("parse_fields () normal return\n");
+	//dw_printf ("parse_fields () normal return\n");
 
 	return (0);
 
@@ -566,21 +574,23 @@ static int parse_fields (char *msg)
  *
  *----------------------------------------------------------------*/
 
+#define VALSTRSIZE 20
+
 static int expand_macro (char *e) 
 {
-	int len;
+	//int len;
 	int ipat;
-	char xstr[20], ystr[20], zstr[20], bstr[20], dstr[20];
+	char xstr[VALSTRSIZE], ystr[VALSTRSIZE], zstr[VALSTRSIZE], bstr[VALSTRSIZE], dstr[VALSTRSIZE];
 	char stemp[MAX_MSG_LEN+1];
-	char *d, *s;
+	char *d;
 
 
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("Macro tone sequence: '%s'\n", e);
 
-	len = strlen(e);
+	//len = strlen(e);
 
-	ipat = find_ttloc_match (e, xstr, ystr, zstr, bstr, dstr);
+	ipat = find_ttloc_match (e, xstr, ystr, zstr, bstr, dstr, VALSTRSIZE);
 
 	if (ipat >= 0) {
 
@@ -723,7 +733,7 @@ static int checksum_not_ok (char *str, int len, char found)
 static int parse_callsign (char *e)
 {
 	int len;
-	int c_length;
+	//int c_length;
 	char tttemp[40], stemp[30];
 
 	assert (*e == 'A');
@@ -838,8 +848,9 @@ static int parse_callsign (char *e)
 static int parse_object_name (char *e)
 {
 	int len;
-	int c_length;
-	char tttemp[40], stemp[30];
+	//int c_length;
+	//char tttemp[40];
+	//char stemp[30];
 
 	assert (e[0] == 'A');
 	assert (e[1] == 'A');
@@ -991,19 +1002,15 @@ static int parse_symbol (char *e)
  *
  *----------------------------------------------------------------*/
 
-
-
 /* Average radius of earth in meters. */
 #define R 6371000.
 
 
-
-
 static int parse_location (char *e)
 {
-	int len;
+	//int len;
 	int ipat;
-	char xstr[20], ystr[20], zstr[20], bstr[20], dstr[20];
+	char xstr[VALSTRSIZE], ystr[VALSTRSIZE], zstr[VALSTRSIZE], bstr[VALSTRSIZE], dstr[VALSTRSIZE];
 	double x, y, dist, bearing;
 	double lat0, lon0;
 	double lat9, lon9;
@@ -1022,9 +1029,9 @@ static int parse_location (char *e)
 				/* If this ever changes, be sure to update corresponding */
 				/* section in process_comment() in decode_aprs.c */
 
-	len = strlen(e);
+	//len = strlen(e);
 
-	ipat = find_ttloc_match (e, xstr, ystr, zstr, bstr, dstr);
+	ipat = find_ttloc_match (e, xstr, ystr, zstr, bstr, dstr, VALSTRSIZE);
 	if (ipat >= 0) {
 
 	  //dw_printf ("ipat=%d, x=%s, y=%s, b=%s, d=%s\n", ipat, xstr, ystr, bstr, dstr);
@@ -1140,7 +1147,7 @@ static int parse_location (char *e)
                 m_latitude = R2D(lat0);
                 m_longitude = R2D(lon0);
 
-                //printf ("DEBUG: from UTM, latitude = %.6f, longitude = %.6f\n", m_latitude, m_longitude);
+                //dw_printf ("DEBUG: from UTM, latitude = %.6f, longitude = %.6f\n", m_latitude, m_longitude);
               }
               else {
 	        char message[300];
@@ -1190,7 +1197,7 @@ static int parse_location (char *e)
                 m_latitude = R2D(lat0);
                 m_longitude = R2D(lon0);
 
-                //printf ("DEBUG: from MGRS/USNG, latitude = %.6f, longitude = %.6f\n", m_latitude, m_longitude);
+                //dw_printf ("DEBUG: from MGRS/USNG, latitude = %.6f, longitude = %.6f\n", m_latitude, m_longitude);
               }
               else {
 	        char message[300];
@@ -1219,7 +1226,7 @@ static int parse_location (char *e)
 	      //text_color_set(DW_COLOR_DEBUG);
 	      //dw_printf ("Case MHEAD: Convert to text \"%s\".\n", stemp);
 
-	      if (tt_mhead_to_text (stemp, 0, mh)  == 0) {
+	      if (tt_mhead_to_text (stemp, 0, mh, sizeof(mh))  == 0) {
 	        //text_color_set(DW_COLOR_DEBUG);
 	        //dw_printf ("Case MHEAD: Resulting text \"%s\".\n", mh);
 
@@ -1277,6 +1284,8 @@ static int parse_location (char *e)
  *				  APRStt messsage.
  *				  In this case, it should start with "B".
  *
+ *		valstrsize	- size of the outputs so we can check for buffer overflow.
+ *
  * Outputs:	xstr		- All digits matching x positions in configuration.
  *		ystr		-                     y 
  *		zstr		-                     z 
@@ -1290,7 +1299,7 @@ static int parse_location (char *e)
  *
  *----------------------------------------------------------------*/
 
-static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *bstr, char *dstr)
+static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *bstr, char *dstr, size_t valstrsize)
 {
 	int ipat;	/* Index into patterns from configuration file */
 	int len;	/* Length of pattern we are trying to match. */
@@ -1307,11 +1316,11 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	  if (strlen(e) == len) {
 
 	    match = 1;
-	    strlcpy (xstr, "", sizeof(xstr));
-	    strlcpy (ystr, "", sizeof(ystr));
-	    strlcpy (zstr, "", sizeof(zstr));
-	    strlcpy (bstr, "", sizeof(bstr));
-	    strlcpy (dstr, "", sizeof(dstr));
+	    strlcpy (xstr, "", valstrsize);
+	    strlcpy (ystr, "", valstrsize);
+	    strlcpy (zstr, "", valstrsize);
+	    strlcpy (bstr, "", valstrsize);
+	    strlcpy (dstr, "", valstrsize);
 
 	    for (k=0; k<len; k++) {
 	      mc = tt_config.ttloc_ptr[ipat].pattern[k];
@@ -1342,7 +1351,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strlcat (xstr, stemp, sizeof(xstr));
+		     strlcat (xstr, stemp, valstrsize);
 		   }
 		   else {
 		     match = 0;
@@ -1354,7 +1363,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strlcat (ystr, stemp, sizeof(ystr));
+		     strlcat (ystr, stemp, valstrsize);
 		   }
 		   else {
 		     match = 0;
@@ -1366,7 +1375,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strlcat (zstr, stemp, sizeof(zstr));
+		     strlcat (zstr, stemp, valstrsize);
 		   }
 		   else {
 		     match = 0;
@@ -1378,7 +1387,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strlcat (bstr, stemp, sizeof(bstr));
+		     strlcat (bstr, stemp, valstrsize);
 		   }
 		   else {
 		     match = 0;
@@ -1390,7 +1399,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	             char stemp[2];
 		     stemp[0] = e[k];
 		     stemp[1] = '\0';
-		     strlcat (dstr, stemp, sizeof(dstr));
+		     strlcat (dstr, stemp, valstrsize);
 		   }
 		   else {
 		     match = 0;
@@ -1447,7 +1456,6 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 static int parse_comment (char *e)
 {
 	int len;
-	int n;
 
 	assert (*e == 'C');
 
@@ -1553,7 +1561,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
 	  alevel.mark = -2;
 	  alevel.space = -2;
 
-	  dlq_append (DLQ_REC_FRAME, chan, -1, pp, alevel, RETRY_NONE, "tt");
+	  dlq_append (DLQ_REC_FRAME, chan, -1, 0, pp, alevel, RETRY_NONE, "tt");
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1579,7 +1587,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
  *					is one line of text.
  *				  2 = Also remove any trailing whitespace.
  *
- *		maxresult	- Amount of space available for result.
+ *		resultsiz	- Amount of space available for result.
  *
  * Outputs:	result		- Output captured from running command.
  *
@@ -1594,21 +1602,21 @@ static void raw_tt_data_to_app (int chan, char *msg)
  *
  *----------------------------------------------------------------*/
 
-int dw_run_cmd (char *cmd, int oneline, char *result, int maxresult) 
+int dw_run_cmd (char *cmd, int oneline, char *result, size_t resultsiz) 
 {
 	FILE *fp;
 
-	strlcpy (result, "", sizeof(result));
+	strlcpy (result, "", resultsiz);
 
 	fp = popen (cmd, "r");
 	if (fp != NULL) {
-	  int remaining = maxresult;
+	  int remaining = (int)resultsiz;
 	  char *pr = result;
 	  int err;
 
 	  while (remaining > 2 && fgets(pr, remaining, fp) != NULL) {
 	    pr = result + strlen(result);
-	    remaining = maxresult - strlen(result);
+	    remaining = (int)resultsiz - strlen(result);
 	  }
 
 	  if ((err = pclose(fp)) != 0) {	 
@@ -1670,104 +1678,180 @@ int dw_run_cmd (char *cmd, int oneline, char *result, int maxresult)
  *
  * Description:	Run unit test like this:
  *
- *		rm a.exe ; gcc tt_text.c -DTT_MAIN -DDEBUG aprs_tt.c latlong.c strtok_r.o utm/LatLong-UTMconversion.c ; ./a.exe 
- *
- * Bugs:	No automatic checking.
- *		Just eyeball it to see if things look right.
+ *			rm a.exe ; gcc tt_text.c -DTT_MAIN -Igeotranz aprs_tt.c latlong.o textcolor.o geotranz.a misc.a  ; ./a.exe
+ *		or
+ *			make ttest
  *
  *----------------------------------------------------------------*/
 
 
+// TODO:  add this to "make check"
+
+
 #if TT_MAIN
 
+/*
+ * Regression test for the parsing.
+ * It does not maintain any history so abbreviation will not invoke previous full call.
+ */
 
-void text_color_set (dw_color_t c) { return; }
-
-int dw_printf (const char *fmt, ...) 
-{
-	va_list args;
-	int len;
+static const struct {
+	char *toneseq;		/* Tone sequence in. */
 	
-	va_start (args, fmt);
-	len = vprintf (fmt, args);
-	va_end (args);
-	return (len);
-}
+	char *callsign;		/* Expected results... */
+	char *ssid;
+	char *symbol;
+	char *freq;
+	char *comment;
+	char *lat;
+	char *lon;
+	char *dao;
+} testcases[] = {
 
+  /* Callsigns & abbreviations. */
+
+	{ "A9A2B42A7A7C71#",	"WB4APR", "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" }, 	/* WB4APR/7 */
+	{ "A27773#",		"277",    "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" }, 	/* abbreviated form */
+	/* Example in http://www.aprs.org/aprstt/aprstt-coding24.txt has a bad checksum! */
+	/* Bad checksum for "2777".  Expected 3 but received 6. */
+	{ "A27776#",		"",       "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Expect error message. */
+	
+	/* Bad checksum for "2A7A7C7".  E xpected 5 but received 1. */
+	{ "A2A7A7C71#",		"",       "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Spelled suffix, overlay, checksum */
+	{ "A27773#",		"277",    "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Suffix digits, overlay, checksum */
+
+	{ "A9A2B26C7D9D71#",	"WB2OSZ", "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* WB2OSZ/7 numeric overlay */
+	{ "A67979#",		"679",    "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* abbreviated form */
+
+	{ "A9A2B26C7D9D5A9#",	"WB2OSZ", "12", "JA", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* WB2OSZ/J letter overlay */
+	{ "A6795A7#",		"679",    "12", "JA", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* abbreviated form */
+
+	{ "A277#",		"277",    "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Tactical call "277" no overlay and no checksum */
+
+  /* Locations */
+
+	{ "B01*A67979#",	"679",    "12", "7A", "", "", "12.2500", "56.2500", "!T1 !" },
+	{ "B988*A67979#",	"679",    "12", "7A", "", "", "12.5000", "56.5000", "!T88!" },
+
+	{ "B51000125*A67979#",	"679",    "12", "7A", "", "", "52.7907", "0.8309", "!TB5!" },		/* expect about 52.79  +0.83 */
+
+	{ "B5206070*A67979#",	"679",    "12", "7A", "", "", "37.9137", "-81.1366", "!TB5!" },		/* Try to get from Hilltop Tower to Archery & Target Range. */
+													/* Latitude comes out ok, 37.9137 -> 55.82 min. */
+													/* Longitude -81.1254 -> 8.20 min */
+	{ "B21234*A67979#",	"679",    "12", "7A", "", "", "12.3400", "56.1200", "!TB2!" },
+	{ "B533686*A67979#",	"679",    "12", "7A", "", "", "37.9222", "81.1143", "!TB5!" },
+
+  /* Comments */
+
+	{ "C1",			"",       "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },
+	{ "C2",			"",       "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },
+	{ "C146520",		"",       "12", "\\A", "146.520MHz", "", "-999999.0000", "-999999.0000", "!T  !" },
+	{ "C7788444222550227776669660333666990122223333",
+	                        "",       "12", "\\A", "", "QUICK BROWN FOX 123", "-999999.0000", "-999999.0000", "!T  !" },
+  /* Macros */
+
+	{ "88345",		"BIKE 345", "0", "/b", "", "", "12.5000", "56.5000", "!T88!" },
+
+  /* 10 digit representation for callsign & satellite grid. WB4APR near 39.5, -77   */
+
+	{ "AC9242771558*BA1819", "WB4APR", "12", "\\A", "", "", "39.5000", "-77.0000", "!TBA!" },
+	{ "18199242771558",	 "WB4APR", "12", "\\A", "", "", "39.5000", "-77.0000", "!TBA!" },
+};
+
+
+static int test_num;
+static int error_count;
+
+static void check_result (void)
+{
+	char stemp[32];
+
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("callsign=\"%s\", ssid=%d, symbol=\"%c%c\", freq=\"%s\", comment=\"%s\", lat=%.4f, lon=%.4f, dao=\"%s\"\n", 
+		m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, m_freq, m_comment, m_latitude, m_longitude, m_dao);
+
+
+	if (strcmp(m_callsign, testcases[test_num].callsign) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for callsign.\n", testcases[test_num].callsign);
+	  error_count++;
+	}
+
+	snprintf (stemp, sizeof(stemp), "%d", m_ssid);
+	if (strcmp(stemp, testcases[test_num].ssid) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for SSID.\n", testcases[test_num].ssid);
+	  error_count++;
+	}
+
+	stemp[0] = m_symtab_or_overlay;
+	stemp[1] = m_symbol_code;
+	stemp[2] = '\0';
+	if (strcmp(stemp, testcases[test_num].symbol) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for Symbol.\n", testcases[test_num].symbol);
+	  error_count++;
+	}
+
+	if (strcmp(m_freq, testcases[test_num].freq) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for Freq.\n", testcases[test_num].freq);
+	  error_count++;
+	}
+
+	if (strcmp(m_comment, testcases[test_num].comment) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for Comment.\n", testcases[test_num].comment);
+	  error_count++;
+	}
+
+	snprintf (stemp, sizeof(stemp), "%.4f", m_latitude);
+	if (strcmp(stemp, testcases[test_num].lat) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for Latitude.\n", testcases[test_num].lat);
+	  error_count++;
+	}
+
+	snprintf (stemp, sizeof(stemp), "%.4f", m_longitude);
+	if (strcmp(stemp, testcases[test_num].lon) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for Longitude.\n", testcases[test_num].lon);
+	  error_count++;
+	}
+
+	if (strcmp(m_dao, testcases[test_num].dao) != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR: Expected \"%s\" for DAO.\n", testcases[test_num].dao);
+	  error_count++;
+	}
+}
 
 
 int main (int argc, char *argv[])
 {
-	char text[256], buttons[256];
-	int n;
-
-	dw_printf ("Hello, world!\n");
-
 	aprs_tt_init (NULL);
 
-	//if (argc < 2) {
-	  //dw_printf ("Supply text string on command line.\n");
-	  //exit (1);
-	//}
+	error_count = 0;
 
-/* Callsigns & abbreviations. */
+	for (test_num = 0; test_num < sizeof(testcases) / sizeof(testcases[0]); test_num++) {
 
-	aprs_tt_sequence (0, "A9A2B42A7A7C71#");		/* WB4APR/7 */
-	aprs_tt_sequence (0, "A27773#");			/* abbreviated form */
-	/* Example in http://www.aprs.org/aprstt/aprstt-coding24.txt has a bad checksum! */
-	aprs_tt_sequence (0, "A27776#");			/* Expect error message. */
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("\nTest case %d: %s\n", test_num, testcases[test_num].toneseq);
 
-	aprs_tt_sequence (0, "A2A7A7C71#");		/* Spelled suffix, overlay, checksum */
-	aprs_tt_sequence (0, "A27773#");			/* Suffix digits, overlay, checksum */
+	  aprs_tt_sequence (0, testcases[test_num].toneseq);
+	}
 
-	aprs_tt_sequence (0, "A9A2B26C7D9D71#");		/* WB2OSZ/7 numeric overlay */
-	aprs_tt_sequence (0, "A67979#");			/* abbreviated form */
+	if (error_count != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\n\nTEST FAILED, Total of %d errors.\n", error_count);
+	  return (EXIT_FAILURE);
+	}
 
-	aprs_tt_sequence (0, "A9A2B26C7D9D5A9#");	/* WB2OSZ/J letter overlay */
-	aprs_tt_sequence (0, "A6795A7#");		/* abbreviated form */
-
-	aprs_tt_sequence (0, "A277#");			/* Tactical call "277" no overlay and no checksum */
-
-/* Locations */
-
-	aprs_tt_sequence (0, "B01*A67979#"); 
-	aprs_tt_sequence (0, "B988*A67979#"); 
-
-	/* expect about 52.79  +0.83 */
-	aprs_tt_sequence (0, "B51000125*A67979#"); 
-
-	/* Try to get from Hilltop Tower to Archery & Target Range. */
-	/* Latitude comes out ok, 37.9137 -> 55.82 min. */
-	/* Longitude -81.1254 -> 8.20 min */
-
-	aprs_tt_sequence (0, "B5206070*A67979#"); 
-
-	aprs_tt_sequence (0, "B21234*A67979#"); 
-	aprs_tt_sequence (0, "B533686*A67979#"); 
-
-
-/* Comments */
-
-	aprs_tt_sequence (0, "C1");
-	aprs_tt_sequence (0, "C2");
-	aprs_tt_sequence (0, "C146520");
-	aprs_tt_sequence (0, "C7788444222550227776669660333666990122223333");
-
-/* Macros */
-
-	aprs_tt_sequence (0, "88345");
-
-/* 10 digit representation for callsign & satellite grid. WB4APR near 39.5, -77   */
-
-	aprs_tt_sequence (0, "AC9242771558*BA1819");
-	aprs_tt_sequence (0, "18199242771558");
-
-
-	return(0);
+	text_color_set(DW_COLOR_REC);
+	dw_printf ("\n\nAll tests passed.\n");
+	return (EXIT_SUCCESS);
 
 }  /* end main */
-
-
 
 
 #endif		

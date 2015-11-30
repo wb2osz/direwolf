@@ -3,7 +3,6 @@
 #define DIREWOLF_H 1
 
 
-
 /*
  * Previously, we could handle only a single audio device.
  * This meant we could have only two radio channels.
@@ -49,6 +48,17 @@
 
 #define MAX_SUBCHANS 9
 
+/*
+ * Each one of these can have multiple slicers, at
+ * different levels, to compensate for different
+ * amplitudes of the AFSK tones.
+ * Intially used same number as subchannels but
+ * we could probably trim this down a little
+ * without impacting performance.
+ */
+
+#define MAX_SLICERS 9
+
 
 #if __WIN32__
 #include <windows.h>
@@ -74,6 +84,10 @@
 /* Not sure where to put these. */
 
 /* Prefix with DW_ because /usr/include/gps.h uses a couple of these names. */
+
+#ifndef G_UNKNOWN
+#include "latlong.h"
+#endif
 
 
 #define DW_METERS_TO_FEET(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 3.2808399)
@@ -163,8 +177,10 @@ typedef pthread_mutex_t dw_mutex_t;
 /* Platform differences for string functions. */
 
 
+
 #if __WIN32__
 char *strsep(char **stringp, const char *delim);
+char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
 //#if __WIN32__

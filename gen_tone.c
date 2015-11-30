@@ -426,8 +426,8 @@ int main ()
 /* one channel.  2 times:  one second of each tone. */
 
 	memset (&my_audio_config, 0, sizeof(my_audio_config));
-	strcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE);
-	strcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE);
+	strlcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE, sizeof(my_audio_config.adev[0].adevice_in));
+	strlcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE, sizeof(my_audio_config.adev[0].adevice_out));
 
 	audio_open (&my_audio_config);
 	gen_tone_init (&my_audio_config, 100);
@@ -448,8 +448,8 @@ int main ()
 /* Now try stereo. */
 
 	memset (&my_audio_config, 0, sizeof(my_audio_config));
-	strcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE);
-	strcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE);
+	strlcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE, sizeof(my_audio_config.adev[0].adevice_in));
+	strlcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE, , sizeof(my_audio_config.adev[0].adevice_out));
 	my_audio_config.adev[0].num_channels = 2;
 
 	audio_open (&my_audio_config);

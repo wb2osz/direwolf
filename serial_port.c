@@ -108,13 +108,13 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 // Bug fix in release 1.1 - Need to munge name for COM10 and up.
 // http://support.microsoft.com/kb/115831
 
-	strcpy (bettername, devicename);
+	strlcpy (bettername, devicename, sizeof(bettername));
 	if (strncasecmp(devicename, "COM", 3) == 0) {
 	  int n;
 	  n = atoi(devicename+3);
 	  if (n >= 10) {
-	    strcpy (bettername, "\\\\.\\");
-	    strcat (bettername, devicename);
+	    strlcpy (bettername, "\\\\.\\", sizeof(bettername));
+	    strlcat (bettername, devicename, sizeof(bettername));
 	  }
 	}
 
@@ -201,14 +201,14 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 	/* Translate Windows device name into Linux name. */
 	/* COM1 -> /dev/ttyS0, etc. */
 	
-	strcpy (linuxname, devicename);
+	strlcpy (linuxname, devicename, sizeof(linuxname));
 
 	if (strncasecmp(devicename, "COM", 3) == 0) {
 	  int n = atoi (devicename + 3);
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Converted serial port name '%s'", devicename);
 	  if (n < 1) n = 1;
-	  sprintf (linuxname, "/dev/ttyS%d", n-1);
+	  snprintf (linuxname, sizeof(linuxname), "/dev/ttyS%d", n-1);
 	  dw_printf (" to Linux equivalent '%s'\n", linuxname);
 	}
 

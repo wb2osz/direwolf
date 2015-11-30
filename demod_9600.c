@@ -56,7 +56,7 @@ static float slice_point[MAX_SUBCHANS];
 
 /* Add sample to buffer and shift the rest down. */
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline void push_sample (float val, float *buff, int size)
 {
 	memmove(buff+1,buff,(size-1)*sizeof(float));
@@ -66,7 +66,7 @@ static inline void push_sample (float val, float *buff, int size)
 
 /* FIR filter kernel. */
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline float convolve (const float *__restrict__ data, const float *__restrict__ filter, int filter_size)
 {
 	float sum = 0.0f;
@@ -81,10 +81,12 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	float *d = __builtin_assume_aligned(data, 16);
 	float *f = __builtin_assume_aligned(filter, 16);
 
+#pragma GCC ivdep
 	for (j=0; j<filter_size; j++) {
 	    sum += f[j] * d[j];
 	}
 #else
+#pragma GCC ivdep				// ignored until gcc 4.9
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}
@@ -95,7 +97,7 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 /* Automatic gain control. */
 /* Result should settle down to 1 unit peak to peak.  i.e. -0.5 to +0.5 */
 
-__attribute__((hot))
+__attribute__((hot)) __attribute__((always_inline))
 static inline float agc (float in, float fast_attack, float slow_decay, float *ppeak, float *pvalley)
 {
 	if (in >= *ppeak) {
@@ -143,6 +145,7 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 	int j;
 
 	memset (D, 0, sizeof(struct demodulator_state_s));
+	D->num_slicers = 1;
 
 	//dw_printf ("demod_9600_init(rate=%d, baud=%d, D ptr)\n", samples_per_sec, baud);
 
@@ -257,14 +260,14 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
  *
  *--------------------------------------------------------------------*/
 
-static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D);
+static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D)
 {
 
 	float fsam;
-	float abs_fsam;
+	//float abs_fsam;
 	float amp;
 	float demod_out;
 
@@ -273,7 +276,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 	static int seq = 0;			/* for log file name */
 #endif
 
-	int j;
+	//int j;
 	int subchan = 0;
 	int demod_data;				/* Still scrambled. */
 
@@ -375,19 +378,16 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 	  /* AGC should generally keep this around -1 to +1 range. */
 
 	  demod_data = demod_out > 0;
-
-	  nudge_pll (chan, subchan, demod_data, D);
+	  nudge_pll (chan, subchan, 0, demod_data, D);
 	}
 	else {
-	  int s;
-
-	  assert (subchan == 0);
+	  int slice;
 
 	  /* Multiple slicers each feeding its own HDLC decoder. */
 
-	  for (s=0; s<D->num_slicers; s++) {
-	    demod_data = demod_out > slice_point[s];
-	    nudge_pll (chan, s, demod_data, D);		
+	  for (slice=0; slice<D->num_slicers; slice++) {
+	    demod_data = demod_out > slice_point[slice];
+	    nudge_pll (chan, subchan, slice, demod_data, D);
 	  }
 	}
 
@@ -395,9 +395,8 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 
 
 __attribute__((hot))
-static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator_state_s *D)
+static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D)
 {
-	int descram;				/* Data bit de-scrambled. */
 
 /*
  * Next, a PLL is used to sample near the centers of the data bits.
@@ -424,10 +423,11 @@ static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator
  * This was optimized for 1200 baud AFSK.  There might be some opportunity
  * for improvement here.
  */
-	D->slicer[subchan].prev_d_c_pll = D->slicer[subchan].data_clock_pll;
-	D->slicer[subchan].data_clock_pll += D->pll_step_per_sample;
 
-	if (D->slicer[subchan].data_clock_pll < 0 && D->slicer[subchan].prev_d_c_pll > 0) {
+	D->slicer[slice].prev_d_c_pll = D->slicer[slice].data_clock_pll;
+	D->slicer[slice].data_clock_pll += D->pll_step_per_sample;
+
+	if (D->slicer[slice].data_clock_pll < 0 && D->slicer[slice].prev_d_c_pll > 0) {
 
 	  /* Overflow. */
 
@@ -439,33 +439,23 @@ static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator
  *
  * http://www.amsat.org/amsat/articles/g3ruh/109/fig03.gif
  */
+	  // Warning: 'descram' set but not used.
+	  // It's used in conditional debug code below.
+	  // descram =
+	  descramble (demod_data, &(D->slicer[slice].lfsr));
 
-	  //assert (modem.modem_type[chan] == MODEM_SCRAMBLE);
-
-	  //if (modem.modem_type[chan] == MODEM_SCRAMBLE) {
-
-
-	    descram = descramble (demod_data, &(D->slicer[subchan].lfsr));
-
-	    hdlc_rec_bit (chan, subchan, demod_data, 1, D->slicer[subchan].lfsr);
-
-	    //D->prev_descram = descram;
-	  //}
-	  //else {
-	    /* Baseband signal for completeness - not in common use. */
-	    //hdlc_rec_bit (chan, subchan, demod_data);
-	  //}
+	  hdlc_rec_bit (chan, subchan, slice, demod_data, 1, D->slicer[slice].lfsr);
 	}
 
-        if (demod_data != D->slicer[subchan].prev_demod_data) {
+        if (demod_data != D->slicer[slice].prev_demod_data) {
 
 	  // Note:  Test for this demodulator, not overall for channel.
 
-	  if (hdlc_rec_gathering (chan, subchan)) {
-	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_locked_inertia);
+	  if (hdlc_rec_gathering (chan, subchan, slice)) {
+	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_locked_inertia);
 	  }
 	  else {
-	    D->slicer[subchan].data_clock_pll = (int)(D->slicer[subchan].data_clock_pll * D->pll_searching_inertia);
+	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_searching_inertia);
 	  }
 	}
 
@@ -473,14 +463,14 @@ static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator
 #if DEBUG5
 
 	//if (chan == 0) {
-	if (hdlc_rec_gathering (chan,subchan)) {
+	if (hdlc_rec_gathering (chan,subchan,slice)) {
 	
 	  char fname[30];
 
 	  
 	  if (demod_log_fp == NULL) {
 	    seq++;
-	    sprintf (fname, "demod96/%04d.csv", seq);
+	    snprintf (fname, sizeof(fname), "demod96/%04d.csv", seq);
 	    if (seq == 1) mkdir ("demod96"
 #ifndef __WIN32__
 					, 0777
@@ -516,7 +506,7 @@ static void nudge_pll (int chan, int subchan, int demod_data, struct demodulator
  * Remember demodulator output (pre-descrambling) so we can compare next time
  * for the DPLL sync.
  */
-	D->slicer[subchan].prev_demod_data = demod_data;
+	D->slicer[slice].prev_demod_data = demod_data;
 
 } /* end nudge_pll */
 

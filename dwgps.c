@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -22,69 +22,67 @@
  *
  * Module:      dwgps.c
  *
- * Purpose:   	Interface to location data, i.e. GPS receiver.
+ * Purpose:   	Interface for obtaining location from GPS.
  *		
- * Description:	Tracker beacons need to know the current location.
- *		At this time, I can't think of any other reason why
- *		we would need this information.
+ * Description:	This is a wrapper for two different implementations:
  *
- *		For Linux, we use gpsd and libgps.
- *		This has the extra benefit that the system clock can
- *		be set from the GPS signal.
+ *		(1) Read NMEA sentences from a serial port (or USB
+ *		    that looks line one).  Available for all platforms.
  *
- *		Not yet implemented for Windows.  Not sure how yet.
- *		The Windows location API is new in Windows 7.
- *		At the end of 2013, about 1/3 of Windows users are
- *		still using XP so that still needs to be supported.	
+ *		(2) Read from gpsd.  Not available for Windows.
+ *		    Including this is optional because it depends
+ *		    on another external software component.
  *
- * Reference:	
+ *
+ * API:		dwgps_init	Connect to data stream at start up time.
+ *
+ *		dwgps_read	Return most recent location to application.
+ *
+ *		dwgps_print	Print contents of structure for debugging.
+ *
+ *		dwgps_term	Shutdown on exit.
+ *
+ *
+ * from below:	dwgps_set_data	Called from other two implementations to
+ *				save data until it is needed.
  *
  *---------------------------------------------------------------*/
-
-#if TEST
-#define ENABLE_GPS 1
-#endif
-
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
-#include <errno.h>
-#include <sys/time.h>
-
-#if __WIN32__
-#include <windows.h>
-#else
-#if ENABLE_GPS
-#include <gps.h>
-
-#if GPSD_API_MAJOR_VERSION != 5
-#error libgps API version might be incompatible.
-#endif
-
-#endif
-#endif
+#include <time.h>
 
 #include "direwolf.h"
 #include "textcolor.h"
 #include "dwgps.h"
+#include "dwgpsnmea.h"
+#include "dwgpsd.h"
 
 
-/* Was init successful? */
+static int s_dwgps_debug = 0;		/* Enable debug output. */
+					/* >= 2 show updates from GPS. */
+					/* >= 1 show results from dwgps_read. */
 
-static enum { INIT_NOT_YET, INIT_SUCCESS, INIT_FAILED } init_status = INIT_NOT_YET;
+/*
+ * The GPS reader threads deposit current data here when it becomes available.
+ * dwgps_read returns it to the requesting application.
+ *
+ * A critical region to avoid inconsistency between fields.
+ */
 
-#if __WIN32__
-#include <windows.h>
-#else
-#if ENABLE_GPS
+static dwgps_info_t s_dwgps_info = {
+	.timestamp = 0,
+	.fix = DWFIX_NOT_INIT,			/* to detect read without init. */
+	.dlat = G_UNKNOWN,
+	.dlon = G_UNKNOWN,
+	.speed_knots = G_UNKNOWN,
+	.track = G_UNKNOWN,
+	.altitude = G_UNKNOWN
+};
 
-static struct gps_data_t gpsdata;
-
-#endif
-#endif
+static dw_mutex_t s_gps_mutex;
 
 
 /*-------------------------------------------------------------------
@@ -93,223 +91,125 @@ static struct gps_data_t gpsdata;
  *
  * Purpose:    	Intialize the GPS interface.
  *
- * Inputs:	none.
- *		
- * Returns:	0 = success
- *		-1 = failure
+ * Inputs:	pconfig		Configuration settings.  This might include
+ *				serial port name for direct connect and host
+ *				name or address for network connection.
  *
- * Description:	For Linux, this maps into gps_open.
- *		Not yet implemented for Windows.
+ *		debug	- If >= 1, print results when dwgps_read is called.
+ *				(In this file.)
+ *
+ *			  If >= 2, location updates are also printed.
+ *				(In other two related files.)
+ *
+ * Returns:	none
+ *
+ * Description:	Call corresponding functions for implementations.
+ * 		Normally we would expect someone to use either GPSNMEA or
+ *		GPSD but there is nothing to prevent use of both at the
+ *		same time.
  *
  *--------------------------------------------------------------------*/
 
-int dwgps_init (void)
+
+void dwgps_init (struct misc_config_s *pconfig, int debug)
 {
 
-#if __WIN32__
+	s_dwgps_debug = debug;
 
-/*
- * Windows version.  Not implemented yet.
- */
+	dw_mutex_init (&s_gps_mutex);
 
-	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("GPS interface not yet available in Windows version.\n");
-	init_status = INIT_FAILED;
-	return (-1);
+	dwgpsnmea_init (pconfig, debug);
 
-#elif ENABLE_GPS
+#if ENABLE_GPSD
 
-	int err;
-
-#if USE_GPS_SHM
-
-/*
- * Linux - Shared memory interface to gpsd.
- *
- * I wanted to use this method because it is simpler and more efficient.
- *
- * The current version of gpsd, supplied with Raspian, is 3.6 from back in 
- * May 2012, is missing support for the shared memory interface.  
- * https://github.com/raspberrypi/linux/issues/523
- *
- * I tried to download a newer source and build with shared memory support
- * but ran into a couple other issues.
- * 
- * 	sudo apt-get install libncurses5-dev
- * 	sudo apt-get install scons
- * 	cd ~
- * 	wget http://download-mirror.savannah.gnu.org/releases/gpsd/gpsd-3.11.tar.gz
- * 	tar xfz gpsd-3.11.tar.gz
- * 	cd gpsd-3.11
- * 	scons prefix=/usr libdir=lib/arm-linux-gnueabihf shm_export=True python=False
- * 	sudo scons udev-install
- * 
- * For now, we will use the socket interface.
- * Maybe get back to this again someday.
- */
-
-	err = gps_open (GPSD_SHARED_MEMORY, NULL, &gpsdata);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Unable to connect to GPSD shared memory interface, status=%d.\n", err);
-	  if (err == NL_NOHOST) {
-	    // I don't think this is right but we are not using it anyhow.
-	    dw_printf ("Shared memory interface is not enabled in libgps.\n");
-	    dw_printf ("Download the gpsd source and build with 'shm_export=True' option.\n");
-	  }
-	  else {
-	    dw_printf ("%s\n", gps_errstr(errno));
-	  }
-	  init_status = INIT_FAILED;
-	  return (-1);
-	}
-	init_status = INIT_SUCCESS;
-	return (0);
-
-#else
-
-/* 
- * Linux - Socket interface to gpsd.
- */
-
-	err = gps_open ("localhost", DEFAULT_GPSD_PORT, &gpsdata);
-	if (err != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Unable to connect to GPSD stream, status%d.\n", err);
-	  dw_printf ("%s\n", gps_errstr(errno));
-	  init_status = INIT_FAILED;
-	  return (-1);
-	}
-
-	gps_stream(&gpsdata, WATCH_ENABLE | WATCH_JSON, NULL);
-
-	init_status = INIT_SUCCESS;
-	return (0);
-
-#endif 
-
-#else	/* end ENABLE_GPS */
-
-	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("GPS interface not enabled in this version.\n");
-	dw_printf ("See documentation on how to rebuild with ENABLE_GPS.\n");
-	init_status = INIT_FAILED;
-	return (-1);
+	dwgpsd_init (pconfig, debug);
 
 #endif
 
-}  /* end dwgps_init */
+	SLEEP_MS(500);		/* So receive thread(s) can clear the */
+				/* not init status before it gets checked. */
 
+} /* end dwgps_init */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dwgps_clear
+ *
+ * Purpose:    	Clear the gps info structure.
+ *
+ *--------------------------------------------------------------------*/
+
+void dwgps_clear (dwgps_info_t *gpsinfo)
+{
+	gpsinfo->timestamp = 0;
+	gpsinfo->fix = DWFIX_NOT_SEEN;
+	gpsinfo->dlat = G_UNKNOWN;
+	gpsinfo->dlon = G_UNKNOWN;
+	gpsinfo->speed_knots = G_UNKNOWN;
+	gpsinfo->track = G_UNKNOWN;
+	gpsinfo->altitude = G_UNKNOWN;
+}
 
 
 /*-------------------------------------------------------------------
  *
  * Name:        dwgps_read
  *
- * Purpose:    	Obtain current location from GPS receiver.
+ * Purpose:     Return most recent location data available.
  *
- * Outputs:	*plat		- Latitude.
- *		*plon		- Longitude.
- *		*pspeed		- Speed, knots.
- *		*pcourse	- Course over ground, degrees.
- *		*palt		- Altitude, meters.
+ * Outputs:	gpsinfo		- Structure with latitude, longitude, etc.
  *
- * Returns:	-1 = error
- *		0 = location currently not available (no fix)
- *		2 = 2D fix, lat/lon, speed, and course are set.
- *		3 - 3D fix, altitude is also set.
+ * Returns:	Position fix quality.  Same as in structure.
+ *
  *
  *--------------------------------------------------------------------*/
 
-int dwgps_read (double *plat, double *plon, float *pspeed, float *pcourse, float *palt)
+dwfix_t dwgps_read (dwgps_info_t *gpsinfo)
 {
-#if __WIN32__
 
-	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("Internal error, dwgps_read, shouldn't be here.\n");
-	return (-1);
+	dw_mutex_lock (&s_gps_mutex);
 
-#elif ENABLE_GPS
+	memcpy (gpsinfo, &s_dwgps_info, sizeof(*gpsinfo));
 
-	int err;
+	dw_mutex_unlock (&s_gps_mutex);
 
-	if (init_status != INIT_SUCCESS) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Internal error, dwgps_read without successful init.\n");
-	  return (-1);
+	if (s_dwgps_debug >= 1) {
+	  text_color_set (DW_COLOR_DEBUG);
+	  dwgps_print ("gps_read: ", gpsinfo);
 	}
 
-#if USE_GPS_SHM
+	// TODO: Should we check timestamp and complain if very stale?
+	// or should we leave that up to the caller?
 
-/*
- * Shared memory version.
- */
+	return (s_dwgps_info.fix);
+} 
 
-	err = gps_read (&gpsdata);
 
-#if DEBUG
-	dw_printf ("gps_read returns %d bytes\n", err);
-#endif
+/*-------------------------------------------------------------------
+ *
+ * Name:        dwgps_print
+ *
+ * Purpose:     Print gps information for debugging.
+ *
+ * Inputs:	msg		- Message for prefix on line.
+ *		gpsinfo		- Structure with latitude, longitude, etc.
+ *
+ * Description:	Caller is responsible for setting text color.
+ *
+ *--------------------------------------------------------------------*/
 
-#else
+void dwgps_print (char *msg, dwgps_info_t *gpsinfo)
+{
 
-/* 
- * Socket version.
- */
+	dw_printf ("%stime=%d fix=%d lat=%.6f lon=%.6f trk=%.0f spd=%.1f alt=%.0f\n",
+			msg,
+			(int)gpsinfo->timestamp, (int)gpsinfo->fix,
+			gpsinfo->dlat, gpsinfo->dlon,
+			gpsinfo->track, gpsinfo->speed_knots,
+			gpsinfo->altitude);
 
-	// Wait for up to 1000 milliseconds.
-	// This should only happen in the beaconing thread so 
-	// I'm not worried about other functions hanging.
-
-        if (gps_waiting(&gpsdata, 1000)) {
-
-	  err = gps_read (&gpsdata);
-	}
-	else {
-	  gps_stream(&gpsdata, WATCH_ENABLE | WATCH_JSON, NULL);
-	  sleep (1);
-	}
-
-#endif
-
-	if (err > 0) {
-	  /* Data is available. */
-
-	  if (gpsdata.status >= STATUS_FIX && gpsdata.fix.mode >= MODE_2D) {
-
-	     *plat = gpsdata.fix.latitude;
-	     *plon = gpsdata.fix.longitude;
-	     *pcourse = gpsdata.fix.track;		
-	     *pspeed = MPS_TO_KNOTS * gpsdata.fix.speed; /* libgps uses meters/sec */
-
-	     if (gpsdata.fix.mode >= MODE_3D) {
-	       *palt = gpsdata.fix.altitude;
-	       return (3);
-	     }
-	     return (2);
-	   }
-
-	   /* No fix.  Probably temporary condition. */
-	   return (0);
-	}
-	else if (err == 0) {
-
-	   /* No data available at the present time. */
-	   return (0);
-	}
-	else {
-
-	  /* More serious error. */
-	  return (-1);
-	}
-#else 
-
-	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("Internal error, dwgps_read, shouldn't be here.\n");
-	return (-1);
-#endif
-
-} /* end dwgps_read */
+}  /* end dwgps_set_data */
 
 
 /*-------------------------------------------------------------------
@@ -326,19 +226,10 @@ int dwgps_read (double *plat, double *plon, float *pspeed, float *pcourse, float
 
 void dwgps_term (void) {
 
-#if __WIN32__
-	
-#elif ENABLE_GPS
+	dwgpsnmea_term ();
 
-	if (init_status == INIT_SUCCESS) {
-
-#ifndef USE_GPS_SHM
-	  gps_stream(&gpsdata, WATCH_DISABLE, NULL);
-#endif
-	  gps_close (&gpsdata);
-	}
-#else 
-
+#if ENABLE_GPSD
+	dwgpsd_term ();
 #endif
 
 } /* end dwgps_term */
@@ -348,69 +239,27 @@ void dwgps_term (void) {
 
 /*-------------------------------------------------------------------
  *
- * Name:        main
+ * Name:        dwgps_set_data
  *
- * Purpose:    	Simple unit test for other functions in this file.
+ * Purpose:     Called by the GPS interfaces when new data is available.
  *
- * Description: Compile with -DTEST option.
- *
- *			gcc -DTEST dwgps.c textcolor.c -lgps
- *			./a.out
+ * Inputs:	gpsinfo		- Structure with latitude, longitude, etc.
  *
  *--------------------------------------------------------------------*/
 
-#if TEST
-
-int main (int argc, char *argv[])
+void dwgps_set_data (dwgps_info_t *gpsinfo)
 {
 
-#if __WIN32__
+	/* Debug print is handled by the two callers so */
+	/* we can distinguish the source. */
 
-	printf ("Not in win32 version yet.\n");
+	dw_mutex_lock (&s_gps_mutex);
 
-#elif ENABLE_GPS
-	int err;
-	int fix;
-	double lat;
-	double lon;
-	float speed;
-	float course;
-	float alt;
+	memcpy (&s_dwgps_info, gpsinfo, sizeof(s_dwgps_info));
 
-	err = dwgps_init ();
+	dw_mutex_unlock (&s_gps_mutex);
 
-	if (err != 0) exit(1);
-
-	while (1) {
-	  fix = dwgps_read (&lat, &lon, &speed, &course, &alt);
-	  switch (fix) {
-	    case 3:
-	    case 2:
-	      dw_printf ("%.6f  %.6f", lat, lon);
-	      dw_printf ("  %.1f knots  %.0f degrees", speed, course);
-	      if (fix==3) dw_printf ("  altitude = %.1f meters", alt);
-	      dw_printf ("\n");
-	      break;
-	    case 0:
-	      dw_printf ("location currently not available.\n");
-	      break;
-	    default:
-	      dw_printf ("ERROR getting GPS information.\n");
-	  }
-	  sleep (3);
-	}
-
-
-#else 
-
-	printf ("Test: Shouldn't be here.\n");
-#endif
-
-} /* end main */
-
-
-#endif
-
+}  /* end dwgps_set_data */
 
 
 /* end dwgps.c */

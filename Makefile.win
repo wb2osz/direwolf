@@ -56,13 +56,10 @@ CFLAGS += -g
 # you can compile this yourself with different options.
 #
 
-# Name of zip file for distribution.
-
-z := $(notdir ${CURDIR})
 
 
 
-# Main application.
+# --------------------------------------  Main application   --------------------------------
 
 demod.o : fsk_demod_state.h
 demod_9600.o : fsk_demod_state.h
@@ -75,7 +72,8 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hd
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o dtime_now.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o \
+		dwgps.o dwgpsnmea.o dtime_now.o \
 		dw-icon.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
@@ -93,6 +91,79 @@ demod_afsk.o : fsk_fast_filter.h
 fsk_fast_filter.h : demod_afsk.c
 	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c
 	./gen_fff > fsk_fast_filter.h
+
+
+#
+# The destination field is often used to identify the manufacturer/model.
+# These are not hardcoded into Dire Wolf.  Instead they are read from
+# a file called tocalls.txt at application start up time.
+#
+# The original permanent symbols are built in but the "new" symbols,
+# using overlays, are often updated.  These are also read from files.
+#
+# You can obtain an updated copy by typing "make tocalls-symbols".
+# This is not part of the normal build process.  You have to do this explicitly.
+#
+# The locations below appear to be the most recent.
+# The copy at http://www.aprs.org/tocalls.txt is out of date.
+#
+
+.PHONY: tocalls-symbols
+tocalls-symbols :
+	cp tocalls.txt tocalls.txt~
+	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
+	-diff tocalls.txt~ tocalls.txt
+	cp symbols-new.txt symbols-new.txt~
+	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
+	-diff symbols-new.txt~ symbols-new.txt
+	cp symbolsX.txt symbolsX.txt~
+	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
+	-diff symbolsX.txt~ symbolsX.txt
+
+
+
+# ----------------------------  Other utilities included with distribution  -------------------------
+
+
+# Separate application to decode raw data.
+
+decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
+	$(CC) $(CFLAGS) -DDECAMAIN -o decode_aprs $^
+
+
+# Convert between text and touch tone representation.
+
+text2tt : tt_text.c misc.a
+	$(CC) $(CFLAGS) -DENC_MAIN -o $@ $^
+
+tt2text : tt_text.c misc.a
+	$(CC) $(CFLAGS) -DDEC_MAIN -o $@ $^
+
+
+# Convert between Latitude/Longitude and UTM coordinates.
+
+ll2utm : ll2utm.c textcolor.c geotranz.a misc.a
+	$(CC) $(CFLAGS) -o $@ $^
+
+utm2ll : utm2ll.c textcolor.c geotranz.a misc.a
+	$(CC) $(CFLAGS) -o $@ $^
+
+
+# Convert from log file to GPX.
+
+log2gpx : log2gpx.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^
+
+
+# Test application to generate sound.
+
+gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o morse.o textcolor.o dsp.o misc.a regex.a
+	$(CC) $(CFLAGS) -o $@ $^
+
+
+
+# -------------------------------------------  Libraries  --------------------------------------------
+
 
 
 # UTM, USNG, MGRS conversions.
@@ -136,8 +207,8 @@ regex.o : regex/regex.c
 	$(CC) $(CFLAGS) -Dbool=int -Dtrue=1 -Dfalse=0 -c -o $@ $^
 
 
-# There are also a couple other functions in the misc
-# subdirectory that are missing on Windows.
+# There are several string functios found in Linux
+# but not on Windows.  Need to provide our own copy.
 
 misc.a : strsep.o strtok_r.o strcasestr.o strlcpy.o strlcat.o
 	ar -cr $@ $^	
@@ -158,41 +229,131 @@ strlcat.o : misc/strlcat.c
 	$(CC) $(CFLAGS) -I. -c -o $@ $^
 
 
-# Separate application to decode raw data.
-
-decode_aprs : decode_aprs.c symbols.c ax25_pad.c textcolor.c fcs_calc.c latlong.c log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
-	$(CC) $(CFLAGS) -o decode_aprs -DTEST $^
+# ---------------------------------  Automated Smoke Test  --------------------------------
 
 
-# Convert between text and touch tone representation.
-
-text2tt : tt_text.c
-	$(CC) $(CFLAGS) -DENC_MAIN -o text2tt tt_text.c
-
-tt2text : tt_text.c
-	$(CC) $(CFLAGS) -DDEC_MAIN -o tt2text tt_text.c
+# Combine some unit tests into a single regression sanity check.
 
 
-# Convert between Latitude/Longitude and UTM coordinates.
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600 
 
-ll2utm : ll2utm.c textcolor.c geotranz.a misc.a
+# Can we encode and decode at popular data rates?
+# Verify that single bit fixup increases the count.
+
+check-modem1200 : gen_packets atest
+	gen_packets -n 100 -o test1.wav
+	atest -F0 -PE -L70 -G71 test1.wav
+	atest -F1 -PE -L73 -G75 test1.wav
+	#rm test1.wav
+
+check-modem300 : gen_packets atest
+	gen_packets -B300 -n 100 -o test3.wav
+	atest -B300 -F0 -L68 -G69 test3.wav
+	atest -B300 -F1 -L73 -G75 test3.wav
+	rm test3.wav
+
+check-modem9600 : gen_packets atest
+	gen_packets -B9600 -n 100 -o test9.wav
+	atest -B9600 -F0 -L57 -G59 test9.wav
+	atest -B9600 -F1 -L66 -G67 test9.wav
+	rm test9.wav
+
+# Unit test for AFSK demodulator
+
+atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o serial_port.o latlong.c \
+		symbols.c tt_text.c textcolor.c telemetry.c \
+		misc.a regex.a
+	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
+	#./atest ..\\direwolf-0.2\\02_Track_2.wav
+	#atest -B 9600 z9.wav
+	#atest za100.wav
 
-utm2ll : utm2ll.c textcolor.c geotranz.a misc.a
+atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
+		fsk_fast_filter.h
+	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
+	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
+	#./atest9 -B 9600 noise96.wav
 
 
-# Convert from log file to GPX.
+# Unit test for inner digipeater algorithm
 
-#log2gpx : log2gpx.c misc/strsep.c misc/strtok_r.c
-log2gpx : log2gpx.c misc.a
-	$(CC) $(CFLAGS) -o $@ $^
+.PHONY: dtest
+dtest : digipeater.c dedupe.c \
+		pfilter.o ax25_pad.o fcs_calc.o tq.o textcolor.o \
+		decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a regex.a
+	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^
+	./dtest
+	rm dtest.exe
+
+# Unit test for APRStt tone seqence parsing.
+
+.PHONTY: ttest
+ttest : aprs_tt.c tt_text.c latlong.o textcolor.o geotranz.a misc.a
+	$(CC) $(CFLAGS) -Igeotranz -DTT_MAIN  -o $@ $^
+	./ttest
+	rm ttest.exe
+
+# Unit test for APRStt tone sequence / text conversions.
+
+.PHONY: tttexttest
+tttexttest : tt_text.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DTTT_TEST -o $@ $^
+	./tttexttest
+	rm tttexttest.exe
+
+# Unit test for Packet Filtering.
+
+.PHONY: pftest
+pftest : pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o dwgpsnmea.o dwgps.o serial_port.o latlong.o symbols.o telemetry.o tt_text.o misc.a regex.a
+	$(CC) $(CFLAGS) -DPFTEST -o $@ $^
+	./pftest
+	rm pftest.exe
 
 
-# Test application to generate sound.
 
-gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o morse.o textcolor.o dsp.o misc.a regex.a
-	$(CC) $(CFLAGS) -o $@ $^
+# Unit test for telemetry decoding.
+
+.PHONY: tlmtest
+tlmtest : telemetry.c ax25_pad.o fcs_calc.o textcolor.o misc.a regex.a
+	$(CC) $(CFLAGS) -DTEST -o $@ $^
+	./tlmtest
+	rm tlmtest.exe
+
+
+# Unit test for location coordinate conversion.
+
+.PHONY: lltest
+lltest : latlong.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DLLTEST -o $@ $^
+	./lltest
+	rm lltest.exe
+
+# Unit test for encoding position & object report.
+
+.PHONY: enctest
+enctest : encode_aprs.c latlong.c textcolor.c misc.a
+	$(CC) $(CFLAGS) -DEN_MAIN -o $@ $^
+	./enctest
+	rm enctest.exe
+
+
+# Unit test for KISS encapsulation.
+
+.PHONY: kisstest
+kisstest : kiss_frame.c
+	$(CC) $(CFLAGS) -DKISSTEST -o $@ $^
+	./kisstest
+	rm kisstest.exe
+
+
+# ------------------------------ Other manual testing & experimenting  -------------------------------
+
 
 # For tweaking the demodulator.
 
@@ -201,14 +362,13 @@ demod_9600.o : tune.h
 demod_afsk.o : tune.h
 
 
-testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c fsk_demod_agc.h \
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.o fsk_demod_agc.h \
 		hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o latlong.o symbols.o textcolor.o telemetry.o \
-		regex.a misc.a \
-		
+		dwgpsnmea.o dwgps.o serial_port.o tt_text.o regex.a misc.a
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
-	./atest -P E ../02_Track_2.wav | grep "packets decoded in" >atest.out
+	./atest -P GGG- -F 0 ../02_Track_2.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
 
 
@@ -236,54 +396,14 @@ testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.
 	#./atest -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
 
-
-# Unit test for AFSK demodulator
-
-atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c tt_text.c textcolor.c telemetry.c misc.a regex.a \
-		fsk_fast_filter.h
-	echo " " > tune.h
-	$(CC) $(CFLAGS) -o $@ $^
-	#./atest ..\\direwolf-0.2\\02_Track_2.wav 
-	#atest -B 9600 z9.wav
-	#atest za100.wav
-
-atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
-		fsk_fast_filter.h
-	echo " " > tune.h
-	$(CC) $(CFLAGS) -o $@ $^
-	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
-	#./atest9 -B 9600 noise96.wav 
-
-
-# Unit test for inner digipeater algorithm
-
-
-dtest : digipeater.c pfilter.c ax25_pad.c dedupe.c fcs_calc.c tq.c textcolor.c misc.a regex.a
-	$(CC) $(CFLAGS) -DTEST -o $@ $^
-	./dtest
-	rm dtest.exe
-
-# Unit test for APRStt.
-
-ttest : aprs_tt.c tt_text.c  latlong.c misc.a  geotranz.a
-	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^
-
-
 # Unit test for IGate
 
 itest : igate.c textcolor.c ax25_pad.c fcs_calc.c misc.a regex.a
 	$(CC) $(CFLAGS) -DITEST -o $@ $^ -lwinmm -lws2_32
 
 
-# Unit test for telemetry decoding.
 
 
-etest : telemetry.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
-	$(CC) $(CFLAGS) -DTEST -o $@ $^
-	./etest
-	
 
 # Multiple AGWPE network or serial port clients to test TNCs side by side.
 
@@ -299,13 +419,19 @@ ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a regex.a
 
 # Send GPS location to KISS TNC each second.
 
-walk96 : walk96.c nmea.c kiss_frame.c \
+walk96 : walk96.c dwgps.o dwgpsnmea.o kiss_frame.o \
 		latlong.o encode_aprs.o serial_port.o textcolor.o \
-		ax25_pad.o fcs_calc.o regex.a \
-		misc.a 
+		ax25_pad.o fcs_calc.o \
+		xmit.o hdlc_send.o gen_tone.o ptt.o tq.o \
+		hdlc_rec.o hdlc_rec2.o rrbb.o dsp.o audio_win.o \
+		multi_modem.o demod.o demod_afsk.o demod_9600.o rdq.o \
+		server.o morse.o audio_stats.o dtime_now.o dlq.o \
+		regex.a misc.a 
 	$(CC) $(CFLAGS) -DWALK96 -o $@ $^ -lwinmm -lws2_32
 
 
+
+#--------------------------------------------------------------
 
 
 .PHONY: depend
@@ -318,7 +444,12 @@ clean :
 	echo " " > tune.h
 
 
-# Package it up for distribution:  Prebuilt Windows & source versions.
+
+# -------------------------------  Packaging for distribution  ----------------------
+
+# Name of zip file for distribution.
+
+z := $(notdir ${CURDIR})
 
 
 # Left out RPi Tracker due to Comcast upload size limit.
@@ -416,9 +547,9 @@ dist-src : README.md CHANGES.md \
 	unix2dos telemetry-toolkit/telem-unit.pl
 	unix2dos telemetry-toolkit/telem-volts.py
 	unix2dos telemetry-toolkit/telem-volts.conf
-	
 
 
+# Reminders if pdf files are not up to date.
 
 doc/User-Guide.pdf : doc/User-Guide.docx
 	echo "***** User-Guide.pdf is out of date *****"
@@ -448,22 +579,6 @@ backup :
 	mkdir /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
 	cp -r . /cygdrive/e/backup-cygwin-home/`date +"%Y-%m-%d"`
 
-#
-# The locations below appear to be the most recent.
-# The copy at http://www.aprs.org/tocalls.txt is out of date.
-#
-
-.PHONY: tocalls-symbols
-tocalls-symbols :
-	cp tocalls.txt tocalls.txt~
-	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
-	diff tocalls.txt~ tocalls.txt
-	cp symbols-new.txt symbols-new.txt~
-	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
-	diff symbols-new.txt~ symbols-new.txt
-	cp symbolsX.txt symbolsX.txt~
-	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
-	diff symbolsX.txt~ symbolsX.txt
 
 #
 # The following is updated by "make depend"

@@ -164,7 +164,7 @@ static struct misc_config_s misc_config;
 int main (int argc, char *argv[])
 {
 	int err;
-	int eof;
+	//int eof;
 	int j;
 	char config_file[100];
 	int xmit_calibrate_option = 0;
@@ -177,12 +177,14 @@ int main (int argc, char *argv[])
 	char input_file[80];
 	
 	int t_opt = 1;		/* Text color option. */				
+	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
+
 	int d_k_opt = 0;	/* "-d k" option for serial port KISS.  Can be repeated for more detail. */					
 	int d_n_opt = 0;	/* "-d n" option for Network KISS.  Can be repeated for more detail. */	
 	int d_t_opt = 0;	/* "-d t" option for Tracker.  Can be repeated for more detail. */	
+	int d_g_opt = 0;	/* "-d g" option for GPS. Can be repeated for more detail. */
 	int d_o_opt = 0;	/* "-d o" option for output control such as PTT and DCD. */	
-	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
-			
+	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */
 	
 
 	strlcpy(l_opt, "", sizeof(l_opt));
@@ -199,12 +201,6 @@ int main (int argc, char *argv[])
 	//Restore on exit? oldcp = GetConsoleOutputCP();
 	SetConsoleOutputCP(CP_UTF8);
 
-#elif __CYGWIN__
-
-/*
- * Without this, the ISO Latin 1 characters are displayed as gray boxes.
- */
-	//setenv ("LANG", "C.ISO-8859-1", 1);
 #else
 
 /*
@@ -230,16 +226,25 @@ int main (int argc, char *argv[])
 	}
 
 	// TODO: control development/beta/release by version.h instead of changing here.
+	// Print platform.  This will provide more information when people send a copy the information displayed.
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "F", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "H", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+
+#if defined(ENABLE_GPSD) 	// later or hamlib ...
+	dw_printf ("Includes optional support for: ");
+#if defined(ENABLE_GPSD)
+	dw_printf (" gpsd");
+#endif
+	dw_printf ("\n");
+#endif
 
 
 #if __WIN32__
-	SetConsoleCtrlHandler (cleanup_win, TRUE);
+	SetConsoleCtrlHandler ((PHANDLER_ROUTINE)cleanup_win, TRUE);
 #else
 	setlinebuf (stdout);
 	signal (SIGINT, cleanup_linux);
@@ -278,19 +283,7 @@ int main (int argc, char *argv[])
 	text_color_set(DW_COLOR_INFO);
 #endif
 
-/*
- * This has not been very well tested in 64 bit mode.
- */
 
-#if 0
-	if (sizeof(int) != 4 || sizeof(long) != 4 || sizeof(char *) != 4) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("------------------------------------------------------------------\n");
-	    dw_printf ("This might not work properly when compiled for a 64 bit target.\n");
-	    dw_printf ("It is recommended that you rebuild it with gcc -m32 option.\n");
-	    dw_printf ("------------------------------------------------------------------\n");
-	}
-#endif
 
 /*
  * Default location of configuration file is current directory.
@@ -307,7 +300,7 @@ int main (int argc, char *argv[])
 
 	strlcpy (input_file, "", sizeof(input_file));
 	while (1) {
-          int this_option_optind = optind ? optind : 1;
+          //int this_option_optind = optind ? optind : 1;
           int option_index = 0;
 	  int c;
 	  char *p;
@@ -448,11 +441,13 @@ int main (int argc, char *argv[])
 
 		// separate out gps & waypoints.
 
+	      case 'g':  d_g_opt++; break;
 	      case 't':  d_t_opt++; beacon_tracker_set_debug (d_t_opt); break;
 
 	      case 'w':	 nmea_set_debug (1); break;		// not documented yet.
 	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      case 'o':  d_o_opt++; ptt_set_debug(d_o_opt); break;	
+	      case 'i':  d_i_opt++; break;
 #if AX25MEMDEBUG
 	      case 'm':  ax25memdebug_set(); break;		// Track down memory leak.  Not documented.		
 #endif
@@ -668,7 +663,7 @@ int main (int argc, char *argv[])
  * Initialize the digipeater and IGate functions.
  */
 	digipeater_init (&audio_config, &digi_config);
-	igate_init (&audio_config, &igate_config, &digi_config);
+	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
 
 /*
  * Provide the AGW & KISS socket interfaces for use by a client application.
@@ -685,7 +680,9 @@ int main (int argc, char *argv[])
 /*
  * Open port for communication with GPS.
  */
-	nmea_init (&misc_config);
+	dwgps_init (&misc_config, d_g_opt);
+
+	nmea_init (&misc_config);  //  TODO: revisit.
 
 /* 
  * Create thread for trying to salvage frames with bad FCS.
@@ -694,17 +691,18 @@ int main (int argc, char *argv[])
 
 /*
  * Enable beaconing.
+ * Open log file first because "-dttt" (along with -l...) will
+ * log the tracker beacon transmissions with fake channel 999.
  */
-	beacon_init (&audio_config, &misc_config, &digi_config);
 
+	log_init(misc_config.logdir);
+	beacon_init (&audio_config, &misc_config);
 
-	log_init(misc_config.logdir);	
 
 /*
  * Get sound samples and decode them.
  * Use hot attribute for all functions called for every audio sample.
  */
-
 
 	recv_init (&audio_config);
 	recv_process ();
@@ -723,6 +721,7 @@ int main (int argc, char *argv[])
  * Inputs:	chan	- Audio channel number, 0 or 1.
  *		subchan	- Which modem caught it.  
  *			  Special case -1 for DTMF decoder.
+ *		slice	- Slicer which caught it.
  *		pp	- Packet handle.
  *		alevel	- Audio level, range of 0 - 100.
  *				(Special case, use negative to skip
@@ -739,8 +738,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-
-void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)  
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -753,6 +751,7 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= -1 && subchan < MAX_SUBCHANS);
+	assert (slice >= 0 && slice < MAX_SLICERS);
 	assert (pp != NULL);	// 1.1J+
      
 	strlcpy (display_retries, "", sizeof(display_retries));
@@ -850,8 +849,15 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
 	  else {
 	    text_color_set(DW_COLOR_DEBUG);
 	  }
-	  if (audio_config.achan[chan].num_subchan > 1) {
+
+	  if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers == 1) {
 	    dw_printf ("[%d.%d] ", chan, subchan);
+	  }
+	  else if (audio_config.achan[chan].num_subchan == 1 && audio_config.achan[chan].num_slicers > 1) {
+	    dw_printf ("[%d.%d] ", chan, slice);
+	  }
+	  else if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers > 1) {
+	    dw_printf ("[%d.%d.%d] ", chan, subchan, slice);
 	  }
 	  else {
 	    dw_printf ("[%d] ", chan);
@@ -911,6 +917,12 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
 
 	  decode_aprs_print (&A);
 
+	  /*
+	   * Perform validity check on each address.
+	   * This should print an error message if any issues.
+	   */
+	  (void)ax25_check_addresses(pp);
+
 	  // Send to log file.
 
 	  log_write (chan, &A, pp, alevel, retries);
@@ -920,7 +932,7 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
  	  if (A.g_lat != G_UNKNOWN && A.g_lon != G_UNKNOWN) {
 	    nmea_send_waypoint (strlen(A.g_name) > 0 ? A.g_name : A.g_src, 
 		A.g_lat, A.g_lon, A.g_symbol_table, A.g_symbol_code, 
-		DW_FEET_TO_METERS(A.g_altitude), A.g_course, DW_MPH_TO_KNOTS(A.g_speed), 
+		DW_FEET_TO_METERS(A.g_altitude_ft), A.g_course, DW_MPH_TO_KNOTS(A.g_speed_mph), 
 		A.g_comment);
 	  }
 	}
@@ -947,7 +959,7 @@ void app_process_rec_packet (int chan, int subchan, packet_t pp, alevel_t alevel
  */
 	if (subchan == -1) {
 	  if (tt_config.gateway_enabled && info_len >= 2) {
-	    aprs_tt_sequence (chan, pinfo+1);
+	    aprs_tt_sequence (chan, (char*)(pinfo+1));
 	  }
 	}
 	else { 
@@ -1048,8 +1060,10 @@ static void usage (char **argv)
 	dw_printf ("       n             n = KISS network client.\n");
 	dw_printf ("       u             u = Display non-ASCII text in hexadecimal.\n");
 	dw_printf ("       p             p = dump Packets in hexadecimal.\n");
-	dw_printf ("       t             t = gps Tracker.\n");
+	dw_printf ("       g             g = GPS interface.\n");
+	dw_printf ("       t             t = Tracker beacon.\n");
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
+	dw_printf ("       i             i = IGate.\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");

@@ -64,14 +64,15 @@ struct dlq_item_s {
 					/* Special case, -1 means DTMF decoder. */
 					/* Maybe we should have a different type in this case? */
 
+	int slice;			/* Winning slicer. */
+
 	packet_t pp;			/* Pointer to frame structure. */
 
-	alevel_t alevel;			/* Audio level. */
+	alevel_t alevel;		/* Audio level. */
 
 	retry_t retries;		/* Effort expended to get a valid CRC. */
 
-	char spectrum[MAX_SUBCHANS+1];	/* "Spectrum" display for multi-decoders. */
-
+	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];	/* "Spectrum" display for multi-decoders. */
 };
 
 
@@ -206,6 +207,8 @@ void dlq_init (void)
  *		subchan	- Which modem caught it.  
  *			  Special case -1 for APRStt gateway.
  *
+ *		slice	- Which slice we picked.
+ *
  *		pp	- Address of packet object.
  *				Caller should NOT make any references to
  *				it after this point because it could
@@ -231,7 +234,7 @@ void dlq_init (void)
  *
  *--------------------------------------------------------------------*/
 
-void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
+void dlq_append (dlq_type_t type, int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
 {
 
 	struct dlq_item_s *pnew;
@@ -271,14 +274,15 @@ void dlq_append (dlq_type_t type, int chan, int subchan, packet_t pp, alevel_t a
 	pnew->nextp = NULL;
 	pnew->type = type;
 	pnew->chan = chan;
+	pnew->slice = slice;
 	pnew->subchan = subchan;
 	pnew->pp = pp;
 	pnew->alevel = alevel;
 	pnew->retries = retries;
 	if (spectrum == NULL) 
-	  strcpy(pnew->spectrum, "");
+	  strlcpy(pnew->spectrum, "", sizeof(pnew->spectrum));
 	else
-	  strcpy(pnew->spectrum, spectrum);
+	  strlcpy(pnew->spectrum, spectrum, sizeof(pnew->spectrum));
 
 #if DEBUG1
 	text_color_set(DW_COLOR_DEBUG);
@@ -514,7 +518,8 @@ void dlq_wait_while_empty (void)
  * Outputs:	type		- type of queue entry.
  *
  *		chan		- channel of received frame.
- *		subchan		- which modem caught it.
+ *		subchan		- which demodulator caught it.
+ *		slice		- which slicer caught it.
  *
  *		pp		- pointer to packet object when type is DLQ_REC_FRAME.
  *				   Caller should destroy it with ax25_delete when finished with it.
@@ -524,7 +529,8 @@ void dlq_wait_while_empty (void)
  *
  *--------------------------------------------------------------------*/
 
-int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_t *alevel, retry_t *retries, char *spectrum)
+
+int dlq_remove (dlq_type_t *type, int *chan, int *subchan, int *slice, packet_t *pp, alevel_t *alevel, retry_t *retries, char *spectrum, size_t spectrumsize)
 {
 
 	struct dlq_item_s *phead;
@@ -557,12 +563,13 @@ int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_
 	  *type = -1;
 	  *chan = -1;
 	  *subchan = -1;
+	  *slice = -1;
 	  *pp = NULL;
 
 	  memset (alevel, 0xff, sizeof(*alevel));
 
 	  *retries = -1;
-	  strcpy(spectrum,"");
+	  strlcpy(spectrum, "", spectrumsize);
 	  result = 0;
 	}
 	else {
@@ -573,10 +580,11 @@ int dlq_remove (dlq_type_t *type, int *chan, int *subchan, packet_t *pp, alevel_
 	  *type = phead->type;
 	  *chan = phead->chan;
 	  *subchan = phead->subchan;
+	  *slice = phead->slice;
 	  *pp = phead->pp;
 	  *alevel = phead->alevel;
 	  *retries = phead->retries;
-	  strcpy (spectrum, phead->spectrum);
+	  strlcpy (spectrum, phead->spectrum, spectrumsize);
 	  result = 1;
 	}
 	 

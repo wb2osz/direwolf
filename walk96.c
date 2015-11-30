@@ -32,47 +32,43 @@
 
 #include <stdio.h>
 #include <unistd.h>
-
-#if __WIN32__
 #include <stdlib.h>
-#include <windows.h>
-#else
-#define __USE_XOPEN2KXSI 1
-#define __USE_XOPEN 1
-#include <stdlib.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <sys/errno.h>
-#endif
-
 #include <assert.h>
 #include <string.h>
+#include <math.h>
 
 #include "direwolf.h"
 #include "config.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "latlong.h"
-#include "nmea.h"
+#include "dwgps.h"
 #include "encode_aprs.h"
 #include "serial_port.h"
+#include "kiss_frame.h"
 
 
 #define MYCALL "WB2OSZ"			/************ Change this if you use it!!!  ***************/
 
+#define HOWLONG 20			/* Run for 20 seconds then quit. */
+
+
+
 static MYFDTYPE tnc;
 
+static void walk96 (int fix, double lat, double lon, float knots, float course, float alt);
 
-main (int argc, char *argv[])
+
+
+int main (int argc, char *argv[])
 {
 	struct misc_config_s config;
 	char cmd[100];
+	int debug_gps = 0;
+	int n;
 
 
-	// Look for Silicon Labs CP210x
+	// TD-D72A USB - Look for Silicon Labs CP210x.
 	// Just happens to be same on desktop & laptop.
 
 	tnc = serial_port_open ("COM5", 9600);	
@@ -82,35 +78,60 @@ main (int argc, char *argv[])
 	  exit (EXIT_FAILURE);	// defined in stdlib.h
   	}
 
-	strcpy (cmd, "\r\rhbaud 9600\rkiss on\rrestart\r");
-
+	strlcpy (cmd, "\r\rhbaud 9600\rkiss on\rrestart\r", sizeof(cmd));
 	serial_port_write (tnc, cmd, strlen(cmd));
-	SLEEP_MS(500);
+
+	
+	// USB GPS happens to be COM22
 
 	memset (&config, 0, sizeof(config));
-	strcpy (config.nmea_port, "COM1");
-	nmea_init (&config);
+	strlcpy (config.gpsnmea_port, "COM22", sizeof(config.nmea_port));
 
-	SLEEP_SEC(20);
+	dwgps_init (&config, debug_gps);
+
+	SLEEP_SEC(1);				/* Wait for sample before reading. */
+
+	for (n=0; n<HOWLONG; n++) {
+
+	  dwgps_info_t info;
+	  dwfix_t fix;
+
+	  fix = dwgps_read (&info);
+
+	  if (fix > DWFIX_2D) {
+	    walk96 (fix, info.dlat, info.dlon, info.speed_knots, info.track, info.altitude);
+	  }
+	  else if (fix < 0) {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf ("Can't communicate with GPS receiver.\n");
+	    exit (EXIT_FAILURE);
+	  }
+	  else  {
+	    text_color_set (DW_COLOR_ERROR);
+            dw_printf ("GPS fix not available.\n");
+	  }
+	  SLEEP_SEC(1);
+	}
+
 
 	// Exit out of KISS mode.
 
-	serial_port_write (tnc, "\xc0\xff\c0", 3);
+	serial_port_write (tnc, "\xc0\xff\xc0", 3);
 
 	SLEEP_MS(100);
-
+	exit (EXIT_SUCCESS);
 }
 
 
 /* Should be called once per second. */
 
-void walk96 (int fix, double lat, double lon, float knots, float course, float alt)
+static void walk96 (int fix, double lat, double lon, float knots, float course, float alt)
 {
 	static int sequence = 0;
 	char comment[50];
 
 	sequence++;
-	sprintf (comment, "Sequence number %04d", sequence);
+	snprintf (comment, sizeof(comment), "Sequence number %04d", sequence);
 
 
 /*
@@ -125,16 +146,20 @@ void walk96 (int fix, double lat, double lon, float knots, float course, float a
 
 	char position_report[AX25_MAX_PACKET_LEN];
 
+
+// TODO (high, bug):    Why do we see !4237.13N/07120.84W=PHG0000...   when all values set to unknown.
+
+
 	info_len = encode_position (messaging, compressed,
 		lat, lon, (int)(DW_METERS_TO_FEET(alt)), 
-		'/', '?',		// TODO: look up code for person.
-		G_UNKNOWN, G_UNKNOWN, G_UNKNOWN, "",	// PHG
-		(int)course, (int)knots, 
+		'/', '=',
+		G_UNKNOWN, G_UNKNOWN, G_UNKNOWN, "",	// PHGd
+		(int)roundf(course), (int)roundf(knots),
 		445.925, 0, 0,
 		comment,
 		info, sizeof(info));
 
-	sprintf (position_report, "%s>WALK96:%s", MYCALL, info);
+	snprintf (position_report, sizeof(position_report), "%s>WALK96:%s", MYCALL, info);
 
 	text_color_set (DW_COLOR_XMIT);
         dw_printf ("%s\n", position_report);

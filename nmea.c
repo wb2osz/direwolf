@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
 
 
 //#define DEBUG 1
+
+
+// TODO: rename this to waypoint & integrate.
 
 /*------------------------------------------------------------------
  *
@@ -73,13 +76,9 @@ static MYFDTYPE nmea_port_fd = MYFDERROR;
 
 static void nmea_send_sentence (char *sent);
 
-#if __WIN32__
-static unsigned __stdcall nmea_listen_thread (void *arg);
-#else
-static void * nmea_listen_thread (void *arg);
-#endif
 
-static void nmea_parse_gps (char *sentence);
+
+//static void nmea_parse_gps (char *sentence);
 
 
 static int nmea_debug = 0;		/* Print information flowing from and to attached device. */
@@ -102,7 +101,6 @@ void nmea_set_debug (int n)
  *	
  *
  * Description:	(1) Open serial port device.
- *		(2) Start a new thread to listen for GPS receiver.
  *
  *---------------------------------------------------------------*/
 
@@ -110,12 +108,6 @@ void nmea_set_debug (int n)
 void nmea_init (struct misc_config_s *mc)
 {
 	
-#if __WIN32__
-	HANDLE nmea_listen_th;
-#else
-	pthread_t nmea_listen_tid;
-#endif
-
 /*
  * Open serial port connection.
  * 4800 baud is standard for GPS.
@@ -125,24 +117,7 @@ void nmea_init (struct misc_config_s *mc)
 
 	  nmea_port_fd = serial_port_open (mc->nmea_port, 4800);
 
-	  if (nmea_port_fd != MYFDERROR) {
-#if __WIN32__
-	    nmea_listen_th = (HANDLE)_beginthreadex (NULL, 0, nmea_listen_thread, (void*)(long)nmea_port_fd, 0, NULL);
-	    if (nmea_listen_th == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Could not create NMEA listening thread.\n");
-	      return;
-	    }
-#else
-	    int e;
-	    e = pthread_create (&nmea_listen_tid, NULL, nmea_listen_thread, (void*)(long)nmea_port_fd);
-	    if (e != 0) {
-	      text_color_set(DW_COLOR_ERROR);
-	      perror("Could not create NMEA listening thread.");
-	    
-	    }
-#endif
-	  }
+
 	}
 
 
@@ -231,7 +206,7 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
 	char sspeed[12];	/* speed as string, empty if unknown */
 	char scourse[12];	/* course as string, empty if unknown */
 	int grm_sym;		/* Garmin symbol code. */
-	char sicon[4];		/* Magellan icon string */
+	char sicon[5];		/* Magellan icon string */
 	char stime[8];
 	char sdate[8];
 	char *p;
@@ -265,7 +240,7 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
  *		*99		is checksum
  */
 
-	sprintf (sentence, "$GPWPL,%s,%s,%s,%s,%s", slat, slat_ns, slong, slong_ew, wname);
+	snprintf (sentence, sizeof(sentence), "$GPWPL,%s,%s,%s,%s,%s", slat, slat_ns, slong, slong_ew, wname);
 	append_checksum (sentence);
 	nmea_send_sentence (sentence);
 
@@ -291,11 +266,11 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
 	  strcpy (salt, "");
 	} 
 	else {
-	  sprintf (salt, "%.1f", alt);
+	  snprintf (salt, sizeof(salt), "%.1f", alt);
 	}
 	grm_sym = 0x1234; 	// TODO
 
-	sprintf (sentence, "$PGRMW,%s,%s,%04X,%s", wname, salt, grm_sym, comment);
+	snprintf (sentence, sizeof(sentence), "$PGRMW,%s,%s,%04X,%s", wname, salt, grm_sym, comment);
 	append_checksum (sentence);
 	nmea_send_sentence (sentence);
 
@@ -319,8 +294,8 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
 
 // TODO: icon
 
-	sprintf (sicon, "??");
-	sprintf (sentence, "$PMGNWPL,%s,%s,%s,%s,%s,M,%s,%s,%s",
+	snprintf (sicon, sizeof(sicon), "??");
+	snprintf (sentence, sizeof(sentence), "$PMGNWPL,%s,%s,%s,%s,%s,M,%s,%s,%s",
 			slat, slat_ns, slong, slong_ew, salt, wname, comment, sicon);
 	append_checksum (sentence);
 	nmea_send_sentence (sentence);
@@ -357,13 +332,13 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
 	  strcpy (sspeed, "");
 	} 
 	else {
-	  sprintf (sspeed, "%.1f", speed);
+	  snprintf (sspeed, sizeof(sspeed), "%.1f", speed);
 	}
 	if (course == G_UNKNOWN) {
 	  strcpy (scourse, "");
 	} 
 	else {
-	  sprintf (scourse, "%.1f", course);
+	  snprintf (scourse, sizeof(scourse), "%.1f", course);
 	}
 
 // TODO:  how to handle time & date ???
@@ -371,7 +346,7 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
 	strcpy (stime, "123456");
 	strcpy (sdate, "123456");
 
-	sprintf (sentence, "$PKWDWPL,%s,V,%s,%s,%s,%s,%s,%s,%s,%s,%s,%c%c",
+	snprintf (sentence, sizeof(sentence), "$PKWDWPL,%s,V,%s,%s,%s,%s,%s,%s,%s,%s,%s,%c%c",
 			stime, slat, slat_ns, slong, slong_ew, 
 			sspeed, scourse, sdate, salt, wname, symtab, symbol);
 	append_checksum (sentence);
@@ -434,7 +409,7 @@ http://gpsbabel.sourcearchive.com/documentation/1.3.7~cvs1/magproto_8c-source.ht
             &lngdeg,&lngdir,
             &alt,&altunits,shortname,descr);  then icon
 
-   sprintf(obuf, "PMGNWPL,%4.3f,%c,%09.3f,%c,%07.0f,M,%-.*s,%-.46s,%s",
+   snprintf(obuf, sizeof(), "PMGNWPL,%4.3f,%c,%09.3f,%c,%07.0f,M,%-.*s,%-.46s,%s",
             lat, ilat < 0 ? 'S' : 'N',
             lon, ilon < 0 ? 'W' : 'E',
             waypointp->altitude == unknown_alt ?
@@ -485,277 +460,6 @@ static void nmea_send_sentence (char *sent)
 
 
 
-/*-------------------------------------------------------------------
- *
- * Name:        nmea_listen_thread
- *
- * Purpose:     Wait for messages from GPS receiver.
- *
- * Inputs:	arg		- File descriptor for reading.
- *
- * Outputs:	pt_slave_fd	- File descriptor for communicating with client app.
- *
- * Description:	Process messages from the client application.
- *
- *--------------------------------------------------------------------*/
 
-
-// Maximum length of message from GPS receiver.
-// 82 according to some people.  Larger to be safe.
-
-#define NMEA_MAX_LEN 120	
-
-static char gps_msg[NMEA_MAX_LEN];
-int gps_msg_len = 0;
-
-
-#if __WIN32__
-static unsigned __stdcall nmea_listen_thread (void *arg)
-#else
-static void * nmea_listen_thread (void *arg)
-#endif
-{
-	MYFDTYPE fd = (MYFDTYPE)(long)arg;
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("nmea_listen_thread ( %d )\n", fd);
-#endif
-
-
-	while (1) {
-	  int ch;
-
-	  ch = serial_port_get1(fd);
-
-
-// TODO:  if ch < 0, terminate thread ...
-
-      //CloseHandle (fd);
-	      //fd = MYFDERROR;
-	      //pthread_exit (NULL);
-
-	  //text_color_set(DW_COLOR_ERROR);
-	  //dw_printf ("\nError trying to read from GPS receiver.  Closing connection %d.\n\n", fd);
-
-	  //close (fd);  -> serial_port_close(fd)
-
-	  //fd = MYFDERROR;
-	  //pthread_exit (NULL);
-
-
-	  if (ch == '$') {
-	    // Start of new sentence.
-	    gps_msg_len = 0;
-	    gps_msg[gps_msg_len++] = ch;
-	    gps_msg[gps_msg_len] = '\0';
-	  }
-	  else if (ch == '\r' || ch == '\n') {
-	    if (gps_msg_len >= 6 && gps_msg[0] == '$') {
-	      nmea_parse_gps (gps_msg);
-	      text_color_set(DW_COLOR_REC);
-	      dw_printf ("%s\n", gps_msg);
-	    }
-	    gps_msg_len = 0;
-	    gps_msg[gps_msg_len] = '\0';
-	  }
-	  else {	
-	    if (gps_msg_len < NMEA_MAX_LEN-1) {
-	      gps_msg[gps_msg_len++] = ch;
-	      gps_msg[gps_msg_len] = '\0';
-	    }
-	  }
-	}	/* while (1) */
-
-	return (NULL);	/* Unreachable but avoids compiler warning. */
-}
-
-
-/*-------------------------------------------------------------------
- *
- * Name:        ...
- *
- * Purpose:     ...
- *
- * Inputs:	...
- *
- * Outputs:	...
- *
- * Description:	...
- *
- *--------------------------------------------------------------------*/
-
-
-static void remove_checksum (char *sent)
-{
-        char *p;
-        char *next;
-        unsigned char cs;
-
-
-// Do we have valid checksum?
-
-        cs = 0;
-        for (p = sent+1; *p != '*' && *p != '\0'; p++) {
-          cs ^= *p;
-        }
-
-        p = strchr (sent, '*');
-        if (p == NULL) {
-	  text_color_set (DW_COLOR_INFO);
-          dw_printf("Missing GPS checksum.\n");
-          return;
-        }
-        if (cs != strtoul(p+1, NULL, 16)) {
-	  text_color_set (DW_COLOR_ERROR);
-          dw_printf("GPS checksum error. Expected %02x but found %s.\n", cs, p+1);
-          return;
-        }
-        *p = '\0';      // Remove the checksum.
-}
-
-static void nmea_parse_gps (char *sentence)
-{
-
-	char stemp[NMEA_MAX_LEN];
-	char *ptype;
-	char *next;
-	double g_lat, g_lon;
-	float g_speed, g_course;
-	static float g_alt = G_UNKNOWN;
-	int fix;		/* 0=none, 2=2D, 3=3D */
-
-	strcpy (stemp, sentence);
-
-	// TODO: process only if good.
-	remove_checksum (stemp);
-
-	next = stemp;
-	ptype = strsep(&next, ",");
-
-
-// $GPRMC has everything we care about except altitude.
-//
-// Examples: $GPRMC,212404.000,V,4237.1505,N,07120.8602,W,,,150614,,*0B
-//	     $GPRMC,000029.020,V,,,,,,,080810,,,N*45
-//	     $GPRMC,003413.710,A,4237.1240,N,07120.8333,W,5.07,291.42,160614,,,A*7F
-
-	if (strcmp(ptype, "$GPRMC") == 0)
-	{
-
-	  char *ptime;			/* Time, hhmmss[.sss] */
-	  char *pstatus;		/* Status, A=Active (valid position), V=Void */
-	  char *plat;			/* Latitude */
-	  char *pns;			/* North/South */
-	  char *plon;			/* Longitude */
-	  char *pew;			/* East/West */
-	  char *pknots;			/* Speed over ground, knots. */
-	  char *pcourse;		/* True course, degrees. */
-	  char *pdate;			/* Date, ddmmyy */
-					/* Magnetic variation */
-					/* In version 3.00, mode is added: A D E N (see below) */
-					/* Checksum */
-
-	  ptime = strsep(&next, ",");
-	  pstatus = strsep(&next, ",");	
-	  plat = strsep(&next, ",");
-	  pns = strsep(&next, ",");
-	  plon = strsep(&next, ",");
-	  pew = strsep(&next, ",");
-	  pknots = strsep(&next, ",");
-	  pcourse = strsep(&next, ",");
-	  pdate = strsep(&next, ",");	
-
-
-	  g_lat = G_UNKNOWN;
-	  g_lon = G_UNKNOWN;
-	  g_speed = G_UNKNOWN;
-	  g_course = G_UNKNOWN;
-
-	  if (plat != NULL && strlen(plat) > 0) {
-	    g_lat = latitude_from_nmea(plat, pns);
-	  }
-	  if (plon != NULL && strlen(plon) > 0) {
-	    g_lon = longitude_from_nmea(plon, pew);
-	  }
-	  if (pknots != NULL && strlen(pknots) > 0) {
-	    g_speed = atof(pknots);
-	  }
-	  if (pcourse != NULL && strlen(pcourse) > 0) {
-	    g_course = atof(pcourse);
-	  }
-
-	  if (*pstatus == 'A') {
-	    if (g_alt != G_UNKNOWN) {
-	      fix = 3;
-	    }
-	    else {
-	      fix = 2;
-	    }
-	  }
-	  else {
-	    fix = 0;
-	  }
-
-	  text_color_set (DW_COLOR_INFO);
-          dw_printf("%d %.6f %.6f %.1f %.0f %.1f\n", fix, g_lat, g_lon, g_speed, g_course, g_alt);
-
-#if WALK96
-	  // TODO: Need to design a proper interface.
-
-	  extern void walk96 (int fix, double lat, double lon, float knots, float course, float alt);
-
-          walk96 (fix, g_lat, g_lon, g_speed, g_course, g_alt);
-#endif	  
-	}
-
-// $GPGGA has altitude.
-//
-// Examples: $GPGGA,212407.000,4237.1505,N,07120.8602,W,0,00,,,M,,M,,*58
-//	     $GPGGA,000409.392,,,,,0,00,,,M,0.0,M,,0000*53
-//	     $GPGGA,003518.710,4237.1250,N,07120.8327,W,1,03,5.9,33.5,M,-33.5,M,,0000*5B
-
-	else if (strcmp(ptype, "$GPGGA") == 0)
-	{
-
-	  char *ptime;			/* Time, hhmmss[.sss] */
-	  char *plat;			/* Latitude */
-	  char *pns;			/* North/South */
-	  char *plon;			/* Longitude */
-	  char *pew;			/* East/West */
-	  char *pfix;			/* 0=invalid, 1=GPS fix, 2=DGPS fix */
-	  char *pnum_sat;		/* Number of satellites */
-	  char *phdop;			/* Horiz. Dilution fo Precision */
-	  char *paltitude;		/* Altitude, above mean sea level */
-	  char *palt_u;			/* Units for Altitude, typically M for meters. */
-	  char *pheight;		/* Height above ellipsoid */
-	  char *pheight_u;		/* Units for height, typically M for meters. */
-	  char *psince;			/* Time since last DGPS update. */
-	  char *pdsta;			/* DGPS reference station id. */
-
-	  ptime = strsep(&next, ",");
-	  plat = strsep(&next, ",");
-	  pns = strsep(&next, ",");
-	  plon = strsep(&next, ",");
-	  pew = strsep(&next, ",");
-	  pfix = strsep(&next, ",");	
-	  pnum_sat = strsep(&next, ",");
-	  phdop = strsep(&next, ",");
-	  paltitude = strsep(&next, ",");
-	  palt_u = strsep(&next, ",");
-	  pheight = strsep(&next, ",");
-	  pheight_u = strsep(&next, ",");
-	  psince = strsep(&next, ",");
-	  pdsta = strsep(&next, ",");
-
-	  g_alt = G_UNKNOWN;
-
-	  if (paltitude != NULL && strlen(paltitude) > 0) {
-	    g_alt = atof(paltitude);
-	  }
-	}
-
-
-} /* end  nmea_parse_gps */
 
 /* end nmea.c */

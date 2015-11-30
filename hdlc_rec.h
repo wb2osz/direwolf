@@ -5,9 +5,7 @@
 
 void hdlc_rec_init (struct audio_s *pa);
 
-
-void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram_state);
-
+void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, int descram_state);
 
 /* Provided elsewhere to process a complete frame. */
 
@@ -18,11 +16,10 @@ void hdlc_rec_bit (int chan, int subchan, int raw, int is_scrambled, int descram
 /* Similar to, but not exactly the same as, data carrier detect. */
 /* We use this to influence the PLL inertia. */
 
-int hdlc_rec_gathering (int chan, int subchan);
-
+int hdlc_rec_gathering (int chan, int subchan, int slice);
 
 /* Transmit needs to know when someone else is transmitting. */
 
-void dcd_change (int chan, int subchan, int state);
+void dcd_change (int chan, int subchan, int slice, int state);
 
 int hdlc_rec_data_detect_any (int chan);

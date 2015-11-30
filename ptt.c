@@ -50,12 +50,48 @@
  *
  *---------------------------------------------------------------*/
 
+/*
+	Idea for future enhancement:
+
+	A couple people have asked about support for the DMK URI.
+	This uses a C-Media CM108/CM119 with one interesting addition, a GPIO
+	pin is used to drive PTT.  Here is some related information.
+
+	DMK URI:
+
+		http://www.dmkeng.com/URI_Order_Page.htm
+		http://dmkeng.com/images/URI%20Schematic.pdf
+		http://www.repeater-builder.com/voip/pdf/cm119-datasheet.pdf
+
+	Homebrew versions of the same idea:
+
+		http://images.ohnosec.org/usbfob.pdf
+		http://www.qsl.net/kb9mwr/projects/voip/usbfob-119.pdf
+		http://rtpdir.weebly.com/uploads/1/6/8/7/1687703/usbfob.pdf
+		http://www.repeater-builder.com/projects/fob/USB-Fob-Construction.pdf
+
+	Applications that have support for this:
+
+		http://docs.allstarlink.org/drupal/
+		http://soundmodem.sourcearchive.com/documentation/0.16-1/ptt_8c_source.html
+		https://github.com/N0NB/hamlib/blob/master/src/cm108.c#L190
+
+	Information about the "hidraw" device:
+
+		http://unix.stackexchange.com/questions/85379/dev-hidraw-read-permissions
+		http://www.signal11.us/oss/udev/
+		http://www.signal11.us/oss/hidapi/
+		https://github.com/signal11/hidapi/blob/master/libusb/hid.c
+		http://stackoverflow.com/questions/899008/howto-write-to-the-gpio-pin-of-the-cm108-chip-in-linux
+		https://www.kernel.org/doc/Documentation/hid/hidraw.txt
+*/
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include <sys/time.h>
+#include <time.h>
 
 #if __WIN32__
 #include <windows.h>
@@ -164,7 +200,7 @@ static char otnames[NUM_OCTYPES][8];
 void ptt_init (struct audio_s *audio_config_p)
 {
 	int ch;
-	HANDLE fd;
+	HANDLE fd = INVALID_HANDLE_VALUE;
 #if __WIN32__
 #else
 	int using_gpio;
@@ -177,9 +213,9 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	save_audio_config_p = audio_config_p;
 
-	strcpy (otnames[OCTYPE_PTT], "PTT");
-	strcpy (otnames[OCTYPE_DCD], "DCD");
-	strcpy (otnames[OCTYPE_FUTURE], "FUTURE");
+	strlcpy (otnames[OCTYPE_PTT], "PTT", sizeof(otnames[OCTYPE_PTT]));
+	strlcpy (otnames[OCTYPE_DCD], "DCD", sizeof(otnames[OCTYPE_DCD]));
+	strlcpy (otnames[OCTYPE_FUTURE], "FUTURE", sizeof(otnames[OCTYPE_FUTURE]));
 
 
 	for (ch = 0; ch < MAX_CHANS; ch++) {
@@ -228,7 +264,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	          text_color_set(DW_COLOR_INFO);
 	          dw_printf ("Converted %s device '%s'", audio_config_p->achan[ch].octrl[ot].ptt_device, otnames[ot]);
 	          if (n < 1) n = 1;
-	          sprintf (audio_config_p->achan[ch].octrl[ot].ptt_device, "/dev/ttyS%d", n-1);
+	          snprintf (audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(audio_config_p->achan[ch].octrl[ot].ptt_device), "/dev/ttyS%d", n-1);
 	          dw_printf (" to Linux equivalent '%s'\n", audio_config_p->achan[ch].octrl[ot].ptt_device);
 	        }
 #endif
@@ -259,13 +295,13 @@ void ptt_init (struct audio_s *audio_config_p)
 	          // Bug fix in release 1.1 - Need to munge name for COM10 and up.
 	          // http://support.microsoft.com/kb/115831
 
-	          strcpy (bettername, audio_config_p->achan[ch].octrl[ot].ptt_device);
+	          strlcpy (bettername, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(bettername));
 	          if (strncasecmp(bettername, "COM", 3) == 0) {
 	            int n;
 	            n = atoi(bettername+3);
 	            if (n >= 10) {
-	              strcpy (bettername, "\\\\.\\");
-	              strcat (bettername, audio_config_p->achan[ch].octrl[ot].ptt_device);
+	              strlcpy (bettername, "\\\\.\\", sizeof(bettername));
+	              strlcat (bettername, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(bettername));
 	            }
 	          }
 	          fd = CreateFile(bettername,
@@ -410,7 +446,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	          dw_printf ("    chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport\n");
 	          exit (1);
 	        }
-	        sprintf (stemp, "%d", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
+	        snprintf (stemp, sizeof(stemp), "%d", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
 	        if (write (fd, stemp, strlen(stemp)) != strlen(stemp)) {
 	          int e = errno;
 	          /* Ignore EBUSY error which seems to mean */
@@ -425,15 +461,35 @@ void ptt_init (struct audio_s *audio_config_p)
 	        close (fd);
 
 /*
+	Idea for future:
+
+	On the RPi, the device path for GPIO number XX is /sys/class/gpio/gpioXX.
+	There was a report that it is different for the Cubieboard.  For instance
+	GPIO 61 has gpio61_pi13 in the path.  This indicates connector "i" pin 13.
+
+	For another similar single board computer, we find the same thing:
+	https://www.olimex.com/wiki/A20-OLinuXino-LIME#GPIO_under_Linux
+
+	How should we deal with this?  Some possibilities:
+
+	(1) The user might explicitly mention the name in direwolf.conf.
+	(2) We might be able to find the names in some system device config file.
+	(3) Get a directory listing of /sys/class/gpio then search for a 
+		matching name.  Suppose we wanted GPIO 61.  First look for an exact
+		match to "gpio61".  If that is not found, look for something
+		matching the pattern "gpio61_*".
+*/
+
+/*
  * We will have the same permission problem if not root.
  * We only care about "direction" and "value".
  */
-	        sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
+	        snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
 	        err = system (stemp);
-	        sprintf (stemp, "sudo chmod go+rw /sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
+	        snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
 	        err = system (stemp);
 
-	        sprintf (stemp, "/sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
+	        snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/value", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
 
 	        if (stat(stemp, &finfo) < 0) {
 	          int e = errno;
@@ -458,7 +514,7 @@ void ptt_init (struct audio_s *audio_config_p)
  * Set output direction with initial state off.
  */
 
-	        sprintf (stemp, "/sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
+	        snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/direction", audio_config_p->achan[ch].octrl[ot].ptt_gpio);
 	        fd = open(stemp, O_WRONLY);
 	        if (fd < 0) {
 	          int e = errno;
@@ -470,10 +526,10 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	        char hilo[8];
 	        if (audio_config_p->achan[ch].octrl[ot].ptt_invert) {
-	          strcpy (hilo, "high");
+	          strlcpy (hilo, "high", sizeof(hilo));
 	        }
 	        else {
-	          strcpy (hilo, "low");
+	          strlcpy (hilo, "low", sizeof(hilo));
 	        }
 	        if (write (fd, hilo, strlen(hilo)) != strlen(hilo)) {
 	          int e = errno;
@@ -702,7 +758,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  int fd;
 	  char stemp[80];
 
-	  sprintf (stemp, "/sys/class/gpio/gpio%d/value", save_audio_config_p->achan[chan].octrl[ot].ptt_gpio);
+	  snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/value", save_audio_config_p->achan[chan].octrl[ot].ptt_gpio);
 
 	  fd = open(stemp, O_WRONLY);
 	  if (fd < 0) {
@@ -713,7 +769,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	    return;
 	  }
 
-	  sprintf (stemp, "%d", ptt);
+	  snprintf (stemp, sizeof(stemp), "%d", ptt);
 
 	  if (write (fd, stemp, 1) != 1) {
 	    int e = errno;
@@ -840,14 +896,14 @@ main ()
 
 	my_audio_config.valid[0] = 1;
 	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_SERIAL;
-	//strcpy (my_audio_config.ptt_device, "COM1");
-	strcpy (my_audio_config.ptt_device, "/dev/ttyUSB0");
+	//strlcpy (my_audio_config.ptt_device, "COM1", sizeof(my_audio_config.ptt_device));
+	strlcpy (my_audio_config.ptt_device, "/dev/ttyUSB0", sizeof(my_audio_config.ptt_device));
 	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_line = PTT_LINE_RTS;
 
 	my_audio_config.valid[1] = 1;
 	my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_SERIAL;
-	//strcpy (my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device, "COM1");
-	strcpy (my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device, "/dev/ttyUSB0");
+	//strlcpy (my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device, "COM1", sizeof(my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device));
+	strlcpy (my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device, "/dev/ttyUSB0", sizeof(my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device));
 	my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_line = PTT_LINE_DTR;
 
 
