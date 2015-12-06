@@ -60,6 +60,7 @@
  *		symbol	- Symbol id.
  *    		dlat	- Latitude.
  *		dlong	- Longitude.
+ *		ambiguity - Blank out least significant digits.
  *
  * Outputs:	presult	- Stored here.  
  *
@@ -77,10 +78,10 @@ typedef struct position_s {
 	} position_t;
 
 
-static int set_norm_position (char symtab, char symbol, double dlat, double dlong, position_t *presult)
+static int set_norm_position (char symtab, char symbol, double dlat, double dlong, int ambiguity, position_t *presult)
 {
 
-	latitude_to_str (dlat, 0, presult->lat);
+	latitude_to_str (dlat, ambiguity, presult->lat);
 
 	if (symtab != '/' && symtab != '\\' && ! isdigit(symtab) && ! isupper(symtab)) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -88,7 +89,7 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
 	}
 	presult->sym_table_id = symtab;
 
-	longitude_to_str (dlong, 0, presult->lon);
+	longitude_to_str (dlong, ambiguity, presult->lon);
 
 	if (symbol < '!' || symbol > '~') {
 	  text_color_set(DW_COLOR_ERROR);
@@ -480,6 +481,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *		compressed - Send in compressed form?
  *		lat	- Latitude.
  *		lon	- Longitude.
+ *		ambiguity - Number of digits to omit from location.
  *		alt_ft	- Altitude in feet.
  *		symtab	- Symbol table id or overlay.
  *		symbol	- Symbol id.
@@ -535,7 +537,7 @@ typedef struct aprs_compressed_pos_s {
 } aprs_compressed_pos_t;
 
 
-int encode_position (int messaging, int compressed, double lat, double lon, int alt_ft, 
+int encode_position (int messaging, int compressed, double lat, double lon, int ambiguity, int alt_ft, 
 		char symtab, char symbol, 
 		int power, int height, int gain, char *dir,
 		int course, int speed,
@@ -559,7 +561,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 	  aprs_ll_pos_t *p = (aprs_ll_pos_t *)presult;
 
 	  p->dti = messaging ? '=' : '!';
-	  set_norm_position (symtab, symbol, lat, lon, &(p->pos));
+	  set_norm_position (symtab, symbol, lat, lon, ambiguity, &(p->pos));
 	  result_len = 1 + sizeof (p->pos);
 
 /* Optional data extension. (singular) */
@@ -622,6 +624,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *		thyme	- Time stamp or 0 for none.
  *		lat	- Latitude.
  *		lon	- Longitude.
+ *		ambiguity - Number of digits to omit from location.
  *		symtab	- Symbol table id or overlay.
  *		symbol	- Symbol id.
  *
@@ -668,7 +671,7 @@ typedef struct aprs_object_s {
 	  } u;    
 	} aprs_object_t;
 
-int encode_object (char *name, int compressed, time_t thyme, double lat, double lon, 
+int encode_object (char *name, int compressed, time_t thyme, double lat, double lon, int ambiguity,
 		char symtab, char symbol, 
 		int power, int height, int gain, char *dir,
 		int course, int speed,
@@ -721,7 +724,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 	  result_len = sizeof(p->o) + sizeof (p->u.cpos);
 	}
 	else {
-	  set_norm_position (symtab, symbol, lat, lon, &(p->u.pos));
+	  set_norm_position (symtab, symbol, lat, lon, ambiguity, &(p->u.pos));
 	  result_len = sizeof(p->o) + sizeof (p->u.pos);
 
 /* Optional data extension. (singular) */
@@ -784,7 +787,7 @@ int main (int argc, char *argv[])
 
 /***********  Position  ***********/
 
-	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
@@ -792,35 +795,35 @@ int main (int argc, char *argv[])
 /* with PHG. */
 // TODO:  Need to test specifying some but not all.
 
-	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		50, 100, 6, "N", G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with freq. */
 
-	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with course/speed, freq, and comment! */
 
-	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz T074 -060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* Course speed, no tone, + offset */
 
-	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* Course speed, no tone, + offset + altitude */
 
-	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 12345, 'D', '&',
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, 12345, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 /A=012345River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
@@ -829,7 +832,7 @@ int main (int argc, char *argv[])
 
 /*********** Compressed position. ***********/
 
-	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!D8yKC<Hn[&  !") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
@@ -837,14 +840,14 @@ int main (int argc, char *argv[])
 
 /* with PHG. In this case it is converted to precomputed radio range.  TODO: check on this.  Is 27.4 correct? */
 
-	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		50, 100, 6, "N", G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!D8yKC<Hn[&{CG") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with course/speed, freq, and comment!  Roundoff. 55 knots should be 63 MPH.  we get 62. */
 
-	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), G_UNKNOWN, 'D', '&',
+	encode_position (0, 1, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 74.4, -0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!D8yKC<Hn[&NUG146.955MHz T074 -060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
@@ -854,7 +857,7 @@ int main (int argc, char *argv[])
 
 /*********** Object. ***********/
 
-	encode_object ("WB1GOF-C", 0, 0, 42+34.61/60, -(71+26.47/60), 'D', '&',
+	encode_object ("WB1GOF-C", 0, 0, 42+34.61/60, -(71+26.47/60), 0, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 0, 0, 0, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, ";WB1GOF-C *111111z4234.61ND07126.47W&") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }

@@ -14,7 +14,7 @@
  */
 
 struct ttloc_s {
-	enum { TTLOC_POINT, TTLOC_VECTOR, TTLOC_GRID, TTLOC_UTM, TTLOC_MGRS, TTLOC_USNG, TTLOC_MACRO, TTLOC_MHEAD, TTLOC_SATSQ } type;
+	enum { TTLOC_POINT, TTLOC_VECTOR, TTLOC_GRID, TTLOC_UTM, TTLOC_MGRS, TTLOC_USNG, TTLOC_MACRO, TTLOC_MHEAD, TTLOC_SATSQ, TTLOC_AMBIG } type;
 
 	char pattern[20];	/* e.g. B998, B5bbbdddd, B2xxyy, Byyyxxx, BAxxxx */
 				/* For macros, it should be all fixed digits, */
@@ -61,6 +61,7 @@ struct ttloc_s {
 	  struct {
 	    char *definition;
 	  } macro;
+
 	};
 };
 

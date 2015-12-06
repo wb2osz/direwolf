@@ -658,6 +658,71 @@ int tt_text_to_satsq (const char *text, int quiet, char *buttons, size_t buttons
 
 /*------------------------------------------------------------------
  *
+ * Name:        tt_text_to_ascii2d
+ *
+ * Purpose:     Convert text to the two digit per ascii character representation.
+ *
+ * Inputs:      text	- Input string.
+ *			  Any printable ASCII characters.
+ *
+ *		quiet	- True to suppress error messages.
+ *
+ * Outputs:	buttons	- Sequence of buttons to press.
+ *
+ * Returns:     Number of errors detected.
+ *
+ * Description:	The standard comment format uses the multipress
+ *		encoding which allows only single case letters, digits,
+ *		and the space character.
+ *		This is a more flexible format that can handle all
+ *		printable ASCII characters.  We take the character code,
+ *		subtract 32 and convert to two decimal digits.  i.e.
+ *			space	= 00
+ *			!	= 01
+ *			"	= 02
+ *			...
+ *			~	= 94
+ *
+ *		This is mostly for internal use, so macros can generate
+ *		comments with all characters.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_text_to_ascii2d (const char *text, int quiet, char *buttons)
+{
+	const char *t = text;
+	char *b = buttons;
+	char c;
+	int errors = 0;
+
+
+	*b = '\0';
+
+	while ((c = *t++) != '\0') {
+
+	  int n;
+
+	  /* "isprint()" might depend on locale so use brute force. */
+
+	  if (c < ' ' || c > '~') c = '?';
+
+	  n = c - 32;
+
+	  *b++ = (n / 10) + '0';
+	  *b++ = (n % 10) + '0';
+	  *b = '\0';
+	}
+	return (errors);
+
+} /* end tt_text_to_ascii2d */
+
+
+
+
+
+
+/*------------------------------------------------------------------
+ *
  * Name:        tt_multipress_to_text
  *
  * Purpose:     Convert the multi-press representation to text.
@@ -1280,6 +1345,69 @@ int tt_satsq_to_text (const char *buttons, int quiet, char *text)
 	return (errors);          
 
 } /* end tt_satsq_to_text */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_ascii2d_to_text
+ *
+ * Purpose:     Convert the two digit ascii representation back to normal text.
+ *
+ * Inputs:      buttons	- Input string.
+ *			  Should contain pairs of digits in range 00 to 94.
+ *
+ *		quiet	- True to suppress error messages.
+ *
+ * Outputs:	text	- Converted to any printable ascii characters.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_ascii2d_to_text (const char *buttons, int quiet, char *text)
+{
+	const char *b = buttons;
+	char *t = text;
+	char c1, c2;
+	int errors = 0;
+
+
+	*t = '\0';
+
+	while (*b != '\0') {
+
+	  c1 = *b++;
+	  if (*b != '\0') {
+	    c2 = *b++;
+	  }
+	  else {
+	    c2 = ' ';
+	  }
+
+	  if (isdigit(c1) && isdigit(c2)) {
+	    int n;
+
+	    n = (c1 - '0') * 10 + (c2 - '0');
+
+           *t++ = n + 32;
+	   *t = '\0';
+	  }
+	  else {
+
+/* Unexpected character. */
+
+	    errors++;
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("ASCII2D to text: Invalid character pair \"%c%c\".\n", c1, c2);
+	    }
+	  }
+	}
+	return (errors);
+
+} /* end tt_ascii2d_to_text */
+
 
 
 /*------------------------------------------------------------------

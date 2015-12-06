@@ -1,4 +1,3 @@
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -322,6 +321,7 @@ static char m_symbol_code;		// Default 'A'
 static char m_loc_text[24];
 static double m_longitude;		// Set to G_UNKNOWN if not defined.
 static double m_latitude;		// Set to G_UNKNOWN if not defined.
+static int m_ambiguity;
 static char m_comment[200];
 static char m_freq[12];
 static char m_mic_e;
@@ -354,8 +354,9 @@ void aprs_tt_sequence (int chan, char *msg)
 	m_symtab_or_overlay = '\\';
 	m_symbol_code = 'A';
 	strlcpy (m_loc_text, "", sizeof(m_loc_text));
-	m_longitude = G_UNKNOWN; 
-	m_latitude = G_UNKNOWN; 
+	m_longitude = G_UNKNOWN;
+	m_latitude = G_UNKNOWN;
+	m_ambiguity = 0;
 	strlcpy (m_comment, "", sizeof(m_comment));
 	strlcpy (m_freq, "", sizeof(m_freq));
 	m_mic_e = ' ';
@@ -384,7 +385,7 @@ void aprs_tt_sequence (int chan, char *msg)
 	if (err == 0) {
 
 	  err = tt_user_heard (m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, 
-		m_loc_text, m_latitude, m_longitude,
+		m_loc_text, m_latitude, m_longitude, m_ambiguity,
 		m_freq, m_comment, m_mic_e, m_dao);
 	}
 
@@ -1254,6 +1255,18 @@ static int parse_location (char *e)
 	      }
 	      break;
 
+	    case TTLOC_AMBIG:
+
+	      if (strlen(xstr) != 1) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Expected 1 digits for the position ambiguity.\n");
+	        return (TT_ERROR_INVALID_LOC);
+	      }
+
+	      m_ambiguity = atoi(xstr);
+
+	      break;
+
 
 	    default:
 	      assert (0);
@@ -1451,6 +1464,8 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
  *
  *		Cttt...tttt	- General comment in Multi-press encoding.
  *
+ *		CAttt...tttt	- New enhanced comment format that can handle all ASCII characters.
+ *
  *----------------------------------------------------------------*/
 
 static int parse_comment (char *e)
@@ -1460,6 +1475,11 @@ static int parse_comment (char *e)
 	assert (*e == 'C');
 
 	len = strlen(e);
+
+	if (e[1] == 'A') {
+	  tt_ascii2d_to_text (e+2, 0, m_comment);
+	  return (0);
+	}
 
 	if (len == 2 && isdigit(e[1])) {
 	  m_mic_e = e[1];

@@ -136,6 +136,9 @@ static struct tt_user_s {
 	double latitude, longitude;		/* Location either from user or generated */		
 						/* position in the corral. */
 
+	int ambiguity;				/* Number of digits to omit from location. */
+						/* Default 0, max. 4. */
+
 	char freq[12];				/* Frequency in format 999.999MHz */
 
 	char comment[MAX_COMMENT_LEN+1];	/* Free form comment from user. */
@@ -381,7 +384,7 @@ static void digit_suffix (char *callsign, char *suffix)
 	char *t;
 
 
-	strlcpy (suffix, "000", sizeof(suffix));
+	strlcpy (suffix, "000", 5);			// TODO: should have proper size
 	tt_text_to_two_key (callsign, 0, two_key);
 	for (t = two_key; *t != '\0'; t++) {
 	  if (isdigit(*t)) {
@@ -408,6 +411,7 @@ static void digit_suffix (char *callsign, char *suffix)
  *		loc_text	- Original text for non lat/lon location
  *		latitude
  *		longitude
+ *		ambiguity
  *		freq
  *		comment
  *		mic_e
@@ -422,15 +426,14 @@ static void digit_suffix (char *callsign, char *suffix)
  *----------------------------------------------------------------*/
 
 int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *loc_text, double latitude, 
-		double longitude, char *freq, char *comment, char mic_e, char *dao)
+		double longitude, int ambiguity, char *freq, char *comment, char mic_e, char *dao)
 {
 	int i;
 
 
-// TODO: remove debug
 
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tt_user_heard (%s, %d, %c, %c, %s, ...)\n", callsign, ssid, overlay, symbol, loc_text);
+	//text_color_set(DW_COLOR_DEBUG);
+	//dw_printf ("tt_user_heard (%s, %d, %c, %c, %s, ...)\n", callsign, ssid, overlay, symbol, loc_text);
 
 /*
  * At this time all messages are expected to contain a callsign.
@@ -475,6 +478,8 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	    tt_user[i].corral_slot = corral_slot();
 	  }
 
+	  tt_user[i].ambiguity = ambiguity;
+
 	  strlcpy (tt_user[i].freq, freq, sizeof(tt_user[i].freq));
 	  strncpy (tt_user[i].comment, comment, MAX_COMMENT_LEN);
 	  tt_user[i].comment[MAX_COMMENT_LEN] = '\0';
@@ -500,6 +505,10 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	    tt_user[i].corral_slot = 0;
 	    tt_user[i].latitude = latitude;
 	    tt_user[i].longitude = longitude;
+	  }
+
+	  if (ambiguity != G_UNKNOWN) {
+	    tt_user[i].ambiguity = ambiguity;
 	  }
 
 	  if (freq[0] != '\0') {
@@ -653,6 +662,7 @@ static void xmit_object_report (int i, int first_time)
 	char stemp[300];		// src>dest,path:object_info
 
 	double olat, olong;
+	int oambig;			// Position ambiguity.
 	packet_t pp;
 	char c4[4];
 
@@ -680,6 +690,8 @@ static void xmit_object_report (int i, int first_time)
  */
 	  olat = tt_user[i].latitude;
 	  olong = tt_user[i].longitude;
+	  oambig = tt_user[i].ambiguity;
+	  if (oambig == G_UNKNOWN) oambig = 0;
 	}
 	else {
 /*
@@ -691,6 +703,7 @@ static void xmit_object_report (int i, int first_time)
 
 	  olat = c_lat - (tt_user[i].corral_slot - 1) * c_offs;
 	  olong = c_long;
+	  oambig = 0;
 	}
 
 /*
@@ -766,7 +779,7 @@ static void xmit_object_report (int i, int first_time)
 
 	strlcat (stemp, ":", sizeof(stemp));
 
-	encode_object (object_name, 0, tt_user[i].last_heard, olat, olong, 
+	encode_object (object_name, 0, tt_user[i].last_heard, olat, olong, oambig,
 		tt_user[i].overlay, tt_user[i].symbol, 
 		0,0,0,NULL, G_UNKNOWN, G_UNKNOWN,	/* PHGD, Course/Speed */
 		atof(tt_user[i].freq), 0, 0, info_comment, object_info, sizeof(object_info));

@@ -1428,6 +1428,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	      else if (strcasecmp(t, "PASSALL") == 0) {
 	        p_audio_config->achan[channel].passall = 1;
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: There is an old saying, \"Be careful what you ask for because you might get it.\"\n", line);
+                dw_printf ("The PASSALL option means allow all frames even when they are invalid.\n");
+                dw_printf ("You are asking to receive random trash and you WILL get your wish.\n");
+                dw_printf ("Don't complain when you see all sorts of random garbage.  That's what you asked for.\n");
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
@@ -2824,6 +2829,81 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
+ * TTAMBIG 		- Define pattern to be used for Object Location Ambiguity.
+ *
+ * TTAMBIG   pattern
+ *
+ *			Pattern would be  B[0-9A-D]x
+ *
+ *			Must have exactly one x.
+ */
+
+	  else if (strcasecmp(t, "TTAMBIG") == 0) {
+
+// TODO1.3:  TTAMBIG To be continued...
+
+	    struct ttloc_s *tl;
+	    int j;
+
+	    assert (p_tt_config->ttloc_size >= 2);
+	    assert (p_tt_config->ttloc_len >= 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    /* Allocate new space, but first, if already full, make larger. */
+	    if (p_tt_config->ttloc_len == p_tt_config->ttloc_size) {
+	      p_tt_config->ttloc_size += p_tt_config->ttloc_size / 2;
+	      p_tt_config->ttloc_ptr = realloc (p_tt_config->ttloc_ptr, sizeof(struct ttloc_s) * p_tt_config->ttloc_size);
+	    }
+	    p_tt_config->ttloc_len++;
+	    assert (p_tt_config->ttloc_len > 0 && p_tt_config->ttloc_len <= p_tt_config->ttloc_size);
+
+	    tl = &(p_tt_config->ttloc_ptr[p_tt_config->ttloc_len-1]);
+	    tl->type = TTLOC_AMBIG;
+	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
+
+	    /* Pattern: B, optional additional button, exactly x for matching */
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing pattern for TTAMBIG command.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+	    strlcpy (tl->pattern, t, sizeof(tl->pattern));
+
+	    if (t[0] != 'B') {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTAMBIG pattern must begin with upper case 'B'.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+
+	    /* Optionally one of 0-9ABCD */
+
+	    if (strchr("ABCD", t[1]) != NULL || isdigit(t[1])) {
+	      j = 2;
+	    }
+	    else {
+	      j = 1;
+	    }
+
+	    if (strcmp(t+j, "x") != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TTAMBIG pattern must end with exactly one x in lower case.\n", line);
+	      p_tt_config->ttloc_len--;
+	      continue;
+	    }
+
+	    /* temp debugging */
+
+	    //for (j=0; j<p_tt_config->ttloc_len; j++) {
+	    //  dw_printf ("debug ttloc %d/%d %s\n", j, p_tt_config->ttloc_size,
+	    //		p_tt_config->ttloc_ptr[j].pattern);
+	    //}
+	  }
+
+
+/*
  * TTMACRO 		- Define compact message format with full expansion
  *
  * TTMACRO   pattern  definition
@@ -3033,6 +3113,37 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  tt_error++;
 	        }
 	      }
+
+	      else if (strncmp(pi, "CA{", 3) == 0) {
+
+		// Convert to enhanced comment that can contain any ASCII character.
+
+	        pi += 3;
+	        ps = stemp;
+	        while (*pi != '}' && *pi != '*' && *pi != '\0') {
+	          *ps++ = *pi++;
+	        }
+	        if (*pi == '}') {
+	          *ps = '\0';
+	          if (tt_text_to_ascii2d (stemp, 0, ttemp) == 0) {
+	            //text_color_set(DW_COLOR_DEBUG);
+	            //dw_printf ("DEBUG Line %d: CA{%s} -> CA%s\n", line, stemp, ttemp);
+	            strlcat (otemp, "CA", sizeof(otemp));
+	            strlcat (otemp, ttemp, sizeof(otemp));
+	          }
+	          else {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: CA{%s} could not be converted to tones for enhanced comment.\n", line, stemp);
+		    tt_error++;
+	          }
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Line %d: CA{... is missing matching } in TTMACRO definition.\n", line);
+		  tt_error++;
+	        }
+	      }
+
 
 	      else if (strchr("0123456789ABCD*#xyz", *pi) != NULL) {
 	        t2[0] = *pi;

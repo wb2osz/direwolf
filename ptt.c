@@ -162,6 +162,8 @@ void ptt_set_debug(int debug)
  *
  *------------------------------------------------------------------*/
 
+#ifndef __WIN32__
+
 void export_gpio(int gpio, int invert, int direction)
 {
 	HANDLE fd;
@@ -276,6 +278,9 @@ void export_gpio(int gpio, int invert, int direction)
 	}
 	close (fd);
 }
+
+#endif   /* not __WIN32__ */
+
 
 /*-------------------------------------------------------------------
  *

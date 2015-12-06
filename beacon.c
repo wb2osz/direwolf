@@ -751,7 +751,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 		case BEACON_POSITION:
 
 		  encode_position (g_misc_config_p->beacon[j].messaging, g_misc_config_p->beacon[j].compress,
-			g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon,
+			g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, 0,
 			(int)roundf(DW_METERS_TO_FEET(g_misc_config_p->beacon[j].alt_m)),
 			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
@@ -764,7 +764,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		case BEACON_OBJECT:
 
-		  encode_object (g_misc_config_p->beacon[j].objname, g_misc_config_p->beacon[j].compress, 0, g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, 
+		  encode_object (g_misc_config_p->beacon[j].objname, g_misc_config_p->beacon[j].compress, 0, g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, 0,
 			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */
@@ -795,7 +795,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	            }
 
 		    encode_position (g_misc_config_p->beacon[j].messaging, g_misc_config_p->beacon[j].compress, 
-			gpsinfo->dlat, gpsinfo->dlon, my_alt_ft,
+			gpsinfo->dlat, gpsinfo->dlon, 0, my_alt_ft,
 			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
 			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
 			coarse, (int)roundf(gpsinfo->speed_knots),

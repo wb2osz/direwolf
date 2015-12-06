@@ -539,7 +539,17 @@ static void pick_best_candidate (int chan)
 
 	  /* Begining score depends on effort to get a valid frame CRC. */
 
-	  candidate[chan][j][k].score = RETRY_MAX * 1000 - ((int)candidate[chan][j][k].retries * 1000);
+	  if (candidate[chan][j][k].packet_p == NULL) {
+	    candidate[chan][j][k].score = 0;
+	  }
+	  else {
+	    /* Originally, this produced 0 for the PASSALL case. */
+	    /* This didn't work so well when looking for the best score. */
+	    /* Around 1.3 dev H, we add an extra 1 in here so the minimum */
+	    /* score should now be 1 for anything received.  */
+
+	    candidate[chan][j][k].score = RETRY_MAX * 1000 - ((int)candidate[chan][j][k].retries * 1000) + 1;
+	  }
 	}
 
 	/* Bump it up slightly if others nearby have the same CRC. */
@@ -605,10 +615,14 @@ static void pick_best_candidate (int chan)
 	}
 #endif
 
+	if (best_score == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unexpected internal problem, %s %d.  How can best score be zero?\n", __FILE__, __LINE__);
+	}
+
 /*
  * send the best one along.
  */
-
 
 	/* Delete those not chosen. */
 

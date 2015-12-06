@@ -3,11 +3,15 @@
 
 ----------
 
-## Version 1.3  -- Development snapshot H  --  November 2015 ##
+## Version 1.3  -- Development snapshot H  --  December 2015 ##
 
 ### New Feature: ###
 
 - New experimental demodulator.  More details later.
+
+### Bugs Fixed: ###
+
+- "INTERNAL ERROR: dlq_append NULL packet pointer." when using PASSALL.
 
 
 ----------

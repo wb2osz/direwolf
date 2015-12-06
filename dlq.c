@@ -254,7 +254,7 @@ void dlq_append (dlq_type_t type, int chan, int subchan, int slice, packet_t pp,
 	assert (chan >= 0 && chan < MAX_CHANS);
 
 	if (pp == NULL) {
-	  text_color_set(DW_COLOR_DEBUG);
+	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("INTERNAL ERROR:  dlq_append NULL packet pointer. Please report this!\n");
 	  return;
 	}
