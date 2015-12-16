@@ -472,7 +472,7 @@ depend : $(wildcard *.c)
 
 .PHONY: clean
 clean :
-	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc \
+	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_fff gen_packets ttcalc \
 		fsk_fast_filter.h *.o *.a
 	echo " " > tune.h
 
