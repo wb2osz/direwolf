@@ -142,19 +142,19 @@ endif
 # Use PortAudio Library
 
 # Force static linking of portaudio if the static library is available.
-PA_LIB_STATIC := $(shell find /usr/local/lib -maxdepth 1 -type f -name "libportaudio.a")
+PA_LIB_STATIC := $(shell find /opt/local/lib -maxdepth 1 -type f -name "libportaudio.a")
 #$(info $$PA_LIB_STATIC is [${PA_LIB_STATIC}])
 ifeq (${PA_LIB_STATIC},)
-LDLIBS += -L/usr/local/lib -lportaudio
+LDLIBS += -L/opt/local/lib -lportaudio
 else
-LDLIBS += /usr/local/lib/libportaudio.a
+LDLIBS += /opt/local/lib/libportaudio.a
 endif
 
 # Include libraries portaudio requires.
 LDLIBS += -framework CoreAudio -framework AudioUnit -framework AudioToolbox
 LDLIBS += -framework Foundation -framework CoreServices
 
-CFLAGS += -DUSE_PORTAUDIO -I/usr/local/include
+CFLAGS += -DUSE_PORTAUDIO -I/opt/local/include
 
 # Uncomment following lines to enable GPS interface & tracker function.
 # Not available for MacOSX.
