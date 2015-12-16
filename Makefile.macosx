@@ -11,14 +11,6 @@
 
 
 all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.conf
-	@echo " "
-	@echo "Next step install with: "
-	@echo " "
-	@echo "      sudo make install"
-	@echo " "
-	@echo "System SDK's (10.8 - 10.10) must be located here to make use of them. "
-	@echo "     /Developer/SDKs "
-	@echo " "
 
 SDK_PATH := $(shell xcrun --show-sdk-path)
 SDK_VERSION := $(shell xcrun --show-sdk-version)
