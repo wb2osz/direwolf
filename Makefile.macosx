@@ -20,29 +20,10 @@ all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx 
 	@echo "     /Developer/SDKs "
 	@echo " "
 
-SYS_LIBS :=
-SYS_MIN :=
-SDK := $(shell find /Developer -maxdepth 1 -type d -name "SDKs")
-#$(info $$SDK = ${SDK})
-ifeq (${SDK},/Developer/SDKs)
-	SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.8.sdk")
-	ifeq (${SDK},/Developer/SDKs/MacOSX10.8.sdk)
-		SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.8.sdk
-		SYS_MIN := -mmacosx-version-min=10.8
-	else
-		SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.9.sdk")
-		ifeq (${SDK},/Developer/SDKs/MacOSX10.9.sdk)
-			SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.9.sdk
-			SYS_MIN := -mmacosx-version-min=10.9
-		else
-			SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.10.sdk")
-			ifeq (${SDK},/Developer/SDKs/MacOSX10.10.sdk)
-				SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.10.sdk
-				SYS_MIN := -mmacosx-version-min=10.10
-			endif
-		endif
-	endif
-endif
+SDK_PATH := $(shell xcrun --show-sdk-path)
+SDK_VERSION := $(shell xcrun --show-sdk-version)
+SYS_LIBS := -isystem ${SDK_PATH}
+SYS_MIN := -mmacosx-version-min=${SDK_VERSION}
 
 EXTRA_CFLAGS :=
 DARWIN_CC := $(shell which clang)
@@ -169,19 +150,19 @@ endif
 # Use PortAudio Library
 
 # Force static linking of portaudio if the static library is available.
-PA_LIB_STATIC := $(shell find /opt/local/lib -maxdepth 1 -type f -name "libportaudio.a")
+PA_LIB_STATIC := $(shell find /usr/local/lib -maxdepth 1 -type f -name "libportaudio.a")
 #$(info $$PA_LIB_STATIC is [${PA_LIB_STATIC}])
 ifeq (${PA_LIB_STATIC},)
-LDLIBS += -L/opt/local/lib -lportaudio
+LDLIBS += -L/usr/local/lib -lportaudio
 else
-LDLIBS += /opt/local/lib/libportaudio.a
+LDLIBS += /usr/local/lib/libportaudio.a
 endif
 
 # Include libraries portaudio requires.
 LDLIBS += -framework CoreAudio -framework AudioUnit -framework AudioToolbox
 LDLIBS += -framework Foundation -framework CoreServices
 
-CFLAGS += -DUSE_PORTAUDIO -I/opt/local/include
+CFLAGS += -DUSE_PORTAUDIO -I/usr/local/include
 
 # Uncomment following lines to enable GPS interface & tracker function.
 # Not available for MacOSX.
