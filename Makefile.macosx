@@ -151,12 +151,14 @@ LDLIBS += -framework Foundation -framework CoreServices
 
 CFLAGS += -DUSE_PORTAUDIO -I/opt/local/include
 
-# Uncomment following lines to enable GPS interface & tracker function.
-# Not available for MacOSX.
-# Although MacPorts has gpsd, wonder if it's the same thing.
 
-#CFLAGS += -DENABLE_GPSD
-#LDLIBS += -lgps
+# Enable GPS interface and tracker function if the gpsd package is installed.
+
+ifeq ($(shell which -s gpsd),)
+	CFLAGS += -DENABLE_GPSD
+	LDLIBS += -lgps
+endif
+
 
 # Name of current directory.
 # Used to generate zip file name for distribution.
@@ -401,7 +403,7 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o
 
 atest : atest.c fsk_fast_filter.h demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c latlong.c symbols.c textcolor.c tt_text.c
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) $^ -lm
 
 # Unit test for inner digipeater algorithm
 
@@ -461,6 +463,7 @@ depend : $(wildcard *.c)
 clean :
 	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_fff gen_packets ttcalc \
 		fsk_fast_filter.h *.o *.a
+	rm -rf aclients.dSYM
 	echo " " > tune.h
 
 
