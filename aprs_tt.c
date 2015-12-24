@@ -43,7 +43,7 @@
 // TODO:  clean up terminolgy.  
 // "Message" has a specific meaning in APRS and this is not it.  
 // Touch Tone sequence should be appropriate.
-// What do we call the parts separated by * key?   Entry?  Field?
+// What do we call the parts separated by * key?  Field.
 
 
 #include <stdlib.h>
@@ -101,6 +101,7 @@ static int parse_fields (char *msg);
 static int parse_callsign (char *e);
 static int parse_object_name (char *e);
 static int parse_symbol (char *e);
+static int parse_aprstt3_call (char *e);
 static int parse_location (char *e);
 static int parse_comment (char *e);
 static int expand_macro (char *e);
@@ -324,6 +325,7 @@ static double m_latitude;		// Set to G_UNKNOWN if not defined.
 static int m_ambiguity;
 static char m_comment[200];
 static char m_freq[12];
+static char m_ctcss[8];
 static char m_mic_e;
 static char m_dao[6];
 static int m_ssid;			// Default 12 for APRStt user.
@@ -351,14 +353,15 @@ void aprs_tt_sequence (int chan, char *msg)
  * The parse functions will fill these in. 
  */
 	strlcpy (m_callsign, "", sizeof(m_callsign));
-	m_symtab_or_overlay = '\\';
-	m_symbol_code = 'A';
+	m_symtab_or_overlay = APRSTT_DEFAULT_SYMTAB;
+	m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	strlcpy (m_loc_text, "", sizeof(m_loc_text));
 	m_longitude = G_UNKNOWN;
 	m_latitude = G_UNKNOWN;
 	m_ambiguity = 0;
 	strlcpy (m_comment, "", sizeof(m_comment));
 	strlcpy (m_freq, "", sizeof(m_freq));
+	strlcpy (m_ctcss, "", sizeof(m_ctcss));
 	m_mic_e = ' ';
 	strlcpy (m_dao, "!T  !", sizeof(m_dao));	/* start out unknown */
 	m_ssid = 12;
@@ -370,8 +373,8 @@ void aprs_tt_sequence (int chan, char *msg)
 
 #if defined(DEBUG)
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("callsign=\"%s\", ssid=%d, symbol=\"%c%c\", freq=\"%s\", comment=\"%s\", lat=%.4f, lon=%.4f, dao=\"%s\"\n", 
-		m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, m_freq, m_comment, m_latitude, m_longitude, m_dao);
+	dw_printf ("callsign=\"%s\", ssid=%d, symbol=\"%c%c\", freq=\"%s\", ctcss=\"%s\", comment=\"%s\", lat=%.4f, lon=%.4f, dao=\"%s\"\n",
+		m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, m_freq, m_ctcss, m_comment, m_latitude, m_longitude, m_dao);
 #endif
 
 #if TT_MAIN
@@ -386,20 +389,22 @@ void aprs_tt_sequence (int chan, char *msg)
 
 	  err = tt_user_heard (m_callsign, m_ssid, m_symtab_or_overlay, m_symbol_code, 
 		m_loc_text, m_latitude, m_longitude, m_ambiguity,
-		m_freq, m_comment, m_mic_e, m_dao);
+		m_freq, m_ctcss, m_comment, m_mic_e, m_dao);
 	}
 
 
 /*
  * If a command / script was supplied, run it now.
  * This can do additional processing and provide a custom audible response.
- * This is done even for the error case.
+ * This is done only for the success case.
+ * It might be useful to run it for error cases as well but we currently
+ * don't pass in the success / failure code to know the difference.
  */
 	char script_response[1000];
 
 	strlcpy (script_response, "", sizeof(script_response));
 
-	if (strlen(tt_config.ttcmd) > 0) {
+	if (err == 0 && strlen(tt_config.ttcmd) > 0) {
 
 	  dw_run_cmd (tt_config.ttcmd, 1, script_response, sizeof(script_response));
 
@@ -408,7 +413,9 @@ void aprs_tt_sequence (int chan, char *msg)
 /*
  * Send response to user by constructing packet with SPEECH or MORSE as destination.
  * Source shouldn't matter because it doesn't get transmitted as AX.25 frame.
- * Use high priority queue for consistent timing.  
+ * Use high priority queue for consistent timing.
+ *
+ * Anything from script, above, will override other predefined responses.
  */
 
 	char audible_response[1000];
@@ -484,25 +491,26 @@ static int parse_fields (char *msg)
 	    case 'A': 
 	      
 	      switch (e[1]) {
-	        case 'A':
+
+	        case 'A':			/* AA object-name */
 	          err = parse_object_name (e);
 	          if (err != 0) return (err);
 	          break;
-	        case 'B':
+
+	        case 'B':			/* AB symbol */
 	          err = parse_symbol (e);
 	          if (err != 0) return (err);
 	          break;
-	        case 'C':
-	          /*
-	           * New in 1.2: test for 10 digit callsign.
-	           */
-	          if (tt_call10_to_text(e+2,1,stemp) == 0) {
-	             strlcpy(m_callsign, stemp, sizeof(m_callsign));
-	          }
-		  // TODO1.3: else return (?)
+
+	        case 'C':			/* AC new-style-callsign */
+
+	          err = parse_aprstt3_call (e);
+	          if (err != 0) return (err);
 	          break;
-	        default:
+
+	        default:			/* Traditional style call or suffix */
 	          err = parse_callsign (e);
+	          if (err != 0) return (err);
 	          break;
 	      }
 	      break;
@@ -674,7 +682,7 @@ static int expand_macro (char *e)
  *
  * Name:        parse_callsign
  *
- * Purpose:     Extract callsign or object name from touch tone message. 
+ * Purpose:     Extract traditional format callsign or object name from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
  *				  APRStt messsage.
@@ -685,6 +693,10 @@ static int expand_macro (char *e)
  *		m_symtab_or_overlay - Set to 0-9 or A-Z if specified.
  *
  *		m_symbol_code	- Always set to 'A'.
+ *					NO!  This should be applied only if we
+ *					have the default value at this point.
+ *					The symbol might have been explicitly
+ *					set already and we don't want to overwrite that.
  *
  * Returns:	0 for success or one of the TT_ERROR_... codes.
  *
@@ -734,7 +746,6 @@ static int checksum_not_ok (char *str, int len, char found)
 static int parse_callsign (char *e)
 {
 	int len;
-	//int c_length;
 	char tttemp[40], stemp[30];
 
 	assert (*e == 'A');
@@ -772,11 +783,11 @@ static int parse_callsign (char *e)
 	    tttemp[1] = e[len-2];
 	    tttemp[2] = '\0';
 	    tt_two_key_to_text (tttemp, 0, stemp);
-	    m_symbol_code = 'A';
+	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = stemp[0];
 	  }
 	  else {
-	    m_symbol_code = 'A';
+	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = e[len-2];
 	  }
 	  return (0);
@@ -793,7 +804,6 @@ static int parse_callsign (char *e)
 	  if (cs_err != 0) {
 	    return (cs_err);
 	  }
-
 	
 	  if (isupper(e[len-2])) {
 	    strncpy (tttemp, e+1, len-4);
@@ -804,7 +814,7 @@ static int parse_callsign (char *e)
 	    tttemp[1] = e[len-2];
 	    tttemp[2] = '\0';
 	    tt_two_key_to_text (tttemp, 0, stemp);
-	    m_symbol_code = 'A';
+	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = stemp[0];
 	  }
 	  else {
@@ -812,7 +822,7 @@ static int parse_callsign (char *e)
 	    tttemp[len-3] = '\0';
 	    tt_two_key_to_text (tttemp, 0, m_callsign);
 
-	    m_symbol_code = 'A';
+	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = e[len-2];
 	  }
 	  return (0);
@@ -823,11 +833,12 @@ static int parse_callsign (char *e)
 	return (TT_ERROR_INVALID_CALL);
 }
 
+
 /*------------------------------------------------------------------
  *
  * Name:        parse_object_name 
  *
- * Purpose:     Extract object name from touch tone message. 
+ * Purpose:     Extract object name from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
  *				  APRStt messsage.
@@ -883,7 +894,7 @@ static int parse_object_name (char *e)
  *
  * Name:        parse_symbol 
  *
- * Purpose:     Extract symbol from touch tone message. 
+ * Purpose:     Extract symbol from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
  *				  APRStt messsage.
@@ -975,9 +986,87 @@ static int parse_symbol (char *e)
 
 /*------------------------------------------------------------------
  *
+ * Name:        parse_aprstt3_call
+ *
+ * Purpose:     Extract QIKcom-2 / APRStt 3 ten digit call or five digit suffix.
+ *
+ * Inputs:      e		- An "entry" extracted from a complete
+ *				  APRStt messsage.
+ *				  In this case, it should start with "AC".
+ *
+ * Outputs:	m_callsign
+ *
+ * Returns:	0 for success or one of the TT_ERROR_... codes.
+ *
+ * Description:	We recognize 3 different formats:
+ *
+ *		ACxxxxxxxxxx	- 10 digit full callsign.
+ *
+ *		ACxxxxx		- 5 digit suffix.   If we can find a corresponding full
+ *				  callsign, that will be substituted.
+ *				  Error condition is returned if we can't find one.
+ *
+ *----------------------------------------------------------------*/
+
+static int parse_aprstt3_call (char *e)
+{
+
+	assert (e[0] == 'A');
+	assert (e[1] == 'C');
+
+	if (strlen(e) == 2+10) {
+	  char call[12];
+
+	  if (tt_call10_to_text(e+2,1,call) == 0) {
+	    strlcpy(m_callsign, call, sizeof(m_callsign));
+	  }
+	  else {
+	    return (TT_ERROR_INVALID_CALL);		/* Could not convert to text */
+	  }
+	}
+	else if (strlen(e) == 2+5) {
+	  char suffix[8];
+          if (tt_call5_suffix_to_text(e+2,1,suffix) == 0) {
+
+#if TT_MAIN
+	    /* For unit test, use suffix rather than trying lookup. */
+	    strlcpy (m_callsign, suffix, sizeof(m_callsign));
+#else
+	    char call[12];
+
+	    /* In normal operation, try to find full callsign for the suffix received. */
+
+	    if (tt_3char_suffix_search (suffix, call) >= 0) {
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Suffix \"%s\" was converted to full callsign \"%s\"\n", suffix, call);
+
+	      strlcpy(m_callsign, call, sizeof(m_callsign));
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Couldn't find full callsign for suffix \"%s\"\n", suffix);
+	      return (TT_ERROR_SUFFIX_NO_CALL);	/* Don't know this user. */
+	    }
+#endif
+	  }
+	  else {
+	    return (TT_ERROR_INVALID_CALL);	/* Could not convert to text */
+	  }
+	}
+	else {
+	  return (TT_ERROR_INVALID_CALL);	/* Invalid length, not 2+ (10 ir 5) */
+	}
+
+	return (0);
+
+}  /* end parse_aprstt3_call */
+
+
+/*------------------------------------------------------------------
+ *
  * Name:        parse_location
  *
- * Purpose:     Extract location from touch tone message. 
+ * Purpose:     Extract location from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
  *				  APRStt messsage.
@@ -985,7 +1074,16 @@ static int parse_symbol (char *e)
  *
  * Outputs:	m_latitude
  *		m_longitude
- *		m_dao
+ *
+ *		m_dao		It should previously be "!T  !" to mean unknown or none.
+ *				We generally take the first two tones of the field.
+ *				For example, "!TB5!" for the standard bearing & range.
+ *				The point type is an exception where we use "!Tn !" for
+ *				one of ten positions or "!Tnn" for one of a hundred.
+ *				If this ever changes, be sure to update corresponding
+ *				section in process_comment() in decode_aprs.c
+ *
+ *		m_ambiguity
  *
  * Returns:	0 for success or one of the TT_ERROR_... codes.
  *
@@ -1001,6 +1099,10 @@ static int parse_symbol (char *e)
  *		* utm
  *		* usng / mgrs
  *
+ *		Position ambiguity is also handled here.
+ *			Latitude, Longitude, and DAO should not be touched in this case.
+ *		 	We only record a position ambiguity value.
+ *
  *----------------------------------------------------------------*/
 
 /* Average radius of earth in meters. */
@@ -1009,7 +1111,6 @@ static int parse_symbol (char *e)
 
 static int parse_location (char *e)
 {
-	//int len;
 	int ipat;
 	char xstr[VALSTRSIZE], ystr[VALSTRSIZE], zstr[VALSTRSIZE], bstr[VALSTRSIZE], dstr[VALSTRSIZE];
 	double x, y, dist, bearing;
@@ -1023,14 +1124,6 @@ static int parse_location (char *e)
 
 	assert (*e == 'B');
 
-	m_dao[2] = e[0];
-	m_dao[3] = e[1];	/* Type of location.  e.g.  !TB6! */
-				/* Will be changed by point types. */
-
-				/* If this ever changes, be sure to update corresponding */
-				/* section in process_comment() in decode_aprs.c */
-
-	//len = strlen(e);
 
 	ipat = find_ttloc_match (e, xstr, ystr, zstr, bstr, dstr, VALSTRSIZE);
 	if (ipat >= 0) {
@@ -1046,6 +1139,9 @@ static int parse_location (char *e)
 	      /* Is it one of ten or a hundred positions? */
 	      /* It's not hardwired to always be B0n or B9nn.  */
 	      /* This is a pretty good approximation. */
+
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
 
 	      if (strlen(e) == 3) {	/* probably B0n -->  !Tn ! */
 		m_dao[2] = e[2];
@@ -1083,6 +1179,10 @@ static int parse_location (char *e)
 
 	      m_longitude = R2D(lon0 + atan2(sin(bearing) * sin(dist/R) * cos(lat0),
 				  cos(dist/R) - sin(lat0) * sin(D2R(m_latitude))));
+
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
+
 	      break;
 
 	    case TTLOC_GRID:
@@ -1107,6 +1207,9 @@ static int parse_location (char *e)
 	      lon9 = tt_config.ttloc_ptr[ipat].grid.lon9;
 	      x = atof(xstr);
 	      m_longitude = lon0 + x * (lon9-lon0) / (pow(10., strlen(xstr)) - 1.);
+
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
 
 	      break;
 
@@ -1158,6 +1261,9 @@ static int parse_location (char *e)
                 dw_printf ("Conversion from UTM failed:\n%s\n\n", message);
               }
 
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
+
 	      break;
 
 
@@ -1207,6 +1313,10 @@ static int parse_location (char *e)
 	        mgrs_error_string (lerr, message);
                 dw_printf ("Conversion from MGRS/USNG failed:\n%s\n\n", message);
               }
+
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
+
 	      break;
 
 	    case TTLOC_MHEAD:
@@ -1235,6 +1345,10 @@ static int parse_location (char *e)
 
 		ll_from_grid_square (mh, &m_latitude, &m_longitude);
 	      }
+
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
+
 	      break;
 
 	    case TTLOC_SATSQ:
@@ -1253,6 +1367,10 @@ static int parse_location (char *e)
 
 		ll_from_grid_square (mh, &m_latitude, &m_longitude);
 	      }
+
+	      m_dao[2] = e[0];
+	      m_dao[3] = e[1];
+
 	      break;
 
 	    case TTLOC_AMBIG:
@@ -1266,7 +1384,6 @@ static int parse_location (char *e)
 	      m_ambiguity = atoi(xstr);
 
 	      break;
-
 
 	    default:
 	      assert (0);
@@ -1462,6 +1579,9 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
  *	
  *		Cnnnnnn		- Six digit frequency reformatted as nnn.nnnMHz
  *
+ *		Cnnn		- Three digit are for CTCSS tone.  Use only integer part
+ *				  and leading 0 if necessary to make exactly 3 digits.
+ *
  *		Cttt...tttt	- General comment in Multi-press encoding.
  *
  *		CAttt...tttt	- New enhanced comment format that can handle all ASCII characters.
@@ -1498,6 +1618,11 @@ static int parse_comment (char *e)
 	  m_freq[8] = 'H';
 	  m_freq[9] = 'z';
 	  m_freq[10] = '\0';
+	  return (0);
+	}
+
+	if (len == 4 && isdigit(e[1]) && isdigit(e[2]) && isdigit(e[3])) {
+	  strlcpy (m_ctcss, e+1, sizeof(m_ctcss));
 	  return (0);
 	}
 
@@ -1705,15 +1830,15 @@ int dw_run_cmd (char *cmd, int oneline, char *result, size_t resultsiz)
  *----------------------------------------------------------------*/
 
 
-// TODO:  add this to "make check"
-
-
 #if TT_MAIN
 
 /*
  * Regression test for the parsing.
  * It does not maintain any history so abbreviation will not invoke previous full call.
  */
+
+/* Some examples are derived from http://www.aprs.org/aprstt/aprstt-coding24.txt */
+
 
 static const struct {
 	char *toneseq;		/* Tone sequence in. */
@@ -1728,16 +1853,17 @@ static const struct {
 	char *dao;
 } testcases[] = {
 
-  /* Callsigns & abbreviations. */
+  /* Callsigns & abbreviations, traditional */
 
 	{ "A9A2B42A7A7C71#",	"WB4APR", "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" }, 	/* WB4APR/7 */
 	{ "A27773#",		"277",    "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" }, 	/* abbreviated form */
-	/* Example in http://www.aprs.org/aprstt/aprstt-coding24.txt has a bad checksum! */
-	/* Bad checksum for "2777".  Expected 3 but received 6. */
+
+	/* Intentionally wrong - Has 6 for checksum when it should be 3. */
 	{ "A27776#",		"",       "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Expect error message. */
 	
-	/* Bad checksum for "2A7A7C7".  E xpected 5 but received 1. */
+	/* Example in spec is wrong.  checksum should be 5 in this case. */
 	{ "A2A7A7C71#",		"",       "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Spelled suffix, overlay, checksum */
+	{ "A2A7A7C75#",		"APR",    "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Spelled suffix, overlay, checksum */
 	{ "A27773#",		"277",    "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Suffix digits, overlay, checksum */
 
 	{ "A9A2B26C7D9D71#",	"WB2OSZ", "12", "7A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* WB2OSZ/7 numeric overlay */
@@ -1747,6 +1873,11 @@ static const struct {
 	{ "A6795A7#",		"679",    "12", "JA", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* abbreviated form */
 
 	{ "A277#",		"277",    "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },	/* Tactical call "277" no overlay and no checksum */
+
+  /* QIKcom-2 style 10 digit call & 5 digit suffix */
+
+	{ "AC9242771558#", 	"WB4APR", "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },
+	{ "AC27722#",		"APR",    "12", "\\A", "", "", "-999999.0000", "-999999.0000", "!T  !" },
 
   /* Locations */
 
@@ -1760,6 +1891,8 @@ static const struct {
 													/* Longitude -81.1254 -> 8.20 min */
 	{ "B21234*A67979#",	"679",    "12", "7A", "", "", "12.3400", "56.1200", "!TB2!" },
 	{ "B533686*A67979#",	"679",    "12", "7A", "", "", "37.9222", "81.1143", "!TB5!" },
+
+// TODO: should test other coordinate systems.
 
   /* Comments */
 

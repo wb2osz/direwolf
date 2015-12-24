@@ -9,12 +9,13 @@ aclients \- Test program for side-by-side TNC performance comparison.
 .I tnc ...
 .RS
 .P
-Each \fItnc\fR reference is either a serial port or TCP network port followed by = and a comment.
+Each \fItnc\fR reference is a port,  =, and a description.
 .P
 .RE
 
 .SH DESCRIPTION
 \fBaclients\fR is used to compare how well different TNCs decode AS.25 frames.
+The port can be a serial port name, host_name:tcp_port, ip_addr:port, or simply tcp_port.
 .P
 
 
@@ -26,13 +27,15 @@ None.
 
 .SH EXAMPLES
 
-.B aclients  /dev/ttyS0=KPC3+  /dev/ttyUSB0=D710A  8000=DireWolf
+.B aclients  /dev/ttyS0=KPC3+  /dev/ttyUSB0=D710A  8000=DireWolf 192.168.1.64:8002=other
 .P
 Serial port /dev/ttyS0 is connected to a KPC3+ with monitor mode turned on.
 .P
 Serial port /dev/ttyUSB0 is connected to a TM-D710A with monitor mode turned on.
 .P
 The Dire Wolf software TNC is available on network port 8000.
+.P
+Some other software TNC is available on network port 8002 on host 192.168.1.64.
 .P
 Packets from each are displayed in columns so it is easy to see how well each decodes 
 the received signals.

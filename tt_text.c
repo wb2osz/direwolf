@@ -19,7 +19,7 @@
 
 /*------------------------------------------------------------------
  *
- * Module:      tt-text.c
+ * Module:      tt_text.c
  *
  * Purpose:   	Translate between text and touch tone representation.
  *		
@@ -1077,6 +1077,102 @@ int tt_call10_to_text (const char *buttons, int quiet, char *text)
 	return (errors);          
 
 } /* end tt_call10_to_text */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_call5_suffix_to_text
+ *
+ * Purpose:     Convert the 5 digit APRStt 3 style callsign suffix
+ *		representation to text.
+ *
+ * Inputs:      buttons	- Input string.
+ *			  Should contain exactly 5 digits.
+ *
+ *		quiet	- True to suppress error messages.
+ *
+ * Outputs:	text	- Converted to 3 upper case letters and/or digits.
+ *
+ * Returns:     Number of errors detected.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_call5_suffix_to_text (const char *buttons, int quiet, char *text)
+{
+	const char *b;
+	char *t;
+	char c;
+	int packed;		/* from last 4 digits */
+	int row, col;
+	int errors = 0;
+	int k;
+
+	t = text;
+	*t = '\0';	/* result */
+
+/* Validity check. */
+
+	if (strlen(buttons) != 5) {
+
+	  if (! quiet) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Callsign 3+2 suffix to text: Encoded Callsign \"%s\" must be exactly 5 digits.\n", buttons);
+	  }
+	  errors++;
+	  return (errors);
+	}
+
+	for (b = buttons; *b != '\0'; b++) {
+
+	  if (! isdigit(*b)) {
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("Callsign 3+2 suffix to text: Encoded Callsign \"%s\" can contain only digits.\n", buttons);
+	    }
+	    errors++;
+	    return (errors);
+	  }
+	}
+
+	packed = atoi(buttons+3);
+
+	for (k = 0; k < 3; k++) {
+	  c = buttons[k];
+
+	  row = c - '0';
+	  col = (packed >> ((2 - k) * 2)) & 3;
+
+	  if (row < 0 || row > 9 || col < 0 || col > 3) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Callsign 3+2 suffix to text: INTERNAL ERROR %d %d.  Should not be here.\n", row, col);
+	    errors++;
+	    row = 0;
+	    col = 1;
+	  }
+
+	  if (call10encoding[row][col] != 0) {
+	    *t++ = call10encoding[row][col];
+	    *t = '\0';
+	  }
+	  else {
+	    errors++;
+	    if (! quiet) {
+	      text_color_set (DW_COLOR_ERROR);
+	      dw_printf ("Callsign 3+2 suffix to text: Invalid combination: button %d, position %d.\n", row, col);
+	    }
+	  }
+	}
+
+	if (errors > 0) {
+	  strcpy (text, "");
+	  return (errors);
+	}
+
+	return (errors);
+
+} /* end tt_call5_suffix_to_text */
+
 
 
 /*------------------------------------------------------------------

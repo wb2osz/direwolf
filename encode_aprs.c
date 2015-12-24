@@ -411,62 +411,57 @@ static int cse_spd_data_extension (int course, int speed, char *presult)
  *
  *		Offset must always be preceded by tone.
  *
+ *		Resulting formats are all fixed width and have a trailing space:
+ *
+ *			"999.999MHz "
+ *			"T999 "
+ *			"+999 "			(10 kHz units)
+ *
+ * Reference:	http://www.aprs.org/info/freqspec.txt
+ *
  *----------------------------------------------------------------*/
-
-
-typedef struct freq_s {
-	  char f[7];		/* format 999.999 */
-	  char mhz[3];
-	  char space;
-	} freq_t;
-
-typedef struct to_s {
-	  char T;
-	  char ttt[3];		/* format 999 (drop fraction) or 'off'. */
-	  char space1;
-	  char oooo[4];		/* leading sign, 3 digits, tens of KHz. */
-	  char space2;
-	} to_t;
 
 
 static int frequency_spec (float freq, float tone, float offset, char *presult)
 {
-	int result_len = 0;
+	int result_size = 24;		// TODO: add as parameter.
+
+	*presult = '\0';
 	
-	if (freq != 0) {
-	  freq_t *f = (freq_t*)presult;
-	  char stemp[12];	/* Frequency should be exactly 7 characters:  999.999 */
-				/* Offset shouldbe exactly 4 characters:  +999 */
+	if (freq > 0) {
+	  char stemp[16];
 
 	  /* TODO: Should use letters for > 999.999. */
-	  snprintf (stemp, sizeof(stemp), "%07.3f", freq);
-	  memcpy (f->f, stemp, 7);
-	  memcpy (f->mhz, "MHz", 3);
-	  f->space = ' ';
-	  result_len = sizeof (freq_t);
+	  /* For now, just be sure we have proper field width. */
+
+	  if (freq > 999.999) freq = 999.999;
+
+	  snprintf (stemp, sizeof(stemp), "%07.3fMHz ", freq);
+
+	  strlcpy (presult, stemp, result_size);
 	}
-	
-	if (tone != 0 || offset != 0) {
-	  to_t *to = (to_t*)(presult + result_len);
+
+	if (tone != G_UNKNOWN) {
 	  char stemp[12];
 
-	  to->T = 'T';
 	  if (tone == 0) {
-	    memcpy(to->ttt, "off", 3);
+	    strlcpy (stemp, "Toff ", sizeof (stemp));
 	  }
 	  else {
-	    snprintf (stemp, sizeof(stemp), "%03d", (int)tone);
-	    memcpy (to->ttt, stemp, 3);
+	    snprintf (stemp, sizeof(stemp), "T%03d ", (int)tone);
 	  }
-	  to->space1 = ' ';
-	  snprintf (stemp, sizeof(stemp), "%+04d", (int)round(offset * 100));
-	  memcpy (to->oooo, stemp, 4);
-	  to->space2 = ' ';
 
-	  result_len += sizeof (to_t);
+	  strlcat (presult, stemp, result_size);
 	}
 
-	return (result_len);
+	if (offset != G_UNKNOWN) {
+	  char stemp[12];
+
+	  snprintf (stemp, sizeof(stemp), "%+04d ", (int)round(offset * 100));
+	  strlcat (presult, stemp, result_size);
+	}
+
+	return (strlen(presult));
 }
 
 
@@ -800,12 +795,22 @@ int main (int argc, char *argv[])
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
-/* with freq. */
+/* with freq & tone.  minus offset, no offset, explict simplex. */
 
 	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 -060 ") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
+
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
+		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, G_UNKNOWN, NULL, result, sizeof(result));
+	dw_printf ("%s\n", result);
+	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 ") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
+
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
+		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, 0, NULL, result, sizeof(result));
+	dw_printf ("%s\n", result);
+	if (strcmp(result, "!4234.61ND07126.47W&146.955MHz T074 +000 ") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* with course/speed, freq, and comment! */
 
@@ -817,11 +822,16 @@ int main (int argc, char *argv[])
 /* Course speed, no tone, + offset */
 
 	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
-		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));
+		0, 0, 0, NULL, 180, 55, 146.955, G_UNKNOWN, 0.6, "River flooding", result, sizeof(result));
 	dw_printf ("%s\n", result);
-	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz Toff +060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz +060 River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 /* Course speed, no tone, + offset + altitude */
+
+	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, 12345, 'D', '&',
+		0, 0, 0, NULL, 180, 55, 146.955, G_UNKNOWN, 0.6, "River flooding", result, sizeof(result));
+	dw_printf ("%s\n", result);
+	if (strcmp(result, "!4234.61ND07126.47W&180/055146.955MHz +060 /A=012345River flooding") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
 	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, 12345, 'D', '&',
 		0, 0, 0, NULL, 180, 55, 146.955, 0, 0.6, "River flooding", result, sizeof(result));

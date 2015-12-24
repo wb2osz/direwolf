@@ -9,6 +9,9 @@
 
 - New experimental demodulator.  More details later.
 
+- APRStt enhancements including new 5 digit callsign suffix abbreviation and
+position ambiguity for latitude and longitude in object reports.
+
 ### Bugs Fixed: ###
 
 - "INTERNAL ERROR: dlq_append NULL packet pointer." when using PASSALL.

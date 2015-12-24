@@ -4021,7 +4021,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->alt_m = G_UNKNOWN;
 	b->symtab = '/';
 	b->symbol = '-';	/* house */
-
+	b->freq = G_UNKNOWN;
+	b->tone = G_UNKNOWN;
+	b->offset = G_UNKNOWN;
 
 	while ((t = split(NULL,0)) != NULL) {
 

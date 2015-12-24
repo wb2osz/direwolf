@@ -80,8 +80,9 @@ struct ttloc_s {
 #define TT_ERROR_NO_CALL	9	/* No call or object name included. */
 #define TT_ERROR_INVALID_MHEAD	10	/* Invalid Maidenhead Locator. */
 #define TT_ERROR_INVALID_SATSQ	11	/* Satellite square must be 4 digits. */
+#define TT_ERROR_SUFFIX_NO_CALL 12	/* No known callsign for suffix. */
 
-#define TT_ERROR_MAXP1		12	/* Number of items above.  i.e. Last number plus 1. */
+#define TT_ERROR_MAXP1		13	/* Number of items above.  i.e. Last number plus 1. */
 
 
 #if CONFIG_C		/* Is this being included from config.c? */
@@ -100,7 +101,8 @@ static const char *tt_msg_id[TT_ERROR_MAXP1] = {
 	"INVALID_LOC",
 	"NO_CALL",
 	"INVALID_MHEAD",
-	"INVALID_SATSQ" 
+	"INVALID_SATSQ",
+	"SUFFIX_NO_CALL"
 };
 
 #endif
@@ -172,6 +174,10 @@ void aprs_tt_button (int chan, char button);
 
 
 #define APRSTT_LOC_DESC_LEN 32		/* Need at least 26 */
+
+#define APRSTT_DEFAULT_SYMTAB '\\'
+#define APRSTT_DEFAULT_SYMBOL 'A'
+
 
 void aprs_tt_dao_to_desc (char *dao, char *str);
 

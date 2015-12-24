@@ -141,6 +141,9 @@ static struct tt_user_s {
 
 	char freq[12];				/* Frequency in format 999.999MHz */
 
+	char ctcss[5];				/* CTCSS tone.  Exactly 3 digits for integer part. */
+						/* For example 74.4 Hz becomes "074". */
+
 	char comment[MAX_COMMENT_LEN+1];	/* Free form comment from user. */
 						/* Comment sent in final object report includes */
 						/* other information besides this. */
@@ -215,18 +218,19 @@ void tt_user_init (struct audio_s *p_audio_config, struct tt_config_s *p_tt_conf
 	}
 }
 
+
 /*------------------------------------------------------------------
  *
  * Name:        tt_user_search
  *
  * Purpose:     Search for user in recent history.
  *
- * Inputs:      callsign	- full or a suffix abbreviation
+ * Inputs:      callsign	- full or a old style 3 DIGIT suffix abbreviation
  *		overlay
  *
  * Returns:     Handle for refering to table position or -1 if not found.
  *		This happens to be an index into an array but
- *		the implementation could change so the caller should 
+ *		the implementation could change so the caller should
  *		not make any assumptions.
  *
  *----------------------------------------------------------------*/
@@ -271,6 +275,51 @@ int tt_user_search (char *callsign, char overlay)
 	return (-1);
 
 }  /* end tt_user_search */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        tt_3char_suffix_search
+ *
+ * Purpose:     Search for new style 3 CHARACTER (vs. 3 digit) suffix in recent history.
+ *
+ * Inputs:      suffix	- full or a old style 3 DIGIT suffix abbreviation
+ *
+ * Outputs:	callsign - corresponding full callsign or empty string.
+ *
+ * Returns:     Handle for refering to table position (>= 0) or -1 if not found.
+ *		This happens to be an index into an array but
+ *		the implementation could change so the caller should
+ *		not make any assumptions.
+ *
+ *----------------------------------------------------------------*/
+
+int tt_3char_suffix_search (char *suffix, char *callsign)
+{
+	int i;
+
+
+/*
+ * Look for suffix in list of known calls.
+ */
+	for (i=0; i<MAX_TT_USERS; i++) {
+	  int len = strlen(tt_user[i].callsign);
+
+	  if (len >= 3 && len <= 6 && strcmp(tt_user[i].callsign + len - 3, suffix) == 0) {
+	    strlcpy (callsign, tt_user[i].callsign, MAX_CALLSIGN_LEN+1);
+	    return (i);
+	  }
+	}
+
+/*
+ * Not found.
+ */
+	strlcpy (callsign, "", MAX_CALLSIGN_LEN+1);
+	return (-1);
+
+}  /* end tt_3char_suffix_search */
+
 
 
 /*------------------------------------------------------------------
@@ -413,6 +462,7 @@ static void digit_suffix (char *callsign, char *suffix)
  *		longitude
  *		ambiguity
  *		freq
+ *		ctcss
  *		comment
  *		mic_e
  *		dao
@@ -426,7 +476,7 @@ static void digit_suffix (char *callsign, char *suffix)
  *----------------------------------------------------------------*/
 
 int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *loc_text, double latitude, 
-		double longitude, int ambiguity, char *freq, char *comment, char mic_e, char *dao)
+		double longitude, int ambiguity, char *freq, char *ctcss, char *comment, char mic_e, char *dao)
 {
 	int i;
 
@@ -458,8 +508,7 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	  i = find_avail ();
 
 	  assert (i >= 0 && i < MAX_TT_USERS);
-	  strncpy (tt_user[i].callsign, callsign, MAX_CALLSIGN_LEN);
-	  tt_user[i].callsign[MAX_CALLSIGN_LEN] = '\0';
+	  strlcpy (tt_user[i].callsign, callsign, sizeof(tt_user[i].callsign));
 	  tt_user[i].count = 1;
 	  tt_user[i].ssid = ssid;
 	  tt_user[i].overlay = overlay;
@@ -481,20 +530,28 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	  tt_user[i].ambiguity = ambiguity;
 
 	  strlcpy (tt_user[i].freq, freq, sizeof(tt_user[i].freq));
-	  strncpy (tt_user[i].comment, comment, MAX_COMMENT_LEN);
-	  tt_user[i].comment[MAX_COMMENT_LEN] = '\0';
+	  strlcpy (tt_user[i].ctcss, ctcss, sizeof(tt_user[i].ctcss));
+	  strlcpy (tt_user[i].comment, comment, sizeof(tt_user[i].comment));
 	  tt_user[i].mic_e = mic_e;
-	  strncpy(tt_user[i].dao, dao, 6);
+	  strlcpy(tt_user[i].dao, dao, sizeof(tt_user[i].dao));
 	}
 	else {
 /*
  * Known user.  Update with any new information.
+ * Keep any old values where not being updated.
  */
 	  assert (i >= 0 && i < MAX_TT_USERS);
 
 	  tt_user[i].count++;
 
 	  /* Any reason to look at ssid here? */
+
+	  /* Update the symbol if not the default. */
+
+	  if (overlay != APRSTT_DEFAULT_SYMTAB || symbol != APRSTT_DEFAULT_SYMBOL) {
+	    tt_user[i].overlay = overlay;
+	    tt_user[i].symbol = symbol;
+	  }
 
 	  if (strlen(loc_text) > 0) {
 	    strlcpy (tt_user[i].loc_text, loc_text, sizeof(tt_user[i].loc_text));
@@ -515,17 +572,21 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	    strlcpy (tt_user[i].freq, freq, sizeof(tt_user[i].freq));
 	  }
 
+	  if (ctcss[0] != '\0') {
+	    strlcpy (tt_user[i].ctcss, ctcss, sizeof(tt_user[i].ctcss));
+	  }
+
 	  if (comment[0] != '\0') {
-	    strncpy (tt_user[i].comment, comment, MAX_COMMENT_LEN);
+	    strlcpy (tt_user[i].comment, comment, MAX_COMMENT_LEN);
 	    tt_user[i].comment[MAX_COMMENT_LEN] = '\0';
 	  }
 
 	  if (mic_e != ' ') {
 	    tt_user[i].mic_e = mic_e;
 	  }
+
 	  if (strlen(dao) > 0) {
-	    strncpy(tt_user[i].dao, dao, 6);
-	    tt_user[i].dao[5] = '\0';
+	    strlcpy(tt_user[i].dao, dao, sizeof(tt_user[i].dao));
 	  }
 	}
 
@@ -782,7 +843,10 @@ static void xmit_object_report (int i, int first_time)
 	encode_object (object_name, 0, tt_user[i].last_heard, olat, olong, oambig,
 		tt_user[i].overlay, tt_user[i].symbol, 
 		0,0,0,NULL, G_UNKNOWN, G_UNKNOWN,	/* PHGD, Course/Speed */
-		atof(tt_user[i].freq), 0, 0, info_comment, object_info, sizeof(object_info));
+		strlen(tt_user[i].freq) > 0 ? atof(tt_user[i].freq) : G_UNKNOWN,
+		strlen(tt_user[i].ctcss) > 0 ? atof(tt_user[i].ctcss) : G_UNKNOWN,
+		G_UNKNOWN,	/* CTCSS */
+		info_comment, object_info, sizeof(object_info));
 
 	strlcat (stemp, object_info, sizeof(stemp));
 
@@ -972,6 +1036,13 @@ static void tt_setenv (int i)
 
 	setenv ("TTFREQ", tt_user[i].freq, 1);
 
+	// TODO: Should convert to actual frequency. e.g.  074 becomes 74.4
+	// There is some code for this in decode_aprs.c but not broken out
+	// into a function that we could use from here.
+	// TODO: Document this environment variable after converting.
+
+	setenv ("TTCTCSS", tt_user[i].ctcss, 1);
+
 	setenv ("TTCOMMENT", tt_user[i].comment, 1);
 
 	setenv ("TTLOC", tt_user[i].loc_text, 1);
@@ -1006,10 +1077,10 @@ void tt_user_dump (void)
 	int i;
 	time_t now = time(NULL);
 	
-	printf ("call  ov suf lsthrd xmit nxt cor  lat    long freq       m comment\n");
+	printf ("call   ov suf lsthrd xmit nxt cor  lat    long freq     ctcss m comment\n");
 	for (i=0; i<MAX_TT_USERS; i++) {
 	  if (tt_user[i].callsign[0] != '\0') {
-	    printf ("%-6s %c%c %-3s %6d %d %+6d %d %6.2f %7.2f %-10s %c %s\n",
+	    printf ("%-6s %c%c %-3s %6d %d %+6d %d %6.2f %7.2f %-10s %-3s %c %s\n",
 	    	tt_user[i].callsign,
 	    	tt_user[i].overlay,
 	    	tt_user[i].symbol,
@@ -1021,6 +1092,7 @@ void tt_user_dump (void)
 	    	tt_user[i].latitude,
 	    	tt_user[i].longitude,
 	    	tt_user[i].freq,
+		tt_user[i].ctcss,
 	    	tt_user[i].mic_e,
 	    	tt_user[i].comment);
 	  }
@@ -1037,7 +1109,7 @@ void tt_user_dump (void)
  *
  * Description:	Just a smattering, not an organized test.
  *
- * 		$ rm a.exe ; gcc -DTT_MAIN -Iregex tt_user.c tt_text.c encode_aprs.c latlong.c textcolor.c ; ./a.exe
+ * 		$ rm a.exe ; gcc -DTT_MAIN -Iregex tt_user.c tt_text.c encode_aprs.c latlong.c textcolor.c misc.a ; ./a.exe
  *
  *----------------------------------------------------------------*/
 
@@ -1081,21 +1153,25 @@ int main (int argc, char *argv[])
 
 	tt_user_init(&my_audio_config, &my_tt_config);
 
-	tt_user_heard ("TEST1",  12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
+// tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *loc_text, double latitude,
+//              double longitude, int ambiguity, char *freq, char *ctcss, char *comment, char mic_e, char *dao);
+
+	tt_user_heard ("TEST1",  12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "", ' ', "!T99!");
 	SLEEP_SEC (1);
-	tt_user_heard ("TEST2",  12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
+	tt_user_heard ("TEST2",  12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "", ' ', "!T99!");
 	SLEEP_SEC (1);
-	tt_user_heard ("TEST3",  12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
+	tt_user_heard ("TEST3",  12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "", ' ', "!T99!");
 	SLEEP_SEC (1);
-	tt_user_heard ("TEST4",  12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
+	tt_user_heard ("TEST4",  12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "", ' ', "!T99!");
 	SLEEP_SEC (1);
-	tt_user_heard ("WB2OSZ", 12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
-	tt_user_heard ("K2H",    12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "", ' ', "!T99!");
+	tt_user_heard ("WB2OSZ", 12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "", ' ', "!T99!");
+	tt_user_heard ("K2H",    12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "", ' ', "!T99!");
 	tt_user_dump ();
 
-	tt_user_heard ("679",    12, 'J', 'A', 37.25,     -71.75,    " ", " ", ' ', "!T99!");
-	tt_user_heard ("WB2OSZ", 12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "146.520MHz", "", ' ', "!T99!");
-	tt_user_heard ("679",    12, 'J', 'A', G_UNKNOWN, G_UNKNOWN, "", "Hello, world", '9', "!T99!");
+	tt_user_heard ("679",    12, 'J', 'A', "", 37.25,     -71.75,    0, "", " ", " ", ' ', "!T99!");
+	tt_user_heard ("WB2OSZ", 12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "146.520MHz", "", "", ' ', "!T99!");
+	tt_user_heard ("WB1GOF", 12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "146.955MHz", "074", "", ' ', "!T99!");
+	tt_user_heard ("679",    12, 'J', 'A', "", G_UNKNOWN, G_UNKNOWN, 0, "", "", "Hello, world", '9', "!T99!");
 	tt_user_dump ();
 	
 	for (n=0; n<30; n++) {

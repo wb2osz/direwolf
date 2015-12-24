@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2015  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -28,10 +28,19 @@
  * Description:	Establish connection with multiple servers and 
  *		compare results side by side.
  *
- * Usage:	aclients  8000=AGWPE  8002=DireWolf  COM1=D710A
+ * Usage:	aclients port1=name1 port2=name2 ...
+ *
+ * Example:	aclients  8000=AGWPE  192.168.1.64:8002=DireWolf  COM1=D710A
  *
  *		This will connect to multiple physical or virtual
  *		TNCs, read packets from them, and display results.
+ *
+ *		Each port can have the following forms:
+ *
+ *		* host-name:tcp-port
+ *		* ip-addr:tcp-port
+ *		* tcp-port
+ *		* serial port name (e.g.  COM1, /dev/ttyS0)
  *
  *---------------------------------------------------------------*/
 
@@ -40,7 +49,6 @@
 /*
  * Native Windows:	Use the Winsock interface.
  * Linux:		Use the BSD socket interface.
- * Cygwin:		Can use either one.
  */
 
 
@@ -156,14 +164,7 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
  * Purpose:   	Start up multiple client threads listening to different
  *		TNCs.   Print packets.  Tally up statistics.
  *
- * Usage:	aclients  8000=AGWPE  8002=DireWolf  COM1=D710A
- *
- *		Each command line argument is TCP port number or a 
- *		serial port name.  Follow by = and a text description
- *		of what is connected.
- *
- *		For now, everything is assumed to be on localhost.
- *		Maybe someday we might recognize host:port=description.
+ * Usage:	Described above.
  *
  *---------------------------------------------------------------*/
 
@@ -173,9 +174,17 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 
 static int num_clients;
 
-static char hostname[MAX_CLIENTS][50];
-static char port[MAX_CLIENTS][30];
-static char description[MAX_CLIENTS][50];
+static char hostname[MAX_CLIENTS][50];		/* DNS host name or IPv4 address. */
+						/* Some of the code is there for IPv6 but */
+						/* needs more work. */
+						/* Defaults to "localhost" if not specified. */
+
+static char port[MAX_CLIENTS][30];		/* If it begins with a digit, it is considered */
+						/* a TCP port number at the hostname.  */
+						/* Otherwise, we treat it as a serial port name. */
+
+static char description[MAX_CLIENTS][50];	/* Name used in the output. */
+
 
 #if __WIN32__
 	static HANDLE client_th[MAX_CLIENTS];
@@ -222,7 +231,9 @@ int main (int argc, char *argv[])
 	for (j=0; j<num_clients; j++) {
 	  char stemp[100];
 	  char *p;
-	
+
+/* Each command line argument should be of the form "port=description." */
+
 	  strlcpy (stemp, argv[j+1], sizeof(stemp));
 	  p = strtok (stemp, "=");
 	  if (p == NULL) {
@@ -237,8 +248,24 @@ int main (int argc, char *argv[])
 	    exit (1);
 	  }
 	  strlcpy (description[j], p, sizeof(description[j]));
+
+/* If the port contains ":" split it into hostname (or addr) and port number. */
+/* Haven't thought about IPv6 yet. */
+
+	  strlcpy (stemp, port[j], sizeof(stemp));
+
+	  char *h;
+
+	  h = strtok (stemp, ":");
+	  if (h != NULL) {
+	    p = strtok (NULL, ":");
+	    if (p != NULL) {
+	      strlcpy (hostname[j], h, sizeof(hostname[j]));
+	      strlcpy (port[j], p, sizeof(port[j]));
+	    }
+	  }
 	}
-	
+
 	//printf ("_WIN32_WINNT = %04x\n", _WIN32_WINNT);
 	//for (j=0; j<num_clients; j++) {
 	//  printf ("%s,%s,%s\n", hostname[j], port[j], description[j]);
@@ -253,6 +280,10 @@ int main (int argc, char *argv[])
 
 
 	for (j=0; j<num_clients; j++) {
+
+/* If port begins with digit, consider it to be TCP. */
+/* Otherwise, treat as serial port name. */
+
 #if __WIN32__
 	  if (isdigit(port[j][0])) {
 	    client_th[j] = (HANDLE)_beginthreadex (NULL, 0, client_thread_net, (void *)j, 0, NULL);

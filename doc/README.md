@@ -28,6 +28,11 @@ These dive into more detail for specialized topics or typical usage scenarios.
 
 	This example illustrates how APRStt can be integrated with other applications such as SARTrack, APRSISCE/32, YAAC, or Xastir.  
 
+- [APRStt Listening Example](APRStt-Listening-Example.pdf)
+
+	WB4APR described a useful application for the [QIKCOM-2 Satallite Transponder](http://www.tapr.org/pipermail/aprssig/2015-November/045035.html). 
+
+    Don’t have your own QIKCOM-2 Satellite Transponder?  No Problem.  You can do the same thing with an ordinary computer and the APRStt gateway built into Dire Wolf.   Here’s how.
 
 - [Raspberry Pi SDR IGate](Raspberry-Pi-SDR-IGate.pdf)
 

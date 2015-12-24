@@ -25,6 +25,8 @@ int tt_two_key_to_text (const char *buttons, int quiet, char *text);
 
 int tt_call10_to_text (const char *buttons, int quiet, char *text);
 
+int tt_call5_suffix_to_text (const char *buttons, int quiet, char *text);
+
 int tt_mhead_to_text (const char *buttons, int quiet, char *text, size_t textsiz);
 
 int tt_satsq_to_text (const char *buttons, int quiet, char *text);

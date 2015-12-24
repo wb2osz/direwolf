@@ -652,7 +652,7 @@ static void pick_best_candidate (int chan)
 
 	/* Clear in preparation for next time. */
 
-	memset (candidate, 0, sizeof(candidate));
+	memset (candidate[chan], 0, sizeof(candidate[chan]));
 
 } /* end pick_best_candidate */
 
