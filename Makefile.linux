@@ -212,6 +212,11 @@ LDFLAGS += -lgps
 endif
 
 
+# Uncomment following lines to enable hamlib support.
+#CFLAGS += -DUSE_HAMLIB
+#LDFLAGS += -lhamlib
+
+
 # Name of current directory.
 # Used to generate zip file name for distribution.
 

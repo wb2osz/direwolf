@@ -12,6 +12,10 @@
 #ifndef AUDIO_H
 #define AUDIO_H 1
 
+#ifdef USE_HAMLIB
+#include <hamlib/rig.h>
+#endif
+
 #include "direwolf.h"		/* for MAX_CHANS used throughout the application. */
 #include "ax25_pad.h"		/* for AX25_MAX_ADDR_LEN */
 
@@ -25,7 +29,8 @@ enum ptt_method_e {
 	PTT_METHOD_NONE,	/* VOX or no transmit. */
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
 	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
-	PTT_METHOD_LPT };	/* Parallel printer port, Linux only. */
+	PTT_METHOD_LPT,	    /* Parallel printer port, Linux only. */
+    PTT_METHOD_HAMLIB }; /* HAMLib, Linux only. */
 
 typedef enum ptt_method_e ptt_method_t;
 
@@ -168,13 +173,13 @@ struct audio_s {
 
 #define OCTYPE_PTT 0
 #define OCTYPE_DCD 1
-#define OCTYPE_FUTURE 2	
+#define OCTYPE_FUTURE 2
 
-#define NUM_OCTYPES 3		/* number of values above */
+#define NUM_OCTYPES 4		/* number of values above */
 	
 	    struct {  		
 
-	        ptt_method_t ptt_method; /* none, serial port, GPIO, LPT. */
+	        ptt_method_t ptt_method; /* none, serial port, GPIO, LPT, HAMLIB. */
 
 	        char ptt_device[20];	/* Serial device name for PTT.  e.g. COM1 or /dev/ttyS0 */
 			
@@ -188,6 +193,10 @@ struct audio_s {
 
 	        int ptt_invert;		/* Invert the output. */
 	        int ptt_invert2;	/* Invert the secondary output. */
+
+#ifdef USE_HAMLIB
+            int ptt_rig;        /* HAMLib rig. */
+#endif
 
 	    } octrl[NUM_OCTYPES];
 
@@ -226,6 +235,11 @@ struct audio_s {
 					/* At this point, I'm thinking of 10 as the default. */
 
 	} achan[MAX_CHANS];
+
+#ifdef USE_HAMLIB
+    int rigs;               /* Total number of configured rigs */
+    RIG *rig[MAX_RIGS];     /* HAMLib rig instances */
+#endif
 
 };
 
@@ -301,7 +315,6 @@ struct audio_s {
  * Note that we have two versions of these in audio.c and audio_win.c.
  * Use one or the other depending on the platform.
  */
-
 
 int audio_open (struct audio_s *pa);
 

@@ -297,6 +297,7 @@ void export_gpio(int gpio, int invert, int direction)
  *					PTT_METHOD_SERIAL - serial (com) port. 
  *					PTT_METHOD_GPIO - general purpose I/O. 
  *					PTT_METHOD_LPT - Parallel printer port. 
+ *                  PTT_METHOD_HAMLIB - HAMLib rig control.
  *			
  *			ptt_device	Name of serial port device.  
  *					 e.g. COM1 or /dev/ttyS0. 
@@ -490,7 +491,7 @@ void ptt_init (struct audio_s *audio_config_p)
 #else
 
 /*
- * Does any of them use GPIO?
+ * Does any of them use GPIO or HAMLIB?
  */
 
 	using_gpio = 0;
@@ -663,6 +664,36 @@ void ptt_init (struct audio_s *audio_config_p)
 
 #endif /* x86 Linux */
 
+#ifdef USE_HAMLIB
+	for (ch = 0; ch < MAX_CHANS; ch++) {
+	  if (save_audio_config_p->achan[ch].valid) {
+	    int ot, retcode;
+        RIG *rig;
+        freq_t freq;
+
+	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_HAMLIB) {
+            if (audio_config_p->achan[ch].octrl[ot].ptt_rig - 1 >= audio_config_p->rigs) {
+              text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Error: RIG %d not available.\n", audio_config_p->achan[ch].octrl[ot].ptt_rig);
+              audio_config_p->achan[ch].octrl[ot].ptt_method = PTT_METHOD_NONE;
+            }
+
+            rig = audio_config_p->rig[audio_config_p->achan[ch].octrl[ot].ptt_rig];
+            retcode = rig_get_freq(rig, RIG_VFO_CURR, &freq);
+            if (retcode == RIG_OK) {
+              text_color_set(DW_COLOR_INFO);
+              dw_printf ("RIG tuned on %"PRIfreq"\n", freq);
+            } else {
+              text_color_set(DW_COLOR_ERROR);
+              dw_printf ("RIG rig_get_freq error %s, PTT probably will not work\n", rigerror(retcode));
+            }
+          }
+        }
+      }
+    }
+#endif
+
 
 /* Why doesn't it transmit?  Probably forgot to specify PTT option. */
 
@@ -688,7 +719,7 @@ void ptt_init (struct audio_s *audio_config_p)
  *		probably be renamed something like octrl_set.
  *
  * Inputs:	ot		- Output control type:
- *				   OCTYPE_PTT, OCTYPE_DCD, OCTYPE_FUTURE
+ *				   OCTYPE_PTT, OCTYPE_DCD, OCTYPE_HAMLIB, OCTYPE_FUTURE
  *
  *		chan		- channel, 0 .. (number of channels)-1
  *
@@ -860,6 +891,24 @@ void ptt_set (int ot, int chan, int ptt_signal)
 
 #endif /* x86 Linux */
 
+#ifdef USE_HAMLIB
+/*
+ * Using hamlib?
+ */
+
+	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_HAMLIB) {
+      int retcode;
+      RIG *rig = save_audio_config_p->rig[save_audio_config_p->achan[chan].octrl[ot].ptt_rig];
+
+      if ((retcode = rig_set_ptt(rig, RIG_VFO_CURR, ptt ? RIG_PTT_ON : RIG_PTT_OFF)) != RIG_OK) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Error sending rig_set_ptt command for channel %d %s\n", chan, otnames[ot]);
+        dw_printf ("%s\n", rigerror(retcode));
+      }
+    }
+
+#endif
+
 
 } /* end ptt_set */
 
@@ -965,6 +1014,31 @@ void ptt_term (void)
 	    }
 	  }
 	}
+
+#ifdef USE_HAMLIB
+    for (n = 0; n < save_audio_config_p->rigs; n++) {
+      RIG *rig = save_audio_config_p->rig[n];
+      int retcode;
+
+      if ((retcode = rig_set_ptt(rig, RIG_VFO_CURR, RIG_PTT_OFF)) != RIG_OK) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Error sending rig_set_ptt command for rig %d\n", n);
+        dw_printf ("%s\n", rigerror(retcode));
+      }
+
+      if ((retcode = rig_close(rig)) != RIG_OK) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Error sending rig_close command for rig %d\n", n);
+        dw_printf ("%s\n", rigerror(retcode));
+      }
+
+      if ((retcode = rig_cleanup(rig)) != RIG_OK) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Error sending rig_cleanup command for rig %d\n", n);
+        dw_printf ("%s\n", rigerror(retcode));
+      }
+    }
+#endif
 }
 
 

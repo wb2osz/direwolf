@@ -46,6 +46,10 @@
 #include <gps.h>		/* for DEFAULT_GPSD_PORT  (2947) */
 #endif
 
+#ifdef USE_HAMLIB
+#include <hamlib/rig.h>
+#endif
+
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "audio.h"
@@ -607,6 +611,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	int channel;
 	int adevice;
 	int m;
+
+#if USE_HAMLIB
+	RIG *rig;
+	int rigs = 0;
+#endif
+
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -1532,6 +1542,24 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with LPT is only available on x86 Linux.\n", line, otname);
 #endif		
 	    }
+	    else if (strcasecmp(t, "RIG") == 0) {
+#ifdef USE_HAMLIB
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_HAMLIB;
+
+	      t = strtok (NULL, " ,\t\n\r");
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: Missing RIG number.\n", line);
+	        continue;
+	      }
+
+	      p_audio_config->achan[channel].octrl[ot].ptt_rig = atoi(t);
+
+#else
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: %s with RIG is only available when hamlib support is enabled.\n", line, otname);
+#endif
+	    }
 	    else  {
 
 /* serial port case. */
@@ -1662,6 +1690,80 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 #endif
 	    }
 	  }
+
+/*
+ * RIG          - HAMLib rig configuration.
+ *
+ * xxx port model
+ *
+ * For example a Yeasu FT-817 on /dev/ttyUSB0:
+ * RIG /dev/ttyUSB0 120
+ *
+ * For example rigctld on localhost:
+ * RIG 127.0.0.1:4532 2
+ */
+
+      else if (strcasecmp(t, "RIG") == 0) {
+#ifdef USE_HAMLIB
+        int n;
+        hamlib_port_t port;
+        rig_model_t rig_model;
+
+        if (rigs == MAX_RIGS) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Config file line %d: Maximum number of rigs reached.\n", line);
+          continue;
+        }
+
+	t = strtok (NULL, " ,\t\n\r");
+	if (t == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Config file line %d: Missing port, model[, key=value].\n", 
+			line);
+	  continue;
+	}
+
+	strncpy (port.pathname, t, FILPATHLEN - 1);
+
+	t = strtok (NULL, " ,\t\n\r");
+	if (t == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Config file line %d: Missing model[, key=value]\n", line);
+	  continue;
+	}
+
+        if (strcasecmp(t, "AUTO") == 0) {
+          rig_load_all_backends();
+          rig_model = rig_probe(&port);
+        }
+        else {
+          rig_model = atoi(t);
+        }
+
+        rig = rig_init(rig_model);
+        if (!rig) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Config file line %d: Unknown rig %d, please check riglist.h.\n", line, rig_model);
+          continue;
+        }
+
+        strncpy (rig->state.rigport.pathname, port.pathname, FILPATHLEN - 1);
+        n = rig_open(rig);
+        if (n != RIG_OK) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Config file line %d: Rig open error %d: %s\n", line, n, rigerror(n));
+          continue;
+        }
+
+        p_audio_config->rig[rigs++] = rig;
+        p_audio_config->rigs = rigs;
+    
+#else
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Config file line %d: RIG is only available when hamlib support is enabled.\n", line);
+        continue;
+#endif
+      }
 
 /*
  * DWAIT 		- Extra delay for receiver squelch.

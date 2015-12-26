@@ -3,6 +3,14 @@
 
 ----------
 
+## Version 1.3  -- Development snapshot I  --  December 2015 ##
+
+### New Feature: ###
+
+- Added support for hamlib.   This will provide more flexible options for PTT control.
+
+----------
+
 ## Version 1.3  -- Development snapshot H  --  December 2015 ##
 
 ### New Feature: ###

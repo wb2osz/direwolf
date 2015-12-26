@@ -51,9 +51,12 @@ Version 1.2 decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](h
 
 Go to the [releases page](https://github.com/wb2osz/direwolf/releases).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
 
-### Linux - short version for the impatient ###
+For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  
 
-Download the source, unpack the files and run:
+
+### Linux - Download with web browser ###
+
+Go to the [releases page](https://github.com/wb2osz/direwolf/releases).  Chose desired release and download the source as zip or compressed tar file.  Unpack the files, with "unzip" or "tar xfz," and then:
 
 	cd direwolf-*
 	make
@@ -62,7 +65,19 @@ Download the source, unpack the files and run:
 
 For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
-Use of "git clone" is not recommended at this time because there could be some inconsistencies during the transition from the old site.
+### Linux - Using git clone ###
+
+	cd ~
+	git clone https://www.github.com/wb2osz/direwolf
+	cd direwolf
+	git checkout 1.2
+	make
+	sudo make install
+	make install-conf
+
+The "git checkout 1.2" is necessary to get the most recent stable release.  The tip of the master branch is temporarily in an inconsistent state during the transition from the old website.  If you want the latest (unstable) development version, use "git checkout dev" instead.
+
+For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
 ## Join the conversation  ##
  
@@ -71,6 +86,8 @@ Here are some good places to share information:
 - [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) 
 
 - [Raspberry Pi 4 Ham Radio](https://groups.yahoo.com/neo/groups/Raspberry_Pi_4-Ham_RADIO/info)
+
+- [linuxham](https://groups.yahoo.com/neo/groups/linuxham/info)
 
 - [TAPR aprssig](http://www.tapr.org/pipermail/aprssig/)
  

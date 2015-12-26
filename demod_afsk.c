@@ -104,25 +104,12 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	float sum = 0.0f;
 	int j;
 
-#if 0
-	//  As suggested here,  http://locklessinc.com/articles/vectorize/
-	//  Unfortunately, older compilers don't recognize it.
 
-	//  Get more information by using -ftree-vectorizer-verbose=5
-
-	float *d = __builtin_assume_aligned(data, 16);
-	float *f = __builtin_assume_aligned(filter, 16);
-
-#pragma GCC ivdep
-	for (j=0; j<filter_size; j++) {
-	    sum += f[j] * d[j];
-	}
-#else
 #pragma GCC ivdep				// ignored until gcc 4.9
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}
-#endif
+
 	return (sum);
 }
 
