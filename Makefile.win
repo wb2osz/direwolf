@@ -452,8 +452,6 @@ clean :
 z := $(notdir ${CURDIR})
 
 
-# Left out RPi Tracker due to Comcast upload size limit.
-
 .PHONY: dist-win
 dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe \
 			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe \
@@ -470,8 +468,17 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		CHANGES.md \
 		doc/User-Guide.pdf \
 		doc/Raspberry-Pi-APRS.pdf \
-		doc/APRStt-Implementation-Notes.pdf \
+		doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
+		doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
 		doc/APRS-Telemetry-Toolkit.pdf \
+		doc/APRStt-Implementation-Notes.pdf \
+		doc/APRStt-interface-for-SARTrack.pdf \
+		doc/APRStt-Listening-Example.pdf \
+		doc/Raspberry-Pi-APRS.pdf \
+		doc/Raspberry-Pi-APRS-Tracker.pdf \
+		doc/Raspberry-Pi-SDR-IGate.pdf \
+		doc/User-Guide.pdf \
+		doc/WA8LMF-TNC-Test-CD-Results.pdf \
 		LICENSE* \
 		direwolf.conf \
 		direwolf.exe \

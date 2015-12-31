@@ -484,6 +484,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) telemetry-toolkit/telem-data91.pl $(INSTALLDIR)/bin
 	$(INSTALL) telemetry-toolkit/telem-eqns.pl $(INSTALLDIR)/bin
 	$(INSTALL) telemetry-toolkit/telem-parm.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-seq.sh $(INSTALLDIR)/bin
 	$(INSTALL) telemetry-toolkit/telem-unit.pl $(INSTALLDIR)/bin
 	$(INSTALL) telemetry-toolkit/telem-volts.py $(INSTALLDIR)/bin
 #
