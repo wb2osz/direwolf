@@ -74,3 +74,8 @@ and a couple things that can be done about it.
 	How can we compare how well the TNCs perform under real world conditions?
 	The de facto standard of measurement is the number of packets decoded from [WA8LMF’s TNC Test CD](http://wa8lmf.net/TNCtest/index.htm).
 	Many have published the number of packets they have been able to decode from this test. Here they are, all gathered in one place, for your reading pleasure.
+
+- [A Closer Look at the WA8LMF TNC Test CD](A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf)
+
+    Here, we take a closer look at some of the frames on the TNC Test CD in hopes of gaining some insights into why some are easily decoded and others are more difficult.
+    There are a lot of ugly signals out there.   Many can be improved by decreasing the transmit volume.   Others are just plain weird and you have to wonder how they are being generated.
