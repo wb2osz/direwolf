@@ -79,6 +79,7 @@
 #if USE_ALSA
 #include <alsa/asoundlib.h>
 #else
+#include <errno.h>
 #ifdef __OpenBSD__
 #include <soundcard.h>
 #else
@@ -86,9 +87,6 @@
 #endif
 #endif
 
-#ifdef __FreeBSD__
-#include <errno.h>
-#endif
 
 #include "direwolf.h"
 #include "audio.h"
@@ -686,7 +684,7 @@ static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *
  * See  /usr/include/sys/soundcard.h  for details. 
  */
 
-static int set_oss_params (int a, int fd, struct audio_s *pa) 
+static int set_oss_params (int a, int fd, struct audio_s *pa)
 {
 	int err;
 	int devcaps;
@@ -1237,7 +1235,7 @@ int audio_flush (int a)
 
 	while (len > 0) {
 	  assert (adev[a].oss_audio_device_fd > 0);
-	  k = write (adev[a].oss_audio_device_fd, ptr, len);	
+	  k = write (adev[a].oss_audio_device_fd, ptr, len);
 #if DEBUGx
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("audio_flush(): write %d returns %d\n", len, k);
