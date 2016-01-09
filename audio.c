@@ -115,7 +115,7 @@ static struct adev_s {
 					/* e.g. 4 for stereo 16 bit. */
 
 #else
-	oss_audio_device_fd;		/* Single device, both directions. */
+	int oss_audio_device_fd;	/* Single device, both directions. */
 
 #endif
 
@@ -144,7 +144,7 @@ static struct adev_s {
 static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *name, char *dir);
 //static void alsa_select_device (char *pick_dev, int direction, char *result);
 #else
-static int set_oss_params (int fd, struct audio_s *pa);
+static int set_oss_params (int a, int fd, struct audio_s *pa);
 #endif
 
 
@@ -351,9 +351,9 @@ int audio_open (struct audio_s *pa)
 	        adev[a].inbuf_size_in_bytes = set_alsa_params (a, adev[a].audio_in_handle, pa, audio_in_name, "input");
 	    
 #else // OSS
-	        oss_audio_device_fd = open (pa->adev[a].adevice_in, O_RDWR);
+	        adev[a].oss_audio_device_fd = open (pa->adev[a].adevice_in, O_RDWR);
 
-	        if (oss_audio_device_fd < 0) {
+	        if (adev[a].oss_audio_device_fd < 0) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("%s:\n", pa->adev[a].adevice_in);
 //	          snprintf (message, sizeof(message), "Could not open audio device %s", pa->adev[a].adevice_in);
@@ -361,7 +361,7 @@ int audio_open (struct audio_s *pa)
 	          return (-1);
 	        }
 
-	        adev[a].outbuf_size_in_bytes = adev[a].inbuf_size_in_bytes = set_oss_params (oss_audio_device_fd, pa);
+	        adev[a].outbuf_size_in_bytes = adev[a].inbuf_size_in_bytes = set_oss_params (a, adev[a].oss_audio_device_fd, pa);
 
 	        if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
 	          return (-1);
@@ -686,7 +686,7 @@ static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *
  * See  /usr/include/sys/soundcard.h  for details. 
  */
 
-static int set_oss_params (int fd, struct audio_s *pa) 
+static int set_oss_params (int a, int fd, struct audio_s *pa) 
 {
 	int err;
 	int devcaps;
@@ -770,7 +770,7 @@ static int set_oss_params (int fd, struct audio_s *pa)
  *
  * This was long ago under different conditions.
  * Should study this again some day.
- */
+ *
  * Your milage may vary.
  */
 	err = ioctl (fd, SNDCTL_DSP_GETBLKSIZE, &ossbuf_size_in_bytes);
@@ -966,9 +966,9 @@ int audio_get (int a)
 	    /* Fixed in 1.2.  This was formerly outside of the switch */
 	    /* so the OSS version did not process stdin or UDP. */
 
-	    while (adev[a]..g_audio_in_type == AUDIO_IN_TYPE_SOUNDCARD && adev[a].inbuf_next >= adev[a].inbuf_len) {
-	      assert (oss_audio_device_fd > 0);
-	      n = read (oss_audio_device_fd, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes);
+	    while (adev[a].g_audio_in_type == AUDIO_IN_TYPE_SOUNDCARD && adev[a].inbuf_next >= adev[a].inbuf_len) {
+	      assert (adev[a].oss_audio_device_fd > 0);
+	      n = read (adev[a].oss_audio_device_fd, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes);
 	      //text_color_set(DW_COLOR_DEBUG);
 	      // dw_printf ("audio_get(): read %d returns %d\n", adev[a].inbuf_size_in_bytes, n);	
 	      if (n < 0) {
@@ -1236,8 +1236,8 @@ int audio_flush (int a)
 	len = adev[a].outbuf_len;
 
 	while (len > 0) {
-	  assert (oss_audio_device_fd > 0);
-	  k = write (oss_audio_device_fd, ptr, len);	
+	  assert (adev[a].oss_audio_device_fd > 0);
+	  k = write (adev[a].oss_audio_device_fd, ptr, len);	
 #if DEBUGx
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("audio_flush(): write %d returns %d\n", len, k);
@@ -1329,12 +1329,12 @@ void audio_wait (int a)
 
 #else
 
-	assert (oss_audio_device_fd > 0);
+	assert (adev[a].oss_audio_device_fd > 0);
 
 	// This caused a crash later on Cygwin.
 	// Haven't tried it on other (non-Linux) Unix yet.
 
-	// err = ioctl (oss_audio_device_fd, SNDCTL_DSP_SYNC, NULL);
+	// err = ioctl (adev[a].oss_audio_device_fd, SNDCTL_DSP_SYNC, NULL);
 
 #endif
 
@@ -1375,13 +1375,13 @@ int audio_close (void)
 	
 #else
 
-	  if  (oss_audio_device_fd > 0) {
+	  if  (adev[a].oss_audio_device_fd > 0) {
   
 	    audio_wait (a);
 
-	    close (oss_audio_device_fd);
+	    close (adev[a].oss_audio_device_fd);
 
-	    oss_audio_device_fd = -1;
+	    adev[a].oss_audio_device_fd = -1;
 #endif
 
 	    free (adev[a].inbuf_ptr);
