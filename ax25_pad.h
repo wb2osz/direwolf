@@ -236,20 +236,23 @@ typedef enum ax25_modulo_e { modulo_8 = 8, modulo_128 = 128 } ax25_modulo_t;
 typedef enum ax25_frame_type_e {
 
 	frame_type_I,		// Information
-	frame_type_RR,		// Receive Ready - System Ready To Receive
-	frame_type_RNR,		// Receive Not Ready - TNC Buffer Full
-	frame_type_REJ,		// Reject Frame - Out of Sequence or Duplicate
-	frame_type_SREJ,	// Selective Reject - Request single frame repeat
-	frame_type_SABME,	// Set Async Balanced Mode, Extended
-	frame_type_SABM,	// Set Async Balanced Mode
-	frame_type_DISC,	// Disconnect
-	frame_type_DM,		// Disconnect Mode
-	frame_type_UA,		// Unnumbered Acknowledge
-	frame_type_FRMR,	// Frame Reject
-	frame_type_UI,		// Unnumbered Information
-	frame_type_XID,		// Exchange Identification
-	frame_type_TEST,	// Test
+
+	frame_type_S_RR,	// Receive Ready - System Ready To Receive
+	frame_type_S_RNR,	// Receive Not Ready - TNC Buffer Full
+	frame_type_S_REJ,	// Reject Frame - Out of Sequence or Duplicate
+	frame_type_S_SREJ,	// Selective Reject - Request single frame repeat
+
+	frame_type_U_SABME,	// Set Async Balanced Mode, Extended
+	frame_type_U_SABM,	// Set Async Balanced Mode
+	frame_type_U_DISC,	// Disconnect
+	frame_type_U_DM,	// Disconnect Mode
+	frame_type_U_UA,	// Unnumbered Acknowledge
+	frame_type_U_FRMR,	// Frame Reject
+	frame_type_U_UI,	// Unnumbered Information
+	frame_type_U_XID,	// Exchange Identification
+	frame_type_U_TEST,	// Test
 	frame_type_U,		// other Unnumbered, not used by AX.25.
+
 	frame_not_AX25		// Could not get control byte from frame.
 
 } ax25_frame_type_t;

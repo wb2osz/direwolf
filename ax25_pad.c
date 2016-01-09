@@ -483,9 +483,8 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  return (NULL);
 	}
 
-	ax25_set_addr (this_p, AX25_SOURCE, pa);
+	ax25_set_addr (this_p, AX25_SOURCE, atemp);
 	ax25_set_h (this_p, AX25_SOURCE);	// c/r in this position
-
 	ax25_set_ssid (this_p, AX25_SOURCE, ssid_temp);
 
 /*
@@ -507,9 +506,8 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  return (NULL);
 	}
 
-	ax25_set_addr (this_p, AX25_DESTINATION, pa);
+	ax25_set_addr (this_p, AX25_DESTINATION, atemp);
 	ax25_set_h (this_p, AX25_DESTINATION);	// c/r in this position
-
 	ax25_set_ssid (this_p, AX25_DESTINATION, ssid_temp);
 
 /*
@@ -522,8 +520,6 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 	  k = this_p->num_addr;
 
-	  // JWL 10:38 this_p->num_addr++;
-
 	  if ( ! ax25_parse_addr (k, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Failed to create packet from text.  Bad digipeater address\n");
@@ -531,8 +527,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 	    return (NULL);
 	  }
 
-	  ax25_set_addr (this_p, k, pa);
-	  
+	  ax25_set_addr (this_p, k, atemp);
 	  ax25_set_ssid (this_p, k, ssid_temp);
 
 	  // Does it have an "*" at the end? 
@@ -934,7 +929,6 @@ void ax25_set_addr (packet_t this_p, int n, char *ad)
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 	assert (n >= 0 && n < AX25_MAX_ADDRS);
-	assert (strlen(ad) < AX25_MAX_ADDR_LEN);
 
 	//dw_printf ("ax25_set_addr (%d, %s) num_addr=%d\n", n, ad, this_p->num_addr);
 
@@ -944,6 +938,11 @@ void ax25_set_addr (packet_t this_p, int n, char *ad)
 /* 
  * Set existing address position. 
  */
+
+	  // Why aren't we setting 'strict' here?
+	  // Messages from IGate have q-constructs.
+	  // We use this to parse it and later remove unwanted parts.
+
 	  ax25_parse_addr (n, ad, 0, atemp, &ssid_temp, &heard_temp);
 
 	  memset (this_p->frame_data + n*7, ' ' << 1, 6);
@@ -1011,7 +1010,6 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 	assert (n >= AX25_REPEATER_1 && n < AX25_MAX_ADDRS);
-	assert (strlen(ad) < AX25_MAX_ADDR_LEN);
 
 	//dw_printf ("ax25_insert_addr (%d, %s)\n", n, ad);
 
@@ -1770,11 +1768,12 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
  *------------------------------------------------------------------*/
 
 // TODO: need someway to ensure caller allocated enough space.
-#define DESC_SIZ 16
+#define DESC_SIZ 32
 
 ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *desc, int *pf, int *nr, int *ns) 
 {
-	int c;
+	int c;		// U frames are always one control byte.
+	int c2;		// I & S frames can have second Control byte.
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
@@ -1789,13 +1788,16 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	  strlcpy (desc, "Not AX.25", DESC_SIZ);
 	  return (frame_not_AX25);
 	}
+	if (modulo == modulo_128) {
+	  c2 = ax25_get_c2 (this_p);
+	}
+
 
 	if ((c & 1) == 0) {
 
-// Information
+// Information 			rrr p sss 0		or	sssssss 0  rrrrrrr p
 
 	  if (modulo == modulo_128) {
-	    int c2 = ax25_get_c2 (this_p);	
 	    *ns = (c >> 1) & 0x7f;
 	    *pf = c2 & 1;
 	    *nr = (c2 >> 1) & 0x7f;
@@ -1805,15 +1807,14 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	    *pf = (c >> 4) & 1;
 	    *nr = (c >> 5) & 7;
 	  }
-	  strlcpy (desc, "I frame", DESC_SIZ);
+	  snprintf (desc, DESC_SIZ, "I frame, n(s)= %d, n(r)=%d, p=%d", *ns, *nr, *pf);
 	  return (frame_type_I);
 	}
 	else if ((c & 2) == 0) {
 
-// Supervisory
+// Supervisory			rrr p/f ss 0 1		or	0000 ss 0 1  rrrrrrr p/f
 
 	  if (modulo == modulo_128) {
-	    int c2 = ax25_get_c2 (this_p);	
 	    *pf = c2 & 1;
 	    *nr = (c2 >> 1) & 0x7f;
 	  }
@@ -1823,35 +1824,35 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	  }
 	  
 	  switch ((c >> 2) & 3) {
-	    case 0: strlcpy (desc, "S frame RR", DESC_SIZ);   return (frame_type_RR);   break;
-	    case 1: strlcpy (desc, "S frame RNR", DESC_SIZ);  return (frame_type_RNR);  break;
-	    case 2: strlcpy (desc, "S frame REJ", DESC_SIZ);  return (frame_type_REJ);  break;
-	    case 3: strlcpy (desc, "S frame SREJ", DESC_SIZ); return (frame_type_SREJ); break;
+	    case 0: snprintf (desc, DESC_SIZ, "S frame RR, n(r)=%d, p/f=%d", *nr, *pf);   return (frame_type_S_RR);   break;
+	    case 1: snprintf (desc, DESC_SIZ, "S frame RNR, n(r)=%d, p/f=%d", *nr, *pf);  return (frame_type_S_RNR);  break;
+	    case 2: snprintf (desc, DESC_SIZ, "S frame REJ, n(r)=%d, p/f=%d", *nr, *pf);  return (frame_type_S_REJ);  break;
+	    case 3: snprintf (desc, DESC_SIZ, "S frame SREJ, n(r)=%d, p/f=%d", *nr, *pf); return (frame_type_S_SREJ); break;
 	 } 
 	}
 	else {
 
-// Unnumbered
+// Unnumbered			mmm p/f mm 1 1
 
 	  *pf = (c >> 4) & 1;
 	  
 	  switch (c & 0xef) {
 	
-	    case 0x6f: strlcpy (desc, "U frame SABME", DESC_SIZ); return (frame_type_SABME); break;
-	    case 0x2f: strlcpy (desc, "U frame SABM", DESC_SIZ);  return (frame_type_SABM);  break;
-	    case 0x43: strlcpy (desc, "U frame DISC", DESC_SIZ);  return (frame_type_DISC);  break;
-	    case 0x0f: strlcpy (desc, "U frame DM", DESC_SIZ);    return (frame_type_DM);    break;
-	    case 0x63: strlcpy (desc, "U frame UA", DESC_SIZ);    return (frame_type_UA);    break;
-	    case 0x87: strlcpy (desc, "U frame FRMR", DESC_SIZ);  return (frame_type_FRMR);  break;
-	    case 0x03: strlcpy (desc, "U frame UI", DESC_SIZ);    return (frame_type_UI);    break;
-	    case 0xaf: strlcpy (desc, "U frame XID", DESC_SIZ);   return (frame_type_XID);   break;
-	    case 0xe3: strlcpy (desc, "U frame TEST", DESC_SIZ);  return (frame_type_TEST);  break;
-	    default:   strlcpy (desc, "U frame ???", DESC_SIZ);   return (frame_type_U);     break;
+	    case 0x6f: snprintf (desc, DESC_SIZ, "U frame SABME, p=%d", *pf);  return (frame_type_U_SABME); break;
+	    case 0x2f: snprintf (desc, DESC_SIZ, "U frame SABM, p=%d", *pf);   return (frame_type_U_SABM);  break;
+	    case 0x43: snprintf (desc, DESC_SIZ, "U frame DISC, p=%d", *pf);   return (frame_type_U_DISC);  break;
+	    case 0x0f: snprintf (desc, DESC_SIZ, "U frame DM, f=%d", *pf);     return (frame_type_U_DM);    break;
+	    case 0x63: snprintf (desc, DESC_SIZ, "U frame UA, f=%d", *pf);     return (frame_type_U_UA);    break;
+	    case 0x87: snprintf (desc, DESC_SIZ, "U frame FRMR, f=%d", *pf);   return (frame_type_U_FRMR);  break;
+	    case 0x03: snprintf (desc, DESC_SIZ, "U frame UI, pf=%d", *pf);    return (frame_type_U_UI);    break;
+	    case 0xaf: snprintf (desc, DESC_SIZ, "U frame XID, pf=%d", *pf);   return (frame_type_U_XID);   break;
+	    case 0xe3: snprintf (desc, DESC_SIZ, "U frame TEST, pf=%d", *pf);  return (frame_type_U_TEST);  break;
+	    default:   snprintf (desc, DESC_SIZ, "U frame ???");               return (frame_type_U);       break;
 	  }
 	}
 
 	// Should be unreachable but compiler doesn't realize that.
-	// Suppress "warning: control reaches end of non-void function"
+	// Here only to suppress "warning: control reaches end of non-void function"
 
 	return (frame_not_AX25);
 
