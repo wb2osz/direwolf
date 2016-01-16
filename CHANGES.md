@@ -3,6 +3,16 @@
 
 ----------
 
+## Version 1.3  -- Development snapshot J  --  January 2016 ##
+
+### Bugs Fixed: ###
+
+- AGW network protocol now works properly for big-endian processors
+such as PowerPC or MIPS.
+
+
+----------
+
 ## Version 1.3  -- Development snapshot I  --  December 2015 ##
 
 ### New Feature: ###

@@ -162,6 +162,21 @@ static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
 					/* the client app must send a command to enable this. */
 
 
+/*
+ * Registered callsigns from 'X' command.
+ * For simplicity just use a fixed size array until there
+ * is evidence that a larger number would be needed.
+ *
+ * Also keep track of which client did the registration.
+ * For example client 0 might register the callsign ABC
+ * and client 1 register DEF.   If something comes addressed
+ * to DEF, we would want it going only to client 1.
+ */
+
+#define MAX_REG_CALLSIGNS 20
+
+static char registered_callsigns[MAX_REG_CALLSIGNS][AX25_MAX_ADDR_LEN];
+static int registered_by_client[MAX_REG_CALLSIGNS];
 
 
 // TODO:  define in one place, use everywhere.
@@ -178,26 +193,75 @@ static THREAD_F cmd_listen_thread (void *arg);
 
 /*
  * Message header for AGW protocol.
- * Assuming little endian such as x86 or ARM.
- * Byte swapping would be required for big endian cpu.
+ * Multibyte numeric values require rearranging for big endian cpu.
  */
 
-#if __GNUC__
-#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-#error This needs to be more portable to work on big endian.
-#endif
+/*
+ * With MinGW version 4.6, obviously x86.
+ * or Linux gcc version 4.9, Linux ARM.
+ *
+ *	$ gcc -E -dM - < /dev/null | grep END
+ *	#define __ORDER_LITTLE_ENDIAN__ 1234
+ *	#define __FLOAT_WORD_ORDER__ __ORDER_LITTLE_ENDIAN__
+ *	#define __ORDER_PDP_ENDIAN__ 3412
+ *	#define __ORDER_BIG_ENDIAN__ 4321
+ *	#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__
+ *
+ * This is for standard OpenWRT on MIPS.
+ *
+ *	#define __ORDER_LITTLE_ENDIAN__ 1234
+ *	#define __FLOAT_WORD_ORDER__ __ORDER_BIG_ENDIAN__
+ *	#define __ORDER_PDP_ENDIAN__ 3412
+ *	#define __ORDER_BIG_ENDIAN__ 4321
+ *	#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__
+ *
+ * This was reported for an old Mac with PowerPC processor.
+ * (Newer versions have x86.)
+ *
+ *	$ gcc -E -dM - < /dev/null | grep END
+ *	#define __BIG_ENDIAN__ 1
+ *	#define _BIG_ENDIAN 1
+ */
+
+
+#if defined(__BIG_ENDIAN__) || (defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+
+// gcc >= 4.2 has __builtin_swap32() but be compatible with older versions.
+
+#define host2netle(x) ( (((x)>>24)&0x000000ff) | (((x)>>8)&0x0000ff00) | (((x)<<8)&0x00ff0000) | (((x)<<24)&0xff000000) )
+#define netle2host(x) ( (((x)>>24)&0x000000ff) | (((x)>>8)&0x0000ff00) | (((x)<<8)&0x00ff0000) | (((x)<<24)&0xff000000) )
+
+#else
+
+#define host2netle(x) (x)
+#define netle2host(x) (x)
+
 #endif
 
+
 struct agwpe_s {	
-  short portx;			/* 0 for first, 1 for second, etc. */
-  short port_hi_reserved;	
-  short kind_lo;		/* message type */
-  short kind_hi;
+  unsigned char portx;		/* 0 for first, 1 for second, etc. */
+  unsigned char reserved1;
+  unsigned char reserved2;
+  unsigned char reserved3;
+
+  unsigned char datakind;	/* message type, usually written as a letter. */
+  unsigned char reserved4;
+  unsigned char pid;
+  unsigned char reserved5;
+
   char call_from[10];
+
   char call_to[10];
-  int data_len;			/* Number of data bytes following. */
-  int user_reserved;
+
+  int data_len_NETLE;		/* Number of data bytes following. */
+				/* _NETLE suffix is reminder to convert for network byte order. */
+
+  int user_reserved_NETLE;
 };
+
+
+static void send_to_client (int client, void *reply_p);
 
 
 /*-------------------------------------------------------------------
@@ -258,7 +322,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	  case FROM_CLIENT:
 	    strlcpy (direction, "from", sizeof(direction));		/* from the client application */
 
-	    switch (pmsg->kind_lo) {
+	    switch (pmsg->datakind) {
 	      case 'P': strlcpy (datakind, "Application Login",				sizeof(datakind)); break;
 	      case 'X': strlcpy (datakind, "Register CallSign",				sizeof(datakind)); break;
 	      case 'x': strlcpy (datakind, "Unregister CallSign",			sizeof(datakind)); break;
@@ -286,7 +350,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	  default:
 	    strlcpy (direction, "to", sizeof(direction));	/* sent to the client application. */
 
-	    switch (pmsg->kind_lo) {
+	    switch (pmsg->datakind) {
 	      case 'R': strlcpy (datakind, "Version Number",				sizeof(datakind)); break;
 	      case 'X': strlcpy (datakind, "Callsign Registration",			sizeof(datakind)); break;
 	      case 'G': strlcpy (datakind, "Port Information",				sizeof(datakind)); break;
@@ -296,6 +360,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	      case 'H': strlcpy (datakind, "Heard Stations on a Port",			sizeof(datakind)); break;
 	      case 'C': strlcpy (datakind, "AX.25 Connection Received",			sizeof(datakind)); break;
 	      case 'D': strlcpy (datakind, "Connected AX.25 Data",			sizeof(datakind)); break;
+	      case 'd': strlcpy (datakind, "Disconnected",				sizeof(datakind)); break;
 	      case 'M': strlcpy (datakind, "Monitored Connected Information",		sizeof(datakind)); break;
 	      case 'S': strlcpy (datakind, "Monitored Supervisory Information",		sizeof(datakind)); break;
 	      case 'U': strlcpy (datakind, "Monitored Unproto Information",		sizeof(datakind)); break;
@@ -311,20 +376,19 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	dw_printf ("%s %s %s AGWPE client application %d, total length = %d\n",
 			prefix[(int)fromto], datakind, direction, client, msg_len);
 
-	dw_printf ("\tportx = %d, port_hi_reserved = %d\n", pmsg->portx, pmsg->port_hi_reserved);
-	dw_printf ("\tkind_lo = %d = '%c', kind_hi = %d\n", pmsg->kind_lo, pmsg->kind_lo, pmsg->kind_hi);
+	dw_printf ("\tportx = %d, datakind = '%c', pid = 0x%02x\n", pmsg->portx, pmsg->datakind, pmsg->pid);
 	dw_printf ("\tcall_from = \"%s\", call_to = \"%s\"\n", pmsg->call_from, pmsg->call_to);
-	dw_printf ("\tdata_len = %d, user_reserved = %d, data =\n", pmsg->data_len, pmsg->user_reserved);
+	dw_printf ("\tdata_len = %d, user_reserved = %d, data =\n", netle2host(pmsg->data_len_NETLE), netle2host(pmsg->user_reserved_NETLE));
 
-	hex_dump ((unsigned char*)pmsg + sizeof(struct agwpe_s), pmsg->data_len);
+	hex_dump ((unsigned char*)pmsg + sizeof(struct agwpe_s), netle2host(pmsg->data_len_NETLE));
 
 	if (msg_len < 36) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("AGWPE message length, %d, is shorter than minumum 36.\n", msg_len);
 	}
-	if (msg_len != pmsg->data_len + 36) {
+	if (msg_len != netle2host(pmsg->data_len_NETLE) + 36) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("AGWPE message length, %d, inconsistent with data length %d.\n", msg_len, pmsg->data_len);
+	  dw_printf ("AGWPE message length, %d, inconsistent with data length %d.\n", msg_len, netle2host(pmsg->data_len_NETLE));
 	}
 
 }
@@ -382,6 +446,8 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	  enable_send_raw_to_client[client] = 0;
 	  enable_send_monitor_to_client[client] = 0;
 	}
+
+	memset (registered_callsigns, 0, sizeof(registered_callsigns));
 
 	if (server_port == 0) {
 	  text_color_set(DW_COLOR_INFO);
@@ -727,13 +793,13 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 
 	    agwpe_msg.hdr.portx = chan;
 
-	    agwpe_msg.hdr.kind_lo = 'K';
+	    agwpe_msg.hdr.datakind = 'K';
 
 	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, agwpe_msg.hdr.call_from);
 
 	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, agwpe_msg.hdr.call_to);
 
-	    agwpe_msg.hdr.data_len = flen + 1;
+	    agwpe_msg.hdr.data_len_NETLE = host2netle(flen + 1);
 
 	    /* Stick in extra byte for the "TNC" to use. */
 
@@ -741,11 +807,11 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    memcpy (agwpe_msg.data + 1, fbuf, (size_t)flen);
 
 	    if (debug_client) {
-	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
 #if __WIN32__	
-            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len, 0);
+            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE), 0);
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -755,7 +821,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      WSACleanup();
 	    }
 #else
-            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -785,7 +851,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 
 	    agwpe_msg.hdr.portx = chan;
 
-	    agwpe_msg.hdr.kind_lo = 'U';
+	    agwpe_msg.hdr.datakind = 'U';
 
 	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, agwpe_msg.hdr.call_from);
 
@@ -807,14 +873,14 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 			tm->tm_hour, tm->tm_min, tm->tm_sec,
 			pinfo);
 
-	    agwpe_msg.hdr.data_len = strlen(agwpe_msg.data) + 1 /* include null */ ;
+	    agwpe_msg.hdr.data_len_NETLE = host2netle(strlen(agwpe_msg.data) + 1) /* include null */ ;
 
 	    if (debug_client) {
-	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
 #if __WIN32__	
-            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len, 0);
+            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE), 0);
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -824,7 +890,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      WSACleanup();
 	    }
 #else
-            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + agwpe_msg.hdr.data_len);
+            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -837,6 +903,110 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	}
 
 } /* server_send_rec_packet */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        server_link_established
+ *
+ * Purpose:     Send notification to client app when a link has
+ *		been established with another station.
+ *
+ * Inputs:	chan		- Which radio channel.
+ *
+ * 		client		- Which one of potentially several clients.
+ *
+ *		remote_call	- Callsign[-ssid] of remote station.
+ *
+ *		own_call	- Callsign[-ssid] of my end.
+ *
+ *		incoming	- true if connection was initiated from other end.
+ *				  false if this end started it.
+ *
+ *--------------------------------------------------------------------*/
+
+void server_link_established (int chan, int client, char *remote_call, char *own_call, int incoming)
+{
+
+	struct {
+	  struct agwpe_s hdr;
+	  char info[100];
+	} reply;
+
+
+	memset (&reply, 0, sizeof(reply));
+	reply.hdr.portx = chan;
+	reply.hdr.datakind = 'C';
+
+	strlcpy (reply.hdr.call_from, remote_call, sizeof(reply.hdr.call_from));
+	strlcpy (reply.hdr.call_to,   own_call,    sizeof(reply.hdr.call_to));
+
+	if (incoming) {
+	  // Other end initiated the connection.
+	  snprintf (reply.info, sizeof(reply.info), "*** CONNECTED To Station %s\r", remote_call);
+	}
+	else {
+	  // We started the connection.
+	  snprintf (reply.info, sizeof(reply.info), "*** CONNECTED With Station %s\r", remote_call);
+	}
+	reply.hdr.data_len_NETLE = host2netle(strlen(reply.info) + 1);
+
+	send_to_client (client, &reply);
+
+} /* end server_link_established */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        server_link_terminated
+ *
+ * Purpose:     Send notification to client app when a link with
+ *		another station has been terminated or a connection
+ *		attempt failed.
+ *
+ * Inputs:	chan		- Which radio channel.
+ *
+ * 		client		- Which one of potentially several clients.
+ *
+ *		remote_call	- Callsign[-ssid] of remote station.
+ *
+ *		own_call	- Callsign[-ssid] of my end.
+ *
+ *		timeout		- true when no answer from other station.
+ *				  How do we distinguish who asked for the
+ *				  termination of an existing linkn?
+ *
+ *--------------------------------------------------------------------*/
+
+void server_link_terminated (int chan, int client, char *remote_call, char *own_call, int timeout)
+{
+
+	struct {
+	  struct agwpe_s hdr;
+	  char info[100];
+	} reply;
+
+
+	memset (&reply, 0, sizeof(reply));
+	reply.hdr.portx = chan;
+	reply.hdr.datakind = 'd';
+	strlcpy (reply.hdr.call_from, remote_call, sizeof(reply.hdr.call_from));  /* right order */
+	strlcpy (reply.hdr.call_to,   own_call,    sizeof(reply.hdr.call_to));
+
+	if (timeout) {
+	  snprintf (reply.info, sizeof(reply.info), "*** DISCONNECTED RETRYOUT With %s\r", remote_call);
+	}
+	else {
+	  snprintf (reply.info, sizeof(reply.info), "*** DISCONNECTED From Station %s\r", remote_call);
+	}
+	reply.hdr.data_len_NETLE = host2netle(strlen(reply.info) + 1);
+
+	send_to_client (client, &reply);
+
+
+} /* end server_link_terminated */
 
 
 
@@ -923,13 +1093,13 @@ static void send_to_client (int client, void *reply_p)
 
 	ph = (struct agwpe_s *) reply_p;	// Replies are often hdr + other stuff.
 
-	len = sizeof(struct agwpe_s) + ph->data_len;
+	len = sizeof(struct agwpe_s) + netle2host(ph->data_len_NETLE);
 
 	/* Not sure what max data length might be. */
 
-	if (ph->data_len < 0 || ph->data_len > 4096) {
+	if (netle2host(ph->data_len_NETLE) < 0 || netle2host(ph->data_len_NETLE) > 4096) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Invalid data length %d for AGW protocol message to client %d.\n", ph->data_len, client);
+	  dw_printf ("Invalid data length %d for AGW protocol message to client %d.\n", netle2host(ph->data_len_NETLE), client);
 	  debug_print (TO_CLIENT, client, ph, len);
 	}
 
@@ -1000,11 +1170,13 @@ static THREAD_F cmd_listen_thread (void *arg)
  * Leave room for an extra nul byte terminator at end later.
  */
 
-	  if (cmd.hdr.data_len < 0 || cmd.hdr.data_len > sizeof(cmd.data) - 1) {
+	  int data_len = netle2host(cmd.hdr.data_len_NETLE);
+
+	  if (data_len < 0 || data_len > sizeof(cmd.data) - 1) {
 
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("\nInvalid message from AGW client application %d.\n", client);
-	    dw_printf ("Data Length of %d is out of range.\n", cmd.hdr.data_len);
+	    dw_printf ("Data Length of %d is out of range.\n", data_len);
 	
 	    /* This is a bad situation. */
 	    /* If we tried to read again, the header probably won't be there. */
@@ -1022,12 +1194,12 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	  cmd.data[0] = '\0';
 
-	  if (cmd.hdr.data_len > 0) {
-	    n = read_from_socket (client_sock[client], cmd.data, cmd.hdr.data_len);
-	    if (n != cmd.hdr.data_len) {
+	  if (data_len > 0) {
+	    n = read_from_socket (client_sock[client], cmd.data, data_len);
+	    if (n != data_len) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nError getting message data from AGW client application %d.\n", client);
-	      dw_printf ("Tried to read %d bytes but got only %d.\n", cmd.hdr.data_len, n);
+	      dw_printf ("Tried to read %d bytes but got only %d.\n", data_len, n);
 	      dw_printf ("Closing connection.\n\n");
 #if __WIN32__
 	      closesocket (client_sock[client]);
@@ -1037,8 +1209,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      client_sock[client] = -1;
 	      return (0);
 	    }
-	    if (n > 0) {
-		cmd.data[cmd.hdr.data_len] = '\0';
+	    if (n >= 0) {
+		cmd.data[n] = '\0';	// Tidy if we print for debug.
 	    }
 	  }
 
@@ -1047,31 +1219,31 @@ static THREAD_F cmd_listen_thread (void *arg)
  */
 
 	  if (debug_client) {
-	    debug_print (FROM_CLIENT, client, &cmd.hdr, sizeof(cmd.hdr) + cmd.hdr.data_len);
+	    debug_print (FROM_CLIENT, client, &cmd.hdr, sizeof(cmd.hdr) + data_len);
 	  }
 
-	  switch (cmd.hdr.kind_lo) {
+	  switch (cmd.hdr.datakind) {
 
 	    case 'R':				/* Request for version number */
 	      {
 		struct {
 		  struct agwpe_s hdr;
-	 	  int major_version;
-	 	  int minor_version;
+	          int major_version_NETLE;
+	          int minor_version_NETLE;
 		} reply;
 
 
 	        memset (&reply, 0, sizeof(reply));
-	        reply.hdr.kind_lo = 'R';
-	        reply.hdr.data_len = sizeof(reply.major_version) + sizeof(reply.minor_version);
-		assert (reply.hdr.data_len == 8);
+	        reply.hdr.datakind = 'R';
+	        reply.hdr.data_len_NETLE = host2netle(sizeof(reply.major_version_NETLE) + sizeof(reply.minor_version_NETLE));
+		assert (netle2host(reply.hdr.data_len_NETLE) == 8);
 
 		// Xastir only prints this and doesn't care otherwise.
 		// APRSIS32 doesn't seem to care.
 		// UI-View32 wants on 2000.15 or later.
 
-	        reply.major_version = 2005;
-	        reply.minor_version = 127;
+	        reply.major_version_NETLE = host2netle(2005);
+	        reply.minor_version_NETLE = host2netle(127);
 
 		assert (sizeof(reply) == 44);
 
@@ -1093,7 +1265,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 
 	        memset (&reply, 0, sizeof(reply));
-	        reply.hdr.kind_lo = 'G';
+	        reply.hdr.datakind = 'G';
 
 
 		// Xastir only prints this and doesn't care otherwise.
@@ -1141,7 +1313,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		  snprintf (reply.info, sizeof(reply.info), "2;Port1 Left channel;Port2 Right Channel;");
 		}
 #endif
-	        reply.hdr.data_len = strlen(reply.info) + 1;
+	        reply.hdr.data_len_NETLE = host2netle(strlen(reply.info) + 1);
 
 	        send_to_client (client, &reply);
 
@@ -1162,15 +1334,15 @@ static THREAD_F cmd_listen_thread (void *arg)
 		  unsigned char slottime;
 		  unsigned char maxframe;
 		  unsigned char active_connections;
-		  int how_many_bytes;
+		  int how_many_bytes_NETLE;
 		} reply;
 
 
 	        memset (&reply, 0, sizeof(reply));
 
 		reply.hdr.portx = cmd.hdr.portx;	/* Reply with same port number ! */
-	        reply.hdr.kind_lo = 'g';
-	        reply.hdr.data_len = 12;
+	        reply.hdr.datakind = 'g';
+	        reply.hdr.data_len_NETLE = host2netle(12);
 
 		// YAAC asks for this.
 		// Fake it to keep application happy.
@@ -1183,7 +1355,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		reply.slottime = 4;
 		reply.maxframe = 7;
 		reply.active_connections = 0;
-		reply.how_many_bytes = 1;
+		reply.how_many_bytes_NETLE = host2netle(1);
 
 		assert (sizeof(reply) == 48);
 
@@ -1204,7 +1376,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 
 	        memset (&reply.hdr, 0, sizeof(reply.hdr));
-	        reply.hdr.kind_lo = 'H';
+	        reply.hdr.datakind = 'H';
 
 		// TODO:  Implement properly.  
 
@@ -1214,7 +1386,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        strlcpy (agwpe_msg.data, ..., sizeof(agwpe_msg.data));
 
-	        reply.hdr.data_len = strlen(reply.info);
+	        reply.hdr.data_len_NETLE = host2netle(strlen(reply.info));
 
 	        send_to_client (client, &reply);
 #endif
@@ -1253,13 +1425,11 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      
 		packet_t pp;
 
-		// We have already verified these do not exceed 9 characters. (?)
-
 	      	strlcpy (stemp, cmd.hdr.call_from, sizeof(stemp));
 	      	strlcat (stemp, ">", sizeof(stemp));
 	      	strlcat (stemp, cmd.hdr.call_to, sizeof(stemp));
 
-		cmd.data[cmd.hdr.data_len] = '\0';
+		cmd.data[data_len] = '\0';
 		ndigi = cmd.data[0];
 		p = cmd.data + 1;
 
@@ -1324,7 +1494,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		// cmd.hdr.data_len so we ended up sending an extra byte.
 
 		memset (&alevel, 0xff, sizeof(alevel));
-		pp = ax25_from_frame ((unsigned char *)cmd.data+1, cmd.hdr.data_len - 1, alevel);
+		pp = ax25_from_frame ((unsigned char *)cmd.data+1, data_len - 1, alevel);
 
 		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
@@ -1352,46 +1522,127 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'X':				/* Register CallSign  */
 
-	      /* Send success status. */
-
 	      {
 		struct {
 		  struct agwpe_s hdr;
 		  char data;
 		} reply;
 
+		int j, ok;
 
 	        memset (&reply, 0, sizeof(reply));
-	        reply.hdr.kind_lo = 'X';
+	        reply.hdr.datakind = 'X';
 		memcpy (reply.hdr.call_from, cmd.hdr.call_from, sizeof(reply.hdr.call_from));
-	        reply.hdr.data_len = 1;
-		reply.data = 1;		/* success */
+	        reply.hdr.data_len_NETLE = host2netle(1);
 	
 		// Version 1.0.
 		// Previously used sizeof(reply) but compiler rounded it up to next byte boundary.
 		// That's why more cumbersome size expression is used.
 
-	        send_to_client (client, &reply);
+		// The protocol spec says it is an error to register the same one more than once.
+	        // First make sure is it not already in there.  Add if space available.
 
+	        if (server_callsign_registered_by_client(cmd.hdr.call_from) >= 0) {
+	          ok = 0;
+	        }
+	        else {
+	          ok = 0;
+	          for (j = 0; j < MAX_REG_CALLSIGNS && ok == 0; j++) {
+	            if (registered_callsigns[j][0] == '\0') {
+	              strlcpy (registered_callsigns[j], cmd.hdr.call_from, sizeof(registered_callsigns[j]));
+	              registered_by_client[j] = client;
+	              ok = 1;
+	            }
+	          }
+	        }
+
+		reply.data = ok;		/* 1 = success, 0 = failure */
+	        send_to_client (client, &reply);
 	      }
 	      break;
 
 	    case 'x':				/* Unregister CallSign  */
+
+	      {
+	        int j;
+
+	        for (j = 0; j < MAX_REG_CALLSIGNS; j++) {
+	          if (strcmp(registered_callsigns[j], cmd.hdr.call_from) == 0) {
+	            registered_callsigns[j][0] = '\0';
+	            registered_by_client[j] = -1;
+	          }
+	        }
+	      }
 	      /* No reponse is expected. */
 	      break;
 
 	    case 'C':				/* Connect, Start an AX.25 Connection  */
 	    case 'v':	      			/* Connect VIA, Start an AX.25 circuit thru digipeaters */
-	    case 'D': 				/* Send Connected Data */
-	    case 'd': 				/* Disconnect, Terminate an AX.25 Connection */
+	    case 'c':	      			/* Connection with non-standard PID */
 
-	      // Version 1.0.  Better message instead of generic unexpected command.
+	      {
+	        struct via_info {
+	          unsigned char num_digi;	/* Expect to be in range 1 to 7.  Why not up to 8? */
+		  char dcall[7][10];
+	        } *v = (struct via_info *)cmd.data;
+
+	        char callsigns[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
+	        int num_calls = 2;	/* 2 plus any digipeaters. */
+	        int pid = 0xf0;		/* normal for AX.25 I frames. */
+		int j;
+	        char stemp[256];
+
+	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
+	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
+
+	        if (cmd.hdr.datakind == 'c') {
+	          pid = cmd.hdr.pid;		/* non standard for NETROM, TCP/IP, etc. */
+	        }
+
+	        if (cmd.hdr.datakind == 'v') {
+	          if (v->num_digi >= 1 && v->num_digi <= 7) {
+
+	            if (data_len != v->num_digi * 10 + 1 && data_len != v->num_digi * 10 + 2) {
+	              // I'm getting 1 more than expected from AGWterminal.
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("AGW client, connect via, has data len, %d when %d expected.\n", data_len, v->num_digi * 10 + 1);
+	            }
+
+	            for (j = 0; j < v->num_digi; j++) {
+	              strlcpy (callsigns[AX25_REPEATER_1 + j], v->dcall[j], sizeof(callsigns[AX25_REPEATER_1 + j]));
+	              num_calls++;
+	            }
+	          }
+	          else {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("\n");
+	            dw_printf ("AGW client, connect via, has invalid number of digipeaters = %d\n", v->num_digi);
+	          }
+	        }
+
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\n");
+	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
+	        dw_printf ("Connected packet mode is not implemented.\n");
+	      }
+	      break;
+
+	    case 'D': 				/* Send Connected Data */
 
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\n");
-	      dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.kind_lo, client);
+	      dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
 	      dw_printf ("Connected packet mode is not implemented.\n");
+	      break;
 
+	    case 'd': 				/* Disconnect, Terminate an AX.25 Connection */
+
+	      {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\n");
+	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
+	        dw_printf ("Connected packet mode is not implemented.\n");
+	      }
 	      break;
 
 
@@ -1400,36 +1651,35 @@ static THREAD_F cmd_listen_thread (void *arg)
 		/* 
 		Added in version 1.3.
 		This is the same as 'V' except there is no provision for digipeaters.
+		TODO: combine 'V' and 'M' into one case.
 		AGWterminal sends this for beacon or ask QRA.
 
 		<<< Send UNPROTO Information from AGWPE client application 0, total length = 253
-		        portx = 0, port_hi_reserved = 0
-		        kind_lo = 77 = 'M', kind_hi = 0
-		        call_from = "SV2AGW-1", call_to = "BEACON"
-		        data_len = 217, user_reserved = 588, data =
+		        portx = 0, datakind = 'M', pid = 0x00
+		        call_from = "WB2OSZ-15", call_to = "BEACON"
+		        data_len = 217, user_reserved = 556, data =
 		  000:  54 68 69 73 20 76 65 72 73 69 6f 6e 20 75 73 65  This version use
-		  010:  73 20 74 68 65 20 6e 65 77 20 41 47 57 20 50 61  s the new AGW Pa
-		  020:  63 6b 65 74 20 45 6e 67 69 6e 65 20 77 69 6e 73  cket Engine wins
+		   ...
 
 		<<< Send UNPROTO Information from AGWPE client application 0, total length = 37
-		        portx = 0, port_hi_reserved = 0
-		        kind_lo = 77 = 'M', kind_hi = 0
-		        call_from = "SV2AGW-1", call_to = "QRA"
-		        data_len = 1, user_reserved = 32218432, data =
+		        portx = 0, datakind = 'M', pid = 0x00
+		        call_from = "WB2OSZ-15", call_to = "QRA"
+		        data_len = 1, user_reserved = 31759424, data =
 		  000:  0d                                               .
+                                          .
 
 		There is also a report of it coming from UISS.
 
 		<<< Send UNPROTO Information from AGWPE client application 0, total length = 50
 			portx = 0, port_hi_reserved = 0
-			kind_lo = 77 = 'M', kind_hi = 0
+			datakind = 77 = 'M', kind_hi = 0
 			call_from = "JH4XSY", call_to = "APRS"
 			data_len = 14, user_reserved = 0, data =
 		  000:  21 22 3c 43 2e 74 71 6c 48 72 71 21 21 5f        !"<C.tqlHrq!!_
 		*/
 	      {
 	      
-		int pid = cmd.hdr.kind_hi & 0xff;
+		int pid = cmd.hdr.pid;
 		(void)(pid);
 			/* The AGW protocol spec says, */
 			/* "AX.25 PID 0x00 or 0xF0 for AX.25 0xCF NETROM and others" */
@@ -1448,7 +1698,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      	strlcat (stemp, ">", sizeof(stemp));
 	      	strlcat (stemp, cmd.hdr.call_to, sizeof(stemp));
 
-		cmd.data[cmd.hdr.data_len] = '\0';
+		cmd.data[data_len] = '\0';
 
 		strlcat (stemp, ":", sizeof(stemp));
 		strlcat (stemp, cmd.data, sizeof(stemp));
@@ -1474,19 +1724,20 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      {
 		struct {
 		  struct agwpe_s hdr;
-		  int data;			// Assuming little-endian architecture.
+		  int data_NETLE;			// Little endian order.
 		} reply;
 
 
 	        memset (&reply, 0, sizeof(reply));
 		reply.hdr.portx = cmd.hdr.portx;	/* Reply with same port number */
-	        reply.hdr.kind_lo = 'y';
-	        reply.hdr.data_len = 4;
-		reply.data = 0;		
-	
+	        reply.hdr.datakind = 'y';
+	        reply.hdr.data_len_NETLE = host2netle(4);
+
+	        int n = 0;
 	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
-		  reply.data = tq_count (cmd.hdr.portx, TQ_PRIO_0_HI) + tq_count (cmd.hdr.portx, TQ_PRIO_1_LO);
+		  n = tq_count (cmd.hdr.portx, TQ_PRIO_0_HI) + tq_count (cmd.hdr.portx, TQ_PRIO_1_LO);
 		}
+		reply.data_NETLE = host2netle(n);
 
 	        send_to_client (client, &reply);
 	      }
@@ -1496,14 +1747,39 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("--- Unexpected Command from application %d using AGW protocol:\n", client);
-	      debug_print (FROM_CLIENT, client, &cmd.hdr, sizeof(cmd.hdr) + cmd.hdr.data_len);
+	      debug_print (FROM_CLIENT, client, &cmd.hdr, sizeof(cmd.hdr) + data_len);
 
 	      break;
 	  }
-	
-
 	}
 
-}
+} /* end send_to_client */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        server_callsign_registered_by_client
+ *
+ * Purpose:     See if given callsign was registered.
+ *
+ * Inputs:	callsign
+ *
+ * Returns:	>= 0 for the client number.
+ *		-1 for not found.
+ *
+ *--------------------------------------------------------------------*/
+
+int server_callsign_registered_by_client (char *callsign)
+{
+	int j;
+
+	for (j = 0; j < MAX_REG_CALLSIGNS; j++) {
+	  if (strcmp(registered_callsigns[j], callsign) == 0) {
+	    return (registered_by_client[j]);
+	  }
+	}
+	return (-1);
+
+} /* end server_callsign_registered_by_client */
 
 /* end server.c */
