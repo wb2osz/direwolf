@@ -10,6 +10,20 @@ direwolf.conf
 *.wav
 fsk_fast_filter.h
 
+# Binaries
+aclients
+atest
+decode_aprs
+direwolf
+direwolf.desktop
+gen_fff
+gen_packets
+ll2utm
+log2gpx
+text2tt
+tt2text
+ttcalc
+utm2ll
 
 # Object files
 *.o
