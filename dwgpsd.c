@@ -41,6 +41,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <math.h>
 
 #if __WIN32__
 #error Not for Windows
