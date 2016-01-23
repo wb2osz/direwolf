@@ -1233,7 +1233,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  /* Later, we check for valid letters and no more than one letter if + specified. */
 
 	          for (pc = t; *pc != '\0'; pc++) {
-		    if ( ! isalpha(*pc) && ! *pc == '+') {
+		    if ( ! isalpha(*pc) && ! (*pc == '+')) {
 	              text_color_set(DW_COLOR_ERROR);
                       dw_printf ("Line %d: Demodulator type can only contain letters and + character.\n", line);
 		    }
