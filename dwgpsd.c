@@ -116,7 +116,7 @@ static struct gps_data_t gpsdata;
  * actually need the data and we don't have a lot of extra unnecessary
  * busy work going on.
  *
- * The current version of gpsd, supplied with Raspian, is 3.6 from back in 
+ * The current version of gpsd, supplied with Raspian (Wheezy), is 3.6 from back in 
  * May 2012, is missing support for the shared memory interface.  
  * 
  * I tried to download a newer source and build with shared memory support
@@ -132,6 +132,11 @@ static struct gps_data_t gpsdata;
  * 	sudo scons udev-install
  * 
  * For now, we will use the socket interface.  Maybe get back to this again someday.
+ *
+ * Update:  January 2016.
+ *
+ *	I'm told that it might work in Raspian, Jessie version.
+ *	Haven't tried it yet.
  */
 
 

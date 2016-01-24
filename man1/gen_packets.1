@@ -98,10 +98,14 @@ Both of these are equivalent.  "-B 9600" automatically selects scrambled baseban
 Both of these generate 200 Hz shift, 300 baud, suitable for HF SSB transceiver.
 .RE
 .P
-.B echo -n "WB2OSZ>WORLD:Hello, world!" | gen_packets -a 25 -o x.wav -
+.B echo -n 'WB2OSZ>WORLD:Hello, world!' | gen_packets -a 25 -o x.wav -
+.PD 0
+.P
+.PD
+.B atest x.wav
 .P
 .RS
-Read message from stdin and put quarter volume sound into the file x.wav.
+Read message from stdin and put quarter volume sound into the file x.wav.  Decode the sound file.
 .RE
 .P
 
