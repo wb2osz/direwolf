@@ -207,37 +207,35 @@ void text_color_init (int enable_color)
 	g_enable_color = enable_color;
 
 
+	if (g_enable_color == 0) {
+		return;
+	}
 #if __WIN32__
 
 
-	if (g_enable_color) {
 
-	  HANDLE h;
-	  CONSOLE_SCREEN_BUFFER_INFO csbi;
-	  WORD attr = BACKGROUND_WHITE;
-	  DWORD length;
-	  COORD coord;
-	  DWORD nwritten;
+	HANDLE h;
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	WORD attr = BACKGROUND_WHITE;
+	DWORD length;
+	COORD coord;
+	DWORD nwritten;
 
-	  h = GetStdHandle(STD_OUTPUT_HANDLE);
-	  if (h != NULL && h != INVALID_HANDLE_VALUE) {
+	h = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (h != NULL && h != INVALID_HANDLE_VALUE) {
 
-	    GetConsoleScreenBufferInfo (h, &csbi);
+		GetConsoleScreenBufferInfo (h, &csbi);
 
-	    length = csbi.dwSize.X * csbi.dwSize.Y;
-	    coord.X = 0; 
-	    coord.Y = 0;
-	    FillConsoleOutputAttribute (h, attr, length, coord, &nwritten);
-	  }
+		length = csbi.dwSize.X * csbi.dwSize.Y;
+		coord.X = 0;
+		coord.Y = 0;
+		FillConsoleOutputAttribute (h, attr, length, coord, &nwritten);
 	}
-
 #else
-	if (g_enable_color) {
-	  //printf ("%s", clear_eos);
-	  printf ("%s", background_white);
-	  printf ("%s", clear_eos);
-	  printf ("%s", black);
-	}
+	//printf ("%s", clear_eos);
+	printf ("%s", background_white);
+	printf ("%s", clear_eos);
+	printf ("%s", black);
 #endif
 }
 
