@@ -77,6 +77,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <unistd.h>
 
 
 #if __WIN32__
@@ -207,7 +208,7 @@ void text_color_init (int enable_color)
 	g_enable_color = enable_color;
 
 
-	if (g_enable_color == 0) {
+	if (g_enable_color == 0 || isatty(fileno(stdout)) == 0) {
 		return;
 	}
 #if __WIN32__
@@ -250,7 +251,7 @@ void text_color_set ( enum dw_color_e c )
 	WORD attr;
 	HANDLE h;
 
-	if (g_enable_color == 0) {
+	if (g_enable_color == 0 || isatty(fileno(stdout)) == 0) {
 	  return;
 	}
 
@@ -294,7 +295,7 @@ void text_color_set ( enum dw_color_e c )
 void text_color_set ( enum dw_color_e c )
 {
 
-	if (g_enable_color == 0) {
+	if (g_enable_color == 0 || isatty(fileno(stdout)) == 0) {
 	  return;
 	}
 
