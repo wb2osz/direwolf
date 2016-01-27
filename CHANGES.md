@@ -10,6 +10,8 @@
 - AGW network protocol now works properly for big-endian processors
 such as PowerPC or MIPS.
 
+ - The Mac OSX build procedure is now better about locating the SDK.
+
 
 ----------
 
@@ -17,7 +19,7 @@ such as PowerPC or MIPS.
 
 ### New Feature: ###
 
-- Added support for hamlib.   This will provide more flexible options for PTT control.
+- Added support for hamlib.   This will provide more flexible options for PTT control.  Needs better documentation.
 
 ----------
 

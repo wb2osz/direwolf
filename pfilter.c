@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2015  John Langner, WB2OSZ
+//    Copyright (C) 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -449,10 +449,24 @@ static int parse_filter_spec (pfstate_t *pf)
 	}
 	else if (pf->token_str[0] == 'd' && ispunct(pf->token_str[1])) {
 	  int n;
-	  // loop on used digipeaters
+	  // loop on all digipeaters
 	  result = 0;
 	  for (n = AX25_REPEATER_1; result == 0 && n < ax25_get_num_addr (pf->pp); n++) {
+	    // Consider only those with the H (has-been-used) bit set.
 	    if (ax25_get_h (pf->pp, n)) {
+	      ax25_get_addr_with_ssid (pf->pp, n, addr);
+	      result = filt_bodgu (pf, addr);
+	    }
+	  }
+	}
+	else if (pf->token_str[0] == 'v' && ispunct(pf->token_str[1])) {
+	  int n;
+	  // loop on all digipeaters (mnemonic Via)
+	  result = 0;
+	  for (n = AX25_REPEATER_1; result == 0 && n < ax25_get_num_addr (pf->pp); n++) {
+	    // This is different than the previous "d" filter.
+	    // Consider only those where the the H (has-been-used) bit is NOT set.
+	    if ( ! ax25_get_h (pf->pp, n)) {
 	      ax25_get_addr_with_ssid (pf->pp, n, addr);
 	      result = filt_bodgu (pf, addr);
 	    }
@@ -528,7 +542,8 @@ static int parse_filter_spec (pfstate_t *pf)
  * 				Object		o/obj1/obj2...  
  * 				Digipeater	d/digi1/digi2...  
  * 				Group Msg	g/call1/call2...  
- * 				Unproto		u/unproto1/unproto2...  
+ * 				Unproto		u/unproto1/unproto2...
+ *				Via-not-yet	v/digi1/digi2...
  *
  *		arg	- Value to match from source addr, destination,
  *			  used digipeater, object name, etc.
@@ -1047,6 +1062,13 @@ int main ()
 	pftest (160, "s//#/LS1", "WB2OSZ-5>APDW12:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
 	pftest (161, "s//#/LS1", "WB2OSZ-5>APDW12:!4237.14N\\07120.83W#PHG7140Chelmsford MA", 0);
 	pftest (162, "s//#/LS1", "WB2OSZ-5>APDW12:!4237.14N/07120.83W#PHG7140Chelmsford MA", 0);
+
+	pftest (170, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (171, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1*,DIGI2,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (172, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (173, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3*,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
+	pftest (174, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3,DIGI4*:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
+	pftest (175, "v/DIGI9/DIGI2", "WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
 
 	/* Test error reporting. */
 
