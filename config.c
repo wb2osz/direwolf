@@ -1121,7 +1121,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= 100 && n <= 10000) {
+            if (n >= MIN_BAUD && n <= MAX_BAUD) {
 	      p_audio_config->achan[channel].baud = n;
 	      if (n != 300 && n != 1200 && n != 9600) {
 	        text_color_set(DW_COLOR_ERROR);
@@ -3719,6 +3719,34 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("You won't make friends by setting a limit this high.\n");
    	    }
 	  }
+
+/*
+ * SATGATE 		- Special SATgate mode to delay packets heard directly.
+ *
+ * SATGATE [ n ]
+ */
+
+	  else if (strcasecmp(t, "SATGATE") == 0) {
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+
+	      int n = atoi(t);
+              if (n >= MIN_SATGATE_DELAY && n <= MAX_SATGATE_DELAY) {
+	        p_igate_config->satgate_delay = n;
+	      }
+	      else {
+	        p_igate_config->satgate_delay = DEFAULT_SATGATE_DELAY;
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Unreasonable SATgate delay.  Using default.\n", line);
+	      }
+	    }
+	    else {
+	      p_igate_config->satgate_delay = DEFAULT_SATGATE_DELAY;
+	    }
+	  }
+
+
 
 /*
  * ==================== All the left overs ==================== 

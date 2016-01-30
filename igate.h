@@ -20,6 +20,7 @@
 #define DEFAULT_IGATE_PORT 14580
 
 
+
 struct igate_config_s {
 
 /*
@@ -53,6 +54,10 @@ struct igate_config_s {
 	int tx_limit_1;			/* Max. packets to transmit in 1 minute. */
 
 	int tx_limit_5;			/* Max. packets to transmit in 5 minutes. */
+/*
+ * Special SATgate mode to delay packets heard directly.
+ */
+	int satgate_delay;		/* seconds.  0 to disable. */
 };
 
 
@@ -61,6 +66,10 @@ struct igate_config_s {
 
 #define IGATE_TX_LIMIT_5_DEFAULT 20
 #define IGATE_TX_LIMIT_5_MAX     80
+
+#define DEFAULT_SATGATE_DELAY 10
+#define MIN_SATGATE_DELAY 5
+#define MAX_SATGATE_DELAY 30
 
 
 /* Call this once at startup */

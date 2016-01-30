@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -32,6 +32,9 @@
  *
  *		APRS iGate properties
  *		http://wiki.ham.fi/APRS_iGate_properties
+ *
+ *		SATgate mode.
+ *		http://www.tapr.org/pipermail/aprssig/2016-January/045283.html
  *
  *---------------------------------------------------------------*/
 
@@ -97,16 +100,25 @@
 #include "igate.h"
 #include "latlong.h"
 #include "pfilter.h"
+#include "dtime_now.h"
 
 
 #if __WIN32__
 static unsigned __stdcall connnect_thread (void *arg);
 static unsigned __stdcall igate_recv_thread (void *arg);
+static unsigned __stdcall satgate_delay_thread (void *arg);
 #else
 static void * connnect_thread (void *arg);
 static void * igate_recv_thread (void *arg);
+static void * satgate_delay_thread (void *arg);
 #endif
 
+
+static dw_mutex_t dp_mutex;				/* Critical section for delayed packet queue. */
+static packet_t dp_queue_head;
+
+static void satgate_delay_packet (packet_t pp, int chan);
+static void send_packet_to_server (packet_t pp, int chan);
 static void send_msg_to_server (const char *msg);
 static void xmit_packet (char *message, int chan);
 
@@ -380,12 +392,15 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 #if __WIN32__
 	HANDLE connnect_th;
 	HANDLE cmd_recv_th;
+	HANDLE satgate_delay_th;
 #else
 	pthread_t connect_listen_tid;
 	pthread_t cmd_listen_tid;
+	pthread_t satgate_delay_tid;
 	int e;
 #endif
 	s_debug = debug_level;
+	dp_queue_head = NULL;
 
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
@@ -467,7 +482,31 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	  return;
 	}
 #endif
-}
+
+/*
+ * This lets delayed packets continue after specified amount of time.
+ */
+
+	if (p_igate_config->satgate_delay > 0) {
+#if __WIN32__
+	  satgate_delay_th = (HANDLE)_beginthreadex (NULL, 0, satgate_delay_thread, NULL, 0, NULL);
+	  if (satgate_delay_th == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Internal error: Could not create SATgate delay thread\n");
+	    return;
+	  }
+#else
+	  e = pthread_create (&satgate_delay_tid, NULL, satgate_delay_thread, NULL);
+	  if (e != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    perror("Internal error: Could not create SATgate delay thread");
+	    return;
+	  }
+#endif
+	  dw_mutex_init(&dp_mutex);
+	}
+
+} /* end igate_init */
 
 
 /*-------------------------------------------------------------------
@@ -816,7 +855,6 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	int n;
 	unsigned char *pinfo;
 	char *p;
-	char msg[IGATE_MAX_MSG];
 	int info_len;
 	
 
@@ -970,6 +1008,52 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 // TODO: Should we drop raw touch tone data object type generated here?
 
+
+/*
+ * If the SATgate mode is enabled, see if it should be delayed.
+ * The rule is if we hear it directly and it has at least one
+ * digipeater so there is potential of being re-transmitted.
+ * (Digis are all unused if we are hearing it directly from source.)
+ */
+	if (save_igate_config_p->satgate_delay > 0 &&
+	    ax25_get_heard(pp) == AX25_SOURCE &&
+	    ax25_get_num_repeaters(pp) > 0) {
+
+	  satgate_delay_packet (pp, chan);
+	}
+	else {
+	  send_packet_to_server (pp, chan);
+	}
+
+} /* end igate_send_rec_packet */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        send_packet_to_server
+ *
+ * Purpose:     Convert to text and send to the IGate server.
+ *
+ * Inputs:	pp 	- Packet object.
+ *
+ *		chan	- Radio channel where it was received.
+ *
+ * Description:	Duplicate detection is handled here.
+ *		Suppress if same was sent recently.
+ *
+ *--------------------------------------------------------------------*/
+
+static void send_packet_to_server (packet_t pp, int chan)
+{
+	unsigned char *pinfo;
+	int info_len;
+	char msg[IGATE_MAX_MSG];
+
+
+	info_len = ax25_get_info (pp, &pinfo);
+	(void)(info_len);
+
 /*
  * Do not relay if a duplicate of something sent recently.
  */
@@ -1004,9 +1088,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 	ax25_delete (pp);
 
-} /* end igate_send_rec_packet */
-
-
+} /* end send_packet_to_server */
 
 
 
@@ -1257,6 +1339,126 @@ static void * igate_recv_thread (void *arg)
 	return (0);
 
 } /* end igate_recv_thread */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        satgate_delay_packet
+ *
+ * Purpose:     Put packet into holding area for a while rather than
+ *		sending it immediately to the IS server.
+ *
+ * Inputs:	pp	- Packet object.
+ *
+ *		chan	- Radio channel where received.
+ *
+ * Outputs:	Appended to queue.
+ *
+ * Description:	If we hear a packet directly and the same one digipeated,
+ *		we only send the first to the APRS IS due to duplicate removal.
+ *		It may be desirable to favor the digipeated packet over the
+ *		original.  For this situation, we have an option which delays
+ *		a packet if we hear it directly and the via path is not empty.
+ *		We know we heard it directly if none of the digipeater
+ *		addresses have been used.
+ *		This way the digipeated packet will go first.
+ *		The original is sent about 10 seconds later.
+ *		Duplicate removal will drop the original if there is no
+ *		corresponding digipeated version.
+ *
+ *--------------------------------------------------------------------*/
+
+static void satgate_delay_packet (packet_t pp, int chan)
+{
+	packet_t pnext, plast;
+
+
+	//if (s_debug >= 1) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Rx IGate: SATgate mode, delay packet heard directly.\n");
+	//}
+
+	ax25_set_release_time (pp, dtime_now() + save_igate_config_p->satgate_delay);
+//TODO: save channel too.
+
+	dw_mutex_lock (&dp_mutex);
+
+	if (dp_queue_head == NULL) {
+	  dp_queue_head = pp;
+	}
+	else {
+	  plast = dp_queue_head;
+	  while ((pnext = ax25_get_nextp(plast)) != NULL) {
+	    plast = pnext;
+	  }
+	  ax25_set_nextp (plast, pp);
+	}
+
+	dw_mutex_unlock (&dp_mutex);
+
+} /* end satgate_delay_packet */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        satgate_delay_thread
+ *
+ * Purpose:     Release packet when specified release time has arrived.
+ *
+ * Inputs:	dp_queue_head	- Queue of packets.
+ *
+ * Outputs:	Sent to APRS IS.
+ *
+ * Description:	For simplicity we'll just poll each second.
+ *		Release the packet when its time has arrived.
+ *
+ *--------------------------------------------------------------------*/
+
+#if __WIN32__
+static unsigned __stdcall satgate_delay_thread (void *arg)
+#else
+static void * satgate_delay_thread (void *arg)
+#endif
+{
+	double release_time;
+	int chan = 0;				// TODO:  get receive channel somehow.
+						// only matters if multi channel with different names.
+		
+	while (1) {
+	  SLEEP_SEC (1);
+
+/* Don't need critical region just to peek */
+
+	  if (dp_queue_head != NULL) {
+
+	    double now = dtime_now();
+
+	    release_time = ax25_get_release_time (dp_queue_head);
+
+#if 0
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("SATgate:  %.1f sec remaining\n", release_time - now);
+#endif
+	    if (now > release_time) {
+	      packet_t pp;
+
+	      dw_mutex_lock (&dp_mutex);
+
+	      pp = dp_queue_head;
+	      dp_queue_head = ax25_get_nextp(pp);
+
+	      dw_mutex_unlock (&dp_mutex);
+	      ax25_set_nextp (pp, NULL);
+
+	      send_packet_to_server (pp, chan);
+	    }
+	  }  /* if something in queue */
+	}  /* while (1) */
+	return (0);
+
+} /* end satgate_delay_thread */
 
 
 /*-------------------------------------------------------------------

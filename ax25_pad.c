@@ -219,7 +219,7 @@ int ax25memdebug_seq (packet_t this_p)
  *------------------------------------------------------------------------------*/
 
 
-static packet_t ax25_new (void) 
+packet_t ax25_new (void)
 {
 	struct packet_s *this_p;
 
@@ -1630,8 +1630,47 @@ packet_t ax25_get_nextp (packet_t this_p)
 {
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
-	
+
 	return (this_p->nextp);
+}
+
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_set_release_time
+ *
+ * Purpose:	Set release time
+ *
+ * Inputs:	this_p		- Current packet object.
+ *
+ *		release_time	- Time as returned by dtime_now().
+ *
+ *------------------------------------------------------------------------------*/
+
+void ax25_set_release_time (packet_t this_p, double release_time)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+	
+	this_p->release_time = release_time;
+}
+
+
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_get_release_time
+ *
+ * Purpose:	Get release time.
+ *
+ *------------------------------------------------------------------------------*/
+
+double ax25_get_release_time (packet_t this_p)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	return (this_p->release_time);
 }
 
 

@@ -3,6 +3,16 @@
 
 ----------
 
+## Version 1.3  -- Development snapshot K  --  January 2016 ##
+
+### New Feature: ###
+
+- SATgate mode for IGate.  Packets heard directly are delayed before being sent
+to the Internet Server.   This favors digipeated packets because the original
+arrives later and gets dropped if there are duplicates.
+
+----------
+
 ## Version 1.3  -- Development snapshot J  --  January 2016 ##
 
 ### Bugs Fixed: ###
@@ -10,7 +20,7 @@
 - AGW network protocol now works properly for big-endian processors
 such as PowerPC or MIPS.
 
- - The Mac OSX build procedure is now better about locating the SDK.
+- The Mac OSX build procedure is now better about locating the SDK.
 
 
 ----------

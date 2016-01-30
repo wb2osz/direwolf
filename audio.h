@@ -298,6 +298,12 @@ struct audio_s {
 #define DEFAULT_SPACE_FREQ	2200
 #define DEFAULT_BAUD		1200
 
+/* Used for sanity checking in config file and command line options. */
+/* 9600 is known to work.  */
+/* TODO: Is 19200 possible with a soundcard at 44100 samples/sec? */
+
+#define MIN_BAUD		100
+#define MAX_BAUD		10000
 
 
 /*
