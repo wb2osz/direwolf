@@ -511,7 +511,7 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 	    text_color_set(DW_COLOR_DEBUG);
 	    dw_printf ("\n");
 	    dw_printf ("Packet content before adding KISS framing and any escapes:\n");
-	    hex_dump ((char*)fbuf, flen);
+	    hex_dump (fbuf, flen);
 	  }
 
 	  kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
