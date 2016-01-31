@@ -1546,7 +1546,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 #ifdef USE_HAMLIB
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_HAMLIB;
 
-	      t = strtok (NULL, " ,\t\n\r");
+	      t = split(NULL,0);
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file line %d: Missing RIG number.\n", line);
@@ -1715,7 +1715,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
           continue;
         }
 
-	t = strtok (NULL, " ,\t\n\r");
+	t = split(NULL,0);
 	if (t == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Config file line %d: Missing port, model[, key=value].\n", 
@@ -1725,7 +1725,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	strncpy (port.pathname, t, FILPATHLEN - 1);
 
-	t = strtok (NULL, " ,\t\n\r");
+	t = split(NULL,0);
 	if (t == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Config file line %d: Missing model[, key=value]\n", line);
