@@ -1134,7 +1134,7 @@ int audio_flush (int a)
 {
 #if USE_ALSA
 	int k;
-	char *psound;
+	unsigned char *psound;
 	int retries = 10;
 	snd_pcm_status_t *status;
 

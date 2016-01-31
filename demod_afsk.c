@@ -720,7 +720,7 @@ static void emit_macro (char *name, int size, float *coeff)
 	dw_printf ("\n");
 }
 
-int main ()
+int main (void)
 {
 	//int n;
 	char fff_profile;
