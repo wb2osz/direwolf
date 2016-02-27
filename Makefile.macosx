@@ -611,10 +611,10 @@ dist-src : README.md CHANGES.md \
 tocalls-symbols :
 	cp tocalls.txt tocalls.txt~
 	wget http://www.aprs.org/aprs11/tocalls.txt -O tocalls.txt
-	-diff tocalls.txt~ tocalls.txt
+	-diff -Z tocalls.txt~ tocalls.txt
 	cp symbols-new.txt symbols-new.txt~
 	wget http://www.aprs.org/symbols/symbols-new.txt -O symbols-new.txt
-	-diff symbols-new.txt~ symbols-new.txt
+	-diff -Z symbols-new.txt~ symbols-new.txt
 	cp symbolsX.txt symbolsX.txt~
 	wget http://www.aprs.org/symbols/symbolsX.txt -O symbolsX.txt
-	-diff symbolsX.txt~ symbolsX.txt
+	-diff -Z symbolsX.txt~ symbolsX.txt

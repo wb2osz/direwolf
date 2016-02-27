@@ -1,4 +1,4 @@
-APRS SYMBOLS (Icons)                                        23 Jun 2015
+APRS SYMBOLS (Icons)                                        25 Nov 2015
 -----------------------------------------------------------------------
                                                                  WB4APR
 
@@ -28,6 +28,8 @@ http://aprs.org/symbols/symbols-background.txt
 
 UPDATE CHRONOLOGY:
 
+25 Nov 15: Found APRStt symbol poorly documented  Was shown as "\=". 
+           But has been \A BOX symbol with variety of overlays
 23 Jun 15: Changed Aircraft to SSID-11 and Human to SSID-7
 28 Aug 14: Added notation on newly availble BASE codes (begun in 2007)
            Old WX versions of these: Bb{*:DFegJp were moved to ovlays
@@ -205,7 +207,7 @@ for the stand-alone trackers described above.
 /: MR  FIRE                      \:  NR  AVAIL (Hail ==> ` ovly H)                    
 /; MS  Campground (Portable ops) \;  NSO Park/Picnic + overlay events 
 /< MT  Motorcycle     (SSID-10)  \<  NTO ADVISORY (one WX flag)
-/= MU  RAILROAD ENGINE           \=  NUO APRStt Touchtone (DTMF users)
+/= MU  RAILROAD ENGINE           \=  NUO avail. symbol overlay group
 /> MV  CAR            (SSID-9)   \>  NV# OVERLAYED CARs & Vehicles
 /? MW  SERVER for Files          \?  NW  INFO Kiosk  (Blue box with ?)
 /@ MX  HC FUTURE predict (dot)   \@  NX  HURICANE/Trop-Storm

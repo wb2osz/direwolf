@@ -13,6 +13,8 @@ Update 29 Oct 2015:  Reorgainized list to Alphabetical Order.
   + Confirmed D^ for Drones was already in there since 2014
   + Added R^ type aircraft for remotely piloted
   + Added S^ Solar Powered Aircraft
+  + Noticed all new category \= is availalbe.  Had been shown ast
+    APRStt, but that was changed in 2009 to overlay BOX symbols.
 
 UPDATES/REVISIONS/CORRECTIONS:
 
@@ -38,6 +40,7 @@ tion, but this was every restrictive.  SO the following alternate
 base symbols were redefined so that the basic symbol could take on
 dozens of unique overlay definitions:
 
+\= - Had been undefined
 \0 - Several overlays for the numbered Circle
 \A - (BOX symbol) APRStt(DTMF), RFID users, XO (OLPC) 
 \' - Was Crash Site.  Now expanded to be INCIDENT sites
