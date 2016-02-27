@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -44,6 +44,8 @@
  * Version 1.2: More than two radio channels.
  *		Generalize for additional signals besides PTT.
  *
+ * Version 1.3:	HAMLIB support.
+ *
  * References:	http://www.robbayer.com/files/serial-win.pdf
  *
  *		https://www.kernel.org/doc/Documentation/gpio.txt
@@ -53,7 +55,7 @@
 /*
 	Idea for future enhancement:
 
-	A couple people have asked about support for the DMK URI.
+	A growing number of people have been asking about support for the DMK URI.
 	This uses a C-Media CM108/CM119 with one interesting addition, a GPIO
 	pin is used to drive PTT.  Here is some related information.
 
@@ -84,6 +86,12 @@
 		https://github.com/signal11/hidapi/blob/master/libusb/hid.c
 		http://stackoverflow.com/questions/899008/howto-write-to-the-gpio-pin-of-the-cm108-chip-in-linux
 		https://www.kernel.org/doc/Documentation/hid/hidraw.txt
+
+	In version 1.3, we add HAMLIB support which should be able to do this.
+ 	(Linux only & haven't verified that it actually works yet!)
+	
+	Might want to have CM108 GPIO support built in, someday, for simpler building & configuration.
+	Maybe even for Windows.  ;-)
 */
 
 #include <stdio.h>
@@ -103,6 +111,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
+
+#ifdef USE_HAMLIB
+#include <hamlib/rig.h>
+#endif
 
 /* So we can have more common code for fd. */
 typedef int HANDLE;
@@ -221,6 +233,7 @@ void export_gpio(int gpio, int invert, int direction)
 	err = system (stemp);
 	snprintf (stemp, sizeof(stemp), "sudo chmod go+rw /sys/class/gpio/gpio%d/value", gpio);
 	err = system (stemp);
+	(void)err;
 
 	snprintf (stemp, sizeof(stemp), "/sys/class/gpio/gpio%d/value", gpio);
 
@@ -297,10 +310,11 @@ void export_gpio(int gpio, int invert, int direction)
  *					PTT_METHOD_SERIAL - serial (com) port. 
  *					PTT_METHOD_GPIO - general purpose I/O. 
  *					PTT_METHOD_LPT - Parallel printer port. 
- *                  PTT_METHOD_HAMLIB - HAMLib rig control.
+ *                  			PTT_METHOD_HAMLIB - HAMLib rig control.
  *			
  *			ptt_device	Name of serial port device.  
  *					 e.g. COM1 or /dev/ttyS0. 
+ *					 HAMLIB can also use hostaddr:port.
  *			
  *			ptt_line	RTS or DTR when using serial port. 
  *			
@@ -313,6 +327,11 @@ void export_gpio(int gpio, int invert, int direction)
  *			
  *			ptt_invert	Invert the signal.  
  *					 Normally higher voltage means transmit or LED on. 
+ *
+ *			ptt_model	Only for HAMLIB.
+ *					2 to communicate with rigctld.
+ *					>= 3 for specific radio model.
+ *					-1 guess at what is out there.  (AUTO option in config file.)
  *
  * Outputs:	Remember required information for future use.
  *
@@ -328,7 +347,9 @@ static HANDLE ptt_fd[MAX_CHANS][NUM_OCTYPES];
 					/* Serial port handle or fd.  */
 					/* Could be the same for two channels */	
 					/* if using both RTS and DTR. */
-
+#if USE_HAMLIB
+static RIG *rig[MAX_CHANS][NUM_OCTYPES];
+#endif
 
 static char otnames[NUM_OCTYPES][8];
 
@@ -359,7 +380,9 @@ void ptt_init (struct audio_s *audio_config_p)
 	  for (ot = 0; ot < NUM_OCTYPES; ot++) {
 
 	    ptt_fd[ch][ot] = INVALID_HANDLE_VALUE;
-
+#if USE_HAMLIB
+	    rig[ch][ot] = NULL;
+#endif
 	    if (ptt_debug_level >= 2) {
 
 	      text_color_set(DW_COLOR_DEBUG);
@@ -464,7 +487,7 @@ void ptt_init (struct audio_s *audio_config_p)
 			audio_config_p->achan[ch].octrl[ot].ptt_device, ch);
 #if __WIN32__
 #else
-	          dw_printf ("%s\n", strerror(errno));
+	          dw_printf ("%s\n", strerror(e));
 #endif
 	          /* Don't try using it later if device open failed. */
 
@@ -491,7 +514,7 @@ void ptt_init (struct audio_s *audio_config_p)
 #else
 
 /*
- * Does any of them use GPIO or HAMLIB?
+ * Does any of them use GPIO?
  */
 
 	using_gpio = 0;
@@ -637,7 +660,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("ERROR - Can't open /dev/port for parallel printer port PTT control.\n");
-	          dw_printf ("%s\n", strerror(errno));
+	          dw_printf ("%s\n", strerror(e));
 	          dw_printf ("You probably don't have adequate permissions to access I/O ports.\n");
 	          dw_printf ("Either run direwolf as root or change these permissions:\n");
 	          dw_printf ("  sudo chmod go+rw /dev/port\n");
@@ -667,31 +690,61 @@ void ptt_init (struct audio_s *audio_config_p)
 #ifdef USE_HAMLIB
 	for (ch = 0; ch < MAX_CHANS; ch++) {
 	  if (save_audio_config_p->achan[ch].valid) {
-	    int ot, retcode;
-        RIG *rig;
-        freq_t freq;
-
+	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_HAMLIB) {
-            if (audio_config_p->achan[ch].octrl[ot].ptt_rig - 1 >= audio_config_p->rigs) {
-              text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Error: RIG %d not available.\n", audio_config_p->achan[ch].octrl[ot].ptt_rig);
-              audio_config_p->achan[ch].octrl[ot].ptt_method = PTT_METHOD_NONE;
-            }
+	        if (ot == OCTYPE_PTT) {
 
-            rig = audio_config_p->rig[audio_config_p->achan[ch].octrl[ot].ptt_rig];
-            retcode = rig_get_freq(rig, RIG_VFO_CURR, &freq);
-            if (retcode == RIG_OK) {
-              text_color_set(DW_COLOR_INFO);
-              dw_printf ("RIG tuned on %"PRIfreq"\n", freq);
-            } else {
-              text_color_set(DW_COLOR_ERROR);
-              dw_printf ("RIG rig_get_freq error %s, PTT probably will not work\n", rigerror(retcode));
-            }
-          }
-        }
-      }
-    }
+	          /* For "AUTO" model, try to guess what is out there. */
+
+	          if (audio_config_p->achan[ch].octrl[ot].ptt_model == -1) {
+	            hamlib_port_t hport;
+
+	            memset (&hport, 0, sizeof(hport));
+	            strlcpy (hport.pathname, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(hport.pathname));
+	            rig_load_all_backends();
+                    audio_config_p->achan[ch].octrl[ot].ptt_model = rig_probe(&hport);
+
+	            if (audio_config_p->achan[ch].octrl[ot].ptt_model == RIG_MODEL_NONE) {
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("Couldn't guess rig model number for AUTO option.  Run \"rigctl --list\" for a list of model numbers.\n");
+	              continue;
+	            }
+
+	            text_color_set(DW_COLOR_INFO);
+	            dw_printf ("Hamlib AUTO option detected rig model %d.  Run \"rigctl --list\" for a list of model numbers.\n",
+							audio_config_p->achan[ch].octrl[ot].ptt_model);
+	          }
+
+	          rig[ch][ot] = rig_init(audio_config_p->achan[ch].octrl[ot].ptt_model);
+	          if (rig[ch][ot] == NULL) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Unknown rig model %d for hamlib.  Run \"rigctl --list\" for a list of model numbers.\n", 
+	                          audio_config_p->achan[ch].octrl[ot].ptt_model);
+	            continue;
+	          }
+
+	          strlcpy (rig[ch][ot]->state.rigport.pathname, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(rig[ch][ot]->state.rigport.pathname));
+	          int err = rig_open(rig[ch][ot]);
+	          if (err != RIG_OK) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Hamlib Rig open error %d: %s\n", err, rigerror(err));
+	            rig_cleanup (rig[ch][ot]);
+	            rig[ch][ot] = NULL;
+	            continue;
+	          }
+
+       		  /* Successful.  Later code should check for rig[ch][ot] not NULL. */
+	        }
+	        else {
+                  text_color_set(DW_COLOR_ERROR);
+                  dw_printf ("HAMLIB can only be used for PTT.  Not DCD or other output.\n");
+	        }
+	      }
+	    }
+	  }
+	}
+
 #endif
 
 
@@ -863,7 +916,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 		ptt_fd[chan][ot] != INVALID_HANDLE_VALUE) {
 
 	  char lpt_data;
-	  ssize_t n;		
+	  //ssize_t n;		
 
 	  lseek (ptt_fd[chan][ot], (off_t)LPT_IO_ADDR, SEEK_SET);
 	  if (read (ptt_fd[chan][ot], &lpt_data, (size_t)1) != 1) {
@@ -897,16 +950,22 @@ void ptt_set (int ot, int chan, int ptt_signal)
  */
 
 	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_HAMLIB) {
-      int retcode;
-      RIG *rig = save_audio_config_p->rig[save_audio_config_p->achan[chan].octrl[ot].ptt_rig];
 
-      if ((retcode = rig_set_ptt(rig, RIG_VFO_CURR, ptt ? RIG_PTT_ON : RIG_PTT_OFF)) != RIG_OK) {
-        text_color_set(DW_COLOR_ERROR);
-        dw_printf ("Error sending rig_set_ptt command for channel %d %s\n", chan, otnames[ot]);
-        dw_printf ("%s\n", rigerror(retcode));
-      }
-    }
+	  if (rig[chan][ot] != NULL) {
 
+	    int retcode = rig_set_ptt(rig[chan][ot], RIG_VFO_CURR, ptt ? RIG_PTT_ON : RIG_PTT_OFF);
+
+	    if (retcode != RIG_OK) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Error sending rig_set_ptt command for channel %d %s\n", chan, otnames[ot]);
+	      dw_printf ("%s\n", rigerror(retcode));
+	    }
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Can't use rig_set_ptt for channel %d %s because rig_open failed.\n", chan, otnames[ot]);
+	  }
+	}
 #endif
 
 
@@ -1016,28 +1075,20 @@ void ptt_term (void)
 	}
 
 #ifdef USE_HAMLIB
-    for (n = 0; n < save_audio_config_p->rigs; n++) {
-      RIG *rig = save_audio_config_p->rig[n];
-      int retcode;
 
-      if ((retcode = rig_set_ptt(rig, RIG_VFO_CURR, RIG_PTT_OFF)) != RIG_OK) {
-        text_color_set(DW_COLOR_ERROR);
-        dw_printf ("Error sending rig_set_ptt command for rig %d\n", n);
-        dw_printf ("%s\n", rigerror(retcode));
-      }
+	for (n = 0; n < MAX_CHANS; n++) {
+	  if (save_audio_config_p->achan[n].valid) {
+	    int ot;
+	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (rig[n][ot] != NULL) {
 
-      if ((retcode = rig_close(rig)) != RIG_OK) {
-        text_color_set(DW_COLOR_ERROR);
-        dw_printf ("Error sending rig_close command for rig %d\n", n);
-        dw_printf ("%s\n", rigerror(retcode));
-      }
-
-      if ((retcode = rig_cleanup(rig)) != RIG_OK) {
-        text_color_set(DW_COLOR_ERROR);
-        dw_printf ("Error sending rig_cleanup command for rig %d\n", n);
-        dw_printf ("%s\n", rigerror(retcode));
-      }
-    }
+	        rig_close(rig[n][ot]);
+	        rig_cleanup(rig[n][ot]);
+	        rig[n][ot] = NULL;
+	      }
+	    }
+	  }
+	}
 #endif
 }
 

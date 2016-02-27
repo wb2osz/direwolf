@@ -67,6 +67,10 @@
 #include <netdb.h>
 #endif
 
+#if USE_HAMLIB
+#include <hamlib/rig.h>
+#endif
+
 
 #define DIREWOLF_C 1
 
@@ -185,7 +189,9 @@ int main (int argc, char *argv[])
 	int d_g_opt = 0;	/* "-d g" option for GPS. Can be repeated for more detail. */
 	int d_o_opt = 0;	/* "-d o" option for output control such as PTT and DCD. */	
 	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */
-	
+#if USE_HAMLIB
+	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
+#endif
 
 	strlcpy(l_opt, "", sizeof(l_opt));
 	strlcpy(P_opt, "", sizeof(P_opt));
@@ -230,8 +236,8 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "K", __DATE__);
+	dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "K", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -454,6 +460,9 @@ int main (int argc, char *argv[])
 #if AX25MEMDEBUG
 	      case 'm':  ax25memdebug_set(); break;		// Track down memory leak.  Not documented.		
 #endif
+#if USE_HAMLIB
+	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
+#endif
 	      default: break;
 	     }
 	    }
@@ -526,6 +535,10 @@ int main (int argc, char *argv[])
  *
  * Possibly override some by command line options.
  */
+
+#if USE_HAMLIB
+        rig_set_debug(d_h_opt);
+#endif
 
 	symbols_init ();
 
@@ -1067,6 +1080,9 @@ static void usage (char **argv)
 	dw_printf ("       t             t = Tracker beacon.\n");
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
 	dw_printf ("       i             i = IGate.\n");
+#if USE_HAMLIB
+	dw_printf ("       h             h = hamlib increase verbose level.\n");
+#endif
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
