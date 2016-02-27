@@ -3,6 +3,15 @@
 
 ----------
 
+## Version 1.3  -- Beta Test  --  February 2016 ##
+
+### Bugs Fixed: ###
+
+- Rewrote the hamlib PTT interface.  Improved documentation.
+
+
+----------
+
 ## Version 1.3  -- Development snapshot K  --  January 2016 ##
 
 ### New Feature: ###

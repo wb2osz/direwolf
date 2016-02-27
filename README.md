@@ -11,7 +11,7 @@ Dire Wolf is a software "soundcard" modem/TNC and [APRS](http://www.aprs.org/) e
 ## Features ##
 
 - Lower cost, higher performance alternative to hardware TNC.
-Version 1.2 decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf.net/TNCtest/).  
+Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf.net/TNCtest/).  
 
 - Ideal for building a Raspberry Pi digipeater & IGate.
 
@@ -30,11 +30,13 @@ Version 1.2 decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](h
 
 - Very flexible Digipeating with routing and filtering between up to 6 ports.
 
-- APRStt gateway - converts touch tone sequences to APRS objects.
+- APRStt gateway - converts touch tone sequences to APRS objects and voice responses.
 
-- APRS Internet Gateway (IGate) with IPv6 support.
+- APRS Internet Gateway (IGate) with IPv6 support and special SATGate mode.
 
-- Compatible with software defined radios (SDR) such as [gqrx](http://gqrx.dk/)  and [rtl_fm](http://sdr.osmocom.org/trac/wiki/rtl-sdr).
+- APRS Telemetry Toolkit.
+
+- Compatible with software defined radios (SDR) such as [gqrx](http://gqrx.dk/),  [rtl_fm](http://sdr.osmocom.org/trac/wiki/rtl-sdr), and SDR#.
 
 - Includes separate raw packet decoder, decode_aprs.
 
@@ -70,12 +72,11 @@ For more details see the **User Guide** in the [doc directory](https://github.co
 	cd ~
 	git clone https://www.github.com/wb2osz/direwolf
 	cd direwolf
-	git checkout 1.2
 	make
 	sudo make install
 	make install-conf
 
-The "git checkout 1.2" is necessary to get the most recent stable release.  The tip of the master branch is temporarily in an inconsistent state during the transition from the old website.  If you want the latest (unstable) development version, use "git checkout dev" instead.
+This should give you the most recent stable release.  If you want the latest (unstable) development version, use "git checkout dev" instead before the first "make" command.
 
 For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
