@@ -5,107 +5,51 @@
 
 ## Version 1.3  -- Beta Test  --  February 2016 ##
 
-### Bugs Fixed: ###
+### New Features: ###
 
-- Rewrote the hamlib PTT interface.  Improved documentation.
+- Support for Mac OS X. 
 
+- Many APRStt enhancements including: Morse code and speech responses to to APRStt tone sequences, new 5 digit callsign suffix abbreviation, 
+position ambiguity for latitude and longitude in object reports
 
-----------
-
-## Version 1.3  -- Development snapshot K  --  January 2016 ##
-
-### New Feature: ###
+- APRS Telemetry Toolkit.
+ 
+- GPS Tracker beacons are now available for the Windows version.  Previously this was only in the Linux version.
 
 - SATgate mode for IGate.  Packets heard directly are delayed before being sent
 to the Internet Server.   This favors digipeated packets because the original
 arrives later and gets dropped if there are duplicates.
 
-----------
-
-## Version 1.3  -- Development snapshot J  --  January 2016 ##
-
-### Bugs Fixed: ###
-
-- AGW network protocol now works properly for big-endian processors
-such as PowerPC or MIPS.
-
-- The Mac OSX build procedure is now better about locating the SDK.
-
-
-----------
-
-## Version 1.3  -- Development snapshot I  --  December 2015 ##
-
-### New Feature: ###
-
-- Added support for hamlib.   This will provide more flexible options for PTT control.  Needs better documentation.
-
-----------
-
-## Version 1.3  -- Development snapshot H  --  December 2015 ##
-
-### New Feature: ###
-
-- New experimental demodulator.  More details later.
-
-- APRStt enhancements including new 5 digit callsign suffix abbreviation and
-position ambiguity for latitude and longitude in object reports.
-
-### Bugs Fixed: ###
-
-- "INTERNAL ERROR: dlq_append NULL packet pointer." when using PASSALL.
-
-
-----------
-
-## Version 1.3  -- Development snapshot G  --  November 2015 ##
-
-### New Feature: ###
-
-- GPS Tracker beacons are now available for the Windows version.  Previously this was only in the Linux version.
+- Added support for hamlib. This provides more flexible options for PTT control.
 
 - Implemented AGW network protocol 'M' message for sending UNPROTO information without digipeater path.
 
-### Bugs Fixed: ###
-
-- Tracker beacons were not always updating the location properly.
-
-- In Mac OSX version:  Assertion failed: (adev[a].inbuf_size_in_bytes >= 100 && adev[a].inbuf_size_in_bytes <= 32768), function audio_get, file audio_portaudio.c, line 917.
-
-----------
-
-## Version 1.3  -- Development snapshot F  --  September 2015 ##
-
-### New Feature: ###
-
-- Command line option "-a n" to print audio device statistics each n seconds.  Previously this was always each 100 seconds on Linux and not available on Windows.
-
-### Bug Fixed: ###
-
-- Crashed when receiving packet with comment of a few hundred characters.
-
-----------
-
-## Version 1.3  -- Development snapshot E  --  August 2015 ##
-
-### Bug Fixed: ###
-
-- Crashed when receiving packet with unexpected form of GPS NMEA sentence.
-
-----------
-
-## Version 1.3  -- Development snapshot D  --  July 2015 ##
-
-### New Features: ###
-
-- Enhancements to APRStt gateway including Morse code and speech responses to to APRStt tone sequences.
-
-- Preliminary support for Mac OS X.  NEEDS MORE TESTING!
 
 - A list of all symbols available can be obtained with the -S
 command line option.
 
-- APRS Telemetry Toolkit (incomplete).
+- Command line option "-a n" to print audio device statistics each n seconds.  Previously this was always each 100 seconds on Linux and not available on Windows.
+
+### Bugs Fixed: ###
+
+
+
+- Fixed several cases where crashes were caused by unexpected packet contents:
+
+ - When receiving packet with unexpected form of GPS NMEA sentence.
+
+ - When receiving packet with comment of a few hundred characters.
+ 
+ - Address in path, from Internet server. more than 9 characters.
+
+- "INTERNAL ERROR: dlq_append NULL packet pointer." when using PASSALL.
+
+- In Mac OSX version:  Assertion failed: (adev[a].inbuf_size_in_bytes >= 100 &&   adev[a].inbuf_size_in_bytes <= 32768), function audio_get, file audio_portaudio.c, line 917.
+
+- Tracker beacons were not always updating the location properly.
+
+- AGW network protocol now works properly for big-endian processors
+such as PowerPC or MIPS.
 
 ----------
 
