@@ -906,14 +906,6 @@ static int kiss_get (/* MYFDTYPE fd*/ void )
 	    dw_printf ("\nError receiving kiss message from client application.  Closing %s.\n\n", pt_slave_name);
 	    perror ("");
 
-	    /* Message added between 1.1 beta test and final version 1.1 */
-
-	    /* TODO: Determine root cause and find proper solution. */
-
-	    dw_printf ("This is a known problem that sometimes shows up when using with kissattach.\n");
-	    dw_printf ("There are a couple work-arounds described in the Dire Wolf User Guide\n");
-	    dw_printf ("and the Raspberry Pi APRS documents.\n");
-
 	    close (pt_master_fd);
 
 	    pt_master_fd = MYFDERROR;
