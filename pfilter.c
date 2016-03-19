@@ -619,6 +619,21 @@ static int filt_bodgu (pfstate_t *pf, char *arg)
  *		
  *------------------------------------------------------------------------------*/
 
+/* Telemetry metadata is a special case of message. */
+/* We want to categorize it as telemetry rather than message. */
+
+static int is_telem_metadata (char *infop)
+{
+	if (*infop != ':') return (0);
+	if (strlen(infop) < 16) return (0);
+	if (strncmp(infop+10, ":PARM.", 6) == 0) return (1);
+	if (strncmp(infop+10, ":UNIT.", 6) == 0) return (1);
+	if (strncmp(infop+10, ":EQNS.", 6) == 0) return (1);
+	if (strncmp(infop+10, ":BITS.", 6) == 0) return (1);
+	return (0);
+}
+
+
 static int filt_t (pfstate_t *pf) 
 {
 	char src[AX25_MAX_ADDR_LEN];
@@ -652,7 +667,7 @@ static int filt_t (pfstate_t *pf)
 	      break;
 
 	    case 'm':				/* Message */
-	      if (*infop == ':') return (1);
+	      if (*infop == ':' && ! is_telem_metadata(infop)) return (1);
 	      break;
 
 	    case 'q':				/* Query */
@@ -665,6 +680,7 @@ static int filt_t (pfstate_t *pf)
 
 	    case 't':				/* Telemetry */
 	      if (*infop == 'T') return (1);
+	      if (is_telem_metadata(infop)) return (1);
 	      break;
 
 	    case 'u':				/* User-defined */
@@ -1033,13 +1049,19 @@ int main ()
 	pftest (112, "t/t", "WM1X>APU25N:@210147z4235.39N/07106.58W_359/000g000t027r000P000p000h89b10234/WX REPORT {UIV32N}<0x0d>", 0);
 	pftest (113, "t/w", "WM1X>APU25N:@210147z4235.39N/07106.58W_359/000g000t027r000P000p000h89b10234/WX REPORT {UIV32N}<0x0d>", 1);
 
+	/* Telemetry metadata is a special case of message. */
+	pftest (114, "t/t", "KJ4SNT>APMI04::KJ4SNT   :PARM.Vin,Rx1h,Dg1h,Eff1h,Rx10m,O1,O2,O3,O4,I1,I2,I3,I4", 1);
+	pftest (115, "t/m", "KJ4SNT>APMI04::KJ4SNT   :PARM.Vin,Rx1h,Dg1h,Eff1h,Rx10m,O1,O2,O3,O4,I1,I2,I3,I4", 0);
+	pftest (116, "t/t", "KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000", 1);
+
+
 	pftest (120, "t/p", "CWAPID>APRS::NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", 0);
 	pftest (122, "t/p", "CWAPID>APRS::SKYCWA   :DDHHMMz,ADVISETYPE,zcs{seq#", 0);
 	pftest (123, "t/p", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 0);
 	pftest (124, "t/n", "CWAPID>APRS::NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", 1);
 	pftest (125, "t/n", "CWAPID>APRS::SKYCWA   :DDHHMMz,ADVISETYPE,zcs{seq#", 1);
 	pftest (126, "t/n", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 1);
-	pftest (127, "t/", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 0);
+	pftest (127, "t/",  "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 0);
 
 	pftest (130, "r/42.6/-71.3/10", "WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
 	pftest (131, "r/42.6/-71.3/10", "WA1PLE-5>APWW10,W1MHL,N8VIM,WIDE2*:@022301h4208.75N/07115.16WoAPRS-IS for Win32", 0);
