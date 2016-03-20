@@ -47,7 +47,8 @@
 
 static int s_debug = 0;		/* Enable debug output. */
 				/* See dwgpsnmea_init description for values. */
-					
+
+static struct misc_config_s *s_save_configp;					
 
 
 
@@ -109,6 +110,8 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 #endif
 
 	s_debug = debug;
+	s_save_configp = pconfig;
+
 
 	if (s_debug >= 2) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -158,6 +161,19 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 	return (1);
 
 }  /* end dwgpsnmea_init */
+
+
+/* Return fd to share if waypoint wants same device. */
+/* Currently both are fixed speed at 4800. */
+/* If that ever becomes configurable, that needs to be compared too. */
+
+MYFDTYPE dwgpsnmea_get_fd(char *wp_port_name, int speed)
+{
+	if (strcmp(s_save_configp->gpsnmea_port, wp_port_name) == 0 && speed == 4800) {
+	  return (s_gpsnmea_port_fd);
+	}
+	return (MYFDERROR);
+}
 
 
 /*-------------------------------------------------------------------

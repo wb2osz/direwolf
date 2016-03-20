@@ -43,6 +43,7 @@ struct misc_config_s {
 
 	char gpsnmea_port[20];	/* Serial port name for reading NMEA sentences from GPS. */
 				/* e.g. COM22, /dev/ttyACM0 */
+				/* Currently no option for setting non-standard speed. */
 
 	char gpsd_host[20];	/* Host for gpsd server. */
 				/* e.g. localhost, 192.168.1.2 */
@@ -50,9 +51,19 @@ struct misc_config_s {
 	int gpsd_port;		/* Port number for gpsd server. */
 				/* Default is  2947. */
 
+				
+	char waypoint_port[20];	/* Serial port name for sending NMEA waypoint sentences */
+				/* to a GPS map display or other mapping application. */
 				/* e.g. COM22, /dev/ttyACM0 */
-	char nmea_port[20];	/* Serial port name for NMEA communication with GPS */
-				/* receiver and/or mapping application. Change this. */
+				/* Currently no option for setting non-standard speed. */
+
+	int waypoint_formats;	/* Which sentence formats should be generated? */
+
+#define WPT_FORMAT_NMEA_GENERIC 0x01		/* N	$GPWPT */
+#define WPT_FORMAT_GARMIN       0x02		/* G	$PGRMW */
+#define WPT_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
+#define WPT_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
+
 
 	char logdir[80];	/* Directory for saving activity logs. */
 

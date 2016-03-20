@@ -89,7 +89,7 @@
 #include "kiss.h"
 #include "kissnet.h"
 #include "kiss_frame.h"
-#include "nmea.h"
+#include "waypoint.h"
 #include "gen_tone.h"
 #include "digipeater.h"
 #include "tq.h"
@@ -103,6 +103,7 @@
 #include "igate.h"
 #include "symbols.h"
 #include "dwgps.h"
+#include "waypoint.h"
 #include "log.h"
 #include "recv.h"
 #include "morse.h"
@@ -160,6 +161,7 @@ static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the decoding of APRS packets. */
+
 
 
 static struct misc_config_s misc_config;
@@ -236,8 +238,8 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "K", __DATE__);
+	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -451,9 +453,9 @@ int main (int argc, char *argv[])
 		// separate out gps & waypoints.
 
 	      case 'g':  d_g_opt++; break;
+	      case 'w':	 waypoint_set_debug (1); break;		// not documented yet.
 	      case 't':  d_t_opt++; beacon_tracker_set_debug (d_t_opt); break;
 
-	      case 'w':	 nmea_set_debug (1); break;		// not documented yet.
 	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      case 'o':  d_o_opt++; ptt_set_debug(d_o_opt); break;	
 	      case 'i':  d_i_opt++; break;
@@ -698,7 +700,7 @@ int main (int argc, char *argv[])
  */
 	dwgps_init (&misc_config, d_g_opt);
 
-	nmea_init (&misc_config);  //  TODO: revisit.
+	waypoint_init (&misc_config);  
 
 /* 
  * Create thread for trying to salvage frames with bad FCS.
@@ -946,7 +948,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // Convert to NMEA waypoint sentence if we have a location.
 
  	  if (A.g_lat != G_UNKNOWN && A.g_lon != G_UNKNOWN) {
-	    nmea_send_waypoint (strlen(A.g_name) > 0 ? A.g_name : A.g_src, 
+	    waypoint_send_sentence (strlen(A.g_name) > 0 ? A.g_name : A.g_src, 
 		A.g_lat, A.g_lon, A.g_symbol_table, A.g_symbol_code, 
 		DW_FEET_TO_METERS(A.g_altitude_ft), A.g_course, DW_MPH_TO_KNOTS(A.g_speed_mph), 
 		A.g_comment);
@@ -1026,6 +1028,7 @@ static BOOL cleanup_win (int ctrltype)
 	  dw_printf ("\nQRT\n");
 	  log_term ();
 	  ptt_term ();
+	  waypoint_term ();
 	  dwgps_term ();
 	  SLEEP_SEC(1);
 	  ExitProcess (0);

@@ -226,7 +226,7 @@ direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_pad.o beaco
 		encode_aprs.o encode_aprs.o fcs_calc.o fcs_calc.o gen_tone.o \
 		geotranz.a hdlc_rec.o hdlc_rec2.o hdlc_send.o igate.o kiss_frame.o \
 		kiss.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
-		nmea.o serial_port.o pfilter.o ptt.o rdq.o recv.o redecode.o rrbb.o server.o \
+		waypoint.o serial_port.o pfilter.o ptt.o rdq.o recv.o redecode.o rrbb.o server.o \
 		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xmit.o \
 		dwgps.o dwgpsnmea.o
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LDLIBS) -lm

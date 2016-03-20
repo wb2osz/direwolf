@@ -1,6 +1,9 @@
 /* serial_port.h */
 
 
+#ifndef SERIAL_PORT_H
+#define SERIAL_PORT_H 1
+
 
 #if __WIN32__
 
@@ -25,3 +28,6 @@ extern int serial_port_write (MYFDTYPE fd, char *str, int len);
 extern int serial_port_get1 (MYFDTYPE fd);
 
 extern void serial_port_close (MYFDTYPE fd);
+
+
+#endif

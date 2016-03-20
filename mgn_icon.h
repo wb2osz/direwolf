@@ -5,8 +5,17 @@
  *
  * Waypoint icon codes for use in the $PMGNWPL sentence.
  *
- * Derived from Data Transmission Protocol For Magellan Products - version 2.11
+ * Derived from Data Transmission Protocol For Magellan Products - version 2.11, March 2003
+ *
+ * http://www.gpsinformation.org/mag-proto-2-11.pdf
+ *
+ *
+ * That's 13 years ago.  There should be something newer available but I can't find it.
+ *
+ * The is based on the newer models at the time.  Earlier models had shorter incompatible icon lists.
  */
+
+
 
 #define MGN_crossed_square "a"
 #define MGN_box "b"
@@ -110,7 +119,7 @@ static const char mgn_primary_symtab[SYMTAB_SIZE][3] =  {
 	MGN_default,		//  E  37  	 EYEBALL (Eye catcher!)
 	MGN_default,		//  F  38  	 Farm Vehicle (tractor)
 	MGN_default,		//  G  39  	 Grid Square (6 digit)
-	MGN_default,		//  H  40  	 HOTEL (blue bed symbol)
+	MGN_hotel,		//  H  40  	 HOTEL (blue bed symbol)
 	MGN_aerial,		//  I  41  	 TcpIp on air network stn
 	MGN_default,		//  J  42  	 
 	MGN_default,		//  K  43  	 School
@@ -150,7 +159,7 @@ static const char mgn_primary_symtab[SYMTAB_SIZE][3] =  {
 	MGN_aerial,		//  m  77  	 Mic-E Repeater
 	MGN_default,		//  n  78  	 Node (black bulls-eye)
 	MGN_default,		//  o  79  	 EOC
-	MGN_default,		//  p  80  	 ROVER (puppy, or dog)
+	MGN_zoo,		//  p  80  	 ROVER (puppy, or dog)
 	MGN_default,		//  q  81  	 GRID SQ shown above 128 m
 	MGN_aerial,		//  r  82  	 Repeater
 	MGN_default,		//  s  83  	 SHIP (pwr boat)
@@ -202,7 +211,7 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_default,		//  >  30  	 OVERLAYED CAR
 	MGN_tourist_info,	//  ?  31  	 INFO Kiosk  (Blue box with ?)
 	MGN_default,		//  @  32  	 HURICANE/Trop-Storm
-	MGN_default,		//  A  33  	 overlayBOX DTMF & RFID & XO
+	MGN_box,		//  A  33  	 overlayBOX DTMF & RFID & XO
 	MGN_default,		//  B  34  	 Blwng Snow (& future codes)
 	MGN_boating,		//  C  35  	 Coast Guard
 	MGN_default,		//  D  36  	 Drizzle (proposed APRStt)
@@ -215,7 +224,7 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_default,		//  K  43  	 Kenwood HT (W)
 	MGN_lighthouse,		//  L  44  	 Lighthouse
 	MGN_default,		//  M  45  	 MARS (A=Army,N=Navy,F=AF)
-	MGN_nav_aid,		//  N  46  	 Navigation Buoy
+	MGN_buoy,		//  N  46  	 Navigation Buoy
 	MGN_airport,		//  O  47  	 Rocket
 	MGN_default,		//  P  48  	 Parking
 	MGN_default,		//  Q  49  	 QUAKE
@@ -223,7 +232,7 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_aerial,		//  S  51  	 Satellite/Pacsat
 	MGN_default,		//  T  52  	 Thunderstorm
 	MGN_default,		//  U  53  	 SUNNY
-	MGN_default,		//  V  54  	 VORTAC Nav Aid
+	MGN_nav_aid,		//  V  54  	 VORTAC Nav Aid
 	MGN_default,		//  W  55  	 # NWS site (NWS options)
 	MGN_default,		//  X  56  	 Pharmacy Rx (Apothicary)
 	MGN_aerial,		//  Y  57  	 Radios and devices
@@ -242,7 +251,7 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_default,		//  f  70  	 Funnel Cloud
 	MGN_default,		//  g  71  	 Gale Flags
 	MGN_default,		//  h  72  	 Store. or HAMFST Hh=HAM store
-	MGN_default,		//  i  73  	 BOX or points of Interest
+	MGN_box,		//  i  73  	 BOX or points of Interest
 	MGN_default,		//  j  74  	 WorkZone (Steam Shovel)
 	MGN_default,		//  k  75  	 Special Vehicle SUV,ATV,4x4
 	MGN_default,		//  l  76  	 Areas      (box,circles,etc)

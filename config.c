@@ -753,8 +753,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	
 	//strlcpy (p_misc_config->nullmodem, DEFAULT_NULLMODEM, sizeof(p_misc_config->nullmodem));
 	strlcpy (p_misc_config->nullmodem, "", sizeof(p_misc_config->nullmodem));
+
 	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
-	strlcpy (p_misc_config->nmea_port, "", sizeof(p_misc_config->nmea_port));
+	strlcpy (p_misc_config->waypoint_port, "", sizeof(p_misc_config->waypoint_port));
+
 	strlcpy (p_misc_config->logdir, "", sizeof(p_misc_config->logdir));
 
 
@@ -1674,10 +1676,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "TXINH") == 0) {
-	    int it;
 	    char itname[8];
 
-	    it = ICTYPE_TXINH;
 	    strlcpy (itname, "TXINH", sizeof(itname));
 
 	    t = split(NULL,0);
@@ -1701,14 +1701,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 
 	      if (*t == '-') {
-	        p_audio_config->achan[channel].ictrl[it].gpio = atoi(t+1);
-		p_audio_config->achan[channel].ictrl[it].invert = 1;
+	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].gpio = atoi(t+1);
+		p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 1;
 	      }
 	      else {
-	        p_audio_config->achan[channel].ictrl[it].gpio = atoi(t);
-		p_audio_config->achan[channel].ictrl[it].invert = 0;
+	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].gpio = atoi(t);
+		p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 0;
 	      }
-	      p_audio_config->achan[channel].ictrl[it].method = PTT_METHOD_GPIO;
+	      p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].method = PTT_METHOD_GPIO;
 #endif
 	    }
 	  }
@@ -3828,18 +3828,46 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * NMEA		- Device name for communication with NMEA device.
- *		  Wasn't documented will probably use WAYPOINT instead.
+ * WAYPOINT		- Generate WPT NMEA sentences for display on map.
+ *
+ * WAYPOINT  serial-device [ formats ]
+ *		  
  */
-	  else if (strcasecmp(t, "nmea") == 0) {
+	  else if (strcasecmp(t, "waypoint") == 0) {
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file: Missing device name for NMEA port on line %d.\n", line);
+	      dw_printf ("Config file: Missing device name for WAYPOINT on line %d.\n", line);
 	      continue;
 	    }
 	    else {
-	      strlcpy (p_misc_config->nmea_port, t, sizeof(p_misc_config->nmea_port));
+	      strlcpy (p_misc_config->waypoint_port, t, sizeof(p_misc_config->waypoint_port));
+	    }
+	    t = split(NULL,1);
+	    if (t != NULL) {
+	      for ( ; *t != '\0' ; t++ ) {
+	        switch (toupper(*t)) {
+	          case 'N':
+	            p_misc_config->waypoint_formats |= WPT_FORMAT_NMEA_GENERIC;
+	            break;
+	          case 'G':
+	            p_misc_config->waypoint_formats |= WPT_FORMAT_GARMIN;
+	            break;
+	          case 'M':
+	            p_misc_config->waypoint_formats |= WPT_FORMAT_MAGELLAN;
+	            break;
+	          case 'K':
+	            p_misc_config->waypoint_formats |= WPT_FORMAT_KENWOOD;
+	            break;
+	          case ' ':
+	          case ',':
+	            break;
+	          default:
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Config file: Invalid output format '%c' for WAYPOINT on line %d.\n", *t, line);   
+	            break;
+	        }
+	      }
 	    }
 	  }
 

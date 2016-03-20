@@ -3,7 +3,7 @@
 
 ----------
 
-## Version 1.3  -- Beta Test  --  February 2016 ##
+## Version 1.3  -- Beta Test  --  March 2016 ##
 
 ### New Features: ###
 
@@ -40,7 +40,7 @@ command line option.
 
  - When receiving packet with comment of a few hundred characters.
  
- - Address in path, from Internet server. more than 9 characters.
+ - Address in path, from Internet server, more than 9 characters.
 
 - "INTERNAL ERROR: dlq_append NULL packet pointer." when using PASSALL.
 
@@ -50,6 +50,8 @@ command line option.
 
 - AGW network protocol now works properly for big-endian processors
 such as PowerPC or MIPS.
+
+- Packet filtering treated telemetry metadata as messages rather than telemetry.
 
 ----------
 
