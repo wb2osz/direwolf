@@ -884,24 +884,27 @@ static int kiss_get (/* MYFDTYPE fd*/ void )
 #else		/* Linux/Cygwin version */
 
 	int n = 0;
+	fd_set fd_in;
+	int rc;
 
 	while ( n == 0 ) {
+	  /* Reading from master fd of the pty before the client has connected leads to trouble with kissattach. */
+	  /* Use select to check if the slave has sent any data before trying to read from it. */
+	  FD_ZERO(&fd_in);
+	  rc = select(pt_master_fd + 1, &fd_in, NULL, &fd_in, NULL);
 
-	  n = read(pt_master_fd, &ch, (size_t)1);
+	  if (rc == 0)
+	  {
+	    continue;
+	  }
 
-	  if (n != 1) {
+	  if (rc == MYFDERROR
+	      || (n = read(pt_master_fd, &ch, (size_t)1)) != 1)
+	  {
 
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("\nError receiving kiss message from client application.  Closing %s.\n\n", pt_slave_name);
 	    perror ("");
-
-	    /* Message added between 1.1 beta test and final version 1.1 */
-
-	    /* TODO: Determine root cause and find proper solution. */
-
-	    dw_printf ("This is a known problem that sometimes shows up when using with kissattach.\n");
-	    dw_printf ("There are a couple work-arounds described in the Dire Wolf User Guide\n");
-	    dw_printf ("and the Raspberry Pi APRS documents.\n");
 
 	    close (pt_master_fd);
 
