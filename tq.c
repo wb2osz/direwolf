@@ -214,7 +214,7 @@ void tq_append (int chan, int prio, packet_t pp)
 {
 	packet_t plast;
 	packet_t pnext;
-	//int a = ACHAN2ADEV(chan);		/* Audio device for channel. */
+
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -222,8 +222,6 @@ void tq_append (int chan, int prio, packet_t pp)
 #endif
 
 
-
-	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (prio >= 0 && prio < TQ_NUM_PRIO);
 
 	if (pp == NULL) {
@@ -240,7 +238,7 @@ void tq_append (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if ( ! save_audio_config_p->achan[chan].valid) {
+	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
 	  ax25_delete(pp);
