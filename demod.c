@@ -562,6 +562,35 @@ int demod_init (struct audio_s *pa)
 	        save_audio_config_p->achan[chan].num_slicers = MAX_SLICERS;
      	      }
 	        
+
+	      /* We need a minimum number of audio samples per bit time for good performance. */
+	      /* Easier to check here because demod_9600_init might have an adjusted sample rate. */
+
+	      float ratio = (float)(save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec)
+							/ (float)(save_audio_config_p->achan[chan].baud);
+
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("The ratio of audio samples per sec (%d) to data rate in baud (%d) is %.1f\n",
+				save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+				save_audio_config_p->achan[chan].baud,
+				ratio);
+	      if (ratio < 3) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("There is little hope of success with such a low ratio.  Use a higher sample rate.\n");
+	      }
+	      else if (ratio < 5) {
+	        dw_printf ("This is on the low side for best performance.  Can you use a higher sample rate?\n");
+	      }
+	      else if (ratio < 6) {
+	        dw_printf ("Increasing the sample rate should improve decoder performance.\n");
+	      }
+	      else if (ratio > 15) {
+	        dw_printf ("Sample rate is more than adequate.  You might lower it if CPU load is a concern.\n");
+	      }
+	      else {
+	        dw_printf ("This is a suitable ratio for good performance.\n");
+	      }
+
 	      demod_9600_init (UPSAMPLE * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {

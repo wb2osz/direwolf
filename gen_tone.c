@@ -210,10 +210,18 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 	  a = ((double)(j) / 256.0) * (2 * M_PI);
 	  s = (int) (sin(a) * 32767 * amp / 100.0);
 
-	  /* 16 bit sound sample is in range of -32768 .. +32767. */
-	  
-	  assert (s >= -32768 && s <= 32767);
+	  /* 16 bit sound sample must fit in range of -32768 .. +32767. */
 	
+	  if (s < -32768) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("gen_tone_init: Excessive amplitude is being clipped.\n");
+	    s = -32768;
+	  }
+	  else if (s > 32767) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("gen_tone_init: Excessive amplitude is being clipped.\n");
+	    s = 32767;
+	  }
 	  sine_table[j] = s;
         }
 
@@ -235,7 +243,8 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 	    /* These numbers were by trial and error.  Need more investigation here. */
 
 	    float filter_len_bits =  88 * 9600.0 / (44100.0 * 2.0);
-						/* Filter length in number of data bits. */	
+						/* Filter length in number of data bits. */
+						/* Currently 9.58 */
 	
 	    float lpf_baud = 0.8;		/* Lowpass cutoff freq as fraction of baud rate */
 
@@ -250,10 +259,15 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 
 	    lp_filter_size[chan] = (int) (( filter_len_bits * (float)samples_per_sec / baud) + 0.5);
 
-	    if (lp_filter_size[chan] < 10 || lp_filter_size[chan] > MAX_FILTER_SIZE) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("gen_tone_init: INTERNAL ERROR, chan %d, lp_filter_size %d\n", chan, lp_filter_size[chan]);
-	      lp_filter_size[chan] = MAX_FILTER_SIZE / 2;
+	    if (lp_filter_size[chan] < 10) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("gen_tone_init: unexpected, chan %d, lp_filter_size %d < 10\n", chan, lp_filter_size[chan]);
+	      lp_filter_size[chan] = 10;
+	    }
+	    else if (lp_filter_size[chan] > MAX_FILTER_SIZE) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("gen_tone_init: unexpected, chan %d, lp_filter_size %d > %d\n", chan, lp_filter_size[chan], MAX_FILTER_SIZE);
+	      lp_filter_size[chan] = MAX_FILTER_SIZE;
 	    }
 
 	    fc = (float)baud * lpf_baud / (float)samples_per_sec;
@@ -357,6 +371,8 @@ void gen_tone_put_sample (int chan, int a, int sam) {
 	/* Generalize to allow 8 bits someday? */
 
 	assert (save_audio_config_p->adev[a].bits_per_sample == 16);
+
+	// TODO: Should print message telling user to reduce output level.
 
 	if (sam < -32767) sam = -32767;
 	else if (sam > 32767) sam = 32767;

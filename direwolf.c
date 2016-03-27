@@ -369,9 +369,9 @@ int main (int argc, char *argv[])
           case 'B':				/* -B baud rate and modem properties. */
 	 
 	    B_opt = atoi(optarg);
-            if (B_opt < 100 || B_opt > 10000) {
+            if (B_opt < MIN_BAUD || B_opt > MAX_BAUD) {
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Use a more reasonable data baud rate in range of 100 - 10000.\n");
+              dw_printf ("Use a more reasonable data baud rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
               exit (EXIT_FAILURE);
             }
             break;

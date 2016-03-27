@@ -196,9 +196,9 @@ int main(int argc, char **argv)
               modem.achan[0].baud = atoi(optarg);
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
-              if (modem.achan[0].baud < 100 || modem.achan[0].baud > 10000) {
+              if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
                 text_color_set(DW_COLOR_ERROR); 
-                dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
+                dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
                 exit (EXIT_FAILURE);
               }
               break;
@@ -208,29 +208,30 @@ int main(int argc, char **argv)
 						/*    1200 implies 1200/2200 AFSK. */
 						/*    9600 implies scrambled. */
 
+						/* If you want something else, specify -B first */
+						/* then anything to override these defaults. */
+
               modem.achan[0].baud = atoi(optarg);
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
-              if (modem.achan[0].baud < 100 || modem.achan[0].baud > 10000) {
+              if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
                 text_color_set(DW_COLOR_ERROR); 
-                dw_printf ("Use a more reasonable bit rate in range of 100 - 10000.\n");
+                dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
                 exit (EXIT_FAILURE);
               }
 
-	      switch (modem.achan[0].baud) {
-	        case 300:
+	      if (modem.achan[0].baud < 600) {
                   modem.achan[0].mark_freq = 1600;
                   modem.achan[0].space_freq = 1800;
-	          break;
-	        case 1200:
+	      }
+	      else if (modem.achan[0].baud <= 2400) {
                   modem.achan[0].mark_freq = 1200;
                   modem.achan[0].space_freq = 2200;
-	          break;
-	        case 9600:
+	      }
+	      else {
                   modem.achan[0].modem_type = MODEM_SCRAMBLE;
                   text_color_set(DW_COLOR_INFO); 
                   dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
-	          break;
 	      }
               break;
 

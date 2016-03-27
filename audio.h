@@ -278,8 +278,12 @@ struct audio_s {
 					/* 44100 works a little better than 22050. */
 					/* If you have a reasonable machine, use the highest rate. */
 #define MIN_SAMPLES_PER_SEC	8000
-#define MAX_SAMPLES_PER_SEC	48000	/* Formerly 44100. */
-					/* Software defined radio often uses 48000. */
+//#define MAX_SAMPLES_PER_SEC	48000	/* Originally 44100.  Later increased because */
+					/* Software Defined Radio often uses 48000. */
+
+#define MAX_SAMPLES_PER_SEC	192000	/* The cheap USB-audio adapters (e.g. CM108) can handle 44100 and 48000. */
+					/* The "soundcard" in my desktop PC can do 96kHz or even 192kHz. */
+					/* We will probably need to increase the sample rate to go much above 9600 baud. */
 
 #define DEFAULT_BITS_PER_SAMPLE	16
 
@@ -301,12 +305,12 @@ struct audio_s {
 #define DEFAULT_BAUD		1200
 
 /* Used for sanity checking in config file and command line options. */
-/* 9600 is known to work.  */
-/* TODO: Is 19200 possible with a soundcard at 44100 samples/sec? */
+/* 9600 baud is known to work.  */
+/* TODO: Is 19200 possible with a soundcard at 44100 samples/sec or do we need a higher sample rate? */
 
 #define MIN_BAUD		100
-#define MAX_BAUD		10000
-
+//#define MAX_BAUD		10000
+#define MAX_BAUD		40000		// Anyone want to try 38.4 k baud?
 
 /*
  * Typical transmit timings for VHF.
