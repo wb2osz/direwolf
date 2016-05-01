@@ -45,6 +45,17 @@ These dive into more detail for specialized topics or typical usage scenarios.
 	digital converter to a Raspberry Pi and transmitting 
 	a measured voltage.
 
+
+
+- [2400 & 4800 bps PSK for APRS / Packet Radio](2400-4800-PSK-for-APRS-Packet-Radio.pdf)
+
+	Double or quadruple your data rate by sending  multiple bits at the same time.
+
+- [Going beyond 9600 baud](Going-beyond-9600-baud.pdf)
+
+	Why stop at 9600 baud?  Go faster if your soundcard and radio can handle it.
+
+
 ## Miscellaneous ##
 
 

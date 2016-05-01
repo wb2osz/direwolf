@@ -756,7 +756,7 @@ int main (void)
 	emit_macro ("CALC_S_SUM1", ds.ms_filter_size, ds.s_sin_table);
 	emit_macro ("CALC_S_SUM2", ds.ms_filter_size, ds.s_cos_table);
 
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 
 #endif

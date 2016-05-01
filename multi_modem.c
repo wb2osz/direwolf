@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -70,6 +70,7 @@
  *		Set limit on number of packets in fix up later queue.
  *
  *------------------------------------------------------------------*/
+
 //#define DEBUG 1
 #define DIGIPEATER_C
 
@@ -108,7 +109,10 @@ static struct {
 
 
 
-#define PROCESS_AFTER_BITS 2
+//#define PROCESS_AFTER_BITS 2		// version 1.4.  Was a little short for skew of PSK with different modem types, optional pre-filter
+
+#define PROCESS_AFTER_BITS 3
+
 
 static int process_age[MAX_CHANS];
 
@@ -154,7 +158,11 @@ void multi_modem_init (struct audio_s *pa)
 	      dw_printf("Internal error, chan=%d, %s, %d\n", chan, __FILE__, __LINE__);
 	      save_audio_config_p->achan[chan].baud = DEFAULT_BAUD;
 	    }
-	    process_age[chan] = PROCESS_AFTER_BITS * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].baud;
+	    int real_baud = save_audio_config_p->achan[chan].baud;
+	    if (save_audio_config_p->achan[chan].modem_type == MODEM_QPSK) real_baud = save_audio_config_p->achan[chan].baud / 2;
+	    if (save_audio_config_p->achan[chan].modem_type == MODEM_8PSK) real_baud = save_audio_config_p->achan[chan].baud / 3;
+
+	    process_age[chan] = PROCESS_AFTER_BITS * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / real_baud ;
 	    //crc_queue_of_last_to_app[chan] = NULL;
 	  }
 	}
@@ -462,7 +470,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	if (save_audio_config_p->achan[chan].num_subchan == 1 &&
 	    save_audio_config_p->achan[chan].num_slicers == 1) {
 
-	  dlq_append (DLQ_REC_FRAME, chan, subchan, slice, pp, alevel, retries, "");
+	  dlq_rec_frame (chan, subchan, slice, pp, alevel, retries, "");
 	  return;
 	}
 
@@ -641,7 +649,7 @@ static void pick_best_candidate (int chan)
 	j = subchan_from_n(best_n);
 	k = slice_from_n(best_n);
 
-	dlq_append (DLQ_REC_FRAME, chan, j, k,
+	dlq_rec_frame (chan, j, k,
 		candidate[chan][j][k].packet_p,
 		candidate[chan][j][k].alevel,
 		(int)(candidate[chan][j][k].retries),

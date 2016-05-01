@@ -914,7 +914,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	            /* Simulated reception. */
 
 		    memset (&alevel, 0xff, sizeof(alevel));
-	            dlq_append (DLQ_REC_FRAME, g_misc_config_p->beacon[j].sendto_chan, 0, 0, pp, alevel, 0, "");
+	            dlq_rec_frame (g_misc_config_p->beacon[j].sendto_chan, 0, 0, pp, alevel, 0, "");
 	            break; 
 		}
 	      }

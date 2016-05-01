@@ -239,7 +239,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -561,21 +561,42 @@ int main (int argc, char *argv[])
 	if (B_opt != 0) {
 	  audio_config.achan[0].baud = B_opt;
 
+	  /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
+	  /* that need to be kept in sync.  Maybe it could be a common function someday. */
+
 	  if (audio_config.achan[0].baud < 600) {
             audio_config.achan[0].modem_type = MODEM_AFSK;
-            audio_config.achan[0].mark_freq = 1600;
+            audio_config.achan[0].mark_freq = 1600;		// Typical for HF SSB.
             audio_config.achan[0].space_freq = 1800;
-	    audio_config.achan[0].decimate = 3;
+	    audio_config.achan[0].decimate = 3;			// Reduce CPU load.
 	  }
-	  else if (audio_config.achan[0].baud > 2400) {
+	  else if (audio_config.achan[0].baud < 1800) {
+            audio_config.achan[0].modem_type = MODEM_AFSK;
+            audio_config.achan[0].mark_freq = DEFAULT_MARK_FREQ;
+            audio_config.achan[0].space_freq = DEFAULT_SPACE_FREQ;
+	  }
+	  else if (audio_config.achan[0].baud < 3600) {
+            audio_config.achan[0].modem_type = MODEM_QPSK;
+            audio_config.achan[0].mark_freq = 0;
+            audio_config.achan[0].space_freq = 0;
+	    if (audio_config.achan[0].baud != 2400) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Bit rate should be standard 2400 rather than specified %d.\n", audio_config.achan[0].baud);
+	    }
+	  }
+	  else if (audio_config.achan[0].baud < 7200) {
+            audio_config.achan[0].modem_type = MODEM_8PSK;
+            audio_config.achan[0].mark_freq = 0;
+            audio_config.achan[0].space_freq = 0;
+	    if (audio_config.achan[0].baud != 4800) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Bit rate should be standard 4800 rather than specified %d.\n", audio_config.achan[0].baud);
+	    }
+	  }
+	  else {
             audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
             audio_config.achan[0].mark_freq = 0;
             audio_config.achan[0].space_freq = 0;
-	  }
-	  else {
-            audio_config.achan[0].modem_type = MODEM_AFSK;
-            audio_config.achan[0].mark_freq = 1200;
-            audio_config.achan[0].space_freq = 2200;
 	  }
 	}
 
@@ -623,7 +644,7 @@ int main (int argc, char *argv[])
 	}
 
 /*
- * Initialize the AFSK demodulator and HDLC decoder.
+ * Initialize the demodulator(s) and HDLC decoder.
  */
 	multi_modem_init (&audio_config);
 
@@ -884,11 +905,27 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	dw_printf ("%s", stemp);			/* stations followed by : */
 
+/* Demystify non-APRS.  Use same format for transmitted frames in xmit.c. */
+
+	if ( ! ax25_is_aprs(pp)) {
+	  ax25_frame_type_t ftype;
+	  cmdres_t cr;
+	  char desc[32];
+	  int pf;
+	  int nr;
+	  int ns;
+
+	  ftype = ax25_frame_type (pp, &cr, desc, &pf, &nr, &ns);
+
+	  dw_printf ("(%s)", desc);
+	}
+
 	// for APRS we generally want to display non-ASCII to see UTF-8.
 	// for other, probably want to restrict to ASCII only because we are
 	// more likely to have compressed data than UTF-8 text.
 
 	// TODO: Might want to use d_u_opt for transmitted frames too.
+
 
 	ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
 	dw_printf ("\n");
@@ -1068,10 +1105,12 @@ static void usage (char **argv)
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
 	dw_printf ("    -b n           Bits per audio sample, 8 or 16.\n");
-	dw_printf ("    -B n           Data rate in bits/sec for channel 0.  Standard values are 300, 1200, 9600.\n");
-	dw_printf ("                     If < 600, AFSK tones are set to 1600 & 1800.\n");
-	dw_printf ("                     If > 2400, K9NG/G3RUH style encoding is used.\n");
-	dw_printf ("                     Otherwise, AFSK tones are set to 1200 & 2200.\n");
+	dw_printf ("    -B n           Data rate in bits/sec for channel 0.  Standard values are 300, 1200, 2400, 4800, 9600.\n");
+	dw_printf ("                     300 bps defaults to AFSK tones of 1600 & 1800.\n");
+	dw_printf ("                     1200 bps uses AFSK tones of 1200 & 2200.\n");
+	dw_printf ("                     2400 bps uses QPSK based on V.26 standard.\n");
+	dw_printf ("                     4800 bps uses 8PSK based on V.27 standard.\n");
+	dw_printf ("                     9600 bps and up uses K9NG/G3RUH standard.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");

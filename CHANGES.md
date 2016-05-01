@@ -3,6 +3,36 @@
 
 ----------
 
+## Version 1.4  -- Development snapshot B  --  April 2016 ##
+
+### New Features: ###
+
+- 2400 & 4800 bps PSK modems.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** in the doc directory for discussion.
+
+
+- The top speed of 9600 bps has been increased to 38400.  You will need a sound card capable of 96k or 192k samples per second for the higher rates.  Radios must also have adequate bandwidth.  See ***Going-beyond-9600-baud.pdf*** in the doc directory for more details.
+
+
+### Bugs Fixed: ###
+
+- Sometimes kissattach would have an issue with the Dire Wolf pseudo terminal.  This showed up most often on Raspbian but sometimes occurred with other versions of Linux.
+
+	*kissattach: Error setting line discipline: TIOCSETD: Device or resource busy
+	Are you sure you have enabled MKISS support in the kernel
+	or, if you made it a module, that the module is loaded?*
+	
+
+- Sometimes writes to a pseudo terminal would block causing the received
+frame processing thread to hang.   The first thing you will notice is that
+received frames are not being printed.  After a while this message will appear:
+
+  	*Received frame queue is out of control. Length=... Reader thread is probably 
+  	frozen.  This can be caused by using a pseudo terminal (direwolf -p) where 
+  	another application is not reading the frames from the other side.*
+
+
+----------
+
 ## Version 1.3  -- Beta Test  --  March 2016 ##
 
 ### New Features: ###
@@ -61,7 +91,7 @@ such as PowerPC or MIPS.
 
 - Improved decoder performance.  
 Over 1000 error-free frames decoded from WA8LMF TNC Test CD.  
-See "A-Better-APRS-Packet-Demodulator.pdf" for details.
+See ***A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf*** for details.
 
 - Up to 3 soundcards and 6 radio channels can be handled at the same time.
 
@@ -272,8 +302,7 @@ to rebuild it from source.
 
 ### New Features: ###
 
-- Added APRStt gateway capability.  For details, see:  
-**APRStt-Implementation-Notes.pdf**
+- Added APRStt gateway capability.  For details, see  ***APRStt-Implementation-Notes.pdf***
 
 
 -----------

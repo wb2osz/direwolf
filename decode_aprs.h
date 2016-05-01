@@ -26,7 +26,9 @@ typedef struct decode_aprs_s {
 
         char g_src[AX25_MAX_ADDR_LEN];
 
-        char g_msg_type[60];		/* Message type.  Telemetry descriptions get pretty long. */
+        char g_msg_type[60];		/* APRS data type.  Telemetry descriptions get pretty long. */
+					/* Putting msg in the name was a poor choice because  */
+					/* "message" has a specific meaning.  Rename it someday. */
 
         char g_symbol_table;		/* The Symbol Table Identifier character selects one */
 					/* of the two Symbol Tables, or it may be used as */
@@ -63,6 +65,19 @@ typedef struct decode_aprs_s {
 	char g_addressee[12];		/* Addressee for a "message."  Max. 9 characters. */
 					/* Also for Directed Station Query which is a */
 					/* special case of message. */
+
+	enum message_subtype_e { message_subtype_invalid = 0,
+				message_subtype_message,
+				message_subtype_ack,
+				message_subtype_rej,
+				message_subtype_telem_parm,
+				message_subtype_telem_unit,
+				message_subtype_telem_eqns,
+				message_subtype_telem_bits,
+				message_subtype_directed_query
+		} g_message_subtype;	/* Various cases of the overloaded "message." */
+
+	char g_message_number[8];	/* Message number.  Should be 1 - 5 characters if used. */
 
         float g_speed_mph;		/* Speed in MPH.  */
 

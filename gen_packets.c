@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -76,6 +76,17 @@
 #include "morse.h"
 
 
+/* Own random number generator so we can get */
+/* same results on Windows and Linux. */
+
+#define MY_RAND_MAX 0x7fffffff
+static int seed = 1;
+
+static int my_rand (void) {
+	seed = ((seed * 1103515245) + 12345) & MY_RAND_MAX;
+	return (seed);
+}
+
 static void usage (char **argv);
 static int audio_file_open (char *fname, struct audio_s *pa);
 static int audio_file_close (void);
@@ -95,7 +106,6 @@ static void send_packet (char *str)
     	int flen;
 	int c;
 
-
 	if (g_morse_wpm > 0) {
 
 	  morse_send (0, str, g_morse_wpm, 100, 100);
@@ -105,6 +115,31 @@ static void send_packet (char *str)
 	  flen = ax25_pack (pp, fbuf);
 	  for (c=0; c<modem.adev[0].num_channels; c++)
 	  {
+
+#if 1
+	    int samples_per_symbol, n, j;
+
+/* Insert random amount of quiet time, approx. 0 to 10 symbol times, to test */
+/* how well the clock recovery PLL can regain lock after random phase shifts. */
+
+	    if (modem.achan[c].modem_type == MODEM_QPSK) {
+	      samples_per_symbol = modem.adev[0].samples_per_sec / (modem.achan[c].baud / 2);
+	    }
+	    else if (modem.achan[c].modem_type == MODEM_8PSK) {
+	      samples_per_symbol = modem.adev[0].samples_per_sec / (modem.achan[c].baud / 3);
+	    }
+	    else {
+	      samples_per_symbol = modem.adev[0].samples_per_sec / modem.achan[c].baud;
+	    }
+
+	    // for 1200 baud, 44100/sec, this should be 0 to 360.
+	    n = samples_per_symbol * 10 * (float)my_rand() / (float)MY_RAND_MAX;
+
+	    //dw_printf ("Random 0-360 = %d\n", n);
+	    for (j=0; j<n; j++) {
+	      gen_tone_put_sample (c, 0, 0);
+	    }
+#endif
 	    hdlc_send_flags (c, 8, 0);
 	    hdlc_send_frame (c, fbuf, flen);
 	    hdlc_send_flags (c, 2, 1);
@@ -123,6 +158,8 @@ int main(int argc, char **argv)
 	int packet_count = 0;
 	int i;
 	int chan;
+	int experiment = 0;
+
 
 /*
  * Set up default values for the modem.
@@ -174,7 +211,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82M:",
+          c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82M:X",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -197,7 +234,7 @@ int main(int argc, char **argv)
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
               if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
-                text_color_set(DW_COLOR_ERROR); 
+                text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
                 exit (EXIT_FAILURE);
               }
@@ -215,18 +252,43 @@ int main(int argc, char **argv)
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
               if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
-                text_color_set(DW_COLOR_ERROR); 
+                text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
                 exit (EXIT_FAILURE);
               }
 
+	      /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
+	      /* that need to be kept in sync.  Maybe it could be a common function someday. */
+
 	      if (modem.achan[0].baud < 600) {
-                  modem.achan[0].mark_freq = 1600;
+                  modem.achan[0].modem_type = MODEM_AFSK;
+                  modem.achan[0].mark_freq = 1600;		// Typical for HF SSB
                   modem.achan[0].space_freq = 1800;
 	      }
-	      else if (modem.achan[0].baud <= 2400) {
-                  modem.achan[0].mark_freq = 1200;
-                  modem.achan[0].space_freq = 2200;
+	      else if (modem.achan[0].baud < 1800) {
+                  modem.achan[0].modem_type = MODEM_AFSK;
+                  modem.achan[0].mark_freq = DEFAULT_MARK_FREQ;
+                  modem.achan[0].space_freq = DEFAULT_SPACE_FREQ;
+	      }
+	      else if (modem.achan[0].baud < 3600) {
+                  modem.achan[0].modem_type = MODEM_QPSK;
+                  modem.achan[0].mark_freq = 0;
+                  modem.achan[0].space_freq = 0;
+                  dw_printf ("Using V.26 QPSK rather than AFSK.\n");
+	          if (modem.achan[0].baud != 2400) {
+                    text_color_set(DW_COLOR_ERROR); 
+	            dw_printf ("Bit rate should be standard 2400 rather than specified %d.\n", modem.achan[0].baud);
+	          }
+	      }
+	      else if (modem.achan[0].baud < 7200) {
+                  modem.achan[0].modem_type = MODEM_8PSK;
+                  modem.achan[0].mark_freq = 0;
+                  modem.achan[0].space_freq = 0;
+                  dw_printf ("Using V.27 8PSK rather than AFSK.\n");
+	          if (modem.achan[0].baud != 4800) {
+                    text_color_set(DW_COLOR_ERROR); 
+	            dw_printf ("Bit rate should be standard 4800 rather than specified %d.\n", modem.achan[0].baud);
+	          }
 	      }
 	      else {
                   modem.achan[0].modem_type = MODEM_SCRAMBLE;
@@ -353,6 +415,11 @@ int main(int argc, char **argv)
               }
               break;
 
+            case 'X':
+
+              experiment = 1;
+              break;
+
             case '?':
 
               /* Unknown option message was already printed. */
@@ -390,7 +457,11 @@ int main(int argc, char **argv)
         }
 
 
-
+	if (experiment) {
+          modem.achan[0].modem_type = MODEM_QPSK;
+	  modem.achan[0].baud = 2400;	// really bps not baud.
+	  amplitude = 100;
+	}
 
 	gen_tone_init (&modem, amplitude/2);
 	morse_init (&modem, amplitude/2);
@@ -399,6 +470,84 @@ int main(int argc, char **argv)
         assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
         assert (modem.adev[0].num_channels == 1 || modem.adev[0].num_channels == 2);
         assert (modem.adev[0].samples_per_sec >= MIN_SAMPLES_PER_SEC && modem.adev[0].samples_per_sec <= MAX_SAMPLES_PER_SEC);
+
+
+	if (experiment) {
+	  int chan = 0;
+	  int n;
+
+	  // 6 cycles of 1800 Hz.
+	  for (n=0; n<8; n++) {
+	    tone_gen_put_bit (chan, 0);
+	  }
+
+	  // Shift 90
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 1);
+
+	  // Shift 90
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 1);
+
+	  // Shift 90
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 1);
+
+	  // Shift 90
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 1);
+
+	  // Shift 180
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+
+	  // Shift 270
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 0);
+
+	  // Shift 0
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 0);
+
+	  // Shift 0
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 0);
+
+
+	  // HDLC flag - six 1 in a row.
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 0);
+
+	  tone_gen_put_bit (chan, 0);	// reverse even/odd position
+
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 1);
+	  tone_gen_put_bit (chan, 0);
+
+	  tone_gen_put_bit (chan, 0);
+
+	  // Shift 0
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 0);
+
+	  // Shift 0
+	  tone_gen_put_bit (chan, 0);
+	  tone_gen_put_bit (chan, 0);
+
+	  audio_file_close ();
+	  return (EXIT_SUCCESS);
+	}
 
 /*
  * Get user packets(s) from file or stdin if specified.
@@ -467,16 +616,25 @@ int main(int argc, char **argv)
 
 	    char stemp[80];
 	
-	    if (modem.achan[0].modem_type == MODEM_SCRAMBLE) {
-	      g_noise_level = 0.33 * (amplitude / 200.0) * ((float)i / packet_count);
-	    }
-	    else if (modem.achan[0].baud < 600) {
-		/* About 2/3 should be decoded properly. */
+	    if (modem.achan[0].baud < 600) {
+	      /* e.g. 300 bps AFSK - About 2/3 should be decoded properly. */
 	      g_noise_level = amplitude *.0048 * ((float)i / packet_count);
 	    }
-	    else {
-		/* About 2/3 should be decoded properly. */
+	    else if (modem.achan[0].baud < 1800) {
+	      /* e.g. 1200 bps AFSK - About 2/3 should be decoded properly. */
 	      g_noise_level = amplitude *.0023 * ((float)i / packet_count);
+	    }
+	    else if (modem.achan[0].baud < 3600) {
+	      /* e.g. 2400 bps QPSK - T.B.D. */
+	      g_noise_level = amplitude *.0015 * ((float)i / packet_count);
+	    }
+	    else if (modem.achan[0].baud < 7200) {
+	      /* e.g. 4800 bps - T.B.D. */
+	      g_noise_level = amplitude *.0007 * ((float)i / packet_count);
+	    }
+	    else {
+	      /* e.g. 9600 */
+	      g_noise_level = 0.33 * (amplitude / 200.0) * ((float)i / packet_count);
 	    }
 
 	    snprintf (stemp, sizeof(stemp), "WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  %04d of %04d", i, packet_count);
@@ -512,7 +670,7 @@ static void usage (char **argv)
 	dw_printf ("Options:\n");
 	dw_printf ("  -a <number>   Signal amplitude in range of 0 - 200%%.  Default 50.\n");
 	dw_printf ("  -b <number>   Bits / second for data.  Default is %d.\n", DEFAULT_BAUD);
-	dw_printf ("  -B <number>   Bits / second for data.  Proper modem selected for 300, 1200, 9600.\n");
+	dw_printf ("  -B <number>   Bits / second for data.  Proper modem selected for 300, 1200, 2400, 4800, 9600.\n");
 	dw_printf ("  -g            Scrambled baseband rather than AFSK.\n");
 	dw_printf ("  -m <number>   Mark frequency.  Default is %d.\n", DEFAULT_MARK_FREQ);
 	dw_printf ("  -s <number>   Space frequency.  Default is %d.\n", DEFAULT_SPACE_FREQ);
@@ -691,14 +849,6 @@ static int audio_file_open (char *fname, struct audio_s *pa)
  *
  *----------------------------------------------------------------*/
 
-#define MY_RAND_MAX 0x7fffffff
-
-static int seed = 1;
-
-static int my_rand (void) {
-	seed = ((seed * 1103515245) + 12345) & MY_RAND_MAX;
-	return (seed);
-}
 
 int audio_put (int a, int c)
 {

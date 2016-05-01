@@ -100,7 +100,8 @@ struct packet_s {
 				 *		Changed to 1 when position has been used.
  				 *
 				 *		for source & destination it is called
-				 *		command/response and is normally 1.
+				 *		command/response.  Normally both 1 for APRS.
+				 *		They should be opposites for connected mode.
 				 *
 				 *   R	R	Reserved.  Normally set to 1 1.
 				 *
@@ -108,6 +109,7 @@ struct packet_s {
 				 *
 				 *   0		Usually 0 but 1 for last address.
 				 */
+
 
 #define SSID_H_MASK	0x80
 #define SSID_H_SHIFT	7
@@ -123,6 +125,15 @@ struct packet_s {
 
 	int frame_len;		/* Frame length without CRC. */
 
+	int modulo;		/* I & S frames have sequence numbers of either 3 bits (modulo 8) */
+				/* or 7 bits (modulo 128).  This is conveyed by either 1 or 2 */
+				/* control bytes.  Unfortunately, we can't determine this by looking */
+				/* at an isolated frame.  We need to know about the context.  If we */
+				/* are part of the conversation, we would know.  But if we are */
+				/* just listening to others, this would be more difficult to determine. */
+
+				/* For U frames:   	set to 0 - not applicable */
+				/* For I & S frames:	8 or 128 if known.  0 if unknown. */
 
 	unsigned char frame_data[AX25_MAX_PACKET_LEN+1];
 				/* Raw frame contents, without the CRC. */
@@ -145,6 +156,7 @@ struct packet_s {
 
 typedef struct packet_s *packet_t;
 
+typedef enum cmdres_e { cr_00 = 2, cr_cmd = 1, cr_res = 0, cr_11 = 3 } cmdres_t;
 
 
 #ifdef AX25_PAD_C	/* Keep this hidden - implementation could change. */
@@ -154,21 +166,17 @@ extern packet_t ax25_new (void);
 /*
  * APRS always has one control octet of 0x03 but the more
  * general AX.25 case is one or two control bytes depending on
- * "modulo 128 operation" is in effect.  Unfortunately, it seems
- * this can be determined only by examining the XID frames and 
- * keeping this information for each connection.
- * We can assume 1 for our current purposes.
+ * whether "modulo 128 operation" is in effect.
  */
 
 static inline int ax25_get_control_offset (packet_t this_p) 
 {
-	//return (0);
 	return (this_p->num_addr*7);
 }
 
 static inline int ax25_get_num_control (packet_t this_p)
 {
-	return (1);	// TODO: always be 1 for U frame.  More complicated for I and S.
+	return (this_p->modulo == 128 ? 2 : 1);
 }
 
 
@@ -361,7 +369,7 @@ extern void ax25_format_addrs (packet_t pp, char *);
 
 extern int ax25_pack (packet_t pp, unsigned char result[AX25_MAX_PACKET_LEN]);
 
-extern ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *desc, int *pf, int *nr, int *ns); 
+extern ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, int *pf, int *nr, int *ns); 
 
 extern void ax25_hex_dump (packet_t this_p);
 

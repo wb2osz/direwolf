@@ -1116,15 +1116,15 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    n = atoi(t);
             if (n >= MIN_BAUD && n <= MAX_BAUD) {
 	      p_audio_config->achan[channel].baud = n;
-	      if (n != 300 && n != 1200 && n != 9600) {
+	      if (n != 300 && n != 1200 && n != 2400 && n != 4800 && n != 9600 && n != 19200) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Line %d: Warning: Non-standard baud rate.  Are you sure?\n", line);
+	        dw_printf ("Line %d: Warning: Non-standard data rate of %d bits per second.  Are you sure?\n", line, n);
     	      }
 	    }
 	    else {
 	      p_audio_config->achan[channel].baud = DEFAULT_BAUD;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Unreasonable baud rate. Using %d.\n", 
+              dw_printf ("Line %d: Unreasonable data rate. Using %d bits per second.\n",
 				 line, p_audio_config->achan[channel].baud);
    	    }
 
@@ -1132,20 +1132,33 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    /* Set defaults based on speed. */
 	    /* Should be same as -B command line option in direwolf.c. */
 
+	    /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
+	    /* that need to be kept in sync.  Maybe it could be a common function someday. */
+
 	    if (p_audio_config->achan[channel].baud < 600) {
               p_audio_config->achan[channel].modem_type = MODEM_AFSK;
               p_audio_config->achan[channel].mark_freq = 1600;
               p_audio_config->achan[channel].space_freq = 1800;
 	    }
-	    else if (p_audio_config->achan[channel].baud > 2400) {
-              p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
+	    else if (p_audio_config->achan[channel].baud < 1800) {
+              p_audio_config->achan[channel].modem_type = MODEM_AFSK;
+              p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;
+              p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;
+	    }
+	    else if (p_audio_config->achan[channel].baud < 3600) {
+              p_audio_config->achan[channel].modem_type = MODEM_QPSK;
+              p_audio_config->achan[channel].mark_freq = 0;
+              p_audio_config->achan[channel].space_freq = 0;
+	    }
+	    else if (p_audio_config->achan[channel].baud < 7200) {
+              p_audio_config->achan[channel].modem_type = MODEM_8PSK;
               p_audio_config->achan[channel].mark_freq = 0;
               p_audio_config->achan[channel].space_freq = 0;
 	    }
 	    else {
-              p_audio_config->achan[channel].modem_type = MODEM_AFSK;
-              p_audio_config->achan[channel].mark_freq = 1200;
-              p_audio_config->achan[channel].space_freq = 2200;
+              p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
+              p_audio_config->achan[channel].mark_freq = 0;
+              p_audio_config->achan[channel].space_freq = 0;
 	    }
 
 	    /* Get mark frequency. */

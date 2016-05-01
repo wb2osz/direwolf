@@ -101,11 +101,12 @@ struct audio_s {
                                 	/* Could all be the same or different. */
 
 
-	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_OFF } modem_type;
+	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_QPSK, MODEM_8PSK, MODEM_OFF } modem_type;
 
 					/* Usual AFSK. */
 					/* Baseband signal. Not used yet. */
 					/* Scrambled http://www.amsat.org/amsat/articles/g3ruh/109/fig03.gif */
+					/* Might try MFJ-2400 / CCITT v.26 / Bell 201 someday. */
 					/* No modem.  Might want this for DTMF only channel. */
 
 
@@ -130,8 +131,9 @@ struct audio_s {
             int mark_freq;		/* Two tones for AFSK modulation, in Hz. */
 	    int space_freq;		/* Standard tones are 1200 and 2200 for 1200 baud. */
 
-	    int baud;			/* Data bits (more accurately, symbols) per second. */
+	    int baud;			/* Data bits per second. */
 					/* Standard rates are 1200 for VHF and 300 for HF. */
+					/* This should really be called bits per second. */
 
 	/* Next 3 come from config file or command line. */
 

@@ -603,6 +603,22 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
 	text_color_set(DW_COLOR_XMIT);
 	dw_printf ("[%d%c] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L');
 	dw_printf ("%s", stemp);			/* stations followed by : */
+
+/* Demystify non-APRS.  Use same format for received frames in direwolf.c. */
+
+	if ( ! ax25_is_aprs(pp)) {
+	  ax25_frame_type_t ftype;
+	  cmdres_t cr;
+	  char desc[32];
+	  int pf;
+	  int nr;
+	  int ns;
+
+	  ftype = ax25_frame_type (pp, &cr, desc, &pf, &nr, &ns);
+
+	  dw_printf ("(%s)", desc);
+	}
+
 	ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	dw_printf ("\n");
 	(void)ax25_check_addresses (pp);
@@ -622,6 +638,9 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
  * Start sending leading flag bytes.
  */
 	time_ptt = dtime_now ();
+
+// TODO: This was written assuming bits/sec = baud.
+// Does it is need to be scaled differently for PSK?
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);

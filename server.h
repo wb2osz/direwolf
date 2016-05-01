@@ -18,5 +18,9 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 int server_callsign_registered_by_client (char *callsign);
 
 
+void server_link_established (int chan, int client, char *remote_call, char *own_call, int incoming);
+
+void server_link_terminated (int chan, int client, char *remote_call, char *own_call, int timeout);
+
 
 /* end server.h */

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -68,17 +68,39 @@ static int ticks_per_bit[MAX_CHANS];
 static int f1_change_per_sample[MAX_CHANS];
 static int f2_change_per_sample[MAX_CHANS];
 
+
 static short sine_table[256];
 
 
 /* Accumulators. */
 
 static unsigned int tone_phase[MAX_CHANS]; // Phase accumulator for tone generation.
-					    // Upper bits are used as index into sine table.
+					   // Upper bits are used as index into sine table.
+
+#define PHASE_SHIFT_180 ( 128u << 24 )
+#define PHASE_SHIFT_90  (  64u << 24 )
+#define PHASE_SHIFT_45  (  32u << 24 )
+
 
 static int bit_len_acc[MAX_CHANS];	// To accumulate fractional samples per bit.
 
 static int lfsr[MAX_CHANS];		// Shift register for scrambler.
+
+static int bit_count[MAX_CHANS];	// Counter incremented for each bit transmitted
+					// on the channel.   This is only used for QPSK.
+					// The LSB determines if we save the bit until
+					// next time, or send this one with the previously saved.
+					// The LSB+1 position determines if we add an
+					// extra 180 degrees to the phase to compensate
+					// for having 1.5 carrier cycles per symbol time.
+
+					// For 8PSK, it has a different meaning.  It is the
+					// number of bits in 'save_bit' so we can accumulate
+					// three for each symbol.
+static int save_bit[MAX_CHANS];
+
+static int prev_symbol[MAX_CHANS];	// Data is conveyed by phase relative to the
+					// previous symbol.  So we need to keep it.
 
 
 /*
@@ -187,19 +209,49 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 
 	    int a = ACHAN2ADEV(chan);
 
+	    tone_phase[chan] = 0;
+	    bit_len_acc[chan] = 0;
+	    lfsr[chan] = 0;
+
 	    ticks_per_sample[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
 
-	    ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->achan[chan].baud ) + 0.5);
+	    // The terminology is all wrong here.  Didn't matter with 1200 and 9600.
+	    // The config speed should be bits per second rather than baud.
+	    // ticks_per_bit should be ticks_per_symbol.
 
-	    f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].mark_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	    switch (save_audio_config_p->achan[chan].modem_type) {
 
-	    f2_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].space_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	      case MODEM_QPSK:
 
-	    tone_phase[chan] = 0;
-				
-	    bit_len_acc[chan] = 0;
+	        audio_config_p->achan[chan].mark_freq = 1800;
+	        audio_config_p->achan[chan].space_freq = audio_config_p->achan[chan].mark_freq;	// Not Used.
 
-	    lfsr[chan] = 0;
+	        // symbol time is 1 / (half of bps)
+	        ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / ((double)audio_config_p->achan[chan].baud * 0.5)) + 0.5);
+	        f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].mark_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	        f2_change_per_sample[chan] = f1_change_per_sample[chan];	// Not used.
+
+	        tone_phase[chan] = PHASE_SHIFT_45;	// Just to mimic first attempt.
+	        break;
+
+	      case MODEM_8PSK:
+
+	        audio_config_p->achan[chan].mark_freq = 1800;
+	        audio_config_p->achan[chan].space_freq = audio_config_p->achan[chan].mark_freq;	// Not Used.
+
+	        // symbol time is 1 / (third of bps)
+	        ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / ((double)audio_config_p->achan[chan].baud / 3.)) + 0.5);
+	        f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].mark_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	        f2_change_per_sample[chan] = f1_change_per_sample[chan];	// Not used.
+	        break;
+
+	      default:
+
+	        ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->achan[chan].baud ) + 0.5);
+	        f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].mark_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	        f2_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].space_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	        break;
+	    }
 	  }
 	}
 
@@ -300,13 +352,17 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
  *
  * Assumption:  fp is open to a file for write.
  *
+ * Version 1.4:	Attempt to implement 2400 and 4800 bps PSK modes.
+ *
  *--------------------------------------------------------------------*/
+
+static const int gray2phase_v26[4] = {0, 1, 3, 2};
+static const int gray2phase_v27[8] = {1, 0, 2, 3, 6, 7, 5, 4};
 
 
 void tone_gen_put_bit (int chan, int dat)
 {
 	int a = ACHAN2ADEV(chan);	/* device for channel. */
-
 
 	assert (save_audio_config_p->achan[chan].valid);
 
@@ -316,6 +372,70 @@ void tone_gen_put_bit (int chan, int dat)
 	  bit_len_acc[chan] -= ticks_per_bit[chan]; 
 	  dat = 0; 
 	} 
+
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_QPSK) {
+
+	  int dibit;
+	  int symbol;
+
+	  dat &= 1;	// Keep only LSB to be extra safe.
+
+	  if ( ! (bit_count[chan] & 1)) {
+	    save_bit[chan] = dat;
+	    bit_count[chan]++;
+	    return;
+	  }
+#define REV2 1
+#if REV2
+#else
+	  tone_phase[chan] = PHASE_SHIFT_45;
+	  if (bit_count[chan] & 2) {
+	    tone_phase[chan] += (unsigned)PHASE_SHIFT_180;
+	  }
+#endif
+	  // All zero bits should give us steady 1800 Hz.
+	  // All one bits should flip phase by 180 degrees each time.
+
+	  dibit = (save_bit[chan] << 1) | dat;
+#if REV2
+	  symbol = gray2phase_v26[dibit];
+	  tone_phase[chan] += symbol * PHASE_SHIFT_90;
+#else
+	  symbol = (prev_symbol[chan] + gray2phase_v26[dibit]) & 0x3;
+	  tone_phase[chan] += symbol * PHASE_SHIFT_90;
+	  prev_symbol[chan] = symbol;
+#endif
+	  bit_count[chan]++;
+	}
+
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_8PSK) {
+
+	  int tribit;
+	  int symbol;
+
+	  dat &= 1;	// Keep only LSB to be extra safe.
+
+	  if (bit_count[chan] < 2) {
+	    save_bit[chan] = (save_bit[chan] << 1) | dat;
+	    bit_count[chan]++;
+	    return;
+	  }
+
+	  // The bit pattern 001 should give us steady 1800 Hz.
+	  // All one bits should flip phase by 180 degrees each time.
+
+	  tribit = (save_bit[chan] << 1) | dat;
+#if 1
+	  symbol = gray2phase_v27[tribit];
+	  tone_phase[chan] += symbol * PHASE_SHIFT_45;
+#else
+	  symbol = (prev_symbol[chan] + gray2phase_v27[tribit]) & 0x7;
+	  tone_phase[chan] = symbol * PHASE_SHIFT_45;
+	  prev_symbol[chan] = symbol;
+#endif
+	  save_bit[chan] = 0;
+	  bit_count[chan] = 0;
+	}
 
 	if (save_audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE) {
 	  int x;
@@ -331,6 +451,14 @@ void tone_gen_put_bit (int chan, int dat)
 	    int sam;
 
 	    tone_phase[chan] += dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
+            sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
+	    gen_tone_put_sample (chan, a, sam);
+	  }
+	  else if (save_audio_config_p->achan[chan].modem_type == MODEM_QPSK ||
+		   save_audio_config_p->achan[chan].modem_type == MODEM_8PSK) {
+	    int sam;
+
+	    tone_phase[chan] += f1_change_per_sample[chan];
             sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
 	    gen_tone_put_sample (chan, a, sam);
 	  }

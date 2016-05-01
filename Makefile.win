@@ -28,6 +28,9 @@ AR := ar
 
 CFLAGS += -g
 
+# TODO: Development in progress.  Don't try using yet.
+#CFLAGS += -DNEW14
+
 #
 # Let's see impact of various optimization levels.
 # Benchmark results with MinGW gcc version 4.6.2.
@@ -61,14 +64,22 @@ CFLAGS += -g
 
 # --------------------------------------  Main application   --------------------------------
 
-demod.o : fsk_demod_state.h
+# Not sure why this is here.
+
+demod.o      : fsk_demod_state.h
+
 demod_9600.o : fsk_demod_state.h
+
 demod_afsk.o : fsk_demod_state.h
 
+demod_psk.o  : fsk_demod_state.h
 
-direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+
+# later ax25_link.o 
+
+direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
-		fcs_calc.o ax25_pad.o \
+		fcs_calc.o ax25_pad.o ax25_pad2.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
@@ -88,9 +99,12 @@ demod.o : fsk_fast_filter.h
 demod_afsk.o : fsk_fast_filter.h
 
 
-fsk_fast_filter.h : demod_afsk.c
-	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c
+fsk_fast_filter.h : gen_fff
 	./gen_fff > fsk_fast_filter.h
+
+gen_fff : demod_afsk.c dsp.c textcolor.c
+	echo " " > tune.h
+	$(CC) $(CFLAGS) -DGEN_FFF -o $@ $^
 
 
 #
@@ -235,32 +249,59 @@ strlcat.o : misc/strlcat.c
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600 
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
 # Can we encode and decode at popular data rates?
 # Verify that single bit fixup increases the count.
 
 check-modem1200 : gen_packets atest
-	gen_packets -n 100 -o test1.wav
-	atest -F0 -PE -L70 -G71 test1.wav
-	atest -F1 -PE -L73 -G75 test1.wav
-	#rm test1.wav
+	gen_packets -n 100 -o test12.wav
+	atest -F0 -PE -L64 -G72 test12.wav
+	atest -F1 -PE -L70 -G75 test12.wav
+	rm test12.wav
 
 check-modem300 : gen_packets atest
 	gen_packets -B300 -n 100 -o test3.wav
 	atest -B300 -F0 -L68 -G69 test3.wav
-	atest -B300 -F1 -L73 -G75 test3.wav
+	atest -B300 -F1 -L71 -G75 test3.wav
 	rm test3.wav
 
 check-modem9600 : gen_packets atest
-	gen_packets -B9600 -n 100 -o test9.wav
-	atest -B9600 -F0 -L57 -G59 test9.wav
-	atest -B9600 -F1 -L66 -G67 test9.wav
-	rm test9.wav
+	gen_packets -B9600 -n 100 -o test96.wav
+	sleep 1
+	atest -B9600 -F0 -L57 -G62 test96.wav
+	atest -B9600 -F1 -L65 -G67 test96.wav
+	sleep 1
+	rm test96.wav
 
-# Unit test for AFSK demodulator
+check-modem19200 : gen_packets atest
+	gen_packets -r 96000 -B19200 -n 100 -o test19.wav
+	sleep 1
+	atest -B19200 -F0 -L63 -G64 test19.wav
+	atest -B19200 -F1 -L69 -G70 test19.wav
+	sleep 1
+	rm test19.wav
 
-atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_9600.c \
+check-modem2400 : gen_packets atest
+	gen_packets -B2400 -n 100 -o test24.wav
+	sleep 1
+	atest -B2400 -F0 -L70 -G78 test24.wav
+	atest -B2400 -F1 -L80 -G87 test24.wav
+	sleep 1
+	#rm test24.wav
+
+check-modem4800 : gen_packets atest
+	gen_packets -B4800 -n 100 -o test48.wav
+	sleep 1
+	atest -B4800 -F0 -L70 -G74 test48.wav
+	atest -B4800 -F1 -L79 -G84 test48.wav
+	sleep 1
+	#rm test48.wav
+
+
+# Unit test for demodulators
+
+atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
 		dwgpsnmea.o dwgps.o serial_port.o latlong.c \
@@ -272,7 +313,7 @@ atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_9600.c \
 	#atest -B 9600 z9.wav
 	#atest za100.wav
 
-atest9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+atest9 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
 		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
 		fsk_fast_filter.h
 	echo " " > tune.h
@@ -352,17 +393,26 @@ kisstest : kiss_frame.c
 	rm kisstest.exe
 
 
+# Unit test for constructing frames besides UI.
+
+.PHONY: pad2test
+pad2test : ax25_pad2.c ax25_pad.c fcs_calc.o textcolor.o regex.a misc.a
+	$(CC) $(CFLAGS) -DPAD2TEST -o $@ $^
+	./pad2test
+	rm pad2test.exe
+
+
 # ------------------------------ Other manual testing & experimenting  -------------------------------
 
 
 # For tweaking the demodulator.
 
-demod.o : tune.h
+demod.o      : tune.h
 demod_9600.o : tune.h
 demod_afsk.o : tune.h
+demod_psk.o  : tune.h
 
-
-testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.o fsk_demod_agc.h \
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.o fsk_demod_agc.h \
 		hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o latlong.o symbols.o textcolor.o telemetry.o \
 		dwgpsnmea.o dwgps.o serial_port.o tt_text.o regex.a misc.a
@@ -375,26 +425,52 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.o fsk_demod_agc.h \
 noisy3.wav : gen_packets
 	./gen_packets -B 300 -n 100 -o noisy3.wav
 
-testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
 		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		tune.h 
-	rm -f atest.exe
-	$(CC) $(CFLAGS) -o atest $^
-	./atest -B 300 -P D -D 3 noisy3.wav | grep "packets decoded in" >atest.out
+	rm -f atest3.exe
+	$(CC) $(CFLAGS) -o atest3 $^
+	./atest3 -B 300 -P D -D 3 noisy3.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
 
 
 noisy96.wav : gen_packets
 	./gen_packets -B 9600 -n 100 -o noisy96.wav
 
-testagc9 : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
+testagc96 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
 		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c regex.a misc.a \
 		tune.h 
-	rm -f atest.exe
-	$(CC) $(CFLAGS) -o atest $^
-	./atest -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
-	#./atest -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+	rm -f atest9.exe
+	$(CC) $(CFLAGS) -o atest9 $^
+	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
+	#./atest9 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
+
+testagc24 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o serial_port.o latlong.o \
+		symbols.o tt_text.o textcolor.o telemetry.o \
+		misc.a regex.a
+	rm -f atest24.exe
+	sleep 1
+	$(CC) $(CFLAGS) -o atest24 $^
+	./atest24 -B 2400 test2400.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
+
+testagc48 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o serial_port.o latlong.o \
+		symbols.o tt_text.o textcolor.o telemetry.o \
+		misc.a regex.a
+	rm -f atest48.exe
+	sleep 1
+	$(CC) $(CFLAGS) -o atest48 $^
+	./atest48 -B 4800 test4800.wav | grep "packets decoded in" >atest.out
+	#./atest48 -B 4800 test4800.wav 
+	echo " " > tune.h
+
 
 # Unit test for IGate
 
@@ -424,7 +500,7 @@ walk96 : walk96.c dwgps.o dwgpsnmea.o kiss_frame.o \
 		ax25_pad.o fcs_calc.o \
 		xmit.o hdlc_send.o gen_tone.o ptt.o tq.o \
 		hdlc_rec.o hdlc_rec2.o rrbb.o dsp.o audio_win.o \
-		multi_modem.o demod.o demod_afsk.o demod_9600.o rdq.o \
+		multi_modem.o demod.o demod_afsk.o demod_psk.c demod_9600.o rdq.o \
 		server.o morse.o audio_stats.o dtime_now.o dlq.o \
 		regex.a misc.a 
 	$(CC) $(CFLAGS) -DWALK96 -o $@ $^ -lwinmm -lws2_32

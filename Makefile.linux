@@ -228,7 +228,7 @@ z := $(notdir ${CURDIR})
 
 
 
-direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
@@ -248,14 +248,17 @@ endif
 
 # Optimization for slow processors.
 
-demod.o : fsk_fast_filter.h
+demod.o      : fsk_fast_filter.h
 
 demod_afsk.o : fsk_fast_filter.h
 
 
-fsk_fast_filter.h : demod_afsk.c
-	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c $(LDFLAGS)
+fsk_fast_filter.h : gen_fff
 	./gen_fff > fsk_fast_filter.h
+
+gen_fff : demod_afsk.c dsp.c textcolor.c
+	echo " " > tune.h
+	$(CC) $(CFLAGS) -DGEN_FFF -o $@ $^ $(LDFLAGS)
 
 
 #
@@ -327,7 +330,7 @@ gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c
 
 # Unit test for AFSK demodulator
 
-atest : atest.c demod.o demod_afsk.o demod_9600.o \
+atest : atest.c demod.o demod_afsk.o demod_psk.o demod_9600.o \
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.o ax25_pad.o decode_aprs.o dwgpsnmea.o \
 		dwgps.o dwgpsd.o serial_port.o telemetry.o latlong.o symbols.o tt_text.o textcolor.o \
@@ -585,15 +588,15 @@ install-rpi : dw-start.sh
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
 # Can we encode and decode at popular data rates?
 
 check-modem1200 : gen_packets atest
-	./gen_packets -n 100 -o /tmp/test1.wav
-	./atest -F0 -PE -L70 -G71 /tmp/test1.wav
-	./atest -F1 -PE -L73 -G75 /tmp/test1.wav
-	#rm /tmp/test1.wav
+	./gen_packets -n 100 -o /tmp/test12.wav
+	./atest -F0 -PE -L63 -G71 /tmp/test12.wav
+	./atest -F1 -PE -L70 -G75 /tmp/test12.wav
+	rm /tmp/test12.wav
 
 check-modem300 : gen_packets atest
 	./gen_packets -B300 -n 100 -o /tmp/test3.wav
@@ -602,11 +605,28 @@ check-modem300 : gen_packets atest
 	rm /tmp/test3.wav
 
 check-modem9600 : gen_packets atest
-	./gen_packets -B9600 -n 100 -o /tmp/test9.wav
-	./atest -B9600 -F0 -L57 -G59 /tmp/test9.wav
-	./atest -B9600 -F1 -L66 -G67 /tmp/test9.wav
-	rm /tmp/test9.wav
+	./gen_packets -B9600 -n 100 -o /tmp/test96.wav
+	./atest -B9600 -F0 -L57 -G61 /tmp/test96.wav
+	./atest -B9600 -F1 -L64 -G67 /tmp/test96.wav
+	rm /tmp/test96.wav
 
+check-modem19200 : gen_packets atest
+	./gen_packets -r 96000 -B19200 -n 100 -o /tmp/test19.wav
+	./atest -B19200 -F0 -L62 -G64 /tmp/test19.wav
+	./atest -B19200 -F1 -L69 -G71 /tmp/test19.wav
+	rm /tmp/test19.wav
+
+check-modem2400 : gen_packets atest
+	./gen_packets -B2400 -n 100 -o /tmp/test24.wav
+	./atest -B2400 -F0 -L70 -G78 /tmp/test24.wav
+	./atest -B2400 -F1 -L80 -G87 /tmp/test24.wav
+	rm /tmp/test24.wav
+
+check-modem4800 : gen_packets atest
+	./gen_packets -B2400 -n 100 -o /tmp/test48.wav
+	./atest -B2400 -F0 -L70 -G79 /tmp/test48.wav
+	./atest -B2400 -F1 -L80 -G90 /tmp/test48.wav
+	rm /tmp/test48.wav
 
 
 # Unit test for inner digipeater algorithm
@@ -679,6 +699,14 @@ kisstest : kiss_frame.c
 	./kisstest
 	rm kisstest
 
+# Unit test for constructing frames besides UI.
+
+.PHONY: pad2test
+pad2test : ax25_pad2.c ax25_pad.c fcs_calc.o textcolor.o misc.a
+	$(CC) $(CFLAGS) -DPAD2TEST -o $@ $^ $(LDFLAGS)
+	./pad2test
+	rm pad2test
+
 
 
 #  -----------------------------  Manual tests and experiments  ---------------------------
@@ -694,7 +722,7 @@ itest : igate.c textcolor.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 # Unit test for UDP reception with AFSK demodulator.
 # Temporary during development.  Might not be useful anymore.
 
-udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.o ax25_pad.o decode_aprs.o symbols.o textcolor.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	./udptest
@@ -702,11 +730,19 @@ udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o hdlc_rec
 # For demodulator tweaking experiments.
 # Dependencies of demod*.c, rather than .o, are intentional.
 
-demod.o : tune.h
+demod.o      : tune.h
+
 demod_afsk.o : tune.h
+
 demod_9600.o : tune.h
 
-testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+demod_psk.o  : tune.h
+
+tune.h :
+	echo " " > tune.h
+
+
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.o ax25_pad.o decode_aprs.o telemetry.o latlong.o symbols.o tune.h textcolor.o misc.a
 	$(CC) $(CFLAGS) -o atest $^ $(LDFLAGS)
 	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
@@ -757,8 +793,7 @@ dist-src : README.md CHANGES.md
 
 .PHONY: clean
 clean :
-	rm -f $(APPS) fsk_fast_filter.h *.o *.a direwolf.desktop
-	echo " " > tune.h
+	rm -f $(APPS) gen_fff tune.h fsk_fast_filter.h *.o *.a direwolf.desktop
 
 
 depend : $(wildcard *.c)

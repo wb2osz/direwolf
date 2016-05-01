@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -58,6 +58,17 @@
  *			'x'	Unregister CallSign 
  *		
  *			'y'	Ask Outstanding frames waiting on a Port   (new in 1.2)
+ *
+ *			'C'	Connect, Start an AX.25 Connection			(new in 1.4)
+ *
+ *			'v'	Connect VIA, Start an AX.25 circuit thru digipeaters	(new in 1.4)
+ *
+ *			'c'	Connection with non-standard PID			(new in 1.4)
+ *
+ *			'D'	Send Connected Data					(new in 1.4)
+ *
+ *			'd'	Disconnect, Terminate an AX.25 Connection		(new in 1.4)
+ *
  *		
  *			A message is printed if any others are received.
  *
@@ -80,7 +91,13 @@
  *				(Enabled with 'm' command.)
  *
  *			'y'	Outstanding frames waiting on a Port   (new in 1.2)
- *		
+ *
+ *			'C'	AX.25 Connection Received		(new in 1.4)
+ *
+ *			'D'	Connected AX.25 Data			(new in 1.4)
+ *
+ *			'd'	Disconnected				(new in 1.4)
+ *
  *
  *
  * References:	AGWPE TCP/IP API Tutorial
@@ -135,6 +152,7 @@
 #include "textcolor.h"
 #include "audio.h"
 #include "server.h"
+#include "dlq.h"
 
 
 
@@ -1590,7 +1608,6 @@ static THREAD_F cmd_listen_thread (void *arg)
 	        int num_calls = 2;	/* 2 plus any digipeaters. */
 	        int pid = 0xf0;		/* normal for AX.25 I frames. */
 		int j;
-	        char stemp[256];
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
 	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
@@ -1620,28 +1637,53 @@ static THREAD_F cmd_listen_thread (void *arg)
 	          }
 	        }
 
+#if NEW14
+	        dlq_connect_request (callsigns, num_calls, cmd.hdr.portx, client, pid);
+#else
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("\n");
 	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
 	        dw_printf ("Connected packet mode is not implemented.\n");
+#endif
 	      }
 	      break;
 
+
 	    case 'D': 				/* Send Connected Data */
 
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\n");
-	      dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
-	      dw_printf ("Connected packet mode is not implemented.\n");
+	      {
+	        char callsigns[2][AX25_MAX_ADDR_LEN];
+	        const int num_calls = 2;
+
+	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
+	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
+#if NEW14
+	        dlq_xmit_data_request (callsigns, num_calls, cmd.hdr.portx, client, cmd.hdr.pid, cmd.data, netle2host(cmd.hdr.data_len_NETLE));
+#else
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\n");
+	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
+	        dw_printf ("Connected packet mode is not implemented.\n");
+#endif
+	      }
 	      break;
 
 	    case 'd': 				/* Disconnect, Terminate an AX.25 Connection */
 
 	      {
+	        char callsigns[2][AX25_MAX_ADDR_LEN];
+	        const int num_calls = 2;
+
+	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
+	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
+#if NEW14
+	        dlq_disconnect_request (callsigns, num_calls, cmd.hdr.portx, client);
+#else
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("\n");
 	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
 	        dw_printf ("Connected packet mode is not implemented.\n");
+#endif
 	      }
 	      break;
 

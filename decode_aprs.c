@@ -166,7 +166,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 	A->g_quiet = quiet;
 
-	snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown message type %c", *pinfo);
+	snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
 
 	A->g_symbol_table = '/';	/* Default to primary table. */
 	A->g_symbol_code = ' ';		/* What should we have for default symbol? */
@@ -254,8 +254,9 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      break;
 
 
-	    case ':':		/* Message */
+	    case ':':		/* Message: for one person, a group, or a bulletin. */
 				/* Directed Station Query */
+				/* Telemetry metadata. */
 
 	      aprs_message (A, pinfo, info_len, quiet);
 	      break;
@@ -1409,22 +1410,45 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  * Function:	aprs_message
  *
- * Purpose:	Decode "Message Format"
+ * Purpose:	Decode "Message Format."
+ *		The word message is used loosely all over the place, but it has a very specific meaning here.
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *		quiet	- supress error messages.
  *
- * Outputs:	??? TBD
+ * Outputs:	A->g_msg_type		Text description for screen display.
+ *
+ *		A->g_addressee		To whom is it addressed.
+ *					Could be a specific station, alias, bulletin, etc.
+ *					For telemetry metadata is is about this station,
+ *					not being sent to it.
+ *
+ *		A->g_message_subtype	Subtype so caller might avoid replicating
+ *					all the code to distinguish them.
+ *
+ *		A->g_message_number	Message number if any.  Required for ack/rej.
  *
  * Description:	An APRS message is a text string with a specifed addressee.
  *
  *		It's a lot more complicated with different types of addressees
  *		and replies with acknowledgement or rejection.
  *
+ *		There is even a special case for telemetry metadata.
  *
- * Examples:	...
- *		
+ *
+ * Cases:	:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
+ *		:xxxxxxxxx:UNIT.		Telemetry metadata, unit/label
+ *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficents
+ *		:xxxxxxxxx:BITS.		Telemetry metadata, Bit Sense/Project Name
+ *		:xxxxxxxxx:?			Directed Station Query
+ *		:xxxxxxxxx:ack			Message acknowledged (received)
+ *		:xxxxxxxxx:rej			Message rejected (unable to accept)
+ *
+ *		:xxxxxxxxx: ...			Message with no message number.
+ *						(Text may not contain the { character because
+ *						 it indicates beginning of optional message number.)
+ *		:xxxxxxxxx: ... {num		Message with message number.
  *
  *------------------------------------------------------------------*/
 
@@ -1436,7 +1460,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char addressee[9];
 	  char colon;			/* : */
 	  char message[73];		/* 0-67 characters for message */
-					/* { followed by 1-5 characters for message number */
+					/* Optional { followed by 1-5 characters for message number */
 
 					/* If the first chracter is '?' it is a Directed Station Query. */
 	} *p;
@@ -1447,20 +1471,23 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	p = (struct aprs_message_s *)info;
 
 	strlcpy (A->g_msg_type, "APRS Message", sizeof(A->g_msg_type));
+	A->g_message_subtype = message_subtype_message;			/* until found otherwise */
 
 	if (ilen < 11) {
 	  if (! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Message must have a minimum of 11 characters for : addressee :\n");
+	    dw_printf("APRS Message must have a minimum of 11 characters for : 9 character addressee :\n");
 	  }
+	  A->g_message_subtype = message_subtype_invalid;
 	  return;
 	}
 
 	if (p->colon != ':') {
 	  if (! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Message must begin with : addressee :\n");
+	    dw_printf("APRS Message must begin with : 9 character addressee :\n");
 	  }
+	  A->g_message_subtype = message_subtype_invalid;
 	  return;
 	}
 
@@ -1475,6 +1502,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	strlcpy (A->g_addressee, addressee, sizeof(A->g_addressee));
 
+
 /*
  * Special message formats contain telemetry metadata.
  * It applies to the addressee, not the sender.
@@ -1488,18 +1516,22 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	if (strncmp(p->message,"PARM.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Parameter Name Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_parm;
 	  telemetry_name_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"UNIT.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Unit/Label Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_unit;
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficents Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_eqns;
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
 	else if (strncmp(p->message,"BITS.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_bits;
 	  telemetry_bit_sense_message (addressee, p->message+5, quiet);
 	}
 
@@ -1510,11 +1542,33 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	else if (p->message[0] == '?') {
 
 	  strlcpy (A->g_msg_type, "Directed Station Query", sizeof(A->g_msg_type));
+	  A->g_message_subtype = message_subtype_directed_query;
 
 	  aprs_directed_station_query (A, addressee, p->message+1, quiet);
 	}
+
+/* ack or rej?  Message number is required for these. */
+
+	else if (strncmp(p->message,"ack",3) == 0) {
+	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "ACK message %s for \"%s\"", A->g_message_number, addressee);
+	  A->g_message_subtype = message_subtype_ack;
+	}
+	else if (strncmp(p->message,"rej",3) == 0) {
+	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "REJ message %s for \"%s\"", A->g_message_number, addressee);
+	  A->g_message_subtype = message_subtype_ack;
+	}
+
+/* message number is optional here. */
+
 	else {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message for \"%s\"", addressee);
+	  char *pno = strchr(p->message, '{');
+	  if (pno != NULL) {
+	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+	  }
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message %s for \"%s\"", A->g_message_number, addressee);
+	  A->g_message_subtype = message_subtype_message;
 
 	  /* No location so don't use  process_comment () */
 

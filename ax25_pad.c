@@ -891,7 +891,10 @@ packet_t ax25_unwrap_third_party (packet_t from_pp)
 
 	(void) ax25_get_info (from_pp, &info_p);
 
-	result_pp = ax25_from_text((char *)info_p + 1, 0);
+	// Want strict because addresses should conform to AX.25 here.
+	// That's not the case for something from an Internet Server.
+
+	result_pp = ax25_from_text((char *)info_p + 1, 1);
 
 	return (result_pp);
 }
@@ -1789,12 +1792,14 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
  *
  * Inputs:	this_p	- pointer to packet object.
  *		
- * 		modulo	- We often need to know this because context is
+ * 		modulo	- We often need to know this because context is		// TODO: remove this - return cr instead.
  *			  required to know if control is 1 or 2 bytes.
  *
  * Outputs:	desc	- Text description such as "I frame" or
  *			  "U frame SABME".   
  *			  Supply 16 bytes to be safe.
+ *
+ *		cr	- Command or response?
  *
  *		pf	- P/F - Poll/Final or -1 if not applicable
  *
@@ -1809,7 +1814,8 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
 // TODO: need someway to ensure caller allocated enough space.
 #define DESC_SIZ 32
 
-ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *desc, int *pf, int *nr, int *ns) 
+
+ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, int *pf, int *nr, int *ns) 
 {
 	int c;		// U frames are always one control byte.
 	int c2;		// I & S frames can have second Control byte.
@@ -1818,6 +1824,7 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	assert (this_p->magic2 == MAGIC);
 
 	strlcpy (desc, "????", DESC_SIZ);
+	*cr = cr_11;
 	*pf = -1;
 	*nr = -1;
 	*ns = -1;
@@ -1827,16 +1834,30 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	  strlcpy (desc, "Not AX.25", DESC_SIZ);
 	  return (frame_not_AX25);
 	}
-	if (modulo == modulo_128) {
+	if (this_p->modulo == modulo_128) {
 	  c2 = ax25_get_c2 (this_p);
 	}
 
+	int dst_c = this_p->frame_data[AX25_DESTINATION * 7 + 6] & SSID_H_MASK;
+	int src_c = this_p->frame_data[AX25_SOURCE * 7 + 6] & SSID_H_MASK;
+
+	char cr_text[8];
+	char pf_text[8];
+
+	if (dst_c) {
+	  if (src_c) { *cr = cr_11;  strcpy(cr_text,"cc=11"); strcpy(pf_text,"p/f"); }
+	  else       { *cr = cr_cmd; strcpy(cr_text,"cmd");   strcpy(pf_text,"p"); }
+	}
+	else {
+	  if (src_c) { *cr = cr_res; strcpy(cr_text,"res");   strcpy(pf_text,"f"); }
+	  else       { *cr = cr_00;  strcpy(cr_text,"cc=00"); strcpy(pf_text,"p/f"); }
+	}
 
 	if ((c & 1) == 0) {
 
 // Information 			rrr p sss 0		or	sssssss 0  rrrrrrr p
 
-	  if (modulo == modulo_128) {
+	  if (this_p->modulo == modulo_128) {
 	    *ns = (c >> 1) & 0x7f;
 	    *pf = c2 & 1;
 	    *nr = (c2 >> 1) & 0x7f;
@@ -1846,14 +1867,14 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	    *pf = (c >> 4) & 1;
 	    *nr = (c >> 5) & 7;
 	  }
-	  snprintf (desc, DESC_SIZ, "I frame, n(s)= %d, n(r)=%d, p=%d", *ns, *nr, *pf);
+	  snprintf (desc, DESC_SIZ, "I %s, n(s)= %d, n(r)=%d, %s=%d", cr_text, *ns, *nr, pf_text, *pf);
 	  return (frame_type_I);
 	}
 	else if ((c & 2) == 0) {
 
 // Supervisory			rrr p/f ss 0 1		or	0000 ss 0 1  rrrrrrr p/f
 
-	  if (modulo == modulo_128) {
+	  if (this_p->modulo == modulo_128) {
 	    *pf = c2 & 1;
 	    *nr = (c2 >> 1) & 0x7f;
 	  }
@@ -1861,12 +1882,13 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	    *pf = (c >> 4) & 1;
 	    *nr = (c >> 5) & 7;
 	  }
-	  
+
+ 
 	  switch ((c >> 2) & 3) {
-	    case 0: snprintf (desc, DESC_SIZ, "S frame RR, n(r)=%d, p/f=%d", *nr, *pf);   return (frame_type_S_RR);   break;
-	    case 1: snprintf (desc, DESC_SIZ, "S frame RNR, n(r)=%d, p/f=%d", *nr, *pf);  return (frame_type_S_RNR);  break;
-	    case 2: snprintf (desc, DESC_SIZ, "S frame REJ, n(r)=%d, p/f=%d", *nr, *pf);  return (frame_type_S_REJ);  break;
-	    case 3: snprintf (desc, DESC_SIZ, "S frame SREJ, n(r)=%d, p/f=%d", *nr, *pf); return (frame_type_S_SREJ); break;
+	    case 0: snprintf (desc, DESC_SIZ, "RR %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf);   return (frame_type_S_RR);   break;
+	    case 1: snprintf (desc, DESC_SIZ, "RNR %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf);  return (frame_type_S_RNR);  break;
+	    case 2: snprintf (desc, DESC_SIZ, "REJ %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf);  return (frame_type_S_REJ);  break;
+	    case 3: snprintf (desc, DESC_SIZ, "SREJ %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf); return (frame_type_S_SREJ); break;
 	 } 
 	}
 	else {
@@ -1877,16 +1899,16 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	  
 	  switch (c & 0xef) {
 	
-	    case 0x6f: snprintf (desc, DESC_SIZ, "U frame SABME, p=%d", *pf);  return (frame_type_U_SABME); break;
-	    case 0x2f: snprintf (desc, DESC_SIZ, "U frame SABM, p=%d", *pf);   return (frame_type_U_SABM);  break;
-	    case 0x43: snprintf (desc, DESC_SIZ, "U frame DISC, p=%d", *pf);   return (frame_type_U_DISC);  break;
-	    case 0x0f: snprintf (desc, DESC_SIZ, "U frame DM, f=%d", *pf);     return (frame_type_U_DM);    break;
-	    case 0x63: snprintf (desc, DESC_SIZ, "U frame UA, f=%d", *pf);     return (frame_type_U_UA);    break;
-	    case 0x87: snprintf (desc, DESC_SIZ, "U frame FRMR, f=%d", *pf);   return (frame_type_U_FRMR);  break;
-	    case 0x03: snprintf (desc, DESC_SIZ, "U frame UI, pf=%d", *pf);    return (frame_type_U_UI);    break;
-	    case 0xaf: snprintf (desc, DESC_SIZ, "U frame XID, pf=%d", *pf);   return (frame_type_U_XID);   break;
-	    case 0xe3: snprintf (desc, DESC_SIZ, "U frame TEST, pf=%d", *pf);  return (frame_type_U_TEST);  break;
-	    default:   snprintf (desc, DESC_SIZ, "U frame ???");               return (frame_type_U);       break;
+	    case 0x6f: snprintf (desc, DESC_SIZ, "SABME %s, %s=%d",	cr_text, pf_text, *pf);  return (frame_type_U_SABME); break;
+	    case 0x2f: snprintf (desc, DESC_SIZ, "SABM %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_SABM);  break;
+	    case 0x43: snprintf (desc, DESC_SIZ, "DISC %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_DISC);  break;
+	    case 0x0f: snprintf (desc, DESC_SIZ, "DM %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_DM);    break;
+	    case 0x63: snprintf (desc, DESC_SIZ, "UA %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_UA);    break;
+	    case 0x87: snprintf (desc, DESC_SIZ, "FRMR %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_FRMR);  break;
+	    case 0x03: snprintf (desc, DESC_SIZ, "UI %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_UI);    break;
+	    case 0xaf: snprintf (desc, DESC_SIZ, "XID %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_XID);   break;
+	    case 0xe3: snprintf (desc, DESC_SIZ, "TEST %s, %s=%d", 	cr_text, pf_text, *pf);  return (frame_type_U_TEST);  break;
+	    default:   snprintf (desc, DESC_SIZ, "U other???");        				 return (frame_type_U);       break;
 	  }
 	}
 
@@ -1896,6 +1918,8 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, ax25_modulo_t modulo, char *
 	return (frame_not_AX25);
 
 } /* end ax25_frame_type */
+
+
 
 /*------------------------------------------------------------------
  *
@@ -2437,7 +2461,11 @@ int ax25_alevel_to_text (alevel_t alevel, char text[AX25_ALEVEL_TO_TEXT_SIZE])
 
 	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d(%+d/%+d)", alevel.rec, alevel.mark, alevel.space);
 	}
-	else if (alevel.mark == -2 &&  alevel.space == -2) {		/* DTMF */
+	else if (alevel.mark == -1 &&  alevel.space == -1) {		/* PSK - single number. */
+
+	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d", alevel.rec);
+	}
+	else if (alevel.mark == -2 &&  alevel.space == -2) {		/* DTMF - single number. */
 
 	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d", alevel.rec);
 	}
