@@ -558,26 +558,6 @@ dist-src : README.md CHANGES.md \
 
 # Reminders if pdf files are not up to date.
 
-doc/User-Guide.pdf : doc/User-Guide.docx
-	echo "***** User-Guide.pdf is out of date *****"
-
-doc/Raspberry-Pi-APRS.pdf : doc/Raspberry-Pi-APRS.docx
-	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
-
-doc/Raspberry-Pi-APRS-Tracker.pdf : doc/Raspberry-Pi-APRS-Tracker.docx
-	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
-
-doc/APRStt-Implementation-Notes.pdf : doc/APRStt-Implementation-Notes.docx
-	echo "***** APRStt-Implementation-Notes.pdf is out of date *****"
-
-doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf : doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.docx
-	echo "***** A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf is out of date *****"
-
-doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf : doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.docx
-	echo "***** A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf is out of date *****"
-
-doc/APRS-Telemetry-Toolkit.pdf : doc/APRS-Telemetry-Toolkit.docx
-	echo "***** APRS-Telemetry-Toolkit.pdf is out of date *****"
 
 
 

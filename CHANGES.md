@@ -3,7 +3,9 @@
 
 ----------
 
-## Version 1.3  -- Beta Test  --  March 2016 ##
+## Version 1.3  -- May 2016 ##
+
+This is the same as the 1.3 beta test version with a few minor documentation updates.  If you are already using 1.3 beta test, there is no need to install this.
 
 ### New Features: ###
 
