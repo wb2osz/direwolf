@@ -757,7 +757,7 @@ dist-src : README.md CHANGES.md
 
 .PHONY: clean
 clean :
-	rm -f $(APPS) fsk_fast_filter.h *.o *.a direwolf.desktop
+	rm -f $(APPS) fsk_fast_filter.h *.o *.a direwolf.desktop direwolf.conf gen_fff
 	echo " " > tune.h
 
 
