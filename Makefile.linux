@@ -12,9 +12,9 @@ all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo " "
 
 CC := gcc
-CFLAGS := -O3 -pthread -Igeotranz
+CFLAGS += -O3 -pthread -Igeotranz
 
-LDFLAGS := -lm -lpthread -lrt
+LDFLAGS += -lm -lpthread -lrt
 
 
 
