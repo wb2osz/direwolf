@@ -1,4 +1,4 @@
-APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      29 Oct 2015
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      22 Mar 2016
 ---------------------------------------------------------------------
 
 BACKGROUND:  This file addresses new additions proposals (OVERLAYS) 
@@ -7,7 +7,11 @@ document remains on the www.aprs.org/symbols/symbolsX.txt page, but
 only has one line per symbol character.  Since each of the symbols
 can have up to 36 overlays, this gives us thousands of symbols codes.
 
-
+22 Mar 2016:  Added A0 overlay circle for ALSTAR nodes 
+              and V0 for VOIP combined echolink and IRLP
+              and P& for PSKmail node
+              and W& for Wirese-X as opposed to W0 for WiresII
+              and Ya for Yaesu C4FM repeaters
 Update 29 Oct 2015:  Reorgainized list to Alphabetical Order.
   + Added many new Balloons (due to lost DoD radar Blimp yesterday)
   + Confirmed D^ for Drones was already in there since 2014
@@ -164,6 +168,7 @@ Ga = RSGB Radio Society of Great Brittan
 Ra = RACES
 Sa = SATERN Salvation Army
 Wa = WinLink
+Ya = C4FM Yaesu repeaters
 
 BALLOONS and lighter than air #O (All new Oct 2015)
 /O = Original Balloon (think Ham balloon)
@@ -240,7 +245,9 @@ GATEWAYS: #&
 /& = HF Gateway  <= the original primary table definition
 I& = Igate Generic (please use more specific overlay)
 R& = Receive only IGate (do not send msgs back to RF)
+P& = PSKmail node
 T& = TX igate with path set to 1 hop only)
+W& = WIRES-X as opposed to W0 for WiresII
 2& = TX igate with path set to 2 hops (not generally good idea)
 
 GPS devices: #\
@@ -287,9 +294,11 @@ P' = Pileup
 T' = Truck wreck
 
 NUMBERED CIRCLES: #0
+A0 = Allstar Node (A0)
 E0 = Echolink Node (E0)
 I0 = IRLP repeater (I0)
 S0 = Staging Area  (S0)
+V0 = Echolink and IRLP (VOIP)
 W0 = WIRES (Yaesu VOIP)
 
 NETWORK NODES: #8

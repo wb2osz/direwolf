@@ -60,6 +60,7 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -88,7 +89,6 @@
 #endif
 
 
-#include "direwolf.h"
 #include "audio.h"
 #include "audio_stats.h"
 #include "textcolor.h"

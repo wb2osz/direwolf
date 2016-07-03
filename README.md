@@ -15,7 +15,7 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
 
 - Ideal for building a Raspberry Pi digipeater & IGate.
 
-- 300, 1200, and 9600 baud operation.
+- Data rates: 300 AFSK, 1200 AFSK, 2400 QPSK, 4800 8PSK, and 9600/19200/38400 K9NG/G3RUH.
 
 - Interface with applications by
       - [AGW](http://uz7.ho.ua/includes/agwpeapi.htm) network protocol
@@ -23,6 +23,8 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
       - [KISS](http://www.ax25.net/kiss.aspx) network protocol
       
 - Decoding of received information for troubleshooting.
+
+- Conversion from APRS to waypoint sentences in popular formats:  $GPWPL, $PGRMW, $PMGNWPL, $PKWDWPL.
 
 - Logging and conversion to GPX file format.
 

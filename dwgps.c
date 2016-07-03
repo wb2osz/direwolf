@@ -48,13 +48,14 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "dwgps.h"
 #include "dwgpsnmea.h"

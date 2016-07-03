@@ -74,6 +74,7 @@
 //#define DEBUG 1
 #define DIGIPEATER_C
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -81,7 +82,6 @@
 #include <stdio.h>
 #include <sys/unistd.h>
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "multi_modem.h"

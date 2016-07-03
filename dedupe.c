@@ -96,6 +96,7 @@
 
 #define DEDUPE_C
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>

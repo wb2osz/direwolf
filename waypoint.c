@@ -29,12 +29,15 @@
  *		
  *---------------------------------------------------------------*/
 
+
+#include "direwolf.h"		// should be first
+
+
 #include <stdio.h>
 #include <unistd.h>
 
 #if __WIN32__
 #include <stdlib.h>
-#include <windows.h>
 #else
 #define __USE_XOPEN2KXSI 1
 #define __USE_XOPEN 1
@@ -48,7 +51,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "direwolf.h"
+
 #include "config.h"
 #include "textcolor.h"
 #include "latlong.h"
@@ -443,7 +446,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
  *		GPS Status	A = active, V = void.
  *					It looks like this might be modeled after the GPS status values
  *					we see in $GPRMC.  i.e. Does the transceiver know its location?
- *					I don’t see how that information would be relevant in this context.
+ *					I don't see how that information would be relevant in this context.
  *					I've observed this under various conditions (No GPS, GPS with/without 
  *					fix) and it has always been "V."
  *					(There is some information out there indicating this field
@@ -524,7 +527,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
 	  char ken_sym;		/* APRS symbol with , or * substituted. */
 
 	  now = time(NULL);
-	  gmtime_r (&now, &tm);
+	  (void)gmtime_r (&now, &tm);
 	  strftime (stime, sizeof(stime), "%H%M%S", &tm);
 	  strftime (sdate, sizeof(sdate), "%d%m%y", &tm);
 

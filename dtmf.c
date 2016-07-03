@@ -34,13 +34,13 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
 
-#include "direwolf.h"
 #include "dtmf.h"
 #include "hdlc_rec.h"	// for dcd_change
 
@@ -48,7 +48,7 @@
 
 #if DTMF_TEST
 #define TIMEOUT_SEC 1	/* short for unit test below. */
-#define DEBUG 1
+#define DEBUG 1		// Don't remove this.  We want more output for test.
 #else
 #define TIMEOUT_SEC 5	/* for normal operation. */
 #endif

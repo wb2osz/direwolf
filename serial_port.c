@@ -34,12 +34,13 @@
  *		
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"		// should be first
+
 #include <stdio.h>
 
 #if __WIN32__
 
 #include <stdlib.h>
-#include <windows.h>
 
 #else
 
@@ -58,7 +59,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
+
 #include "textcolor.h"
 #include "serial_port.h"
 

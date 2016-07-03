@@ -8,7 +8,6 @@
 #if __WIN32__
 
 #include <stdlib.h>
-#include <windows.h>
 
 typedef HANDLE MYFDTYPE;
 #define MYFDERROR INVALID_HANDLE_VALUE

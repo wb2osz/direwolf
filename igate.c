@@ -63,18 +63,15 @@
  * Cygwin:		Can use either one.
  */
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
 
 #if __WIN32__
 
 /* The goal is to support Windows XP and later. */
 
 #include <winsock2.h>
-// default is 0x0400
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0501	/* Minimum OS version is XP. */
-//#define _WIN32_WINNT 0x0502	/* Minimum OS version is XP with SP2. */
-//#define _WIN32_WINNT 0x0600	/* Minimum OS version is Vista. */
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
+
 #else 
 #include <stdlib.h>
 #include <netdb.h>
@@ -293,8 +290,10 @@ static int 			s_debug;
 
 
 /*
- * Statistics.  
- * TODO: need print function.
+ * Statistics for IGate function.
+ * Note that the RF related counters are just a subset of what is happening on radio channels.
+ *
+ * TODO: should have debug option to print these occasionally.
  */
 
 static int stats_failed_connect;	/* Number of times we tried to connect to */
@@ -312,8 +311,10 @@ static time_t stats_connect_at;		/* Most recent time connection was established.
 					/* can be used to determine elapsed connect time. */
 
 static int stats_rf_recv_packets;	/* Number of candidate packets from the radio. */
+					/* This is not the total number of AX.25 frames received */
+					/* over the radio; only APRS packets get this far. */
 
-static int stats_rx_igate_packets;	/* Number of packets passed along to the IGate */
+static int stats_uplink_packets;	/* Number of packets passed along to the IGate */
 					/* server after filtering. */
 
 static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
@@ -322,40 +323,44 @@ static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
 static int stats_downlink_bytes;	/* Total number of bytes from IGate server including */
 					/* packets, heartbeats, other messages. */
 
-static int stats_tx_igate_packets;	/* Number of packets from IGate server. */
+static int stats_downlink_packets;	/* Number of packets from IGate server for possible transmission. */
+					/* Fewer might be transmitted due to filtering or rate limiting. */
 
-static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
-					/* after rate limiting or other restrictions. */
+static int stats_rf_xmit_packets;	/* Number of packets passed along to radio, for the IGate function, */
+					/* after filtering, rate limiting, or other restrictions. */
+					/* Number of packets transmitted for beacons, digipeating, */
+					/* or client applications are not included here. */
 
-/* We have some statistics.  What do we do with them?
+static int stats_msg_cnt;		/* Number of "messages" transmitted.  Subset of above. */
+					/* A "message" has the data type indicator of ":" and it is */
+					/* not the special case of telemetry metadata. */
 
 
-	IGate stations often send packets like this:
+/*
+ * Make some of these available for IGate statistics beacon like
+ *
+ *	WB2OSZ>APDW14,WIDE1-1:<IGATE,MSG_CNT=2,PKT_CNT=0,DIR_CNT=10,LOC_CNT=35,RF_CNT=45
+ *
+ * MSG_CNT is only "messages."   From original spec.
+ * PKT_CNT is other (non-message) packets.  Followed precedent of APRSISCE32.
+ */
 
-	<IGATE MSG_CNT=1238 LOC_CNT=0 FILL_CNT=0
-	<IGATE,MSG_CNT=1,LOC_CNT=25
-	<IGATE,MSG_CNT=0,LOC_CNT=46,DIR_CNT=13,RF_CNT=49,RFPORT_ID=0
+int igate_get_msg_cnt (void) {
+	return (stats_msg_cnt);
+}
 
-	What does it all mean?
-	Why do some have spaces instead of commas between the capabilities?
+int igate_get_pkt_cnt (void) {
+	return (stats_rf_xmit_packets - stats_msg_cnt);
+}
 
-	The APRS Protocol Reference ( http://www.aprs.org/doc/APRS101.PDF ),
-	section 15, briefly discusses station capabilities and gives the example
-	IGATE,MSG_CNT=n,LOC_CNT=n
+int igate_get_upl_cnt (void) {
+	return (stats_uplink_packets);
+}
 
-	IGate Design ( http://www.aprs-is.net/IGating.aspx ) barely mentions
-	<IGATE,MSG_CNT=n,LOC_CNT=n
+int igate_get_dnl_cnt (void) {
+	return (stats_downlink_packets);
+}
 
-	This leaves many questions.  Does "number of messages transmitted" mean only
-	the APRS "Message" (data type indicator ":") or does it mean any type of
-	APRS packet?   What are "local" stations?   Those we hear directly without
-	going thru a digipeater?
-
-	What are DIR_CNT, RF_CNT, and so on?
-
-	Are the counts since the system started up or are they for some interval?
-
-*/
 
 
 /*-------------------------------------------------------------------
@@ -421,14 +426,15 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	save_digi_config_p = p_digi_config;
 
 	stats_failed_connect = 0;	
-	stats_connects = 0;		
-	stats_connect_at = 0;		
-	stats_rf_recv_packets = 0;	
-	stats_rx_igate_packets = 0;	
-	stats_uplink_bytes = 0;		
-	stats_downlink_bytes = 0;	
-	stats_tx_igate_packets = 0;	
+	stats_connects = 0;
+	stats_connect_at = 0;
+	stats_rf_recv_packets = 0;
+	stats_uplink_packets = 0;
+	stats_uplink_bytes = 0;
+	stats_downlink_bytes = 0;
+	stats_downlink_packets = 0;
 	stats_rf_xmit_packets = 0;
+	stats_msg_cnt = 0;
 	
 	rx_to_ig_init ();
 	ig_to_tx_init ();
@@ -867,6 +873,10 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	  return;	/* Login not complete. */
 	}
 
+	/* Gather statistics. */
+
+	stats_rf_recv_packets++;
+
 /*
  * Check for filtering from specified channel to the IGate server.
  */
@@ -875,17 +885,17 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp) != 1) {
 
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
+	    // Is this useful troubleshooting information or just distracting noise?
+	    // Originally this was always printed but there was a request to add a "quiet" option to suppress this.
+	    // version 1.4: Instead, make the default off and activate it only with the debug igate option.
 
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
+	    }
 	    return;
 	  }
 	}
-
-
-	/* Gather statistics. */
-
-	stats_rf_recv_packets++;
 
 /*
  * First make a copy of it because it might be modified in place.
@@ -1080,7 +1090,7 @@ static void send_packet_to_server (packet_t pp, int chan)
 	strlcat (msg, (char*)pinfo, sizeof(msg));
 
 	send_msg_to_server (msg);
-	stats_rx_igate_packets++;
+	stats_uplink_packets++;
 
 /*
  * Remember what was sent to avoid duplicates in near future.
@@ -1329,6 +1339,8 @@ static void * igate_recv_thread (void *arg)
 	    ax25_safe_print ((char *)message, len, 0);
 	    dw_printf ("\n");
 
+	    stats_downlink_packets++;
+
 	    int to_chan = save_igate_config_p->tx_chan;
 
 	    if (to_chan >= 0) {
@@ -1532,8 +1544,13 @@ static void xmit_packet (char *message, int to_chan)
 
 	  if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3) != 1) {
 
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
+	    // Originally this was always printed but it's probably too much noise.
+	    // Version 1.4, print only if debug option is specified.
+
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
+	    }
 
 	    ax25_delete (pp3);
 	    return;
@@ -1599,8 +1616,6 @@ static void xmit_packet (char *message, int to_chan)
 
 	  if (pradio != NULL) {
 
-	    stats_tx_igate_packets++;
-
 #if ITEST
 	    text_color_set(DW_COLOR_XMIT);
 	    dw_printf ("Xmit: %s\n", radio);
@@ -1609,7 +1624,12 @@ static void xmit_packet (char *message, int to_chan)
 	    /* This consumes packet so don't reference it again! */
 	    tq_append (to_chan, TQ_PRIO_1_LO, pradio);
 #endif
-	    stats_rf_xmit_packets++;
+	    stats_rf_xmit_packets++;		// Any type of packet.
+
+	    if (*pinfo == ':' && ! is_telem_metadata(pinfo)) {
+	      stats_msg_cnt++;			// "message" be sure to exclude telemetry metadata.
+	    }
+
 	    ig_to_tx_remember (pp3, save_igate_config_p->tx_chan, 0);	// correct. version before encapsulating it.
 	  }
 	  else {
@@ -1701,6 +1721,7 @@ static void rx_to_ig_remember (packet_t pp)
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	  info_len = ax25_get_info (pp, &pinfo);
+	  (void)info_len;
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("rx_to_ig_remember [%d] = %d %d \"%s>%s:%s\"\n",
@@ -1731,6 +1752,7 @@ static int rx_to_ig_allow (packet_t pp)
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	  info_len = ax25_get_info (pp, &pinfo);
+	  (void)info_len;
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("rx_to_ig_allow? %d \"%s>%s:%s\"\n", crc, src, dest, pinfo);
@@ -1986,6 +2008,7 @@ void ig_to_tx_remember (packet_t pp, int chan, int bydigi)
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	  info_len = ax25_get_info (pp, &pinfo);
+	  (void)info_len;
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("ig_to_tx_remember [%d] = ch%d d%d %d %d \"%s>%s:%s\"\n",
@@ -2012,16 +2035,20 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 	time_t now = time(NULL);
 	int j;
 	int count_1, count_5;
+	int increase_limit;
+
+	unsigned char *pinfo;
+	int info_len;
+
+	info_len = ax25_get_info (pp, &pinfo);
+	(void)info_len;
 
 	if (s_debug >= 2) {
 	  char src[AX25_MAX_ADDR_LEN];
 	  char dest[AX25_MAX_ADDR_LEN];
-	  unsigned char *pinfo;
-	  int info_len;
 
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
-	  info_len = ax25_get_info (pp, &pinfo);
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("ig_to_tx_allow? ch%d %d \"%s>%s:%s\"\n", chan, crc, src, dest, pinfo);
@@ -2053,12 +2080,25 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 	  }
 	}
 
-	if (count_1 >= save_igate_config_p->tx_limit_1) {
+	/* "Messages" (special APRS data type ":") are intentional and more */
+	/* important than all of the other mostly repetitive useless junk */
+	/* flowing thru here.  */
+	/* It would be unfortunate to discard a message because we already */
+	/* hit our limit.  I don't want to completely eliminate limiting for */
+	/* messages, in case something goes terribly wrong, but we can triple */
+	/* the normal limit for them. */
+
+	increase_limit = 1;
+	if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+	  increase_limit = 3;
+	}
+
+	if (count_1 >= save_igate_config_p->tx_limit_1 * increase_limit) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 1 minute.\n", save_igate_config_p->tx_limit_1);
 	  return 0;
 	}
-	if (count_5 >= save_igate_config_p->tx_limit_5) {
+	if (count_5 >= save_igate_config_p->tx_limit_5 * increase_limit) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 5 minutes.\n", save_igate_config_p->tx_limit_5);
 	  return 0;

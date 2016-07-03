@@ -44,12 +44,12 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
-#include "direwolf.h"
 #include "textcolor.h"
 //#include "xid.h"
 

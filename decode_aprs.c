@@ -33,6 +33,8 @@
  *
  *------------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <time.h>
 #include <assert.h>
@@ -48,7 +50,6 @@
 #endif
 #include "regex.h"
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "symbols.h"

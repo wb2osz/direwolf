@@ -26,21 +26,18 @@
  *
  *------------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>	
 #include <string.h>	
 #include <ctype.h>	
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "symbols.h"
 #include "tt_text.h"
 
-
-//#if __WIN32__
-	char *strcasestr(const char *S, const char *FIND);
-//#endif
 
 /*
  * APRS symbol tables.

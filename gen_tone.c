@@ -1,3 +1,6 @@
+//#define DEBUG 1
+//#define DEBUG2 1
+
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -28,6 +31,9 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
+
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
@@ -35,7 +41,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "direwolf.h"
+
 #include "audio.h"
 #include "gen_tone.h"
 #include "textcolor.h"
@@ -47,7 +53,7 @@
 
 // Properties of the digitized sound stream & modem.
 
-static struct audio_s *save_audio_config_p;
+static struct audio_s *save_audio_config_p = NULL;
 
 /*
  * 8 bit samples are unsigned bytes in range of 0 .. 255.
@@ -98,9 +104,6 @@ static int bit_count[MAX_CHANS];	// Counter incremented for each bit transmitted
 					// number of bits in 'save_bit' so we can accumulate
 					// three for each symbol.
 static int save_bit[MAX_CHANS];
-
-static int prev_symbol[MAX_CHANS];	// Data is conveyed by phase relative to the
-					// previous symbol.  So we need to keep it.
 
 
 /*
@@ -177,6 +180,9 @@ static int resample[MAX_CHANS];
  *
  *		amp		- Signal amplitude on scale of 0 .. 100.
  *
+ *		gen_packets	- True if being called from "gen_packets" utility
+ *				  rather than the "direwolf" application.
+ *
  * Returns:     0 for success.
  *              -1 for failure.
  *
@@ -188,10 +194,16 @@ static int resample[MAX_CHANS];
 static int amp16bit;	/* for 9600 baud */
 
 
-int gen_tone_init (struct audio_s *audio_config_p, int amp)  
+int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 {
 	int j;
 	int chan = 0;
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("gen_tone_init ( audio_config_p=%p, amp=%d, gen_packets=%d )\n",
+			audio_config_p, amp, gen_packets);
+#endif
 	
 /* 
  * Save away modem parameters for later use. 
@@ -208,6 +220,15 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 	  if (audio_config_p->achan[chan].valid) {
 
 	    int a = ACHAN2ADEV(chan);
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("gen_tone_init: chan=%d, modem_type=%d, bps=%d, samples_per_sec=%d\n",
+		chan,
+		save_audio_config_p->achan[chan].modem_type,
+		audio_config_p->achan[chan].baud,
+		audio_config_p->adev[a].samples_per_sec);
+#endif
 
 	    tone_phase[chan] = 0;
 	    bit_len_acc[chan] = 0;
@@ -302,6 +323,20 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 
 	    float fc;				/* Cutoff frequency as fraction of sampling frequency. */
 
+/*
+ * Normally, we want to generate the same thing whether sending over the air
+ * or putting it into a file for other testing.
+ * (There is an important exception.  gen_packets can introduce random noise.)
+ * In this case, we want more aggressive low pass filtering so it looks more like
+ * what we see coming out of a receiver.
+ * Specifically, single bits of the same state have considerably reduced amplitude
+ * below several same values in a row.
+ */
+
+	    if (gen_packets) {
+	      filter_len_bits = 4;
+	      lpf_baud = 0.55;		/* Lowpass cutoff freq as fraction of baud rate */
+	    }
 
 	    samples_per_sec = audio_config_p->adev[a].samples_per_sec * UPSAMPLE;		
 	    baud = audio_config_p->achan[chan].baud;
@@ -339,7 +374,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp)
 
 /*-------------------------------------------------------------------
  *
- * Name:        gen_tone_put_bit
+ * Name:        tone_gen_put_bit
  *
  * Purpose:     Generate tone of proper duration for one data bit.
  *
@@ -364,6 +399,7 @@ void tone_gen_put_bit (int chan, int dat)
 {
 	int a = ACHAN2ADEV(chan);	/* device for channel. */
 
+	assert (save_audio_config_p != NULL);
 	assert (save_audio_config_p->achan[chan].valid);
 
 
@@ -385,26 +421,15 @@ void tone_gen_put_bit (int chan, int dat)
 	    bit_count[chan]++;
 	    return;
 	  }
-#define REV2 1
-#if REV2
-#else
-	  tone_phase[chan] = PHASE_SHIFT_45;
-	  if (bit_count[chan] & 2) {
-	    tone_phase[chan] += (unsigned)PHASE_SHIFT_180;
-	  }
-#endif
+
 	  // All zero bits should give us steady 1800 Hz.
 	  // All one bits should flip phase by 180 degrees each time.
 
 	  dibit = (save_bit[chan] << 1) | dat;
-#if REV2
+
 	  symbol = gray2phase_v26[dibit];
 	  tone_phase[chan] += symbol * PHASE_SHIFT_90;
-#else
-	  symbol = (prev_symbol[chan] + gray2phase_v26[dibit]) & 0x3;
-	  tone_phase[chan] += symbol * PHASE_SHIFT_90;
-	  prev_symbol[chan] = symbol;
-#endif
+
 	  bit_count[chan]++;
 	}
 
@@ -425,14 +450,10 @@ void tone_gen_put_bit (int chan, int dat)
 	  // All one bits should flip phase by 180 degrees each time.
 
 	  tribit = (save_bit[chan] << 1) | dat;
-#if 1
+
 	  symbol = gray2phase_v27[tribit];
 	  tone_phase[chan] += symbol * PHASE_SHIFT_45;
-#else
-	  symbol = (prev_symbol[chan] + gray2phase_v27[tribit]) & 0x7;
-	  tone_phase[chan] = symbol * PHASE_SHIFT_45;
-	  prev_symbol[chan] = symbol;
-#endif
+
 	  save_bit[chan] = 0;
 	  bit_count[chan] = 0;
 	}
@@ -445,39 +466,63 @@ void tone_gen_put_bit (int chan, int dat)
 	  dat = x;
 	}
 	  
-	do {
+	do {		/* until enough audio samples for this symbol. */
 
-	  if (save_audio_config_p->achan[chan].modem_type == MODEM_AFSK) {
-	    int sam;
+	  int sam;
+	  float fsam;
 
-	    tone_phase[chan] += dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
-            sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
-	    gen_tone_put_sample (chan, a, sam);
-	  }
-	  else if (save_audio_config_p->achan[chan].modem_type == MODEM_QPSK ||
-		   save_audio_config_p->achan[chan].modem_type == MODEM_8PSK) {
-	    int sam;
+	  switch (save_audio_config_p->achan[chan].modem_type) {
 
-	    tone_phase[chan] += f1_change_per_sample[chan];
-            sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
-	    gen_tone_put_sample (chan, a, sam);
-	  }
-  	  else {
-	    
-	    float fsam = dat ? amp16bit : (-amp16bit);
+	    case MODEM_AFSK:
 
-	    /* version 1.2 - added a low pass filter instead of square wave out. */
-
-	    push_sample (fsam, raw[chan], lp_filter_size[chan]);
-	    
-	    resample[chan]++;
-	    if (resample[chan] >= UPSAMPLE) {
-	      int sam; 
-
-	      sam = (int) convolve (raw[chan], lp_filter[chan], lp_filter_size[chan]);
-	      resample[chan] = 0;
+#if DEBUG2
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("tone_gen_put_bit %d AFSK\n", __LINE__);
+#endif
+	      tone_phase[chan] += dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
+              sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
 	      gen_tone_put_sample (chan, a, sam);
-	    }
+	      break;
+
+	    case MODEM_QPSK:
+	    case MODEM_8PSK:
+
+#if DEBUG2
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("tone_gen_put_bit %d PSK\n", __LINE__);
+#endif
+	      tone_phase[chan] += f1_change_per_sample[chan];
+              sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
+	      gen_tone_put_sample (chan, a, sam);
+	      break;
+
+	    case MODEM_BASEBAND:
+	    case MODEM_SCRAMBLE:
+
+#if DEBUG2
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("tone_gen_put_bit %d SCR\n", __LINE__);
+#endif
+	      fsam = dat ? amp16bit : (-amp16bit);
+
+	      /* version 1.2 - added a low pass filter instead of square wave out. */
+
+	      push_sample (fsam, raw[chan], lp_filter_size[chan]);
+
+	      resample[chan]++;
+	      if (resample[chan] >= UPSAMPLE) {
+
+	        sam = (int) convolve (raw[chan], lp_filter[chan], lp_filter_size[chan]);
+	        resample[chan] = 0;
+	        gen_tone_put_sample (chan, a, sam);
+	      }
+	      break;
+
+	    default:
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("INTERNAL ERROR: %s %d achan[%d].modem_type = %d\n",
+				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].modem_type);
+	      exit (EXIT_FAILURE);
 	  }
 
 	  /* Enough for the bit time? */
@@ -493,12 +538,14 @@ void tone_gen_put_bit (int chan, int dat)
 void gen_tone_put_sample (int chan, int a, int sam) {
 
         /* Ship out an audio sample. */
+	/* 16 bit is signed, little endian, range -32768 .. +32767 */
+	/* 8 bit is unsigned, range 0 .. 255 */
+
+	assert (save_audio_config_p != NULL);
 
 	assert (save_audio_config_p->adev[a].num_channels == 1 || save_audio_config_p->adev[a].num_channels == 2);
 
-	/* Generalize to allow 8 bits someday? */
-
-	assert (save_audio_config_p->adev[a].bits_per_sample == 16);
+	assert (save_audio_config_p->adev[a].bits_per_sample == 16 || save_audio_config_p->adev[a].bits_per_sample == 8);
 
 	// TODO: Should print message telling user to reduce output level.
 
@@ -509,8 +556,13 @@ void gen_tone_put_sample (int chan, int a, int sam) {
 
 	  /* Mono */
 
-          audio_put (a, sam & 0xff);
-          audio_put (a, (sam >> 8) & 0xff);
+	  if (save_audio_config_p->adev[a].bits_per_sample == 8) {
+            audio_put (a, ((sam+32768) >> 8) & 0xff);
+	  }
+	  else {
+            audio_put (a, sam & 0xff);
+            audio_put (a, (sam >> 8) & 0xff);
+	  }
  	}
 	else {
 
@@ -518,21 +570,33 @@ void gen_tone_put_sample (int chan, int a, int sam) {
 	  
 	    /* Stereo, left channel. */
 
-            audio_put (a, sam & 0xff);
-            audio_put (a, (sam >> 8) & 0xff);
+	    if (save_audio_config_p->adev[a].bits_per_sample == 8) {
+              audio_put (a, ((sam+32768) >> 8) & 0xff);
+              audio_put (a, 0);
+	    }
+	    else {
+              audio_put (a, sam & 0xff);
+              audio_put (a, (sam >> 8) & 0xff);
  
-            audio_put (a, 0);		
-            audio_put (a, 0);
+              audio_put (a, 0);
+              audio_put (a, 0);
+	    }
 	  }
 	  else { 
 
 	    /* Stereo, right channel. */
 	  
-            audio_put (a, 0);		
-            audio_put (a, 0);
+	    if (save_audio_config_p->adev[a].bits_per_sample == 8) {
+              audio_put (a, 0);
+              audio_put (a, ((sam+32768) >> 8) & 0xff);
+	    }
+	    else {
+              audio_put (a, 0);
+              audio_put (a, 0);
 
-            audio_put (a, sam & 0xff);
-            audio_put (a, (sam >> 8) & 0xff);
+              audio_put (a, sam & 0xff);
+              audio_put (a, (sam >> 8) & 0xff);
+	    }
 	  }
 	}
 }

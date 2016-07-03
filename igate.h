@@ -51,6 +51,11 @@ struct igate_config_s {
 					/* Must start with "," if not empty so it can */
 					/* simply be inserted after the destination address. */
 
+	int max_digi_hops;		/* Maximum number of digipeater hops possible for via path. */
+					/* e.g.  "WIDE1-1,WDIE2-2" would be 3. */
+					/* This is useful to know so we can determine how many */
+					/* stations we might be able to reach. */
+
 	int tx_limit_1;			/* Max. packets to transmit in 1 minute. */
 
 	int tx_limit_5;			/* Max. packets to transmit in 5 minutes. */
@@ -83,5 +88,19 @@ void igate_send_rec_packet (int chan, packet_t recv_pp);
 /* This when digipeater transmits.  Set bydigi to 1 . */
 
 void ig_to_tx_remember (packet_t pp, int chan, int bydigi);
+
+
+
+/* Get statistics for IGATE status beacon. */
+
+int igate_get_msg_cnt (void);
+
+int igate_get_pkt_cnt (void);
+
+int igate_get_upl_cnt (void);
+
+int igate_get_dnl_cnt (void);
+
+
 
 #endif

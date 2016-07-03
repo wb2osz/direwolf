@@ -25,10 +25,10 @@
 
 #if TEST
 
-#define DEBUG1 1
-#define DEBUG2 1
-#define DEBUG3 1
-#define DEBUG4 1
+#define DEBUG1 1	// Activate debug out when testing.
+#define DEBUG2 1	//
+#define DEBUG3 1	//
+#define DEBUG4 1	//
 
 #endif
 
@@ -49,6 +49,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -57,7 +59,6 @@
 #include <math.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "ax25_pad.h"			// for packet_t, AX25_MAX_ADDR_LEN
 #include "decode_aprs.h"		// for decode_aprs_t, G_UNKNOWN  
 #include "textcolor.h"

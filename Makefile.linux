@@ -229,13 +229,13 @@ z := $(notdir ${CURDIR})
 
 
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
-		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
+		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o \
+		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o \
 		misc.a geotranz.a
 	$(CC) -o $@ $^ $(LDFLAGS)
 ifneq ($(enable_gpsd),)
@@ -333,7 +333,7 @@ gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c
 atest : atest.c demod.o demod_afsk.o demod_psk.o demod_9600.o \
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.o ax25_pad.o decode_aprs.o dwgpsnmea.o \
-		dwgps.o dwgpsd.o serial_port.o telemetry.o latlong.o symbols.o tt_text.o textcolor.o \
+		dwgps.o dwgpsd.o serial_port.o telemetry.o dtime_now.o latlong.o symbols.o tt_text.o textcolor.o \
 		misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -606,14 +606,14 @@ check-modem300 : gen_packets atest
 
 check-modem9600 : gen_packets atest
 	./gen_packets -B9600 -n 100 -o /tmp/test96.wav
-	./atest -B9600 -F0 -L57 -G61 /tmp/test96.wav
-	./atest -B9600 -F1 -L64 -G67 /tmp/test96.wav
+	./atest -B9600 -F0 -L50 -G54 /tmp/test96.wav
+	./atest -B9600 -F1 -L55 -G59 /tmp/test96.wav
 	rm /tmp/test96.wav
 
 check-modem19200 : gen_packets atest
 	./gen_packets -r 96000 -B19200 -n 100 -o /tmp/test19.wav
-	./atest -B19200 -F0 -L62 -G64 /tmp/test19.wav
-	./atest -B19200 -F1 -L69 -G71 /tmp/test19.wav
+	./atest -B19200 -F0 -L55 -G59 /tmp/test19.wav
+	./atest -B19200 -F1 -L60 -G64 /tmp/test19.wav
 	rm /tmp/test19.wav
 
 check-modem2400 : gen_packets atest
@@ -743,11 +743,26 @@ tune.h :
 
 
 testagc : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
-		fcs_calc.o ax25_pad.o decode_aprs.o telemetry.o latlong.o symbols.o tune.h textcolor.o misc.a
+		fcs_calc.o ax25_pad.o decode_aprs.o telemetry.o dtime_now.o latlong.o symbols.o tune.h textcolor.o misc.a
 	$(CC) $(CFLAGS) -o atest $^ $(LDFLAGS)
 	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
 
 
+testagc96 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o \
+		symbols.o tt_text.o textcolor.o telemetry.o dtime_now.o \
+		misc.a
+	rm -f atest96
+	$(CC) $(CFLAGS) -o atest96 $^ $(LDFLAGS)
+	./atest96 -B 9600 ../walkabout9600c.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 19990303_0225_9600_8bis_22kHz.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600  19990303_0225_9600_16bit_22kHz.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 -P + z8-22k.wav| grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 test9600.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
 
 
 

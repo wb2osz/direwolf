@@ -3,15 +3,27 @@
 
 ----------
 
-## Version 1.4  -- Development snapshot B  --  April 2016 ##
+## Version 1.4  -- Development snapshot C --  June 2016 ##
+
+This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
+
 
 ### New Features: ###
+
+- New beacon type, IBEACON, for sending IGate statistics.
 
 - 2400 & 4800 bps PSK modems.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** in the doc directory for discussion.
 
 
 - The top speed of 9600 bps has been increased to 38400.  You will need a sound card capable of 96k or 192k samples per second for the higher rates.  Radios must also have adequate bandwidth.  See ***Going-beyond-9600-baud.pdf*** in the doc directory for more details.
 
+- Better decoder performance for 9600 and higher especially for low audio sample rate to baud ratios.
+
+- Generate waypoint sentences for use by AvMap G5 / G6 or other mapping devices or applications.   Formats include
+ - $GPWPL	- NMEA generic with only location and name.
+ - $PGRMW	- Garmin, adds altitude, symbol, and comment to previously named waypoint.
+ - $PMGNWPL	- Magellan, more complete for stationary objects.
+ - $PKWDWPL	- Kenwood with APRS style symbol but missing comment.
 
 ### Bugs Fixed: ###
 
@@ -31,9 +43,11 @@ received frames are not being printed.  After a while this message will appear:
   	another application is not reading the frames from the other side.*
 
 
+- The Windows version 1.3 would crash when starting to transmit on Windows XP. There have also been some other reports of erratic behavior on Windows. The crashing problem was fixed in in the 1.3.1 patch release.   Linux version was not affected.
+
 ----------
 
-## Version 1.3  -- Beta Test  --  March 2016 ##
+## Version 1.3  -- May 2016 ##
 
 ### New Features: ###
 

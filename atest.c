@@ -59,6 +59,7 @@
 
 // #define X 1
 
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -79,6 +80,7 @@
 #include "hdlc_rec2.h"
 #include "dlq.h"
 #include "ptt.h"
+#include "dtime_now.h"
 
 
 
@@ -178,7 +180,10 @@ int main (int argc, char *argv[])
 	int err;
 	int c;
 	int channel;
-	time_t start_time;
+
+	double start_time;		// Time when we started so we can measure elapsed time.
+	double duration;		// Length of the audio file in seconds.
+	double elapsed;			// Time it took us to process it.
 
 
 #if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
@@ -430,8 +435,7 @@ int main (int argc, char *argv[])
           exit (EXIT_FAILURE);
         }
 
-	start_time = time(NULL);
-
+	start_time = dtime_now();
 
 /*
  * Read the file header.  
@@ -501,12 +505,16 @@ int main (int argc, char *argv[])
 	if (format.nchannels == 2) my_audio_config.achan[1].valid = 1;
 
 	text_color_set(DW_COLOR_INFO);
-	dw_printf ("%d samples per second\n", my_audio_config.adev[0].samples_per_sec);
-	dw_printf ("%d bits per sample\n", my_audio_config.adev[0].bits_per_sample);
-	dw_printf ("%d audio channels\n", my_audio_config.adev[0].num_channels);
-	dw_printf ("%d audio bytes in file\n", (int)(wav_data.datasize));
+	dw_printf ("%d samples per second.  %d bits per sample.  %d audio channels.\n",
+		my_audio_config.adev[0].samples_per_sec,
+		my_audio_config.adev[0].bits_per_sample,
+		my_audio_config.adev[0].num_channels);
+	duration = (double) wav_data.datasize /
+		((my_audio_config.adev[0].bits_per_sample / 8) * my_audio_config.adev[0].num_channels * my_audio_config.adev[0].samples_per_sec);
+	dw_printf ("%d audio bytes in file.  Duration = %.1f seconds.\n",
+		(int)(wav_data.datasize),
+		duration);
 	dw_printf ("Fix Bits level = %d\n", my_audio_config.achan[0].fix_bits);
-
 		
 /*
  * Initialize the AFSK demodulator and HDLC decoder.
@@ -563,7 +571,11 @@ int main (int argc, char *argv[])
 	  dw_printf ("%d\n", count[j]);
 	}
 #endif
-	dw_printf ("%d packets decoded in %d seconds.\n", packets_decoded, (int)(time(NULL) - start_time));
+
+
+	elapsed = dtime_now() - start_time;
+
+	dw_printf ("%d packets decoded in %.3f seconds.  %.1f x realtime\n", packets_decoded, elapsed, duration/elapsed);
 
 	if (error_if_less_than != -1 && packets_decoded < error_if_less_than) {
 	  text_color_set(DW_COLOR_ERROR);

@@ -37,6 +37,8 @@
 
 #if	defined(USE_PORTAUDIO)
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -54,7 +56,6 @@
 #include <errno.h>
 #include <pthread.h>
 
-#include "direwolf.h"
 #include "audio.h"
 #include "audio_stats.h"
 #include "textcolor.h"

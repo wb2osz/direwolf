@@ -74,14 +74,14 @@
  *--------------------------------------------------------------------*/
 
 
+#include "direwolf.h"		// Should be first.  includes windows.h
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 
 
 #if __WIN32__
-
-#include <windows.h>
 
 #define BACKGROUND_WHITE (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY)
 

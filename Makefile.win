@@ -21,12 +21,23 @@ all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_pa
 
 # People say we need -mthreads option for threads to work properly.
 # They also say it creates a dependency on mingwm10.dll but I'm not seeing that.
+# Maybe that is for pthreads.  We are using the Windows threads.
+
+# -Ofast was added in gcc 4.6 which was the MinGW version back in 2012.
 
 CC := gcc
 CFLAGS :=    -Wall -Ofast -march=pentium3 -msse -Iregex -Iutm -Igeotranz -mthreads -DUSE_REGEX_STATIC
+#CFLAGS :=   -Wall        -march=pentium3 -msse -Iregex -Iutm -Igeotranz -mthreads -DUSE_REGEX_STATIC
 AR := ar
 
 CFLAGS += -g
+
+# For version 1.4, we upgrade from 4.6.2 to 4.9.3.
+
+# gcc 4.8 adds these.  Try them just for fun.
+# No, it needs libasan which is not on Windows.
+#CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+
 
 # TODO: Development in progress.  Don't try using yet.
 #CFLAGS += -DNEW14
@@ -78,13 +89,13 @@ demod_psk.o  : fsk_demod_state.h
 # later ax25_link.o 
 
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
-		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
+		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o ax25_pad2.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dtime_now.o \
+		dwgps.o dwgpsnmea.o dtime_now.o mheard.o \
 		dw-icon.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
@@ -269,16 +280,16 @@ check-modem300 : gen_packets atest
 check-modem9600 : gen_packets atest
 	gen_packets -B9600 -n 100 -o test96.wav
 	sleep 1
-	atest -B9600 -F0 -L57 -G62 test96.wav
-	atest -B9600 -F1 -L65 -G67 test96.wav
+	atest -B9600 -F0 -L50 -G54 test96.wav
+	atest -B9600 -F1 -L55 -G59 test96.wav
 	sleep 1
 	rm test96.wav
 
 check-modem19200 : gen_packets atest
 	gen_packets -r 96000 -B19200 -n 100 -o test19.wav
 	sleep 1
-	atest -B19200 -F0 -L63 -G64 test19.wav
-	atest -B19200 -F1 -L69 -G70 test19.wav
+	atest -B19200 -F0 -L55 -G59 test19.wav
+	atest -B19200 -F1 -L60 -G64 test19.wav
 	sleep 1
 	rm test19.wav
 
@@ -288,7 +299,7 @@ check-modem2400 : gen_packets atest
 	atest -B2400 -F0 -L70 -G78 test24.wav
 	atest -B2400 -F1 -L80 -G87 test24.wav
 	sleep 1
-	#rm test24.wav
+	rm test24.wav
 
 check-modem4800 : gen_packets atest
 	gen_packets -B4800 -n 100 -o test48.wav
@@ -296,7 +307,7 @@ check-modem4800 : gen_packets atest
 	atest -B4800 -F0 -L70 -G74 test48.wav
 	atest -B4800 -F1 -L79 -G84 test48.wav
 	sleep 1
-	#rm test48.wav
+	rm test48.wav
 
 
 # Unit test for demodulators
@@ -305,7 +316,7 @@ atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_psk.c demod_9600.c 
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
 		dwgpsnmea.o dwgps.o serial_port.o latlong.c \
-		symbols.c tt_text.c textcolor.c telemetry.c \
+		symbols.c tt_text.c textcolor.c telemetry.c dtime_now.o \
 		misc.a regex.a
 	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
@@ -314,7 +325,7 @@ atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_psk.c demod_9600.c 
 	#atest za100.wav
 
 atest9 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c misc.a regex.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c dtime_now.o misc.a regex.a \
 		fsk_fast_filter.h
 	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
@@ -415,7 +426,7 @@ demod_psk.o  : tune.h
 testagc : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.o fsk_demod_agc.h \
 		hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o latlong.o symbols.o textcolor.o telemetry.o \
-		dwgpsnmea.o dwgps.o serial_port.o tt_text.o regex.a misc.a
+		dwgpsnmea.o dwgps.o serial_port.o tt_text.o dtime_now.o regex.a misc.a
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
 	./atest -P GGG- -F 0 ../02_Track_2.wav | grep "packets decoded in" >atest.out
@@ -426,7 +437,7 @@ noisy3.wav : gen_packets
 	./gen_packets -B 300 -n 100 -o noisy3.wav
 
 testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c regex.a misc.a \
+		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c dtime_now.o regex.a misc.a \
 		tune.h 
 	rm -f atest3.exe
 	$(CC) $(CFLAGS) -o atest3 $^
@@ -437,20 +448,27 @@ testagc3 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.
 noisy96.wav : gen_packets
 	./gen_packets -B 9600 -n 100 -o noisy96.wav
 
-testagc96 : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.c multi_modem.c \
-		rrbb.c fcs_calc.c ax25_pad.c decode_aprs.c latlong.c symbols.c textcolor.c telemetry.c regex.a misc.a \
-		tune.h 
-	rm -f atest9.exe
-	$(CC) $(CFLAGS) -o atest9 $^
-	./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
-	#./atest9 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+testagc96 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o serial_port.o latlong.o \
+		symbols.o tt_text.o textcolor.o telemetry.o dtime_now.o \
+		misc.a regex.a
+	rm -f atest96.exe
+	$(CC) $(CFLAGS) -o atest96 $^
+	./atest96 -B 9600 ../walkabout9600c.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 19990303_0225_9600_8bis_22kHz.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600  19990303_0225_9600_16bit_22kHz.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 -P + z8-22k.wav| grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 test9600.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
 
 testagc24 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
 		dwgpsnmea.o dwgps.o serial_port.o latlong.o \
-		symbols.o tt_text.o textcolor.o telemetry.o \
+		symbols.o tt_text.o textcolor.o telemetry.o dtime_now.o \
 		misc.a regex.a
 	rm -f atest24.exe
 	sleep 1
@@ -462,7 +480,7 @@ testagc48 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c de
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
 		dwgpsnmea.o dwgps.o serial_port.o latlong.o \
-		symbols.o tt_text.o textcolor.o telemetry.o \
+		symbols.o tt_text.o textcolor.o telemetry.o dtime_now.o \
 		misc.a regex.a
 	rm -f atest48.exe
 	sleep 1
@@ -569,67 +587,6 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		ttcalc.exe \
 		dwespeak.bat \
 		telemetry-toolkit/*
-
-.PHONY: dist-src
-dist-src : README.md CHANGES.md \
-		doc/User-Guide.pdf \
-		doc/Raspberry-Pi-APRS.pdf \
-		doc/Raspberry-Pi-APRS-Tracker.pdf \
-		doc/APRStt-Implementation-Notes.pdf \
-		doc/APRS-Telemetry-Toolkit.pdf \
-		dw-start.sh dwespeak.bat dwespeak.sh \
-		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
-	rm -f fsk_fast_filter.h
-	echo " " > tune.h
-	rm -f ../$z-src.zip
-	dos2unix generic.conf
-	dos2unix Makefile
-	dos2unix Makefile.linux
-	dos2unix Makefile.macosx
-	dos2unix telemetry-toolkit/telem-balloon.conf
-	dos2unix telemetry-toolkit/telem-balloon.pl
-	dos2unix telemetry-toolkit/telem-bits.pl
-	dos2unix telemetry-toolkit/telem-data.pl
-	dos2unix telemetry-toolkit/telem-data91.pl
-	dos2unix telemetry-toolkit/telem-eqns.pl
-	dos2unix telemetry-toolkit/telem-m0xer-3.txt
-	dos2unix telemetry-toolkit/telem-parm.pl
-	dos2unix telemetry-toolkit/telem-unit.pl
-	dos2unix telemetry-toolkit/telem-volts.py
-	dos2unix telemetry-toolkit/telem-volts.conf
-	(cd .. ; zip $z-src.zip \
-		$z/README.md \
-		$z/CHANGES.md \
-		$z/LICENSE* \
-		$z/doc/User-Guide.pdf \
-		$z/doc/Raspberry-Pi-APRS.pdf \
-		$z/doc/Raspberry-Pi-APRS-Tracker.pdf \
-		$z/doc/APRStt-Implementation-Notes.pdf \
-		$z/doc/APRS-Telemetry-Toolkit.pdf \
-		$z/Makefile.win $z/Makefile.linux $z/Makefile.macosx $z/Makefile \
-		$z/*.c $z/*.h \
-		$z/regex/* $z/misc/* $z/geotranz/* \
-		$z/man1/* \
-		$z/generic.conf \
-		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
-		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
-		$z/dw-start.sh $z/direwolf.spec \
-		$z/dwespeak.bat $z/dwespeak.sh \
-		$z/telemetry-toolkit/* )
-	unix2dos Makefile
-	unix2dos Makefile.linux
-	unix2dos Makefile.macosx
-	unix2dos telemetry-toolkit/telem-balloon.conf
-	unix2dos telemetry-toolkit/telem-balloon.pl
-	dos2unix telemetry-toolkit/telem-bits.pl
-	unix2dos telemetry-toolkit/telem-data.pl
-	unix2dos telemetry-toolkit/telem-data91.pl
-	unix2dos telemetry-toolkit/telem-eqns.pl
-	unix2dos telemetry-toolkit/telem-m0xer-3.txt
-	unix2dos telemetry-toolkit/telem-parm.pl
-	unix2dos telemetry-toolkit/telem-unit.pl
-	unix2dos telemetry-toolkit/telem-volts.py
-	unix2dos telemetry-toolkit/telem-volts.conf
 
 
 # Reminders if pdf files are not up to date.

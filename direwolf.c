@@ -35,6 +35,13 @@
  *
  *---------------------------------------------------------------*/
 
+
+#define DIREWOLF_C 1
+
+#include "direwolf.h"
+
+
+
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
@@ -72,9 +79,7 @@
 #endif
 
 
-#define DIREWOLF_C 1
 
-#include "direwolf.h"
 #include "version.h"
 #include "audio.h"
 #include "config.h"
@@ -96,7 +101,6 @@
 #include "xmit.h"
 #include "ptt.h"
 #include "beacon.h"
-#include "redecode.h"
 #include "dtmf.h"
 #include "aprs_tt.h"
 #include "tt_user.h"
@@ -107,6 +111,7 @@
 #include "log.h"
 #include "recv.h"
 #include "morse.h"
+#include "mheard.h"
 
 
 //static int idx_decoded = 0;
@@ -160,7 +165,7 @@ static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in h
 static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
-static int q_d_opt = 0;			/* "-q d" Quiet, suppress the decoding of APRS packets. */
+static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
 
 
 
@@ -236,10 +241,13 @@ int main (int argc, char *argv[])
 	// TODO: control development/beta/release by version.h instead of changing here.
 	// Print platform.  This will provide more information when people send a copy the information displayed.
 
+	// Might want to print OS version here.   For Windows, see:
+	// https://msdn.microsoft.com/en-us/library/ms724451(v=VS.85).aspx
+
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -660,7 +668,7 @@ int main (int argc, char *argv[])
  * Note:  This is not the same as a volume control you would see on the screen.
  * It is the range of the digital sound representation.
 */
-	gen_tone_init (&audio_config, 100);
+	gen_tone_init (&audio_config, 100, 0);
 	morse_init (&audio_config, 100);
 
 	assert (audio_config.adev[0].bits_per_sample == 8 || audio_config.adev[0].bits_per_sample == 16);
@@ -723,11 +731,6 @@ int main (int argc, char *argv[])
 
 	waypoint_init (&misc_config);  
 
-/* 
- * Create thread for trying to salvage frames with bad FCS.
- */
-	redecode_init (&audio_config);
-
 /*
  * Enable beaconing.
  * Open log file first because "-dttt" (along with -l...) will
@@ -735,7 +738,8 @@ int main (int argc, char *argv[])
  */
 
 	log_init(misc_config.logdir);
-	beacon_init (&audio_config, &misc_config);
+	mheard_init (0);		// might add debug option someday.
+	beacon_init (&audio_config, &misc_config, &igate_config);
 
 
 /*
@@ -916,6 +920,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  int ns;
 
 	  ftype = ax25_frame_type (pp, &cr, desc, &pf, &nr, &ns);
+	  (void)ftype;
 
 	  dw_printf ("(%s)", desc);
 	}
@@ -962,15 +967,20 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 /* Decode the contents of APRS frames and display in human-readable form. */
 /* Suppress decoding if "-q d" option used. */
 
-	if ( ( ! q_d_opt ) && ax25_is_aprs(pp)) {
+
+	if (ax25_is_aprs(pp)) {
 
 	  decode_aprs_t A;
 
 	  decode_aprs (&A, pp, 0);
 
-	  //Print it all out in human readable format.
 
-	  decode_aprs_print (&A);
+	  if ( ! q_d_opt ) {
+
+	    // Print it all out in human readable format unless "-q d" option used.
+
+	    decode_aprs_print (&A);
+	  }
 
 	  /*
 	   * Perform validity check on each address.
@@ -981,6 +991,11 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // Send to log file.
 
 	  log_write (chan, &A, pp, alevel, retries);
+
+	  // Add to list of stations heard.
+
+	  mheard_save (chan, &A, pp, alevel, retries);
+
 
 	  // Convert to NMEA waypoint sentence if we have a location.
 
@@ -994,7 +1009,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 
 /* Send to another application if connected. */
-// TODO1.3:  Put a wrapper around this so we only call one function to send by all methods.
+// TODO:  Put a wrapper around this so we only call one function to send by all methods.
 
 	int flen;
 	unsigned char fbuf[AX25_MAX_PACKET_LEN];
@@ -1119,6 +1134,7 @@ static void usage (char **argv)
 	dw_printf ("       u             u = Display non-ASCII text in hexadecimal.\n");
 	dw_printf ("       p             p = dump Packets in hexadecimal.\n");
 	dw_printf ("       g             g = GPS interface.\n");
+	dw_printf ("       w             w = Waypoints for Position or Object Reports.\n");
 	dw_printf ("       t             t = Tracker beacon.\n");
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
 	dw_printf ("       i             i = IGate.\n");

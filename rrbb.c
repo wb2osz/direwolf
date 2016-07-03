@@ -35,12 +35,13 @@
 
 #define RRBB_C
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "ax25_pad.h"
 #include "rrbb.h"

@@ -45,12 +45,12 @@
  *---------------------------------------------------------------*/
 
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
+
 #if __WIN32__
 
 #include <winsock2.h>
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0501	/* Minimum OS version is XP. */
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
 #else 
 #include <stdlib.h>
 #include <netdb.h>

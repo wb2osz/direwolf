@@ -121,11 +121,11 @@
  * Cygwin:		Can use either one.
  */
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
 
 #if __WIN32__
 #include <winsock2.h>
-#define _WIN32_WINNT 0x0501
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
 #else 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -146,7 +146,6 @@
 #include <time.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "tq.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
@@ -861,6 +860,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 
 	    time_t clock;
 	    struct tm *tm;
+	    int num_digi;
 
 	    clock = time(NULL);
 	    tm = localtime(&clock);	// TODO: should use localtime_r
@@ -885,13 +885,46 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    /* The documentation example includes these 3 extra in the Len= value */
 	    /* but actual observed data uses only the packet info length. */
 
-	    snprintf (agwpe_msg.data, sizeof(agwpe_msg.data), " %d:Fm %s To %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
+	    // Documentation doesn't mention anything about including the via path.
+	    // In version 1.4, we add that to match observed behaviour.
+
+	    // This inconsistency was reported:
+	    // Direwolf:
+	    // [AGWE-IN] 1:Fm ZL4FOX-8 To Q7P2U2 [08:25:07]`I1*l V>/"9<}[:Barts Tracker 3.83V X
+	    // AGWPE:
+	    // [AGWE-IN] 1:Fm ZL4FOX-8 To Q7P2U2 Via WIDE3-3 [08:32:14]`I0*l V>/"98}[:Barts Tracker 3.83V X
+
+	    num_digi = ax25_get_num_repeaters(pp);
+
+	    if (num_digi > 0) {
+
+	      char via[AX25_MAX_REPEATERS*(AX25_MAX_ADDR_LEN+1)];
+	      char stemp[AX25_MAX_ADDR_LEN+1];
+	      int j;
+
+	      ax25_get_addr_with_ssid (pp, AX25_REPEATER_1, via);
+	      for (j = 1; j < num_digi; j++) {
+	        ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, stemp);
+	        strlcat (via, ",", sizeof(via));
+	        strlcat (via, stemp, sizeof(via));
+	      }
+
+	      snprintf (agwpe_msg.data, sizeof(agwpe_msg.data), " %d:Fm %s To %s Via %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
+			chan+1, agwpe_msg.hdr.call_from, agwpe_msg.hdr.call_to, via,
+			ax25_get_pid(pp), info_len,
+			tm->tm_hour, tm->tm_min, tm->tm_sec,
+			pinfo);
+	    }
+	    else {
+
+	      snprintf (agwpe_msg.data, sizeof(agwpe_msg.data), " %d:Fm %s To %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
 			chan+1, agwpe_msg.hdr.call_from, agwpe_msg.hdr.call_to,
 			ax25_get_pid(pp), info_len, 
 			tm->tm_hour, tm->tm_min, tm->tm_sec,
 			pinfo);
+	    }
 
-	    agwpe_msg.hdr.data_len_NETLE = host2netle(strlen(agwpe_msg.data) + 1) /* include null */ ;
+	    agwpe_msg.hdr.data_len_NETLE = host2netle(strlen(agwpe_msg.data) + 1) /* +1 to include terminating null */ ;
 
 	    if (debug_client) {
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
@@ -1383,10 +1416,14 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      break;
 
 
-	    case 'H':				/* Ask about recently heard stations. */
+	    case 'H':				/* Ask about recently heard stations on given port. */
+
+		/* This should send back 20 'H' frames for the most recently heard stations. */
+		/* If there are less available, empty frames are sent to make a total of 20. */
+		/* Each contains the first and last heard times. */
 
 	      {
-#if 0						/* This information is not being collected. */
+#if 0						/* Currently, this information is not being collected. */
 		struct {
 		  struct agwpe_s hdr;
 	 	  char info[100];
@@ -1400,7 +1437,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        reply.hdr.portx = cmd.hdr.portx
 
-	        strlcpy (reply.hdr.call_from, "WB2OSZ-15", sizeof(reply.hdr.call_from));
+	        strlcpy (reply.hdr.call_from, "WB2OSZ-15 Mon,01Jan2000 01:02:03  Tue,31Dec2099 23:45:56", sizeof(reply.hdr.call_from));
+		// or                                                  00:00:00                00:00:00
 
 	        strlcpy (agwpe_msg.data, ..., sizeof(agwpe_msg.data));
 
@@ -1640,6 +1678,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 #if NEW14
 	        dlq_connect_request (callsigns, num_calls, cmd.hdr.portx, client, pid);
 #else
+		(void)pid;	// suppress unused variable message.
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("\n");
 	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
@@ -1660,6 +1699,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 #if NEW14
 	        dlq_xmit_data_request (callsigns, num_calls, cmd.hdr.portx, client, cmd.hdr.pid, cmd.data, netle2host(cmd.hdr.data_len_NETLE));
 #else
+		(void)num_calls;	// suppress unused variable warning.
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("\n");
 	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
@@ -1679,6 +1719,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 #if NEW14
 	        dlq_disconnect_request (callsigns, num_calls, cmd.hdr.portx, client);
 #else
+		(void)num_calls;	// suppress unused variable warning.
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("\n");
 	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);

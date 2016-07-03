@@ -234,6 +234,7 @@ struct demodulator_state_s
 
 		int prev_demod_data;			// Previous data bit detected.
 							// Used to look for transitions.
+		float prev_demod_out_f;
 
 		/* This is used only for "9600" baud data. */
 

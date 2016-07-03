@@ -228,7 +228,7 @@ static inline int ax25_get_info_offset (packet_t this_p)
 	return (ax25_get_control_offset (this_p) + ax25_get_num_control(this_p) + ax25_get_num_pid(this_p));
 }
 
-static int ax25_get_num_info (packet_t this_p)
+static inline int ax25_get_num_info (packet_t this_p)
 {
 	int len;
 	

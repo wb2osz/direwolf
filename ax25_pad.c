@@ -146,6 +146,7 @@
 
 #define AX25_PAD_C		/* this will affect behavior of ax25_pad.h */
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -163,7 +164,7 @@
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
-#include "direwolf.h"
+
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "fcs_calc.h"

@@ -53,6 +53,7 @@
 
 #define DIGIPEATER_C
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +63,6 @@
 #include "regex.h"
 #include <sys/unistd.h>
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "digipeater.h"
 #include "textcolor.h"
@@ -74,8 +74,6 @@
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
 				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *type_filter);
 
-//static int filter_by_type (char *source, char *infop, char *type_filter);
-
 
 /*
  * Keep pointer to configuration options.
@@ -85,6 +83,18 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 static struct audio_s	    *save_audio_config_p;
 static struct digi_config_s *save_digi_config_p;
+
+
+/*
+ * Maintain count of packets digipeated for each combination of from/to channel.
+ */
+
+static int digi_count[MAX_CHANS][MAX_CHANS];
+
+int digipeater_get_count (int from_chan, int to_chan) {
+	return (digi_count[from_chan][to_chan]);
+}
+
 
 
 /*------------------------------------------------------------------------------
@@ -165,6 +175,7 @@ void digipeater (int from_chan, packet_t pp)
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
 	        tq_append (to_chan, TQ_PRIO_0_HI, result);
+	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
 	  }
@@ -190,6 +201,7 @@ void digipeater (int from_chan, packet_t pp)
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
 	        tq_append (to_chan, TQ_PRIO_1_LO, result);
+	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
 	  }
@@ -584,13 +596,11 @@ static int failed;
 
 static enum preempt_e preempt = PREEMPT_OFF;
 
-static char typefilter[20] = "";
 
 
 static void test (char *in, char *out)
 {
 	packet_t pp, result;
-	//int should_repeat;
 	char rec[256];
 	char xmit[256];
 	unsigned char *pinfo;
@@ -610,6 +620,7 @@ static void test (char *in, char *out)
 
 	ax25_format_addrs (pp, rec);
 	info_len = ax25_get_info (pp, &pinfo);
+	(void)info_len;
 	strlcat (rec, (char*)pinfo, sizeof(rec));
 
 	if (strcmp(in, rec) != 0) {
@@ -862,69 +873,6 @@ int main (int argc, char *argv[])
 	test (	"W1ABC>TEST11,CITYA*,CITYW,CITYX,CITYY,CITYZ:nomatch",
 		"");
 
-
-#if 0	/* changed strategy */
-/*
- * New in version 1.2.
- */
-
-
-	// no filter.
-	if (filter_by_type ("CWAPID", ":NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "") != 1) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 1\n"); failed++; }
-	
-	// message should not match psqt
-	if (filter_by_type ("CWAPID", ":NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "pqst") != 0) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 2\n"); failed++; }
-	
-	// This should match position
-	if (filter_by_type ("N3LEE-7", "`cHDl <0x1c>[/\"5j}", "qstp") != 1) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 3\n"); failed++; }
-	
-	// This should match nws
-	if (filter_by_type ("CWAPID", ":NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "n") != 1) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 4\n"); failed++; }
-	
-	// But not this.
-	if (filter_by_type ("CWAPID", ":zzz-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", "n") != 0) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 5\n"); failed++; }
-
-	// This should match nws
-	if (filter_by_type ("CWAPID", ";CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", "n") != 1) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 6\n"); failed++; }
-
-	// But not this due do addressee prefix mismatch
-	if (filter_by_type ("CWAPID", ";NWSttttz *DDHHMMzLATLONICONADVISETYPE{seq#", "n") != 0) 
-	  { text_color_set(DW_COLOR_ERROR); dw_printf ("filter_by_type case 7\n"); failed++; }
-
-
-/*
- * Filtering integrated with rest of process...
- */
-
-	strlcpy (typefilter, "w", sizeof(typefilter));
-
-	test (	"N8VIM>APN391,WIDE2-1:$ULTW00000000010E097D2884FFF389DC000102430002033400000000",
-		"N8VIM>APN391,WB2OSZ-9*:$ULTW00000000010E097D2884FFF389DC000102430002033400000000");
-
-	test (	"AB1OC-10>APWW10,WIDE1-1,WIDE2-1:>FN42er/# Hollis, NH iGate Operational",
-		"");
- 
-	strlcpy (typefilter, "s", sizeof(typefilter));
-
-	test (	"AB1OC-10>APWW10,WIDE1-1,WIDE2-1:>FN42er/# Hollis, NH iGate Operational",
-		"AB1OC-10>APWW10,WB2OSZ-9*,WIDE2-1:>FN42er/# Hollis, NH iGate Operational");
-
-	test (	"K1ABC-9>TR4R8R,WIDE1-1:`c6LlIb>/`\"4K}_%",
-		"");
-
-	strlcpy (typefilter, "up", sizeof(typefilter));
-
-	test (	"K1ABC-9>TR4R8R,WIDE1-1:`c6LlIb>/`\"4K}_%",
-		"K1ABC-9>TR4R8R,WB2OSZ-9*:`c6LlIb>/`\"4K}_%");
-
-	strlcpy (typefilter, "", sizeof(typefilter));
-#endif
 
 /* 
  * Did I miss any cases?

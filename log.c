@@ -31,6 +31,8 @@
  *
  *------------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <time.h>
 #include <assert.h>
@@ -42,8 +44,6 @@
 #include <unistd.h>
 #include <errno.h>
 
-
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "decode_aprs.h"

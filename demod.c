@@ -31,6 +31,7 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,7 +42,6 @@
 #include <assert.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "audio.h"
 #include "demod.h"
 #include "tune.h"
@@ -61,12 +61,15 @@
 static struct audio_s          *save_audio_config_p;
 
 
+// TODO: temp experiment.
+
+static int upsample = 2;	// temp experiment.
+static int zerostuff = 1;	// temp experiment.
+
 // Current state of all the decoders.
 
 static struct demodulator_state_s demodulator_state[MAX_CHANS][MAX_SUBCHANS];
 
-
-#define UPSAMPLE 2
 
 static int sample_sum[MAX_CHANS][MAX_SUBCHANS];
 static int sample_count[MAX_CHANS][MAX_SUBCHANS];
@@ -641,11 +644,20 @@ int demod_init (struct audio_s *pa)
 #endif
 	      }
 
+#ifdef TUNE_UPSAMPLE
+	      upsample = TUNE_UPSAMPLE;
+#endif
+
+
+#ifdef TUNE_ZEROSTUFF
+	      zerostuff = TUNE_ZEROSTUFF;
+#endif
+
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("Channel %d: %d baud, K9NG/G3RUH, %s, %d sample rate x %d",
 		    chan, save_audio_config_p->achan[chan].baud, 
 		    save_audio_config_p->achan[chan].profiles,
-		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, UPSAMPLE);
+		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, upsample);
 	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF) 
 	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");
@@ -693,7 +705,7 @@ int demod_init (struct audio_s *pa)
 	        dw_printf ("This is a suitable ratio for good performance.\n");
 	      }
 
-	      demod_9600_init (UPSAMPLE * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
+	      demod_9600_init (upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
 
@@ -919,51 +931,51 @@ void demod_process_sample (int chan, int subchan, int sam)
 	  case MODEM_BASEBAND:
 	  case MODEM_SCRAMBLE:
 	  default:
-
-#define ZEROSTUFF 1
-
 	
-#if ZEROSTUFF
-	    /* Literature says this is better if followed */
-	    /* by appropriate low pass filter. */
-	    /* So far, both are same in tests with different */
-	    /* optimal low pass filter parameters. */
+	    if (zerostuff) {
+	      /* Literature says this is better if followed */
+	      /* by appropriate low pass filter. */
+	      /* So far, both are same in tests with different */
+	      /* optimal low pass filter parameters. */
 
-	    for (k=1; k<UPSAMPLE; k++) {
-	      demod_9600_process_sample (chan, 0, D);
+	      for (k=1; k<upsample; k++) {
+	        demod_9600_process_sample (chan, 0, D);
+	      }
+	      demod_9600_process_sample (chan, sam * upsample, D);
 	    }
-	    demod_9600_process_sample (chan, sam*UPSAMPLE, D);
-#else
-	    /* Linear interpolation. */
-	    static int prev_sam;
-	    switch (UPSAMPLE) {
-	      case 1:
-	        demod_9600_process_sample (chan, sam);
+	    else {
 
-	        break;
-	      case 2:
-	        demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
-	        demod_9600_process_sample (chan, sam, D);
-	        break;
-              case 3:
-                demod_9600_process_sample (chan, (2 * prev_sam + sam) / 3, D);
-                demod_9600_process_sample (chan, (prev_sam + 2 * sam) / 3, D);
-                demod_9600_process_sample (chan, sam, D);
-                break;
-              case 4:
-                demod_9600_process_sample (chan, (3 * prev_sam + sam) / 4, D);
-                demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
-                demod_9600_process_sample (chan, (prev_sam + 3 * sam) / 4, D);
-                demod_9600_process_sample (chan, sam, D);
-                break;
-              default:
-                assert (0);
-                break;
+	      /* Linear interpolation. */
+	      static int prev_sam;
+
+	      switch (upsample) {
+	        case 1:
+	          demod_9600_process_sample (chan, sam, D);
+	          break;
+	        case 2:
+	          demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
+	          demod_9600_process_sample (chan, sam, D);
+	          break;
+                case 3:
+                  demod_9600_process_sample (chan, (2 * prev_sam + sam) / 3, D);
+                  demod_9600_process_sample (chan, (prev_sam + 2 * sam) / 3, D);
+                  demod_9600_process_sample (chan, sam, D);
+                  break;
+                case 4:
+                  demod_9600_process_sample (chan, (3 * prev_sam + sam) / 4, D);
+                  demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
+                  demod_9600_process_sample (chan, (prev_sam + 3 * sam) / 4, D);
+                  demod_9600_process_sample (chan, sam, D);
+                  break;
+                default:
+                  assert (0);
+                  break;
+	      }
+	      prev_sam = sam;
 	    }
-	    prev_sam = sam;
-#endif
 	    break;
-	}
+
+	}  /* switch modem_type */
 	return;
 
 } /* end demod_process_sample */

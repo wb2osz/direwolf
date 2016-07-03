@@ -33,6 +33,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -42,7 +44,6 @@
 #include <math.h>
 #include <assert.h>
 
-#include "direwolf.h"
 #include "encode_aprs.h"
 #include "latlong.h"
 #include "textcolor.h"
@@ -692,7 +693,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 
 #define XMIT_UTC 1
 #if XMIT_UTC
-	  gmtime_r (&thyme, &tm);
+	  (void)gmtime_r (&thyme, &tm);
 #else
 	  /* Using local time, for this application, would make more sense to me. */
 	  /* On Windows, localtime_r produces UTC. */

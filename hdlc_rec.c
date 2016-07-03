@@ -27,11 +27,12 @@
  *
  *******************************************************************************/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
 #include "demod.h"
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
@@ -45,6 +46,7 @@
 
 
 //#define TEST 1				/* Define for unit testing. */
+
 
 //#define DEBUG3 1				/* monitor the data detect signal. */
 
@@ -277,6 +279,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
  * clear channel to transmit.  Even a two byte match causes a lot of flickering
  * when listening to live signals.  Let's try 3 and see how that works out.
  */
+
 
 	//if (H->flag4_det == 0x7e7e7e7e) {
 	if ((H->flag4_det & 0xffffff00) == 0x7e7e7e00) {	

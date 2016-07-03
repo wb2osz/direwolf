@@ -112,12 +112,13 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 
 #if __WIN32__
 #include <stdlib.h>
-#include <windows.h>
 #else
 #define __USE_XOPEN2KXSI 1
 #define __USE_XOPEN 1
@@ -138,7 +139,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
+
 #include "tq.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
@@ -241,17 +242,22 @@ void hex_dump (unsigned char *p, int len);
  *
  *--------------------------------------------------------------------*/
 
-static MYFDTYPE kiss_open_pt (void);
+#if __WIN32__
 static MYFDTYPE kiss_open_nullmodem (char *device);
+#else
+static MYFDTYPE kiss_open_pt (void);
+#endif
+
 
 void kiss_init (struct misc_config_s *mc)
 {
-	int e;
+
 #if __WIN32__
 	HANDLE kiss_nullmodem_listen_th;
 #else
 	pthread_t kiss_pterm_listen_tid;
 	pthread_t kiss_nullmodem_listen_tid;
+	int e;
 #endif
 
 	memset (&kf, 0, sizeof(kf));
@@ -635,7 +641,6 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int kiss_len;
-	int j;
 	int err;
 
 #if ! __WIN32__

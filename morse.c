@@ -30,6 +30,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -39,8 +41,6 @@
 #include <time.h>
 #include <math.h>
 
-
-#include "direwolf.h"
 #include "textcolor.h"
 #include "audio.h"
 #include "ptt.h"

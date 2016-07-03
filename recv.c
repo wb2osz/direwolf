@@ -82,6 +82,7 @@
 
 //#define DEBUG 1
 
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -97,7 +98,6 @@
 #include <errno.h>
 #endif
 
-#include "direwolf.h"
 #include "audio.h"
 #include "demod.h"
 #include "multi_modem.h"

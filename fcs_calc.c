@@ -18,6 +18,8 @@
 //
 
 
+#include "direwolf.h"
+
 #include <stdio.h>
 
 /*

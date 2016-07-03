@@ -51,6 +51,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -615,6 +617,7 @@ static void xmit_ax25_frames (int c, int p, packet_t pp)
 	  int ns;
 
 	  ftype = ax25_frame_type (pp, &cr, desc, &pf, &nr, &ns);
+	  (void)ftype;
 
 	  dw_printf ("(%s)", desc);
 	}
@@ -821,6 +824,8 @@ static void xmit_speech (int c, packet_t pp)
  */
 
 	info_len = ax25_get_info (pp, &pinfo);
+	(void)info_len;
+
 	text_color_set(DW_COLOR_XMIT);
 	dw_printf ("[%d.speech] \"%s\"\n", c, pinfo);
 
@@ -891,6 +896,7 @@ int xmit_speak_it (char *script, int c, char *orig_msg)
 	  dw_printf ("Failed to run text-to-speech script, %s\n", script);
 
 	  ignore = getcwd (cwd, sizeof(cwd));
+	  (void)ignore;
 	  strlcpy (path, getenv("PATH"), sizeof(path));
 
 	  dw_printf ("CWD = %s\n", cwd);
@@ -933,6 +939,7 @@ static void xmit_morse (int c, packet_t pp, int wpm)
 
 
 	info_len = ax25_get_info (pp, &pinfo);
+	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
 	dw_printf ("[%d.morse] \"%s\"\n", c, pinfo);
 

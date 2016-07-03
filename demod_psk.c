@@ -94,7 +94,7 @@
  *
  *---------------------------------------------------------------*/
 
-
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -105,9 +105,8 @@
 #include <assert.h>
 #include <ctype.h>
 
-#include "direwolf.h"
-#include "audio.h"
 
+#include "audio.h"
 #include "tune.h"
 #include "fsk_demod_state.h"
 #include "fsk_gen_filter.h"
@@ -694,14 +693,14 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 #endif
 	  }
 	  else {
-	    float a, delta;
-	    int id;
+	    float a;
+	    int idelta;
 
 	    a = my_atan2f(I,Q);
-	    id = ((int)((a / (2.f * M_PI) + 1.f) * 256.f)) & 0xff;
+	    idelta = ((int)((a / (2.f * M_PI) + 1.f) * 256.f)) & 0xff;
 	    // 32 (90 degrees) compensates for 1800 carrier vs. 1800 baud.
 	    // 16 is to set threshold between constellation points.
-	    demod_phase_shift = ((id - 32 - 16) >> 5) & 0x7;
+	    demod_phase_shift = ((idelta - 32 - 16) >> 5) & 0x7;
 	  }
 
 	  nudge_pll (chan, subchan, slice, demod_phase_shift, D);

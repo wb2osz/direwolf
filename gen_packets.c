@@ -60,7 +60,7 @@
  *------------------------------------------------------------------*/
 
 
-
+#include "direwolf.h"
 
 #include <stdio.h>     
 #include <stdlib.h>    
@@ -463,7 +463,7 @@ int main(int argc, char **argv)
 	  amplitude = 100;
 	}
 
-	gen_tone_init (&modem, amplitude/2);
+	gen_tone_init (&modem, amplitude/2, 1);
 	morse_init (&modem, amplitude/2);
 
 
@@ -635,6 +635,8 @@ int main(int argc, char **argv)
 	    else {
 	      /* e.g. 9600 */
 	      g_noise_level = 0.33 * (amplitude / 200.0) * ((float)i / packet_count);
+	      // temp test
+	      //g_noise_level = 0.20 * (amplitude / 200.0) * ((float)i / packet_count);
 	    }
 
 	    snprintf (stemp, sizeof(stemp), "WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  %04d of %04d", i, packet_count);
@@ -677,8 +679,8 @@ static void usage (char **argv)
 	dw_printf ("  -r <number>   Audio sample Rate.  Default is %d.\n", DEFAULT_SAMPLES_PER_SEC);
 	dw_printf ("  -n <number>   Generate specified number of frames with increasing noise.\n");
 	dw_printf ("  -o <file>     Send output to .wav file.\n");
-//	dw_printf ("  -8            8 bit audio rather than 16.\n");
-//	dw_printf ("  -2            2 channels of audio rather than 1.\n");
+	dw_printf ("  -8            8 bit audio rather than 16.\n");
+	dw_printf ("  -2            2 channels (stereo) audio rather than one channel.\n");
 //	dw_printf ("  -z <number>   Number of leading zero bits before frame.\n");
 //	dw_printf ("                  Default is 12 which is .01 seconds at 1200 bits/sec.\n");
 

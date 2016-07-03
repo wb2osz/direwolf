@@ -94,6 +94,9 @@
 	Maybe even for Windows.  ;-)
 */
 
+
+#include "direwolf.h"		// should be first.   This includes windows.h.
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -102,7 +105,6 @@
 #include <time.h>
 
 #if __WIN32__
-#include <windows.h>
 #else
 #include <sys/termios.h>
 #include <sys/ioctl.h>
@@ -122,7 +124,6 @@ typedef int HANDLE;
 
 #endif
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "audio.h"
 #include "ptt.h"

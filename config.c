@@ -17,7 +17,7 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#define CONFIG_C 1
+#define CONFIG_C 1		// influences behavior of aprs_tt.h
 
 
 // #define DEBUG 1
@@ -33,6 +33,8 @@
  *		time to add a configuration file to specify options.
  *
  *---------------------------------------------------------------*/
+
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -448,6 +450,110 @@ static int parse_interval (char *str, int line)
 	return (sec);
 
 } /* end parse_interval */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        check_via_path
+ *
+ * Purpose:     Check for valid path in beacons, IGate, and APRStt configuration.
+ *
+ * Inputs:      via_path	- Zero or more comma separated stations.
+ *
+ * Returns:	Maximum number of digipeater hops or -1 for error.
+ *
+ * Description:	Beacons and IGate can use via paths such as:
+ *
+ *			WIDE1-1,MA3-3
+ *			N2GH,RARA-7
+ *
+ * 		Each part could be a specific station, an alias, or a path
+ *		from the "New n-N Paradigm."
+ *		In the first example above, the maximum number of digipeater
+ *		hops would be 4.  In the second example, 2.
+ *
+ *----------------------------------------------------------------*/
+
+// Put something like this in the config file as a quick test.
+// Not worth adding to "make check" regression tests.
+//
+// 	IBEACON via=
+//	IBEACON via=W2UB
+//	IBEACON via=W2UB-7
+//	IBEACON via=WIDE1-1,WIDE2-2,WIDE3-3
+//	IBEACON via=Lower
+//	IBEACON via=T00LONG
+//	IBEACON via=W2UB-16
+//	IBEACON via=D1,D2,D3,D4,D5,D6,D7,D8
+//	IBEACON via=D1,D2,D3,D4,D5,D6,D7,D8,D9
+//
+// Define below and visually check results.
+
+//#define DEBUG8 1
+
+
+static int check_via_path (char *via_path)
+{
+	char stemp[AX25_MAX_REPEATERS * (AX25_MAX_ADDR_LEN + 1)];
+	int num_digi = 0;
+	int max_digi_hops = 0;
+	char *r;
+	char *a;
+
+#if DEBUG8
+	text_color_set(DW_COLOR_DEBUG);
+        dw_printf ("check_via_path %s\n", via_path);
+#endif
+	if (strlen(via_path) == 0) {
+	  return (0);
+	}
+
+	strlcpy (stemp, via_path, sizeof(stemp));
+
+	r = stemp;
+	while (( a = strsep(&r,",")) != NULL) {
+	  int strict = 1;
+	  int ok;
+	  char addr[AX25_MAX_ADDR_LEN];
+	  int ssid;
+	  int heard;
+
+	  num_digi++;
+	  ok = ax25_parse_addr (AX25_REPEATER_1 - 1 + num_digi, a, strict, addr, &ssid, &heard);
+	  if ( ! ok) {
+#if DEBUG8
+	    text_color_set(DW_COLOR_DEBUG);
+            dw_printf ("check_via_path bad address\n");
+#endif
+	    return (-1);
+	  }
+
+	  /* Based on assumption that a callsign can't end with a digit. */
+	  /* For something of the form xxx9-9, we take the ssid as max hop count. */
+
+	  if (ssid > 0 && strlen(addr) >= 2 && isdigit(addr[strlen(addr)-1])) {
+	    max_digi_hops += ssid;
+	  }
+	  else {
+	    max_digi_hops++;
+	  }
+	}
+
+	if (num_digi > AX25_MAX_REPEATERS) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Maximum of 8 digipeaters has been exceeded.\n");
+	  return (-1);
+        }
+
+#if DEBUG8
+	text_color_set(DW_COLOR_DEBUG);
+        dw_printf ("check_via_path %d addresses, %d max digi hops\n", num_digi, max_digi_hops);
+#endif
+
+	return (max_digi_hops);
+
+} /* end check_via_path */
 
 
 
@@ -3348,8 +3454,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t != NULL) {
 
-	      // TODO: Should do some validity checking on the path.
-	      strlcpy (p_tt_config->obj_xmit_via, t, sizeof(p_tt_config->obj_xmit_via));
+	      if (check_via_path(t) >= 0) {
+	        strlcpy (p_tt_config->obj_xmit_via, t, sizeof(p_tt_config->obj_xmit_via));
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: invalid via path.\n", line);
+	      }
 	    }
 	  }
 
@@ -3600,6 +3711,22 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    t = split(NULL,0);
 	    if (t != NULL) {
+
+#if 1	// proper checking
+
+	      n = check_via_path(t);
+	      if (n >= 0) {
+	        p_igate_config->max_digi_hops = n;
+	        p_igate_config->tx_via[0] = ',';
+	        strlcpy (p_igate_config->tx_via + 1, t, sizeof(p_igate_config->tx_via)-1);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: invalid via path.\n", line);
+	      }
+
+#else	// previously
+
 	      char *p;
 	      p_igate_config->tx_via[0] = ',';
 	      strlcpy (p_igate_config->tx_via + 1, t, sizeof(p_igate_config->tx_via)-1);
@@ -3608,6 +3735,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  *p = toupper(*p);	/* silently force upper case. */
 	        }
 	      }
+#endif
 	    }
 	  }
 
@@ -3841,7 +3969,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * WAYPOINT		- Generate WPT NMEA sentences for display on map.
+ * WAYPOINT		- Generate WPL NMEA sentences for display on map.
  *
  * WAYPOINT  serial-device [ formats ]
  *		  
@@ -3924,6 +4052,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * OBEACON keyword=value ...
  * TBEACON keyword=value ...
  * CBEACON keyword=value ...
+ * IBEACON keyword=value ...
  *
  * New style with keywords for options.
  */
@@ -3931,7 +4060,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "PBEACON") == 0 ||
 		   strcasecmp(t, "OBEACON") == 0 ||
 		   strcasecmp(t, "TBEACON") == 0 ||
-		   strcasecmp(t, "CBEACON") == 0) {
+		   strcasecmp(t, "CBEACON") == 0 ||
+		   strcasecmp(t, "IBEACON") == 0) {
 
 	    if (p_misc_config->num_beacons < MAX_BEACONS) {
 
@@ -3944,6 +4074,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	      else if (strcasecmp(t, "TBEACON") == 0) {
 	        p_misc_config->beacon[p_misc_config->num_beacons].btype = BEACON_TRACKER;
+	      }
+	      else if (strcasecmp(t, "IBEACON") == 0) {
+	        p_misc_config->beacon[p_misc_config->num_beacons].btype = BEACON_IGATE;
 	      }
 	      else {
 	        p_misc_config->beacon[p_misc_config->num_beacons].btype = BEACON_CUSTOM;
@@ -4218,12 +4351,27 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	  }
 	  else if (strcasecmp(keyword, "VIA") == 0) {
+
+#if 1	// proper checking
+
+	    if (check_via_path(value) >= 0) {
+	      b->via = strdup(value);
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: invalid via path.\n", line);
+	    }
+
+
+#else	// previously
+
 	    b->via = strdup(value);
 	    for (p = b->via; *p != '\0'; p++) {
 	      if (islower(*p)) {
 	        *p = toupper(*p);	/* silently force upper case. */
 	      }
 	    }
+#endif
 	  }
 	  else if (strcasecmp(keyword, "INFO") == 0) {
 	    b->custom_info = strdup(value);

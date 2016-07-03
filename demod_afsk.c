@@ -39,7 +39,7 @@
  *
  *---------------------------------------------------------------*/
 
-
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -50,9 +50,7 @@
 #include <assert.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "audio.h"
-
 #include "tune.h"
 #include "fsk_demod_state.h"
 #include "fsk_gen_filter.h"
@@ -105,7 +103,7 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	int j;
 
 
-#pragma GCC ivdep				// ignored until gcc 4.9
+//#pragma GCC ivdep				// ignored until gcc 4.9
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}

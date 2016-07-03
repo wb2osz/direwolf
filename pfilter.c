@@ -37,6 +37,7 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <unistd.h>
 #include <assert.h>
@@ -45,11 +46,6 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#if __WIN32__
-char *strsep(char **stringp, const char *delim);
-#endif
-
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "decode_aprs.h"
@@ -622,7 +618,7 @@ static int filt_bodgu (pfstate_t *pf, char *arg)
 /* Telemetry metadata is a special case of message. */
 /* We want to categorize it as telemetry rather than message. */
 
-static int is_telem_metadata (char *infop)
+int is_telem_metadata (char *infop)
 {
 	if (*infop != ':') return (0);
 	if (strlen(infop) < 16) return (0);

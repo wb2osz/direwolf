@@ -34,6 +34,9 @@
  *---------------------------------------------------------------*/
 
 
+#include "direwolf.h"
+
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -60,7 +63,6 @@
 #endif
 
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "dwgps.h"
 #include "dwgpsd.h"
