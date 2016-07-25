@@ -104,9 +104,10 @@ static void quote_for_csv (char *out, size_t outsize, const char *in) {
 static char g_log_dir[80];
 static FILE *g_log_fp;
 static char g_open_fname[20];
+static char g_logfilename[80];
 
 
-void log_init (char *path) 
+void log_init (char *path, char *logfilename)
 { 
 	struct stat st;
 
@@ -117,6 +118,11 @@ void log_init (char *path)
 	if (strlen(path) == 0) {
 	  return;
 	}
+
+if (strlen(logfilename) != 0) {
+	strlcpy (g_logfilename, logfilename, sizeof(g_logfilename));
+	}
+
 
 	if (stat(path,&st) == 0) {
 	  // Exists, but is it a directory?
@@ -191,7 +197,12 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_
 
 	// Microsoft doesn't recognize %F as equivalent to %Y-%m-%d
 
+	if (strlen(g_logfilename) != 0) {
+	strftime (fname, sizeof(fname), g_logfilename, &tm);
+	}
+	else {
 	strftime (fname, sizeof(fname), "%Y-%m-%d.log", &tm);
+	}
 
 	// Close current file if name has changed
 

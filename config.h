@@ -56,6 +56,8 @@ struct misc_config_s {
 
 	char logdir[80];	/* Directory for saving activity logs. */
 
+	char logfilename[80];	/* File name for saving activity logs. */
+
 	int sb_configured;	/* TRUE if SmartBeaconing is configured. */
 	int sb_fast_speed;	/* MPH */
 	int sb_fast_rate;	/* seconds */

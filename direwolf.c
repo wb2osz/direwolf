@@ -178,6 +178,7 @@ int main (int argc, char *argv[])
 	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0;	/* Command line options. */
 	char P_opt[16];
 	char l_opt[80];
+	char f_opt[80];
 	char input_file[80];
 	
 	int t_opt = 1;		/* Text color option. */				
@@ -194,6 +195,7 @@ int main (int argc, char *argv[])
 #endif
 
 	strlcpy(l_opt, "", sizeof(l_opt));
+	strlcpy(f_opt, "", sizeof(f_opt));
 	strlcpy(P_opt, "", sizeof(P_opt));
 
 #if __WIN32__
@@ -322,7 +324,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:",
+          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:Uf:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -501,6 +503,11 @@ int main (int argc, char *argv[])
 	    strlcpy (l_opt, optarg, sizeof(l_opt));
             break;
 
+          case 'f':				/* -f for log file name */
+
+	    strlcpy (f_opt, optarg, sizeof(f_opt));
+	    break;
+
 	  case 'S':				/* Print symbol tables and exit. */
 
 	    symbols_init ();
@@ -593,6 +600,11 @@ int main (int argc, char *argv[])
 	if (strlen(l_opt) > 0) {
 	  strlcpy (misc_config.logdir, l_opt, sizeof(misc_config.logdir));
 	}
+
+	if (strlen(f_opt) > 0) {
+	  strlcpy (misc_config.logfilename, f_opt, sizeof(misc_config.logfilename));
+	}
+
 
 	misc_config.enable_kiss_pt = enable_pseudo_terminal;
 
@@ -711,7 +723,7 @@ int main (int argc, char *argv[])
  * log the tracker beacon transmissions with fake channel 999.
  */
 
-	log_init(misc_config.logdir);
+	log_init(misc_config.logdir, misc_config.logfilename);
 	beacon_init (&audio_config, &misc_config);
 
 
@@ -1062,6 +1074,7 @@ static void usage (char **argv)
 	dw_printf ("Options:\n");
 	dw_printf ("    -c fname       Configuration file name.\n");
 	dw_printf ("    -l logdir      Directory name for log files.  Use . for current.\n");
+	dw_printf ("    -f logname     Name for log file. \n");
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
 	dw_printf ("    -b n           Bits per audio sample, 8 or 16.\n");

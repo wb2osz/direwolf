@@ -756,6 +756,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
 	strlcpy (p_misc_config->nmea_port, "", sizeof(p_misc_config->nmea_port));
 	strlcpy (p_misc_config->logdir, "", sizeof(p_misc_config->logdir));
+	strlcpy (p_misc_config->logfilename, "", sizeof(p_misc_config->logfilename));
 
 
 /* 
@@ -3862,6 +3863,28 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: LOGDIR on line %d should have directory path and nothing more.\n", line);
 	    }
 	  }
+
+
+/*
+ * LOGFILENAME	- Log file name.
+ */
+	  else if (strcasecmp(t, "logfilename") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing  name for LogFileName on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      strlcpy (p_misc_config->logfilename, t, sizeof(p_misc_config->logfilename));
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: LOGFILE on line %d should have logfile name  and nothing more.\n", line);
+	    }
+	  }
+
 
 /*
  * BEACON channel delay every message

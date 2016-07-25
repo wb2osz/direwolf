@@ -10,8 +10,8 @@
 
 
 
-void log_init (char *path);	
+void log_init (char *path, char *logfilename);
 
 void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_t retries);
 
-void log_term (void); 	
+void log_term (void);
