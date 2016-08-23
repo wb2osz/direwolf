@@ -51,6 +51,7 @@
 #endif
 
 #if ENABLE_GPSD
+
 #include <gps.h>
 
 // Debian bug report:  direwolf (1.2-1) FTBFS with libgps22 as part of the gpsd transition (#803605):
@@ -60,7 +61,13 @@
 #error libgps API version might be incompatible.
 #endif
 
-#endif
+/*
+ * Information for interface to gpsd daemon.
+ */
+
+static struct gps_data_t gpsdata;
+
+#endif   /* ENABLE_GPSD */
 
 
 #include "textcolor.h"
@@ -75,11 +82,7 @@ static int s_debug = 0;		/* Enable debug output. */
 
 static void * read_gpsd_thread (void *arg);
 
-/*
- * Information for interface to gpsd daemon. 
- */
 
-static struct gps_data_t gpsdata;
 
 
 /*-------------------------------------------------------------------
@@ -138,7 +141,7 @@ static struct gps_data_t gpsdata;
  *
  * Update:  January 2016.
  *
- *	I'm told that it might work in Raspian, Jessie version.
+ *	I'm told that the shared memory interface might work in Raspian, Jessie version.
  *	Haven't tried it yet.
  */
 
