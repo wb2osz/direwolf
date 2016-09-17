@@ -976,6 +976,7 @@ N1ZZN-9>T2SP0W:`c_Vm6hk/ "49}Originl Mic-E (leading space)
 
 N1ZZN-9>T2SP0W:`c_Vm6hk/>"49}TH-D7A walkie Talkie
 N1ZZN-9>T2SP0W:`c_Vm6hk/>"49}TH-D72 walkie Talkie=
+W6GPS>S4PT3R:`p(1oR0K\>TH-D74A^
 N1ZZN-9>T2SP0W:`c_Vm6hk/]"49}TM-D700 MObile Radio
 N1ZZN-9>T2SP0W:`c_Vm6hk/]"49}TM-D710 Mobile Radio=
 
@@ -1330,38 +1331,44 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 #define isT(c) ((c) == ' ' || (c) == '>' || (c) == ']' || (c) == '`' || (c) == '\'')
 
+// Last updated Sept. 2016 for TH-D74A
 
 	if (isT(*pfirst)) {
 	
-	  if (*pfirst == ' ') { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
+	  if      (*pfirst == ' '                                       )  { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == '>' && *plast == '=') { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == '>') { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
+	  else if (*pfirst == '>'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == '>'                       && *plast == '^')  { strlcpy (A->g_mfr, "Kenwood TH-D74", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == '>'                                       )  { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == ']' && *plast == '=') { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == ']') { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
+	  else if (*pfirst == ']'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == ']'                                       )  { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ' ') { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '"') { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '$') { strlcpy (A->g_mfr, "Yaesu FT1D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '%') { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ')') { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '(') { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ' ')  { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '"')  { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '#')  { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '$')  { strlcpy (A->g_mfr, "Yaesu FT1D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '%')  { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ')')  { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '(')  { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*(plast-1) == '\\') { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '/') { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '^') { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '*') { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '~') { strlcpy (A->g_mfr, "OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'                                       )  { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; }
 
-	  // Should Original Mic-E and Kenwood be moved down to here?
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3')  { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4')  { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '`') { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'') { strlcpy (A->g_mfr, "McTrackr", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '4')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7400 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '8')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7800 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+
+	  else if (*pfirst == '\''                                      )  { strlcpy (A->g_mfr, "McTrackr", sizeof(A->g_mfr)); pfirst++; }
+
+	  else if (                   *(plast-1) == '\\'                )  { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '/'                 )  { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '^'                 )  { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '*'                 )  { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '~'                 )  { strlcpy (A->g_mfr, "OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	}
 
 /*
