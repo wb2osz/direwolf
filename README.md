@@ -93,4 +93,4 @@ Here are some good places to share information:
 - [TAPR aprssig](http://www.tapr.org/pipermail/aprssig/)
  
 
-
+The github "issues" section is for reporting software defects and enhancement requests.  It is NOT a place to ask questions or have general discussions.  Please use one of the locations above.
