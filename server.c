@@ -179,23 +179,6 @@ static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
 					/* the client app must send a command to enable this. */
 
 
-/*
- * Registered callsigns from 'X' command.
- * For simplicity just use a fixed size array until there
- * is evidence that a larger number would be needed.
- *
- * Also keep track of which client did the registration.
- * For example client 0 might register the callsign ABC
- * and client 1 register DEF.   If something comes addressed
- * to DEF, we would want it going only to client 1.
- */
-
-#define MAX_REG_CALLSIGNS 20
-
-static char registered_callsigns[MAX_REG_CALLSIGNS][AX25_MAX_ADDR_LEN];
-static int registered_by_client[MAX_REG_CALLSIGNS];
-
-
 // TODO:  define in one place, use everywhere.
 // TODO:  Macro to terminate thread when no point to go on.
 
@@ -464,8 +447,6 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	  enable_send_monitor_to_client[client] = 0;
 	}
 
-	memset (registered_callsigns, 0, sizeof(registered_callsigns));
-
 	if (server_port == 0) {
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Disabled AGW network client port.\n");
@@ -653,6 +634,7 @@ static THREAD_F connect_listen_thread (void *arg)
             }
 
 	    text_color_set(DW_COLOR_INFO);
+// TODO: "attached" or some other term would be better because "connected" has a different meaning for AX.25.
 	    dw_printf("\nConnected to AGW client application %d ...\n\n", client);
 
 /*
@@ -836,6 +818,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      closesocket (client_sock[client]);
 	      client_sock[client] = -1;
 	      WSACleanup();
+	      dlq_client_cleanup (client);
 	    }
 #else
             err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
@@ -845,6 +828,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
 	      close (client_sock[client]);
 	      client_sock[client] = -1;    
+	      dlq_client_cleanup (client);
 	    }
 #endif
 	  }
@@ -939,6 +923,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      closesocket (client_sock[client]);
 	      client_sock[client] = -1;
 	      WSACleanup();
+	      dlq_client_cleanup (client);
 	    }
 #else
             err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
@@ -947,7 +932,8 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nError sending message to AGW client application %d.  Closing connection.\n\n", client);
 	      close (client_sock[client]);
-	      client_sock[client] = -1;    
+	      client_sock[client] = -1;
+	      dlq_client_cleanup (client);
 	    }
 #endif
 	  }
@@ -963,6 +949,8 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
  *
  * Purpose:     Send notification to client app when a link has
  *		been established with another station.
+ *
+ *		DL-CONNECT Confirm or DL-CONNECT Indication in the protocol spec.
  *
  * Inputs:	chan		- Which radio channel.
  *
@@ -1017,6 +1005,8 @@ void server_link_established (int chan, int client, char *remote_call, char *own
  *		another station has been terminated or a connection
  *		attempt failed.
  *
+ *		DL-DISCONNECT Confirm or DL-DISCONNECT Indication in the protocol spec.
+ *
  * Inputs:	chan		- Which radio channel.
  *
  * 		client		- Which one of potentially several clients.
@@ -1027,7 +1017,7 @@ void server_link_established (int chan, int client, char *remote_call, char *own
  *
  *		timeout		- true when no answer from other station.
  *				  How do we distinguish who asked for the
- *				  termination of an existing linkn?
+ *				  termination of an existing link?
  *
  *--------------------------------------------------------------------*/
 
@@ -1059,6 +1049,66 @@ void server_link_terminated (int chan, int client, char *remote_call, char *own_
 
 } /* end server_link_terminated */
 
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        server_rec_conn_data
+ *
+ * Purpose:     Send received connected data to the application.
+ *
+ *		DL-DATA Indication in the protocol spec.
+ *
+ * Inputs:	chan		- Which radio channel.
+ *
+ * 		client		- Which one of potentially several clients.
+ *
+ *		remote_call	- Callsign[-ssid] of remote station.
+ *
+ *		own_call	- Callsign[-ssid] of my end.
+ *
+ *		pid		- Protocol ID from I frame.
+ *
+ *		data_ptr	- Pointer to a block of bytes.
+ *
+ *		data_len	- Number of bytes.  Could be zero.
+ *
+ *--------------------------------------------------------------------*/
+
+void server_rec_conn_data (int chan, int client, char *remote_call, char *own_call, int pid, char *data_ptr, int data_len)
+{
+
+	struct {
+	  struct agwpe_s hdr;
+	  char info[AX25_MAX_INFO_LEN];		// I suppose there is potential for something larger.
+						// We'll cross that bridge if we ever come to it.
+	} reply;
+
+
+	memset (&reply.hdr, 0, sizeof(reply.hdr));
+	reply.hdr.portx = chan;
+	reply.hdr.datakind = 'D';
+	reply.hdr.pid = pid;
+
+	strlcpy (reply.hdr.call_from, remote_call, sizeof(reply.hdr.call_from));
+	strlcpy (reply.hdr.call_to,   own_call,    sizeof(reply.hdr.call_to));
+
+	if (data_len < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid length %d for connected data to client %d.\n", data_len, client);
+	  data_len = 0;
+	}
+	else if (data_len > AX25_MAX_INFO_LEN) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid length %d for connected data to client %d.\n", data_len, client);
+	  data_len = AX25_MAX_INFO_LEN;
+	}
+
+	memcpy (reply.info, data_ptr, data_len);
+	reply.hdr.data_len_NETLE = host2netle(data_len);
+
+	send_to_client (client, &reply);
+
+} /* end server_rec_conn_data */
 
 
 /*-------------------------------------------------------------------
@@ -1137,7 +1187,7 @@ static void send_to_client (int client, void *reply_p)
 {
 	struct agwpe_s *ph;
 	int len;
-#if __WIN32__     
+#if __WIN32__
 #else
 	int err;
 #endif
@@ -1199,6 +1249,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    close (client_sock[client]);
 #endif
 	    client_sock[client] = -1;
+	    dlq_client_cleanup (client);
 	    continue;
 	  }
 
@@ -1240,6 +1291,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    close (client_sock[client]);
 #endif
 	    client_sock[client] = -1;
+	    dlq_client_cleanup (client);
 	    return (0);
 	  }
 
@@ -1258,6 +1310,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      close (client_sock[client]);
 #endif
 	      client_sock[client] = -1;
+	      dlq_client_cleanup (client);
 	      return (0);
 	    }
 	    if (n >= 0) {
@@ -1581,38 +1634,34 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      {
 		struct {
 		  struct agwpe_s hdr;
-		  char data;
+		  char data;			/* 1 = success, 0 = failure */
 		} reply;
 
-		int j, ok;
+		int ok = 1;
+
+		// The protocol spec says it is an error to register the same one more than once.
+	        // Too much trouble.  Report success if the channel is valid.
+
+
+	        int chan = cmd.hdr.portx;
+
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].valid) {
+		  ok = 1;
+	          dlq_register_callsign (cmd.hdr.call_from, chan, client);
+	        }
+	        else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("AGW protocol error.  Register callsign for invalid channel %d.\n", chan);
+	          ok = 0;
+	        }
+
 
 	        memset (&reply, 0, sizeof(reply));
 	        reply.hdr.datakind = 'X';
+	        reply.hdr.portx = cmd.hdr.portx;
 		memcpy (reply.hdr.call_from, cmd.hdr.call_from, sizeof(reply.hdr.call_from));
 	        reply.hdr.data_len_NETLE = host2netle(1);
-	
-		// Version 1.0.
-		// Previously used sizeof(reply) but compiler rounded it up to next byte boundary.
-		// That's why more cumbersome size expression is used.
-
-		// The protocol spec says it is an error to register the same one more than once.
-	        // First make sure is it not already in there.  Add if space available.
-
-	        if (server_callsign_registered_by_client(cmd.hdr.call_from) >= 0) {
-	          ok = 0;
-	        }
-	        else {
-	          ok = 0;
-	          for (j = 0; j < MAX_REG_CALLSIGNS && ok == 0; j++) {
-	            if (registered_callsigns[j][0] == '\0') {
-	              strlcpy (registered_callsigns[j], cmd.hdr.call_from, sizeof(registered_callsigns[j]));
-	              registered_by_client[j] = client;
-	              ok = 1;
-	            }
-	          }
-	        }
-
-		reply.data = ok;		/* 1 = success, 0 = failure */
+		reply.data = ok;
 	        send_to_client (client, &reply);
 	      }
 	      break;
@@ -1620,13 +1669,15 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    case 'x':				/* Unregister CallSign  */
 
 	      {
-	        int j;
 
-	        for (j = 0; j < MAX_REG_CALLSIGNS; j++) {
-	          if (strcmp(registered_callsigns[j], cmd.hdr.call_from) == 0) {
-	            registered_callsigns[j][0] = '\0';
-	            registered_by_client[j] = -1;
-	          }
+	        int chan = cmd.hdr.portx;
+
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].valid) {
+	          dlq_unregister_callsign (cmd.hdr.call_from, chan, client);
+	        }
+		else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("AGW protocol error.  Unregister callsign for invalid channel %d.\n", chan);
 	        }
 	      }
 	      /* No reponse is expected. */
@@ -1648,7 +1699,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		int j;
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
-	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
+	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_DESTINATION]));
 
 	        if (cmd.hdr.datakind == 'c') {
 	          pid = cmd.hdr.pid;		/* non standard for NETROM, TCP/IP, etc. */
@@ -1675,15 +1726,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 	          }
 	        }
 
-#if NEW14
+
 	        dlq_connect_request (callsigns, num_calls, cmd.hdr.portx, client, pid);
-#else
-		(void)pid;	// suppress unused variable message.
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("\n");
-	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
-	        dw_printf ("Connected packet mode is not implemented.\n");
-#endif
+
 	      }
 	      break;
 
@@ -1696,15 +1741,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
 	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
-#if NEW14
+
 	        dlq_xmit_data_request (callsigns, num_calls, cmd.hdr.portx, client, cmd.hdr.pid, cmd.data, netle2host(cmd.hdr.data_len_NETLE));
-#else
-		(void)num_calls;	// suppress unused variable warning.
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("\n");
-	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
-	        dw_printf ("Connected packet mode is not implemented.\n");
-#endif
+
 	      }
 	      break;
 
@@ -1716,15 +1755,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
 	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
-#if NEW14
+
 	        dlq_disconnect_request (callsigns, num_calls, cmd.hdr.portx, client);
-#else
-		(void)num_calls;	// suppress unused variable warning.
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("\n");
-	        dw_printf ("Can't process command '%c' from AGW client app %d.\n", cmd.hdr.datakind, client);
-	        dw_printf ("Connected packet mode is not implemented.\n");
-#endif
+
 	      }
 	      break;
 
@@ -1838,31 +1871,5 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 } /* end send_to_client */
 
-
-/*-------------------------------------------------------------------
- *
- * Name:        server_callsign_registered_by_client
- *
- * Purpose:     See if given callsign was registered.
- *
- * Inputs:	callsign
- *
- * Returns:	>= 0 for the client number.
- *		-1 for not found.
- *
- *--------------------------------------------------------------------*/
-
-int server_callsign_registered_by_client (char *callsign)
-{
-	int j;
-
-	for (j = 0; j < MAX_REG_CALLSIGNS; j++) {
-	  if (strcmp(registered_callsigns[j], callsign) == 0) {
-	    return (registered_by_client[j]);
-	  }
-	}
-	return (-1);
-
-} /* end server_callsign_registered_by_client */
 
 /* end server.c */

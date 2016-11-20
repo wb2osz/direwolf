@@ -883,7 +883,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 	if (save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
 
-	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp) != 1) {
+	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp, 1) != 1) {
 
 	    // Is this useful troubleshooting information or just distracting noise?
 	    // Originally this was always printed but there was a request to add a "quiet" option to suppress this.
@@ -1542,7 +1542,7 @@ static void xmit_packet (char *message, int to_chan)
 
 	if (save_digi_config_p->filter_str[MAX_CHANS][to_chan] != NULL) {
 
-	  if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3) != 1) {
+	  if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3, 1) != 1) {
 
 	    // Originally this was always printed but it's probably too much noise.
 	    // Version 1.4, print only if debug option is specified.

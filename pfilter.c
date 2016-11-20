@@ -81,9 +81,15 @@ typedef struct pfstate_s {
 	packet_t pp;
 
 /*
- * Packet split into separate parts.
+ * Are we processing APRS or connected mode?
+ * This determines whch types of filters are available.
+ */
+	int is_aprs;
+
+/*
+ * Packet split into separate parts if APRS.
  * Most interesting fields are:
- *		g_src		- source address
+ *
  *		g_symbol_table	- / \ or overlay
  *		g_symbol_code
  *		g_lat, g_lon	- Location
@@ -133,6 +139,10 @@ static int filt_s (pfstate_t *pf);
  *
  *		pp	- Packet object handle.
  *
+ *		is_aprs	- True for APRS, false for connected mode digipeater.
+ *			  Connected mode allows a subset of the filter types, only
+ *			  looking at the addresses, not information part contents.
+ *
  * Returns:	 1 = yes
  *		 0 = no
  *		-1 = error detected
@@ -142,7 +152,7 @@ static int filt_s (pfstate_t *pf);
  *
  *--------------------------------------------------------------------*/
 
-int pfilter (int from_chan, int to_chan, char *filter, packet_t pp)
+int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 {
 	pfstate_t pfstate;
 	char *p;
@@ -150,6 +160,8 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp)
 
 	assert (from_chan >= 0 && from_chan <= MAX_CHANS);
 	assert (to_chan >= 0 && to_chan <= MAX_CHANS);
+
+	memset (&pfstate, 0, sizeof(pfstate));
 
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -165,10 +177,9 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp)
 	pfstate.from_chan = from_chan;
 	pfstate.to_chan = to_chan;
 
-	/* Copy filter string, removing any control characters. */
+	/* Copy filter string, changing any control characers to spaces. */
 
-	memset (pfstate.filter_str, 0, sizeof(pfstate.filter_str));
-	strncpy (pfstate.filter_str, filter, MAX_FILTER_LEN-1);
+	strlcpy (pfstate.filter_str, filter, sizeof(pfstate.filter_str));
 
 	pfstate.nexti = 0;
 	for (p = pfstate.filter_str; *p != '\0'; p++) {
@@ -178,7 +189,11 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp)
 	}
 
 	pfstate.pp = pp;
-	decode_aprs (&pfstate.decoded, pp, 1);	
+	pfstate.is_aprs = is_aprs;
+
+	if (is_aprs) {
+	  decode_aprs (&pfstate.decoded, pp, 1);
+	}
 
 	next_token(&pfstate);
 	
@@ -415,6 +430,14 @@ static int parse_primary (pfstate_t *pf)
  *		 0 = no
  *		-1 = error detected
  *
+ * Description:	All filter specifications are allowed for APRS.
+ *		Only those dealing with addresses are allowed for connected digipeater.
+ *
+ *		b	- budlist (source)
+ *		d	- digipeaters used
+ *		v	- digipeaters not used
+ *		u	- unproto (destination)
+ *
  *--------------------------------------------------------------------*/
 
 
@@ -423,6 +446,16 @@ static int parse_filter_spec (pfstate_t *pf)
 {
 	int result = -1;
 	char addr[AX25_MAX_ADDR_LEN];
+
+
+	if ( ( ! pf->is_aprs) && strchr ("01bdvu", pf->token_str[0]) == NULL) {
+
+	  print_error (pf, "Only b, d, v, and u specifications are allowed for connected mode digipeater filtering.");
+	  result = -1;
+	  next_token (pf);
+	  return (result);
+	}
+
 
 /* undocumented: can use 0 or 1 for testing. */
 
@@ -437,7 +470,8 @@ static int parse_filter_spec (pfstate_t *pf)
 
 	else if (pf->token_str[0] == 'b' && ispunct(pf->token_str[1])) {
 	  /* Budlist - source address */
-	  result = filt_bodgu (pf, pf->decoded.g_src);
+	  ax25_get_addr_with_ssid (pf->pp, AX25_SOURCE, addr);
+	  result = filt_bodgu (pf, addr);
 	}
 	else if (pf->token_str[0] == 'o' && ispunct(pf->token_str[1])) {
 	  /* Object or item name */
@@ -479,7 +513,7 @@ static int parse_filter_spec (pfstate_t *pf)
 	}
 	else if (pf->token_str[0] == 'u' && ispunct(pf->token_str[1])) {
 	  /* Unproto (destination) - probably want to exclude mic-e types */
-	  /* because destintation is used for part of location. */
+	  /* because destination is used for part of location. */
 
 	  if (ax25_get_dti(pf->pp) != '\'' && ax25_get_dti(pf->pp) != '`') {
 	    ax25_get_addr_with_ssid (pf->pp, AX25_DESTINATION, addr);
@@ -1120,7 +1154,7 @@ static void pftest (int test_num, char *filter, char *monitor, int expected)
 	pp = ax25_from_text (monitor, 1);
 	assert (pp != NULL);
 
-	result = pfilter (0, 0, filter, pp);
+	result = pfilter (0, 0, filter, pp, 1);
 	if (result != expected) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Unexpected result for test number %d\n", test_num);

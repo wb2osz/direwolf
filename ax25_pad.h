@@ -64,8 +64,10 @@
  */
 
 #define AX25_UI_FRAME 3		/* Control field value. */
-#define AX25_NO_LAYER_3 0xf0	/* protocol ID */
 
+#define AX25_PID_NO_LAYER_3 0xf0		/* protocol ID used for APRS */
+#define AX25_PID_SEGMENTATION_FRAGMENT 0x08
+#define AX25_PID_ESCAPE_CHARACTER 0xff
 
 
 #ifdef AX25_PAD_C	/* Keep this hidden - implementation could change. */
@@ -159,15 +161,19 @@ typedef struct packet_s *packet_t;
 typedef enum cmdres_e { cr_00 = 2, cr_cmd = 1, cr_res = 0, cr_11 = 3 } cmdres_t;
 
 
+extern packet_t ax25_new (void);
+
+
 #ifdef AX25_PAD_C	/* Keep this hidden - implementation could change. */
 
-extern packet_t ax25_new (void);
 
 /*
  * APRS always has one control octet of 0x03 but the more
  * general AX.25 case is one or two control bytes depending on
  * whether "modulo 128 operation" is in effect.
  */
+
+//#define DEBUGX 1
 
 static inline int ax25_get_control_offset (packet_t this_p) 
 {
@@ -176,7 +182,29 @@ static inline int ax25_get_control_offset (packet_t this_p)
 
 static inline int ax25_get_num_control (packet_t this_p)
 {
-	return (this_p->modulo == 128 ? 2 : 1);
+	int c;
+
+	c = this_p->frame_data[ax25_get_control_offset(this_p)];
+
+	if ( (c & 0x01) == 0 ) {			/* I   xxxx xxx0 */
+#if DEBUGX
+	  dw_printf ("ax25_get_num_control, %02x is I frame, returns %d\n", c, (this_p->modulo == 128) ? 2 : 1);
+#endif
+	  return ((this_p->modulo == 128) ? 2 : 1);
+	}
+
+	if ( (c & 0x03) == 1 ) {			/* S   xxxx xx01 */
+#if DEBUGX
+	  dw_printf ("ax25_get_num_control, %02x is S frame, returns %d\n", c, (this_p->modulo == 128) ? 2 : 1);
+#endif
+	  return ((this_p->modulo == 128) ? 2 : 1);
+	}
+
+#if DEBUGX
+	dw_printf ("ax25_get_num_control, %02x is U frame, always returns 1.\n", c);
+#endif
+
+	return (1);					/* U   xxxx xx11 */
 }
 
 
@@ -202,11 +230,17 @@ static int ax25_get_num_pid (packet_t this_p)
 	     c == 0x03 || c == 0x13) {			/* UI  000x 0011 */
 
 	  pid = this_p->frame_data[ax25_get_pid_offset(this_p)];
-	  if (pid == 0xff) {
+#if DEBUGX
+	  dw_printf ("ax25_get_num_pid, %02x is I or UI frame, pid = %02x, returns %d\n", c, pid, (pid==AX25_PID_ESCAPE_CHARACTER) ? 2 : 1);
+#endif
+	  if (pid == AX25_PID_ESCAPE_CHARACTER) {
 	    return (2);			/* pid 1111 1111 means another follows. */
 	  }
 	  return (1);		
 	}
+#if DEBUGX
+	dw_printf ("ax25_get_num_pid, %02x is neither I nor UI frame, returns 0\n", c);
+#endif
 	return (0);
 }
 
@@ -225,7 +259,11 @@ static int ax25_get_num_pid (packet_t this_p)
 
 static inline int ax25_get_info_offset (packet_t this_p) 
 {
-	return (ax25_get_control_offset (this_p) + ax25_get_num_control(this_p) + ax25_get_num_pid(this_p));
+	int offset = ax25_get_control_offset (this_p) + ax25_get_num_control(this_p) + ax25_get_num_pid(this_p);
+#if DEBUGX
+	dw_printf ("ax25_get_info_offset, returns %d\n", offset);
+#endif
+	return (offset);
 }
 
 static inline int ax25_get_num_info (packet_t this_p)
@@ -249,7 +287,7 @@ typedef enum ax25_modulo_e { modulo_8 = 8, modulo_128 = 128 } ax25_modulo_t;
 
 typedef enum ax25_frame_type_e {
 
-	frame_type_I,		// Information
+	frame_type_I = 0,	// Information
 
 	frame_type_S_RR,	// Receive Ready - System Ready To Receive
 	frame_type_S_RNR,	// Receive Not Ready - TNC Buffer Full
@@ -268,6 +306,8 @@ typedef enum ax25_frame_type_e {
 	frame_type_U,		// other Unnumbered, not used by AX.25.
 
 	frame_not_AX25		// Could not get control byte from frame.
+				// This must be last because value plus 1 is
+				// for the size of an array.
 
 } ax25_frame_type_t;
 	
@@ -354,6 +394,8 @@ extern int ax25_get_heard(packet_t this_p);
 
 extern int ax25_get_first_not_repeated(packet_t pp);
 
+extern int ax25_get_rr (packet_t this_p, int n);
+
 extern int ax25_get_info (packet_t pp, unsigned char **paddr);
 
 extern void ax25_set_nextp (packet_t this_p, packet_t next_p);
@@ -365,6 +407,8 @@ extern packet_t ax25_get_nextp (packet_t this_p);
 extern void ax25_set_release_time (packet_t this_p, double release_time);
 extern double ax25_get_release_time (packet_t this_p);
 
+extern void ax25_set_modulo (packet_t this_p, int modulo);
+
 extern void ax25_format_addrs (packet_t pp, char *);
 
 extern int ax25_pack (packet_t pp, unsigned char result[AX25_MAX_PACKET_LEN]);
@@ -374,6 +418,7 @@ extern ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *d
 extern void ax25_hex_dump (packet_t this_p);
 
 extern int ax25_is_aprs (packet_t pp);
+extern int ax25_is_null_frame (packet_t this_p);
 
 extern int ax25_get_control (packet_t this_p); 
 extern int ax25_get_c2 (packet_t this_p); 

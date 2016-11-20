@@ -233,6 +233,11 @@ char *strcasestr(const char *S, const char *FIND);
 #else   // Use our own copy
 
 
+// These prevent /usr/include/gps.h from providing its own definition.
+#define HAVE_STRLCAT 1
+#define HAVE_STRLCPY 1
+
+
 #define DEBUG_STRL 1
 
 #if DEBUG_STRL

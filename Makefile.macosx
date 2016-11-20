@@ -221,14 +221,14 @@ z := $(notdir ${CURDIR})
 
 # Main application.
 
-direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_pad.o beacon.o \
+direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_link.o ax25_pad.o  ax25_pad2.o beacon.o \
 		config.o decode_aprs.o dedupe.o demod_9600.o demod_afsk.o demod_psk.o \
-		demod.o digipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
+		demod.o digipeater.o cdigipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
 		encode_aprs.o encode_aprs.o fcs_calc.o fcs_calc.o gen_tone.o \
 		geotranz.a hdlc_rec.o hdlc_rec2.o hdlc_send.o igate.o kiss_frame.o \
 		kiss.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
 		waypoint.o serial_port.o pfilter.o ptt.o rdq.o recv.o rrbb.o server.o \
-		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xmit.o \
+		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xid.o xmit.o \
 		dwgps.o dwgpsnmea.o mheard.o
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LDLIBS) -lm
 

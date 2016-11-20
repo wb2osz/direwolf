@@ -743,6 +743,24 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	ax25_safe_print ((char *)pinfo, info_len, 0);
 	dw_printf ("\n");
 
+#if 1		// temp experiment  	TODO: remove this.
+
+#include "decode_aprs.h"
+#include "log.h"
+
+	if (ax25_is_aprs(pp)) {
+
+	  decode_aprs_t A;
+
+	  decode_aprs (&A, pp, 0);
+
+	  // Temp experiment to see how different systems set the RR bits in the source and destination.
+	  // log_rr_bits (&A, pp);
+
+	}
+#endif
+
+
 	ax25_delete (pp);
 
 } /* end fake dlq_append */

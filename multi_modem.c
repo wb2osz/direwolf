@@ -470,7 +470,27 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	if (save_audio_config_p->achan[chan].num_subchan == 1 &&
 	    save_audio_config_p->achan[chan].num_slicers == 1) {
 
-	  dlq_rec_frame (chan, subchan, slice, pp, alevel, retries, "");
+
+	  int drop_it = 0;
+	  if (save_audio_config_p->recv_error_rate != 0) {
+	    float r = (float)(rand()) / (float)RAND_MAX;		// Random, 0.0 to 1.0
+
+	    //text_color_set(DW_COLOR_INFO);
+	    //dw_printf ("TEMP DEBUG.  recv error rate = %d\n", save_audio_config_p->recv_error_rate);
+
+	    if (save_audio_config_p->recv_error_rate / 100.0 > r) {
+	      drop_it = 1;
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Intentionally dropping incoming frame.  Recv Error rate = %d per cent.\n", save_audio_config_p->recv_error_rate);
+	    }
+	  }
+
+	  if (drop_it ) {
+	    ax25_delete (pp);
+	  }
+	  else {
+	    dlq_rec_frame (chan, subchan, slice, pp, alevel, retries, "");
+	  }
 	  return;
 	}
 
@@ -649,14 +669,34 @@ static void pick_best_candidate (int chan)
 	j = subchan_from_n(best_n);
 	k = slice_from_n(best_n);
 
-	dlq_rec_frame (chan, j, k,
+	int drop_it = 0;
+	if (save_audio_config_p->recv_error_rate != 0) {
+	  float r = (float)(rand()) / (float)RAND_MAX;		// Random, 0.0 to 1.0
+
+	  //text_color_set(DW_COLOR_INFO);
+	  //dw_printf ("TEMP DEBUG.  recv error rate = %d\n", save_audio_config_p->recv_error_rate);
+
+	  if (save_audio_config_p->recv_error_rate / 100.0 > r) {
+	    drop_it = 1;
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("Intentionally dropping incoming frame.  Recv Error rate = %d per cent.\n", save_audio_config_p->recv_error_rate);
+	  }
+	}
+
+	if ( drop_it ) {
+	  ax25_delete (candidate[chan][j][k].packet_p);
+	  candidate[chan][j][k].packet_p = NULL;
+	}
+	else {
+	  dlq_rec_frame (chan, j, k,
 		candidate[chan][j][k].packet_p,
 		candidate[chan][j][k].alevel,
 		(int)(candidate[chan][j][k].retries),
 		spectrum);
 
-	/* Someone else owns it now and will delete it later. */
-	candidate[chan][j][k].packet_p = NULL;
+	  /* Someone else owns it now and will delete it later. */
+	  candidate[chan][j][k].packet_p = NULL;
+	}
 
 	/* Clear in preparation for next time. */
 

@@ -42,6 +42,8 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
 
 - Includes separate raw packet decoder, decode_aprs.
 
+- AX.25 v2.2 connected mode.  (New in version 1.4.)
+
 - Open source so you can see how it works and make your own modifications.
 
 - Runs in 3 different environments:
@@ -95,4 +97,4 @@ Here are some good places to share information:
 - [TAPR aprssig](http://www.tapr.org/pipermail/aprssig/)
  
 
-
+The github "issues" section is for reporting software defects and enhancement requests.  It is NOT a place to ask questions or have general discussions.  Please use one of the locations above.

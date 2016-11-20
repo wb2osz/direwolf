@@ -22,5 +22,7 @@ void server_link_established (int chan, int client, char *remote_call, char *own
 
 void server_link_terminated (int chan, int client, char *remote_call, char *own_call, int timeout);
 
+void server_rec_conn_data (int chan, int client, char *remote_call, char *own_call, int pid, char *data_ptr, int data_len);
+
 
 /* end server.h */

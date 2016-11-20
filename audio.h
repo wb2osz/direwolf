@@ -89,6 +89,14 @@ struct audio_s {
 					/* statistics reports.  This is set by */
 					/* the "-a" option.  0 to disable feature. */
 
+	int xmit_error_rate;		/* For testing purposes, we can generate frames with an invalid CRC */
+					/* to simulate corruption while going over the air. */
+					/* This is the probability, in per cent, of randomly corrupting it. */
+					/* Normally this is 0.  25 would mean corrupt it 25% of the time. */
+
+	int recv_error_rate;		/* Similar but the % probablity of dropping a received frame. */
+
+
 	/* Properties for each audio channel, common to receive and transmit. */
 	/* Can be different for each radio channel. */
 
@@ -166,18 +174,20 @@ struct audio_s {
 	    int passall;		/* Allow thru even with bad CRC. */
 
 
+
 	/* Additional properties for transmit. */
 	
 	/* Originally we had control outputs only for PTT. */
 	/* In version 1.2, we generalize this to allow others such as DCD. */
+	/* In version 1.4 we add CON for connected to another station. */
 	/* Index following structure by one of these: */
 
 
 #define OCTYPE_PTT 0
 #define OCTYPE_DCD 1
-#define OCTYPE_FUTURE 2
+#define OCTYPE_CON 2
 
-#define NUM_OCTYPES 4		/* number of values above */
+#define NUM_OCTYPES 4		/* number of values above.   WHY IS THIS NOT 3? */
 	
 	    struct {  		
 

@@ -184,6 +184,10 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 	//text_color_set(DW_COLOR_INFO);
 	//dw_printf("Successful serial port open on %s.\n", devicename);
 
+	// Some devices, e.g. KPC-3+, can't turn off hardware flow control and need RTS.
+
+	EscapeCommFunction(fd,SETRTS);
+	EscapeCommFunction(fd,SETDTR);
 #else
 
 /* Linux version. */

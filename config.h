@@ -15,6 +15,7 @@
 
 #include "audio.h"		/* for struct audio_s */
 #include "digipeater.h"		/* for struct digi_config_s */
+#include "cdigipeater.h"		/* for struct cdigi_config_s */
 #include "aprs_tt.h"		/* for struct tt_config_s */
 #include "igate.h"		/* for struct igate_config_s */
 
@@ -76,6 +77,25 @@ struct misc_config_s {
 	int sb_turn_angle;	/* degrees */
 	int sb_turn_slope;	/* degrees * MPH */
 
+// AX.25 connected mode.
+
+	int frack;		/* Number of seconds to wait for ack to transmission. */
+
+	int retry;		/* Number of times to retry before giving up. */
+
+	int paclen;		/* Max number of bytes in information part of frame. */
+
+	int maxframe_basic;	/* Max frames to send before ACK.  mod 8 "Window" size. */
+
+	int maxframe_extended;	/* Max frames to send before ACK.  mod 128 "Window" size. */
+
+	int maxv22;		/* Maximum number of unanswered SABME frames sent before */
+				/* switching to SABM.  This is to handle the case of an old */
+				/* TNC which simply ignores SABME rather than replying with FRMR. */
+
+
+
+// Beacons.
  			
 	int num_beacons;	/* Number of beacons defined. */
 
@@ -166,6 +186,7 @@ struct misc_config_s {
 
 extern void config_init (char *fname, struct audio_s *p_modem, 
 			struct digi_config_s *digi_config,
+			struct cdigi_config_s *cdigi_config,
 			struct tt_config_s *p_tt_config,
 			struct igate_config_s *p_igate_config,
 			struct misc_config_s *misc_config);

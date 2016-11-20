@@ -12,10 +12,30 @@
 #include "audio.h"
 
 
+/* A transmit or receive data block for connected mode. */
+
+typedef struct cdata_s {
+	int magic;			/* For integrity checking. */
+
+#define TXDATA_MAGIC 0x09110911
+
+	struct cdata_s *next;		/* Pointer to next when part of a list. */
+
+	int pid;			/* Protocol id. */
+
+	int size;			/* Number of bytes allocated. */
+
+	int len;			/* Number of bytes actually used. */
+
+	char data[];			/* Variable length data. */
+
+} cdata_t;
+
+
 
 /* Types of things that can be in queue. */
 
-typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST} dlq_type_t; 
+typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_CHANNEL_BUSY, DLQ_CLIENT_CLEANUP} dlq_type_t;
 
 
 /* A queue item. */
@@ -28,9 +48,12 @@ typedef struct dlq_item_s {
 	struct dlq_item_s *nextp;	/* Next item in queue. */
 
 	dlq_type_t type;		/* Type of item. */
-					/* DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST	 */
+					/* See enum definition above. */
 
 	int chan;			/* Radio channel of origin. */
+
+// I'm not worried about amount of memory used but this might be a
+// little clearer if a union was used for the different event types.
 
 // Used for received frame.
 
@@ -49,7 +72,7 @@ typedef struct dlq_item_s {
 
 	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];	/* "Spectrum" display for multi-decoders. */
 
-// Used by requests from a client application.
+// Used by requests from a client application, connect, etc.
 
 	char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
 
@@ -57,9 +80,19 @@ typedef struct dlq_item_s {
 
 	int client;
 
-	int pid;
 
-	/* TODO: xmit data */
+// Used only by client request to transmit connected data.
+
+	cdata_t *txdata;
+
+// Used for channel activity change.
+// It is useful to know when the channel is busy either for carrier detect
+// or when we are transmitting.
+
+	int activity;			/* OCTYPE_PTT for my transmission start/end. */
+					/* OCTYPE_DCD if we hear someone else. */
+
+	int status;			/* 1 for active or 0 for quiet. */
 
 } dlq_item_t;
 
@@ -75,7 +108,16 @@ void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num
 
 void dlq_disconnect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client);
 
-void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int clienti, int pid, char *xdata_ptr, int xdata_len);
+void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid, char *xdata_ptr, int xdata_len);
+
+void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
+
+void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
+
+void dlq_channel_busy (int chan, int activity, int status);
+
+void dlq_client_cleanup (int client);
+
 
 
 int dlq_wait_while_empty (double timeout_val);
@@ -83,6 +125,15 @@ int dlq_wait_while_empty (double timeout_val);
 struct dlq_item_s *dlq_remove (void);
 
 void dlq_delete (struct dlq_item_s *pitem);
+
+
+
+cdata_t *cdata_new (int pid, char *data, int len);
+
+void cdata_delete (cdata_t *txdata);
+
+void cdata_check_leak (void);
+
 
 #endif
 

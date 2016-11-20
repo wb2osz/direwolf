@@ -254,7 +254,7 @@ packet_t ax25_u_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	if (t != 2) {
 	  if (cr != t) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Internal error in %s: U frame, cr is %d but must be %d.\n", __func__, cr, t);
+	    dw_printf ("Internal error in %s: U frame, cr is %d but must be %d. ftype=%d\n", __func__, cr, t, ftype);
 	  }
 	}
 
@@ -270,7 +270,7 @@ packet_t ax25_u_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	  if (pid < 0 || pid == 0 || pid == 0xff) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Internal error in %s: U frame, Invalid pid value 0x%02x.\n", __func__, pid);
-	    pid = AX25_NO_LAYER_3;
+	    pid = AX25_PID_NO_LAYER_3;
 	  }
 	  *p++ = pid;
 	  this_p->frame_len++;
@@ -303,7 +303,7 @@ packet_t ax25_u_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 #if PAD2TEST
 	ax25_frame_type_t check_ftype;
 	cmdres_t check_cr;
-	char check_desc[32];
+	char check_desc[80];
 	int check_pf;
 	int check_nr;
 	int check_ns;
@@ -444,7 +444,7 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 
 	ax25_frame_type_t check_ftype;
 	cmdres_t check_cr;
-	char check_desc[32];
+	char check_desc[80];
 	int check_pf;
 	int check_nr;
 	int check_ns;
@@ -573,9 +573,9 @@ packet_t ax25_i_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	// or 0xff (which means more bytes follow).
 
 	if (pid < 0 || pid == 0 || pid == 0xff) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Internal error in %s: I frame, Invalid pid value 0x%02x.\n", __func__, pid);
-	  pid = AX25_NO_LAYER_3;
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("Warning: Client application provided invalid PID value, 0x%02x, for I frame.\n", pid);
+	  pid = AX25_PID_NO_LAYER_3;
 	}
 	*p++ = pid;
 	this_p->frame_len++;
@@ -601,7 +601,7 @@ packet_t ax25_i_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 
 	ax25_frame_type_t check_ftype;
 	cmdres_t check_cr;
-	char check_desc[32];
+	char check_desc[80];
 	int check_pf;
 	int check_nr;
 	int check_ns;

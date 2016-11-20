@@ -88,6 +88,7 @@
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
 #include "ax25_pad.h"
+#include "xid.h"
 #include "decode_aprs.h"
 #include "textcolor.h"
 #include "server.h"
@@ -97,6 +98,7 @@
 #include "waypoint.h"
 #include "gen_tone.h"
 #include "digipeater.h"
+#include "cdigipeater.h"
 #include "tq.h"
 #include "xmit.h"
 #include "ptt.h"
@@ -112,6 +114,7 @@
 #include "recv.h"
 #include "morse.h"
 #include "mheard.h"
+#include "ax25_link.h"
 
 
 //static int idx_decoded = 0;
@@ -158,7 +161,8 @@ static void __cpuid(int cpuinfo[4], int infotype){
 
 static struct audio_s audio_config;
 static struct tt_config_s tt_config;
-struct digi_config_s digi_config;
+//struct digi_config_s digi_config;
+//struct cdigi_config_s cdigi_config;
 
 
 static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in hexadecimal. */
@@ -181,6 +185,7 @@ int main (int argc, char *argv[])
 	int xmit_calibrate_option = 0;
 	int enable_pseudo_terminal = 0;
 	struct digi_config_s digi_config;
+	struct cdigi_config_s cdigi_config;
 	struct igate_config_s igate_config;
 	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0;	/* Command line options. */
 	char P_opt[16];
@@ -199,6 +204,8 @@ int main (int argc, char *argv[])
 #if USE_HAMLIB
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
+	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering trasmit frames. */
+	int E_rx_opt = 0;		/* "-E Rn" Error rate % for clobbering receive frames. */
 
 	strlcpy(l_opt, "", sizeof(l_opt));
 	strlcpy(P_opt, "", sizeof(P_opt));
@@ -247,7 +254,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -332,7 +339,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:",
+          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:E:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -518,6 +525,27 @@ int main (int argc, char *argv[])
 	    exit (0);
 	    break;
 
+          case 'E':				/* -E Error rate (%) for corrupting frames. */
+						/* Just a number is transmit.  Precede by R for receive. */
+
+	    if (*optarg == 'r' || *optarg == 'R') {
+	      E_rx_opt = atoi(optarg+1);
+	      if (E_rx_opt < 1 || E_rx_opt > 99) {
+	        text_color_set(DW_COLOR_ERROR);
+                  dw_printf("-ER must be in range of 1 to 99.\n");
+	      E_rx_opt = 10;
+	      }
+	    }
+	    else {
+	      E_tx_opt = atoi(optarg);
+	      if (E_tx_opt < 1 || E_tx_opt > 99) {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf("-E must be in range of 1 to 99.\n");
+	        E_tx_opt = 10;
+	      }
+	    }
+            break;
+
           default:
 
             /* Should not be here. */
@@ -552,7 +580,7 @@ int main (int argc, char *argv[])
 
 	symbols_init ();
 
-	config_init (config_file, &audio_config, &digi_config, &tt_config, &igate_config, &misc_config);
+	config_init (config_file, &audio_config, &digi_config, &cdigi_config, &tt_config, &igate_config, &misc_config);
 
 	if (r_opt != 0) {
 	  audio_config.adev[0].samples_per_sec = r_opt;
@@ -620,6 +648,12 @@ int main (int argc, char *argv[])
 	    // Reduce audio sampling rate to reduce CPU requirements.
 	    audio_config.achan[0].decimate = D_opt;
 	}
+
+	// temp - only xmit errors.
+
+	audio_config.xmit_error_rate = E_tx_opt;
+	audio_config.recv_error_rate = E_rx_opt;
+
 
 	if (strlen(l_opt) > 0) {
 	  strlcpy (misc_config.logdir, l_opt, sizeof(misc_config.logdir));
@@ -711,6 +745,8 @@ int main (int argc, char *argv[])
  */
 	digipeater_init (&audio_config, &digi_config);
 	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
+	cdigipeater_init (&audio_config, &cdigi_config);
+	ax25_link_init (&misc_config);
 
 /*
  * Provide the AGW & KISS socket interfaces for use by a client application.
@@ -890,7 +926,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	    text_color_set(DW_COLOR_REC);
 	  }
 	  else {
-	    text_color_set(DW_COLOR_DEBUG);
+	    text_color_set(DW_COLOR_DECODED);
 	  }
 
 	  if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers == 1) {
@@ -914,26 +950,41 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	if ( ! ax25_is_aprs(pp)) {
 	  ax25_frame_type_t ftype;
 	  cmdres_t cr;
-	  char desc[32];
+	  char desc[80];
 	  int pf;
 	  int nr;
 	  int ns;
 
 	  ftype = ax25_frame_type (pp, &cr, desc, &pf, &nr, &ns);
-	  (void)ftype;
+
+	  /* Could change by 1, since earlier call, if we guess at modulo 128. */
+	  info_len = ax25_get_info (pp, &pinfo);
 
 	  dw_printf ("(%s)", desc);
+	  if (ftype == frame_type_U_XID) {
+	    struct xid_param_s param;
+	    char info2text[100];
+
+	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
+	    dw_printf (" %s\n", info2text);
+	  }
+	  else {
+	    ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
+	    dw_printf ("\n");
+	  }
+	}
+	else {
+
+	  // for APRS we generally want to display non-ASCII to see UTF-8.
+	  // for other, probably want to restrict to ASCII only because we are
+	  // more likely to have compressed data than UTF-8 text.
+
+	  // TODO: Might want to use d_u_opt for transmitted frames too.
+
+	  ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
+	  dw_printf ("\n");
 	}
 
-	// for APRS we generally want to display non-ASCII to see UTF-8.
-	// for other, probably want to restrict to ASCII only because we are
-	// more likely to have compressed data than UTF-8 text.
-
-	// TODO: Might want to use d_u_opt for transmitted frames too.
-
-
-	ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
-	dw_printf ("\n");
 
 // Also display in pure ASCII if non-ASCII characters and "-d u" option specified.
 
@@ -991,6 +1042,9 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // Send to log file.
 
 	  log_write (chan, &A, pp, alevel, retries);
+
+	  // temp experiment.
+	  //log_rr_bits (&A, pp);
 
 	  // Add to list of stations heard.
 
@@ -1051,22 +1105,29 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  digi_regen (chan, pp);
 
 
-/* 
- * Note that the digipeater function can modify the packet in place so 
- * this is the last thing we should do with it. 
- * Again, use only those with correct CRC; We don't want to spread corrupted data!
- * Single bit change appears to be safe from observations so far but be cautious. 
+/*
+ * APRS digipeater.
+ * Use only those with correct CRC; We don't want to spread corrupted data!
  */
 
 	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
 
 	    digipeater (chan, pp);
 	  }
+
+/*
+ * Connected mode digipeater.
+ * Use only those with correct CRC.
+ */
+
+	  if (retries == RETRY_NONE) {
+
+	    cdigipeater (chan, pp);
+	  }
 	}
 
-	ax25_delete (pp);
-	
 } /* end app_process_rec_packet */
+
 
 
 /* Process control C and window close events. */

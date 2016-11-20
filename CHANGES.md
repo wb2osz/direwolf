@@ -1,6 +1,20 @@
 
 # Revision History #
 
+
+
+----------
+
+## Version 1.4  -- Development snapshot D --  November 2016 ##
+
+This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
+
+
+### New Features: ###
+
+- AX.25 v2.2 connected mode.  See chapter 10 of User Guide for details.
+
+
 ----------
 
 ## Version 1.4  -- Development snapshot C --  June 2016 ##

@@ -24,6 +24,10 @@
  *
  * Purpose:	Packet assembler and disasembler.
  *
+ *		This was written when I was only concerned about APRS which
+ *		uses only UI frames.  ax25_pad2.c, added years later, has
+ *		functions for dealing with other types of frames.
+ *
  *   		We can obtain AX.25 packets from different sources:
  *		
  *		(a) from an HDLC frame.
@@ -77,11 +81,24 @@
  *			SSID = substation ID
  *			0 = zero
  *
+ *		The AX.25 spec states that the RR bits should be 11 if not used.
+ *		There are a couple documents talking about possible uses for APRS.
+ *		I'm ignoring them for now.
+ *		http://www.aprs.org/aprs12/preemptive-digipeating.txt
+ *		http://www.aprs.org/aprs12/RR-bits.txt
+ *
+ *		I don't recall why I originally intended to set the source/destination C bits both to 1.
+ *		Reviewing this 5 years later, after spending more time delving into the
+ *		AX.25 spec, I think it should be 1 for destination and 0 for source.
+ *		In practice you see all four combinations being used by APRS stations
+ *		and no one really cares about these two bits.
+ *
  *	The final octet of the Source has the form:
  *
  *		C R R SSID 0, where,
  *
- *			C = command/response = 1
+ *			C = command/response = 1    (originally, now I think it should be 0 for source.)
+ *						(Haven't gone back to check to see what code actually does.)
  *			R R = Reserved = 1 1
  *			SSID = substation ID
  *			0 = zero (or 1 if no repeaters)
@@ -165,8 +182,8 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
 
-#include "ax25_pad.h"
 #include "textcolor.h"
+#include "ax25_pad.h"
 #include "fcs_calc.h"
 
 /*
@@ -236,7 +253,13 @@ packet_t ax25_new (void)
 /*
  * check for memory leak.
  */
-	if (new_count > delete_count + 100) {
+
+// version 1.4 push up the threshold.   We could have considerably more with connected mode.
+
+	//if (new_count > delete_count + 100) {
+	if (new_count > delete_count + 256) {
+
+
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Report to WB2OSZ - Memory leak for packet objects.  new=%d, delete=%d\n", new_count, delete_count);
 #if AX25MEMDEBUG
@@ -434,7 +457,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 	this_p->frame_data[AX25_SOURCE*7+6] = SSID_H_MASK | SSID_RR_MASK | SSID_LAST_MASK;
 
 	this_p->frame_data[14] = AX25_UI_FRAME;
-	this_p->frame_data[15] = AX25_NO_LAYER_3;
+	this_p->frame_data[15] = AX25_PID_NO_LAYER_3;
 
 	this_p->frame_len = 7 + 7 + 1 + 1;
 	this_p->num_addr = (-1);
@@ -1519,6 +1542,39 @@ int ax25_get_first_not_repeated(packet_t this_p)
 
 /*------------------------------------------------------------------------------
  *
+ * Name:	ax25_get_rr
+ *
+ * Purpose:	Return the two reserved "RR" bits in the specified address field.
+ *
+ * Inputs:	pp	- Packet object.
+ *
+ *		n	- Index of address.   Use the symbols
+ *			  AX25_DESTINATION, AX25_SOURCE, AX25_REPEATER1, etc.
+ *
+ * Returns:	0, 1, 2, or 3.
+ *
+ *------------------------------------------------------------------------------*/
+
+int ax25_get_rr (packet_t this_p, int n)
+{
+
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+	assert (n >= 0 && n < this_p->num_addr);
+
+	if (n >= 0 && n < this_p->num_addr) {
+	  return ((this_p->frame_data[n*7+6] & SSID_RR_MASK) >> SSID_RR_SHIFT);
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: ax25_get_rr(%d), num_addr=%d\n", n, this_p->num_addr);
+	  return (0);
+	}
+}
+
+
+/*------------------------------------------------------------------------------
+ *
  * Name:	ax25_get_info
  * 
  * Purpose:	Obtain Information part of current packet.
@@ -1678,6 +1734,25 @@ double ax25_get_release_time (packet_t this_p)
 }
 
 
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_set_modulo
+ *
+ * Purpose:	Set modulo value for I and S frame sequence numbers.
+ *
+ *------------------------------------------------------------------------------*/
+
+void ax25_set_modulo (packet_t this_p, int modulo)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	this_p->modulo = modulo;
+}
+
+
+
+
 
 /*------------------------------------------------------------------
  *
@@ -1793,12 +1868,9 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
  *
  * Inputs:	this_p	- pointer to packet object.
  *		
- * 		modulo	- We often need to know this because context is		// TODO: remove this - return cr instead.
- *			  required to know if control is 1 or 2 bytes.
- *
  * Outputs:	desc	- Text description such as "I frame" or
  *			  "U frame SABME".   
- *			  Supply 16 bytes to be safe.
+ *			  Supply 40 bytes to be safe.
  *
  *		cr	- Command or response?
  *
@@ -1813,13 +1885,14 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
  *------------------------------------------------------------------*/
 
 // TODO: need someway to ensure caller allocated enough space.
-#define DESC_SIZ 32
+// Should pass in as parameter.
+#define DESC_SIZ 40
 
 
 ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, int *pf, int *nr, int *ns) 
 {
 	int c;		// U frames are always one control byte.
-	int c2;		// I & S frames can have second Control byte.
+	int c2 = 0;	// I & S frames can have second Control byte.
 
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
@@ -1835,6 +1908,41 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, in
 	  strlcpy (desc, "Not AX.25", DESC_SIZ);
 	  return (frame_not_AX25);
 	}
+
+/*
+ * TERRIBLE HACK :-(  for display purposes.
+ *
+ * I and S frames can have 1 or 2 control bytes but there is
+ * no good way to determine this without dipping into the data
+ * link state machine.  Can we guess?
+ *
+ * S frames have no protocol id or information so if there is one
+ * more byte beyond the control field, we could assume there are
+ * two control bytes.
+ *
+ * For I frames, the protocol id will usually be 0xf0.  If we find
+ * that as the first byte of the information field, it is probably
+ * the pid and not part of the information.  Ditto for segments 0x08.
+ * Not fool proof but good enough for troubleshooting text out.
+ *
+ * If we have a link to the peer station, this will be set properly
+ * before it needs to be used for other reasons.
+ *
+ * Setting one of the RR bits (find reference!) is sounding better and better.
+ * It's in common usage so I should lobby to get that in the official protocol spec.
+ */
+
+	if (this_p->modulo == 0 && (c & 3) == 1 && ax25_get_c2(this_p) != -1) {
+	  this_p->modulo = modulo_128;
+	}
+	else if (this_p->modulo == 0 && (c & 1) == 0 && this_p->frame_data[ax25_get_info_offset(this_p)] == 0xF0) {
+	  this_p->modulo = modulo_128;
+	}
+	else if (this_p->modulo == 0 && (c & 1) == 0 && this_p->frame_data[ax25_get_info_offset(this_p)] == 0x08) {	// same for segments
+	  this_p->modulo = modulo_128;
+	}
+
+
 	if (this_p->modulo == modulo_128) {
 	  c2 = ax25_get_c2 (this_p);
 	}
@@ -1868,7 +1976,9 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, in
 	    *pf = (c >> 4) & 1;
 	    *nr = (c >> 5) & 7;
 	  }
-	  snprintf (desc, DESC_SIZ, "I %s, n(s)= %d, n(r)=%d, %s=%d", cr_text, *ns, *nr, pf_text, *pf);
+
+	  //snprintf (desc, DESC_SIZ, "I %s, n(s)=%d, n(r)=%d, %s=%d", cr_text, *ns, *nr, pf_text, *pf);
+	  snprintf (desc, DESC_SIZ, "I %s, n(s)=%d, n(r)=%d, %s=%d, pid=0x%02x", cr_text, *ns, *nr, pf_text, *pf, ax25_get_pid(this_p));
 	  return (frame_type_I);
 	}
 	else if ((c & 2) == 0) {
@@ -1960,6 +2070,7 @@ static void hex_dump (unsigned char *p, int len)
 }
 
 /* Text description of control octet. */
+// FIXME:  this is wrong.  It doesn't handle modulo 128.
 
 // TODO: use ax25_frame_type() instead.
 
@@ -2108,10 +2219,12 @@ int ax25_is_aprs (packet_t this_p)
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
+	if (this_p->frame_len == 0) return(0);
+
 	ctrl = ax25_get_control(this_p);
 	pid = ax25_get_pid(this_p);
 
-	is_aprs = this_p->num_addr >= 2 && ctrl == AX25_UI_FRAME && pid == AX25_NO_LAYER_3;
+	is_aprs = this_p->num_addr >= 2 && ctrl == AX25_UI_FRAME && pid == AX25_PID_NO_LAYER_3;
 
 #if 0 
         text_color_set(DW_COLOR_ERROR);
@@ -2119,6 +2232,41 @@ int ax25_is_aprs (packet_t this_p)
 #endif
 	return (is_aprs);
 }
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_is_null_frame
+ *
+ * Purpose:	Is this packet structure empty?
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *
+ * Returns:	True if frame data length is 0.
+ *
+ * Description:	This is used when we want to wake up the
+ *		transmit queue processing thread but don't
+ *		want to transmit a frame.
+ *
+ *------------------------------------------------------------------*/
+
+
+int ax25_is_null_frame (packet_t this_p)
+{
+	int is_null;
+
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	is_null = this_p->frame_len == 0;
+
+#if 0
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("ax25_is_null_frame(): is_null=%d\n", is_null);
+#endif
+	return (is_null);
+}
+
 
 /*------------------------------------------------------------------
  *
@@ -2140,6 +2288,8 @@ int ax25_get_control (packet_t this_p)
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
+	if (this_p->frame_len == 0) return(-1);
+
 	if (this_p->num_addr >= 2) {
 	  return (this_p->frame_data[ax25_get_control_offset(this_p)]);
 	}
@@ -2151,10 +2301,19 @@ int ax25_get_c2 (packet_t this_p)
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
+	if (this_p->frame_len == 0) return(-1);
+
 	if (this_p->num_addr >= 2) {
-	  return (this_p->frame_data[ax25_get_control_offset(this_p)+1]);
+	  int offset2 = ax25_get_control_offset(this_p)+1;
+
+	  if (offset2 < this_p->frame_len) {
+	    return (this_p->frame_data[offset2]);
+	  }
+	  else {
+	    return (-1);	/* attempt to go beyond the end of frame. */
+	  }
 	}
-	return (-1);
+	return (-1);		/* not AX.25 */
 }
 
 
@@ -2183,6 +2342,8 @@ int ax25_get_pid (packet_t this_p)
 
 	// TODO: handle 2 control byte case.
 	// TODO: sanity check: is it I or UI frame?
+
+	if (this_p->frame_len == 0) return(-1);
 
 	if (this_p->num_addr >= 2) {
 	  return (this_p->frame_data[ax25_get_pid_offset(this_p)]);
@@ -2372,7 +2533,8 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 	if (len > MAXSAFE)
 	  len = MAXSAFE;
 
-	while (len > 0 && *pstr != '\0')
+	//while (len > 0 && *pstr != '\0')
+	while (len > 0)
 	{
 	  ch = *((unsigned char *)pstr);
 

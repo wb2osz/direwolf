@@ -141,7 +141,7 @@ static void send_packet (char *str)
 	    }
 #endif
 	    hdlc_send_flags (c, 8, 0);
-	    hdlc_send_frame (c, fbuf, flen);
+	    hdlc_send_frame (c, fbuf, flen, 0);
 	    hdlc_send_flags (c, 2, 1);
 	  }
 	  ax25_delete (pp);

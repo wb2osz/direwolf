@@ -23,6 +23,7 @@
  * Name:	digipeater.c
  *
  * Purpose:	Act as an APRS digital repeater.
+ *		Similar cdigipeater.c is for connected mode.
  *
  *
  * Description:	Decide whether the specified packet should
@@ -255,6 +256,10 @@ void digipeater (int from_chan, packet_t pp)
  *
  *------------------------------------------------------------------------------*/
 
+#define OBSOLETE14 1
+
+
+#ifndef OBSOLETE14
 static char *dest_ssid_path[16] = { 	
 			"",		/* Use VIA path */
 			"WIDE1-1",
@@ -272,6 +277,7 @@ static char *dest_ssid_path[16] = {
 			"WIDE2-2",	/* South */
 			"WIDE2-2",	/* East */
 			"WIDE2-2"  };	/* West */
+#endif
 				  
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
@@ -290,7 +296,7 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 	if (filter_str != NULL) {
 
-	  if (pfilter(from_chan, to_chan, filter_str, pp) != 1) {
+	  if (pfilter(from_chan, to_chan, filter_str, pp, 1) != 1) {
 
 // TODO1.2: take out debug message
 // Actually it turns out to be useful.
@@ -322,11 +328,15 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  * Otherwise we don't want to modify the input because this could be called multiple times.
  */
 
+#ifndef OBSOLETE14		// Took it out in 1.4
+
 	if (ax25_get_num_repeaters(pp) == 0 && (ssid = ax25_get_ssid(pp, AX25_DESTINATION)) > 0) {
 	  ax25_set_addr(pp, AX25_REPEATER_1, dest_ssid_path[ssid]);
 	  ax25_set_ssid(pp, AX25_DESTINATION, 0);
 	  /* Continue with general case, below. */
 	}
+#endif
+
 
 /* 
  * Find the first repeater station which doesn't have "has been repeated" set.
@@ -795,11 +805,15 @@ int main (int argc, char *argv[])
 
 
 /* 
- * Change destination SSID to normal digipeater if none specified.
+ * Change destination SSID to normal digipeater if none specified.  (Obsolete, removed.)
  */
-	test (	"W1ABC>TEST-3:",
-		"W1ABC>TEST,WB2OSZ-9*,WIDE3-2:");
 
+	test (	"W1ABC>TEST-3:",
+#ifndef OBSOLETE14
+		"W1ABC>TEST,WB2OSZ-9*,WIDE3-2:");
+#else
+		"");
+#endif
 	test (	"W1DEF>TEST-3,WIDE2-2:",
 		"W1DEF>TEST-3,WB2OSZ-9*,WIDE2-1:");
 

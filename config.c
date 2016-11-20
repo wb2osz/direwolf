@@ -53,6 +53,7 @@
 #include "textcolor.h"
 #include "audio.h"
 #include "digipeater.h"
+#include "cdigipeater.h"
 #include "config.h"
 #include "aprs_tt.h"
 #include "igate.h"
@@ -60,6 +61,7 @@
 #include "symbols.h"
 #include "xmit.h"
 #include "tt_text.h"
+#include "ax25_link.h"
 
 // geotranz
 
@@ -680,7 +682,9 @@ static char *split (char *string, int rest_of_line)
  *
  * Outputs:	p_audio_config		- Radio channel parameters stored here.
  *
- *		p_digi_config	- Digipeater configuration stored here.
+ *		p_digi_config	- APRS Digipeater configuration stored here.
+ *
+ *		p_cdigi_config	- Connected Digipeater configuration stored here.
  *
  *		p_tt_config	- APRStt stuff.
  *
@@ -703,6 +707,7 @@ static char *split (char *string, int rest_of_line)
 
 void config_init (char *fname, struct audio_s *p_audio_config, 
 			struct digi_config_s *p_digi_config,
+			struct cdigi_config_s *p_cdigi_config,
 			struct tt_config_s *p_tt_config,
 			struct igate_config_s *p_igate_config,
 			struct misc_config_s *p_misc_config)
@@ -789,6 +794,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	memset (p_digi_config, 0, sizeof(struct digi_config_s));
 	p_digi_config->dedupe_time = DEFAULT_DEDUPE;
+	memset (p_cdigi_config, 0, sizeof(struct cdigi_config_s));
 
 	memset (p_tt_config, 0, sizeof(struct tt_config_s));	
 	p_tt_config->gateway_enabled = 0;
@@ -865,6 +871,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	strlcpy (p_misc_config->logdir, "", sizeof(p_misc_config->logdir));
 
+	/* connected mode. */
+
+	p_misc_config->frack = AX25_T1V_FRACK_DEFAULT;		/* Number of seconds to wait for ack to transmission. */
+
+	p_misc_config->retry = AX25_N2_RETRY_DEFAULT;		/* Number of times to retry before giving up. */
+
+	p_misc_config->paclen = AX25_N1_PACLEN_DEFAULT;		/* Max number of bytes in information part of frame. */
+
+	p_misc_config->maxframe_basic = AX25_K_MAXFRAME_BASIC_DEFAULT;	/* Max frames to send before ACK.  mod 8 "Window" size. */
+
+	p_misc_config->maxframe_extended = AX25_K_MAXFRAME_EXTENDED_DEFAULT;	/* Max frames to send before ACK.  mod 128 "Window" size. */
+
+	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 2;	/* Max SABME before falling back to SABM. */
 
 /* 
  * Try to extract options from a file.
@@ -1568,6 +1587,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 /*
  * PTT 		- Push To Talk signal line.
  * DCD		- Data Carrier Detect indicator.
+ * CON		- Connected to another station indicator.
  *
  * xxx  serial-port [-]rts-or-dtr [ [-]rts-or-dtr ]
  * xxx  GPIO  [-]gpio-num
@@ -1582,7 +1602,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * Applies to most recent CHANNEL command.
  */
 
-	  else if (strcasecmp(t, "PTT") == 0 || strcasecmp(t, "DCD") == 0) {
+	  else if (strcasecmp(t, "PTT") == 0 || strcasecmp(t, "DCD") == 0 || strcasecmp(t, "CON") == 0) {
 	    int ot;
 	    char otname[8];
 
@@ -1595,8 +1615,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      strlcpy (otname, "DCD", sizeof(otname));
 	    }
 	    else {
-	      ot = OCTYPE_FUTURE;
-	      strlcpy (otname, "FUTURE", sizeof(otname));
+	      ot = OCTYPE_CON;
+	      strlcpy (otname, "CON", sizeof(otname));
 	    }
 
 	    t = split(NULL,0);
@@ -1784,7 +1804,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }  /* end of second serial port control line. */
 	    }  /* end of serial port case. */
 
-	  }  /* end of PTT */
+	  }  /* end of PTT, DCD, CON */
 
 /*
  * INPUTS
@@ -1984,14 +2004,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * ==================== Digipeater parameters ==================== 
+ * ==================== APRS Digipeater parameters ====================
  */
 
 /*
  * DIGIPEAT  from-chan  to-chan  alias-pattern  wide-pattern  [ OFF|DROP|MARK|TRACE ] 
  */
 
-	  else if (strcasecmp(t, "digipeat") == 0) {
+	  else if (strcasecmp(t, "DIGIPEAT") == 0 || strcasecmp(t, "DIGIPEATER") == 0) {
 	    int from_chan, to_chan;
 	    int e;
 	    char message[100];
@@ -2175,7 +2195,82 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * ==================== Packet Filtering for digipeater or IGate ==================== 
+ * ==================== Connected Digipeater parameters ====================
+ */
+
+/*
+ * CDIGIPEAT  from-chan  to-chan [ alias-pattern ]
+ */
+
+	  else if (strcasecmp(t, "CDIGIPEAT") == 0 || strcasecmp(t, "CDIGIPEATER") == 0) {
+	    int from_chan, to_chan;
+	    int e;
+	    char message[100];
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
+	      continue;
+	    }
+	    from_chan = atoi(t);
+	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: FROM-channel must be in range of 0 to %d on line %d.\n",
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[from_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n",
+							line, from_chan);
+	      continue;
+	    }
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+	    to_chan = atoi(t);
+	    if (to_chan < 0 || to_chan >= MAX_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: TO-channel must be in range of 0 to %d on line %d.\n",
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[to_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n",
+							line, to_chan);
+	      continue;
+	    }
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      e = regcomp (&(p_cdigi_config->alias[from_chan][to_chan]), t, REG_EXTENDED|REG_NOSUB);
+	      if (e != 0) {
+	        regerror (e, &(p_cdigi_config->alias[from_chan][to_chan]), message, sizeof(message));
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Invalid alias matching pattern on line %d:\n%s\n",
+							line, message);
+	        continue;
+	      }
+	      t = split(NULL,0);
+	    }
+
+	    p_cdigi_config->enabled[from_chan][to_chan] = 1;
+
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Found \"%s\" where end of line was expected.\n", line, t);
+	    }
+	  }
+
+
+/*
+ * ==================== Packet Filtering for APRS digipeater or IGate ====================
  */
 
 /*
@@ -2246,6 +2341,74 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 
 	    p_digi_config->filter_str[from_chan][to_chan] = strdup(t);
+
+//TODO1.2:  Do a test run to see errors now instead of waiting.
+
+	  }
+
+
+/*
+ * ==================== Packet Filtering for connected digipeater ====================
+ */
+
+/*
+ * CFILTER  from-chan  to-chan  filter_specification_expression
+ */
+
+	  else if (strcasecmp(t, "CFILTER") == 0) {
+	    int from_chan, to_chan;
+	    	    
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
+	      continue;
+	    }
+
+	    from_chan = isdigit(*t) ? atoi(t) : -999;
+	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Filter FROM-channel must be in range of 0 to %d on line %d.\n",
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+
+	    if ( ! p_audio_config->achan[from_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n",
+							line, from_chan);
+	      continue;
+	    }
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+
+	    to_chan = isdigit(*t) ? atoi(t) : -999;
+	    if (to_chan < 0 || to_chan >= MAX_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Filter TO-channel must be in range of 0 to %d on line %d.\n",
+							MAX_CHANS-1, line);
+	      continue;
+	    }
+	    if ( ! p_audio_config->achan[to_chan].valid) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n",
+							line, to_chan);
+	      continue;
+	    }
+
+	    t = split(NULL,1);		/* Take rest of line including spaces. */
+
+	    if (t == NULL) {
+	      t = " ";				/* Empty means permit nothing. */
+	    }
+
+	    p_cdigi_config->filter_str[from_chan][to_chan] = strdup(t);
 
 //TODO1.2:  Do a test run to see errors now instead of waiting.
 
@@ -4163,6 +4326,154 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_misc_config->sb_configured = 1;
 	  }
 
+
+/*
+ * ==================== AX.25 connected mode ====================
+ */
+
+
+/*
+ * FRACK  n 		- Number of seconds to wait for ack to transmission.
+ */
+
+	  else if (strcasecmp(t, "FRACK") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing value for FRACK.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= AX25_T1V_FRACK_MIN && n <= AX25_T1V_FRACK_MAX) {
+	      p_misc_config->frack = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid FRACK time. Using default %d.\n", line, p_misc_config->frack);
+	    }
+	  }
+
+
+/*
+ * RETRY  n 		- Number of times to retry before giving up.
+ */
+
+	  else if (strcasecmp(t, "RETRY") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing value for RETRY.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= AX25_N2_RETRY_MIN && n <= AX25_N2_RETRY_MAX) {
+	      p_misc_config->retry = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid RETRY number. Using default %d.\n", line, p_misc_config->retry);
+	    }
+	  }
+
+
+/*
+ * PACLEN  n 		- Maximum number of bytes in information part.
+ */
+
+	  else if (strcasecmp(t, "PACLEN") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing value for PACLEN.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= AX25_N1_PACLEN_MIN && n <= AX25_N1_PACLEN_MAX) {
+	      p_misc_config->paclen = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid PACLEN value. Using default %d.\n", line, p_misc_config->paclen);
+	    }
+	  }
+
+
+/*
+ * MAXFRAME  n 		- Max frames to send before ACK.  mod 8 "Window" size.
+ *
+ * Window size would make more sense but everyone else calls it MAXFRAME.
+ */
+
+	  else if (strcasecmp(t, "MAXFRAME") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing value for MAXFRAME.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= AX25_K_MAXFRAME_BASIC_MIN && n <= AX25_K_MAXFRAME_BASIC_MAX) {
+	      p_misc_config->maxframe_basic = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid MAXFRAME value outside range of %d to %d. Using default %d.\n",
+			line, AX25_K_MAXFRAME_BASIC_MIN, AX25_K_MAXFRAME_BASIC_MAX, p_misc_config->maxframe_basic);
+	    }
+	  }
+
+
+
+/*
+ * EMAXFRAME  n 		- Max frames to send before ACK.  mod 128 "Window" size.
+ */
+
+	  else if (strcasecmp(t, "EMAXFRAME") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing value for EMAXFRAME.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= AX25_K_MAXFRAME_EXTENDED_MIN && n <= AX25_K_MAXFRAME_EXTENDED_MAX) {
+	      p_misc_config->maxframe_extended = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid EMAXFRAME value outside of range %d to %d. Using default %d.\n",
+			line, AX25_K_MAXFRAME_EXTENDED_MIN, AX25_K_MAXFRAME_EXTENDED_MAX, p_misc_config->maxframe_extended);
+   	    }
+	  }
+
+/*
+ * MAXV22  n 		- Max number of SABME sent before trying SABM.
+ */
+
+	  else if (strcasecmp(t, "MAXV22") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing value for MAXV22.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= 0 && n <= AX25_N2_RETRY_MAX) {
+	      p_misc_config->maxv22 = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Invalid MAXV22 number. Will use half of RETRY.\n", line);
+	    }
+	  }
+
+
 /*
  * Invalid command.
  */
@@ -4188,6 +4499,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	for (i=0; i<MAX_CHANS; i++) {
 	  for (j=0; j<MAX_CHANS; j++) {
+
+/* APRS digipeating. */
 
 	    if (p_digi_config->enabled[i][j]) {
 
@@ -4221,6 +4534,39 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        //p_digi_config->enabled[i][j] = 0;
 	      }
 	    }
+
+/* Connected mode digipeating. */
+
+	    if (p_cdigi_config->enabled[i][j]) {
+
+	      if ( strcmp(p_audio_config->achan[i].mycall, "") == 0 ||
+		   strcmp(p_audio_config->achan[i].mycall, "NOCALL") == 0 ||
+		   strcmp(p_audio_config->achan[i].mycall, "N0CALL") == 0) {
+
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: MYCALL must be set for receive channel %d before digipeating is allowed.\n", i);
+	        p_cdigi_config->enabled[i][j] = 0;
+	      }
+
+	      if ( strcmp(p_audio_config->achan[j].mycall, "") == 0 ||
+	           strcmp(p_audio_config->achan[j].mycall, "NOCALL") == 0 ||
+		   strcmp(p_audio_config->achan[j].mycall, "N0CALL") == 0) {
+
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: MYCALL must be set for transmit channel %d before digipeating is allowed.\n", i);
+	        p_cdigi_config->enabled[i][j] = 0;
+	      }
+
+	      b = 0;
+	      for (k=0; k<p_misc_config->num_beacons; k++) {
+	        if (p_misc_config->beacon[k].sendto_chan == j) b++;
+	      }
+	      if (b == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Beaconing should be configured for channel %d when digipeating is enabled.\n", j);
+		// It's a recommendation, not a requirement.
+	      }
+	    }
 	  }
 
 	  if (p_audio_config->achan[i].valid && strlen(p_igate_config->t2_login) > 0) {
@@ -4241,6 +4587,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	  }
 
+	}
+
+	if (p_misc_config->maxv22 < 0) {
+	  p_misc_config->maxv22 = p_misc_config->retry / 2;
 	}
 
 } /* end config_init */

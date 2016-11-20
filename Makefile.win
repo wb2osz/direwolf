@@ -16,7 +16,7 @@
 #
 
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest
 
 
 # People say we need -mthreads option for threads to work properly.
@@ -39,8 +39,6 @@ CFLAGS += -g
 #CFLAGS += -fsanitize=address -fno-omit-frame-pointer
 
 
-# TODO: Development in progress.  Don't try using yet.
-#CFLAGS += -DNEW14
 
 #
 # Let's see impact of various optimization levels.
@@ -86,16 +84,14 @@ demod_afsk.o : fsk_demod_state.h
 demod_psk.o  : fsk_demod_state.h
 
 
-# later ax25_link.o 
-
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
-		fcs_calc.o ax25_pad.o ax25_pad2.o \
+		fcs_calc.o ax25_pad.o ax25_pad2.o xid.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
+		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dtime_now.o mheard.o \
+		dwgps.o dwgpsnmea.o dtime_now.o mheard.o ax25_link.o \
 		dw-icon.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
@@ -260,7 +256,7 @@ strlcat.o : misc/strlcat.c
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
 # Can we encode and decode at popular data rates?
 # Verify that single bit fixup increases the count.
@@ -317,6 +313,7 @@ atest : atest.c fsk_fast_filter.h demod.c demod_afsk.c demod_psk.c demod_9600.c 
 		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
 		dwgpsnmea.o dwgps.o serial_port.o latlong.c \
 		symbols.c tt_text.c textcolor.c telemetry.c dtime_now.o \
+		decode_aprs.o log.o \
 		misc.a regex.a
 	echo " " > tune.h
 	$(CC) $(CFLAGS) -o $@ $^
@@ -412,8 +409,21 @@ pad2test : ax25_pad2.c ax25_pad.c fcs_calc.o textcolor.o regex.a misc.a
 	./pad2test
 	rm pad2test.exe
 
+# Unit Test for XID frame encode/decode.
+
+.PHONY: xidtest
+xidtest : xid.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DXIDTEST -o $@ $^
+	./xidtest
+	rm xidtest.exe
+
+
 
 # ------------------------------ Other manual testing & experimenting  -------------------------------
+
+
+tnctest : tnctest.c textcolor.o dtime_now.o serial_port.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
 # For tweaking the demodulator.

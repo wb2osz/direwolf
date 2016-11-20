@@ -1,4 +1,4 @@
-APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      22 Mar 2016
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      18 Oct 2016
 ---------------------------------------------------------------------
 
 BACKGROUND:  This file addresses new additions proposals (OVERLAYS) 
@@ -7,6 +7,9 @@ document remains on the www.aprs.org/symbols/symbolsX.txt page, but
 only has one line per symbol character.  Since each of the symbols
 can have up to 36 overlays, this gives us thousands of symbols codes.
 
+18 Oct 2016:  Added Green, Yellow, Red for Flood gaures using G,Y,R
+              overlays + N for Normal. (on existing H2O symbol)
+              Added DIGIPEATERS
 22 Mar 2016:  Added A0 overlay circle for ALSTAR nodes 
               and V0 for VOIP combined echolink and IRLP
               and P& for PSKmail node
@@ -226,6 +229,19 @@ BD = Bus Depot (new Aug 2014)
 LD = LIght Rail or Subway (new Aug 2014)
 SD = Seaport Depot (new Aug 2014)
 
+DIGIPEATERS
+/# - Generic digipeater
+1# - WIDE1-1 digipeater
+A# - Alternate input (i.e. 144.990MHz) digipeater
+E# - Emergency powered (assumed full normal digi)
+I# - I-gate equipped digipeater
+L# - WIDEn-N with path length trapping
+P# - PacComm
+S# - SSn-N digipeater (includes WIDEn-N)
+X# - eXperimental digipeater
+V# - Viscous https://github.com/PhirePhly/aprx/blob/master/ViscousDigipeater.README
+W# - WIDEn-N, SSn-N and Trapping
+
 EMERGENCY: #!
 /! = Police/Sheriff, etc
 \! = Emergency!
@@ -388,6 +404,18 @@ Pu = Plow or SnowPlow (new Aug 2014)
 Tu = Tanker
 Cu = Chlorine Tanker
 Hu = Hazardous
+
+WATER #w
+/w = Water Station or other H2O
+\w = flooding (or Avalanche/slides)
+Aw = Avalanche
+Gw = Green Flood Gauge
+Mw = Mud slide
+Nw = Normal flood gauge (blue)
+Rw = Red flood gauge
+Sw = Snow Blockage
+Yw = Yellow flood gauge
+
 
 
 Anyone can use any overlay on any of the overlayable symbols for any

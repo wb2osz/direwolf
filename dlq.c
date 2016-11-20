@@ -24,7 +24,7 @@
  *
  * Purpose:   	Received frame queue.
  *
- * Description: In earlierversions, the main thread read from the
+ * Description: In earlier versions, the main thread read from the
  *		audio device and performed the receive demodulation/decoding.
  *
  *		Since version 1.2 we have a separate receive thread
@@ -32,7 +32,7 @@
  *		received frames from all channels and process them
  *		serially.
  *
- *		In version 1.4, other types of events go into this
+ *		In version 1.4, other types of events also go into this
  *		queue and we use it to drive the data link state machine.
  *
  *---------------------------------------------------------------*/
@@ -85,9 +85,12 @@ static int was_init = 0;			/* was initialization performed? */
 
 static void append_to_queue (struct dlq_item_s *pnew);
 
-static volatile int s_new_count = 0;		/* To detect memory leak. */
-static volatile int s_delete_count = 0;			// TODO:  need to test.
+static volatile int s_new_count = 0;		/* To detect memory leak for queue items. */
+static volatile int s_delete_count = 0;		// TODO:  need to test.
 
+
+static volatile int s_cdata_new_count = 0;		/* To detect memory leak for connected mode data. */
+static volatile int s_cdata_delete_count = 0;		// TODO:  need to test.
 
 
 
@@ -109,8 +112,6 @@ static volatile int s_delete_count = 0;			// TODO:  need to test.
 
 void dlq_init (void)
 {
-	//int c, p;
-
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("dlq_init ( )\n");
@@ -189,6 +190,7 @@ void dlq_init (void)
  *		Normally this was received over the radio but we can create
  *		our own from APRStt or beaconing.
  *
+ *		This would correspond to PH-DATA Indication in the AX.25 protocol spec.
  *
  * Inputs:	chan	- Channel, 0 is first.
  *
@@ -244,10 +246,16 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	}
 #endif
 
+
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
 	s_new_count++;
+
+	if (s_new_count > s_delete_count + 50) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("INTERNAL ERROR:  DLQ memory leak, new=%d, delete=%d\n", s_new_count, s_delete_count);
+	}
 
 	pnew->nextp = NULL;
 	pnew->type = DLQ_REC_FRAME;
@@ -458,6 +466,7 @@ static void append_to_queue (struct dlq_item_s *pnew)
  *		pid		- Protocol ID for data.  Normally 0xf0 but the API
  *				  allows the client app to use something non-standard
  *				  for special situations.
+ *						TODO: remove this.   PID is only for I and UI frames.
  *
  * Outputs:	Request is appended to queue for processing by
  *		the data link state machine.
@@ -486,7 +495,6 @@ void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num
 	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
 	pnew->num_addr = num_addr;
 	pnew->client = client;
-	pnew->pid = pid;
 
 /* Put it into queue. */
 
@@ -603,15 +611,205 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
 	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
 	pnew->num_addr = num_addr;
 	pnew->client = client;
-	pnew->pid = pid;
 
-/* TODO:  haven't thought about user data yet. */
+/* Attach the transmit data. */
+
+	pnew->txdata = cdata_new(pid,xdata_ptr,xdata_len);
 
 /* Put it into queue. */
 
 	append_to_queue (pnew);
 
 } /* end dlq_xmit_data_request */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dlq_register_callsign
+ *		dlq_unregister_callsign
+ *
+ * Purpose:     Register callsigns that we will recognize for incoming connection requests.
+ *
+ * Inputs:	addrs		- Source (owncall), destination (peercall),
+ *				  and possibly digipeaters.
+ *
+ *		chan		- Channel, 0 is first.
+ *
+ *		client		- Client application instance.
+ *
+ * Outputs:	Request is appended to queue for processing by
+ *		the data link state machine.
+ *
+ * Description:	The data link state machine does not use MYCALL from the APRS configuration.
+ *		For outgoing frames, the client supplies the source callsign.
+ *		For incoming connection requests, we need to know what address(es) to respond to.
+ *
+ *		Note that one client application can register multiple callsigns for
+ *		multiple channels.
+ *		Different clients can register different different addresses on the same channel.
+ *
+ *--------------------------------------------------------------------*/
+
+
+void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
+{
+	struct dlq_item_s *pnew;
+
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("dlq_register_callsign (%s, chan=%d, client=%d)\n", addr, chan, client);
+#endif
+
+	assert (chan >= 0 && chan < MAX_CHANS);
+
+/* Allocate a new queue item. */
+
+	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	s_new_count++;
+
+	pnew->type = DLQ_REGISTER_CALLSIGN;
+	pnew->chan = chan;
+	strlcpy (pnew->addrs[0], addr, AX25_MAX_ADDR_LEN);
+	pnew->num_addr = 1;
+	pnew->client = client;
+
+/* Put it into queue. */
+
+	append_to_queue (pnew);
+
+} /* end dlq_register_callsign */
+
+
+void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
+{
+	struct dlq_item_s *pnew;
+
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("dlq_unregister_callsign (%s, chan=%d, client=%d)\n", addr, chan, client);
+#endif
+
+	assert (chan >= 0 && chan < MAX_CHANS);
+
+/* Allocate a new queue item. */
+
+	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	s_new_count++;
+
+	pnew->type = DLQ_UNREGISTER_CALLSIGN;
+	pnew->chan = chan;
+	strlcpy (pnew->addrs[0], addr, AX25_MAX_ADDR_LEN);
+	pnew->num_addr = 1;
+	pnew->client = client;
+
+/* Put it into queue. */
+
+	append_to_queue (pnew);
+
+} /* end dlq_unregister_callsign */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dlq_channel_busy
+ *
+ * Purpose:     Inform data link state machine about activity on the radio channel.
+ *
+ * Inputs:	chan		- Radio channel number.
+ *
+ *		activity	- OCTYPE_PTT or OCTYPE_DCD, as defined in audio.h.
+ *				  Other values will be discarded.
+ *
+ *		status		- 1 for active or 0 for quiet.
+ *
+ * Outputs:	Request is appended to queue for processing by
+ *		the data link state machine.
+ *
+ * Description:	Notify the link state machine about changes in carrier detect
+ *		and our transmitter.
+ *		This is needed for pausing some of our timers.   For example,
+ *		if we transmit a frame and expect a response in 3 seconds, that
+ *		might be delayed because someone else is using the channel.
+ *
+ *--------------------------------------------------------------------*/
+
+void dlq_channel_busy (int chan, int activity, int status)
+{
+	struct dlq_item_s *pnew;
+
+	if (activity == OCTYPE_PTT || activity == OCTYPE_DCD) {
+#if DEBUG
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("dlq_channel_busy (...)\n");
+#endif
+
+
+/* Allocate a new queue item. */
+
+	  pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	  s_new_count++;
+
+	  pnew->type = DLQ_CHANNEL_BUSY;
+	  pnew->chan = chan;
+	  pnew->activity = activity;
+	  pnew->status = status;
+
+/* Put it into queue. */
+
+	  append_to_queue (pnew);
+	}
+
+} /* end dlq_channel_busy */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dlq_client_cleanup
+ *
+ * Purpose:     Client application has disappeared.
+ *		i.e. The TCP connection has been broken.
+ *
+ * Inputs:	client		- Client application instance.
+ *
+ * Outputs:	Request is appended to queue for processing by
+ *		the data link state machine.
+ *
+ * Description:	Notify the link state machine that given client has gone away.
+ *		Clean up all information related to that client application.
+ *
+ *--------------------------------------------------------------------*/
+
+void dlq_client_cleanup (int client)
+{
+	struct dlq_item_s *pnew;
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("dlq_client_cleanup (...)\n");
+#endif
+
+	// assert (client >= 0 && client < MAX_NET_CLIENTS);
+
+/* Allocate a new queue item. */
+
+	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	s_new_count++;
+
+	// All we care about is the client number.
+
+	pnew->type = DLQ_CLIENT_CLEANUP;
+	pnew->client = client;
+
+/* Put it into queue. */
+
+	append_to_queue (pnew);
+
+} /* end dlq_client_cleanup */
+
 
 
 /*-------------------------------------------------------------------
@@ -817,11 +1015,144 @@ struct dlq_item_s *dlq_remove (void)
 
 void dlq_delete (struct dlq_item_s *pitem)
 {
+	if (pitem == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("INTERNAL ERROR: dlq_delete()  given NULL pointer.\n");
+	  return;
+	}
+
 	s_delete_count++;
-	if (pitem->pp != NULL) ax25_delete (pitem->pp)
+
+	if (pitem->pp != NULL) {
+	  ax25_delete (pitem->pp);
+	  pitem->pp = NULL;
+	}
+
+	if (pitem->txdata != NULL) {
+	  cdata_delete (pitem->txdata);
+	  pitem->txdata = NULL;
+	}
+
 	free (pitem);
 
 } /* end dlq_delete */
+
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        cdata_new
+ *
+ * Purpose:     Allocate blocks of data for sending and receiving connected data.
+ *
+ * Inputs:	pid	- protocol id.
+ *		data	- pointer to data.  Can be NULL for segment reassembler.
+ *		len	- length of data.
+ *
+ * Returns:	Structure with a copy of the data.
+ *
+ * Description:	The flow goes like this:
+ *
+ *		Client application extablishes a connection with another station.
+ *		Client application calls "dlq_xmit_data_request."
+ *		A copy of the data is made with this function and attached to the queue item.
+ *		The txdata block is attached to the appropriate link state machine.
+ *		At the proper time, it is transmitted in an I frame.
+ *		It needs to be kept around in case it needs to be retransmitted.
+ *		When no longer needed, it is freed with cdata_delete.
+ *
+ *--------------------------------------------------------------------*/
+
+
+cdata_t *cdata_new (int pid, char *data, int len)
+{
+	int size;
+	cdata_t *cdata;
+
+	s_cdata_new_count++;
+
+	/* Round up the size to the next 128 bytes. */
+	/* The theory is that a smaller number of unique sizes might be */
+	/* beneficial for memory fragmentation and garbage collection. */
+
+	size = ( len + 127 ) & ~0x7f;
+
+	cdata = malloc ( sizeof(cdata_t) + size );
+
+	cdata->magic = TXDATA_MAGIC;
+	cdata->next = NULL;
+	cdata->pid = pid;
+	cdata->size = size;
+	cdata->len = len;
+
+	assert (len >= 0 && len <= size);
+	if (data == NULL) {
+	  memset (cdata->data, '?', size);
+	}
+	else {
+	  memcpy (cdata->data, data, len);
+	}
+	return (cdata);
+
+}  /* end cdata_new */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        cdata_delete
+ *
+ * Purpose:     Release storage used by a connected data block.
+ *
+ * Inputs:	cdata		- Pointer to a data block.
+ *
+ *--------------------------------------------------------------------*/
+
+
+void cdata_delete (cdata_t *cdata)
+{
+	if (cdata == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("INTERNAL ERROR: cdata_delete()  given NULL pointer.\n");
+	  return;
+	}
+
+	if (cdata->magic != TXDATA_MAGIC) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("INTERNAL ERROR: cdata_delete()  given corrupted data.\n");
+	  return;
+	}
+
+	s_cdata_delete_count++;
+
+	cdata->magic = 0;
+
+	free (cdata);
+
+} /* end cdata_delete */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        cdata_check_leak
+ *
+ * Purpose:     Check for memory leak of cdata items.
+ *
+ * Description:	This is called when we expect no outstanding allocations.
+ *
+ *--------------------------------------------------------------------*/
+
+
+void cdata_check_leak (void)
+{
+	if (s_cdata_delete_count != s_cdata_new_count) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal Error, %s, new=%d, delete=%d\n", __func__, s_cdata_new_count, s_cdata_delete_count);
+	}
+
+} /* end cdata_check_leak */
 
 
 

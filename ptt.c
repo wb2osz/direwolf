@@ -46,6 +46,8 @@
  *
  * Version 1.3:	HAMLIB support.
  *
+ * Version 1.4:	The spare "future" indicator is now used when connected to another station.
+ *
  * References:	http://www.robbayer.com/files/serial-win.pdf
  *
  *		https://www.kernel.org/doc/Documentation/gpio.txt
@@ -127,6 +129,7 @@ typedef int HANDLE;
 #include "textcolor.h"
 #include "audio.h"
 #include "ptt.h"
+#include "dlq.h"
 
 
 #if __WIN32__
@@ -372,7 +375,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	strlcpy (otnames[OCTYPE_PTT], "PTT", sizeof(otnames[OCTYPE_PTT]));
 	strlcpy (otnames[OCTYPE_DCD], "DCD", sizeof(otnames[OCTYPE_DCD]));
-	strlcpy (otnames[OCTYPE_FUTURE], "FUTURE", sizeof(otnames[OCTYPE_FUTURE]));
+	strlcpy (otnames[OCTYPE_CON], "CON", sizeof(otnames[OCTYPE_CON]));
 
 
 	for (ch = 0; ch < MAX_CHANS; ch++) {
@@ -773,7 +776,7 @@ void ptt_init (struct audio_s *audio_config_p)
  *		probably be renamed something like octrl_set.
  *
  * Inputs:	ot		- Output control type:
- *				   OCTYPE_PTT, OCTYPE_DCD, OCTYPE_HAMLIB, OCTYPE_FUTURE
+ *				   OCTYPE_PTT, OCTYPE_DCD, OCTYPE_FUTURE
  *
  *		chan		- channel, 0 .. (number of channels)-1
  *
@@ -809,6 +812,13 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  dw_printf ("Internal error, ptt_set ( %s, %d, %d ), did not expect invalid channel.\n", otnames[ot], chan, ptt);
 	  return;
 	}
+
+/*
+ * The data link state machine has an interest in activity on the radio channel.
+ * This is a very convenient place to get that information.
+ */
+
+	dlq_channel_busy (chan, ot, ptt_signal);
 
 /* 
  * Inverted output? 

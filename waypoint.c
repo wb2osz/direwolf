@@ -502,7 +502,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
  *					These would not be parsed properly:
  *
  *						$PKWDWPL,150753,V,4237.14,N,07120.83,W,,,190316,,test3,/,*1B
- *						$PKWDWPL,150758,V,4237.14,N,07120.83,W,,,190316,,test4,/**3B
+ *						$PKWDWPL,150758,V,4237.14,N,07120.83,W,,,190316,,test4,/ **3B
  *
  *					We perform the usual substitution and the other end would
  *					need to change them back after extracting from NMEA sentence.

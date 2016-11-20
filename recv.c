@@ -68,7 +68,7 @@
  *
  *					The difference is that app_process_rec_frame
  *					is no longer called directly.  Instead
- *					the frame is appended to a queue with dlq_append.
+ *					the frame is appended to a queue with dlq_rec_frame.
  *
  *					Received frames can now be processed one at 
  *					a time and we don't need to worry about later
@@ -107,9 +107,8 @@
 #include "dtmf.h"
 #include "aprs_tt.h"
 #include "dtime_now.h"
-#if NEW14
 #include "ax25_link.h"
-#endif
+
 
 #if __WIN32__
 static unsigned __stdcall recv_adev_thread (void *arg);
@@ -266,7 +265,7 @@ static void * recv_adev_thread (void *arg)
 	  }
 
 		/* When a complete frame is accumulated, */
-		/* dlq_append, is called. */
+		/* dlq_rec_frame, is called. */
 
 		/* recv_process, below, drains the queue. */
 
@@ -293,15 +292,11 @@ void recv_process (void)
 	while (1) {
 
 	  int timed_out;
-#if NEW14
+
 	  double timeout_value =  ax25_link_get_next_timer_expiry();
 
-
 	  timed_out = dlq_wait_while_empty (timeout_value);
-#else
-	  dlq_wait_while_empty (0.0);
-	  timed_out = 0;
-#endif
+
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
@@ -315,9 +310,7 @@ void recv_process (void)
 	    dw_printf ("recv_process: time waiting on dlq.  call dl_timer_expiry.\n");
 #endif
 
-#if NEW14
 	    dl_timer_expiry ();
-#endif
 	  }
 	  else {
 
@@ -345,17 +338,16 @@ void recv_process (void)
  */
 
 		  app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->retries, pitem->spectrum);
-	          pitem->pp = NULL;  // Was consumed by above.  Don't try to use or free again.
 
 
 /*
- * Link processing - Can ignore UI frames.
+ * Link processing.
  */
-	// TODO - ax25_link_rec_frame  & delete & remove delete from above.
+	          lm_data_indication(pitem);
 
 	          break;
 
-#if NEW14
+
 	        case DLQ_CONNECT_REQUEST:
 
 	          dl_connect_request (pitem);
@@ -370,7 +362,27 @@ void recv_process (void)
 
 	          dl_data_request (pitem);
 	          break;
-#endif
+
+	        case DLQ_REGISTER_CALLSIGN:
+
+	          dl_register_callsign (pitem);
+	          break;
+
+	        case DLQ_UNREGISTER_CALLSIGN:
+
+	          dl_unregister_callsign (pitem);
+	          break;
+
+		case DLQ_CHANNEL_BUSY:
+
+	          lm_channel_busy (pitem);
+	          break;
+
+	        case DLQ_CLIENT_CLEANUP:
+
+	          dl_client_cleanup (pitem);
+	          break;
+
 	      }
 
 	      dlq_delete (pitem);

@@ -52,6 +52,8 @@ static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdl
  *
  *		flen	- Frame length, not including the FCS.
  *
+ *		bad_fcs	- Append an invalid FCS for testing purposes.
+ *
  * Outputs:	Bits are shipped out by calling tone_gen_put_bit().
  *
  * Returns:	Number of bits sent including "flags" and the
@@ -73,8 +75,7 @@ static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdl
  *
  *--------------------------------------------------------------*/
 
-
-int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
+int hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs)
 {
 	int j, fcs;
 	
@@ -84,7 +85,7 @@ int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("hdlc_send_frame ( chan = %d, fbuf = %p, flen = %d )\n", chan, fbuf, flen);
+	dw_printf ("hdlc_send_frame ( chan = %d, fbuf = %p, flen = %d, bad_fcs = %d)\n", chan, fbuf, flen, bad_fcs);
 	fflush (stdout);
 #endif
 
@@ -97,8 +98,15 @@ int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
 
 	fcs = fcs_calc (fbuf, flen);
 
-	send_data (chan, fcs & 0xff);
-	send_data (chan, (fcs >> 8) & 0xff);
+	if (bad_fcs) {
+	  /* For testing only - Simulate a frame getting corrupted along the way. */
+	  send_data (chan, (~fcs) & 0xff);
+	  send_data (chan, ((~fcs) >> 8) & 0xff);
+	}
+	else {
+	  send_data (chan, fcs & 0xff);
+	  send_data (chan, (fcs >> 8) & 0xff);
+	}
 
 	send_control (chan, 0x7e);	/* End frame */
 

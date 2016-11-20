@@ -230,12 +230,12 @@ z := $(notdir ${CURDIR})
 
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
-		fcs_calc.o ax25_pad.o \
+		fcs_calc.o ax25_pad.o  ax25_pad2.o xid.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
+		gen_tone.o audio.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o \
+		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o ax25_link.o \
 		misc.a geotranz.a
 	$(CC) -o $@ $^ $(LDFLAGS)
 ifneq ($(enable_gpsd),)
@@ -588,7 +588,7 @@ install-rpi : dw-start.sh
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
 # Can we encode and decode at popular data rates?
 
@@ -706,6 +706,15 @@ pad2test : ax25_pad2.c ax25_pad.c fcs_calc.o textcolor.o misc.a
 	$(CC) $(CFLAGS) -DPAD2TEST -o $@ $^ $(LDFLAGS)
 	./pad2test
 	rm pad2test
+
+
+# Unit Test for XID frame encode/decode.
+
+.PHONY: xidtest
+xidtest : xid.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DXIDTEST -o $@ $^  $(LDFLAGS)
+	./xidtest
+	rm xidtest
 
 
 
