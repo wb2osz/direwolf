@@ -80,6 +80,15 @@ This should give you the most recent stable release.  If you want the latest (un
 
 For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
+## Mac OS X ##
+
+You should have the Xcode developer tools installed. You can then install PortAudio using MacPort, following the instructions in Chapter 6 of the [User Guide](doc/User-Guide.pdf). However, a much simpler method might be to install Homebrew:
+
+1. Install [Homebrew](http://brew.sh/) if you don't have it already
+1. `brew install portaudio`
+
+Finally, follow either of the instructions given above for installing on Linux.
+
 ## Join the conversation  ##
  
 Here are some good places to share information:
