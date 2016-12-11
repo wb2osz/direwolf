@@ -68,8 +68,12 @@ endif
 
 # Change as required in support of the available libraries
 
-#CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+UNAME_M := $(shell uname -m)
+ifeq (${UNAME_M},x86_64)
+CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+else
 CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
+endif
 CFLAGS := -Os -pthread -Igeotranz $(EXTRA_CFLAGS)
 # $(info $$CC is [${CC}])
 
