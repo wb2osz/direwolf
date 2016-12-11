@@ -295,14 +295,15 @@ INSTALLDIR := /usr/local
 
 # Command to "install" to system directories.  "install" for Linux.  "ginstall" for Mac.
 
-INSTALL=ginstall
+INSTALL=install
 
 .PHONY: install
-install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png
 #
 # Applications, not installed with package manager, normally go in /usr/local/bin.
 # /usr/bin is used instead when installing from .DEB or .RPM package.
 #
+	$(INSTALL) -d $(INSTALLDIR)/bin
 	$(INSTALL) direwolf $(INSTALLDIR)/bin
 	$(INSTALL) decode_aprs $(INSTALLDIR)/bin
 	$(INSTALL) text2tt $(INSTALLDIR)/bin
@@ -329,28 +330,29 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 #
 # Misc. data such as "tocall" to system mapping.
 #
-	$(INSTALL) -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
-	$(INSTALL) -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
-	$(INSTALL) -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
-	$(INSTALL) -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
-	$(INSTALL) -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
+	$(INSTALL) -d $(INSTALLDIR)/share
+	$(INSTALL) -m 644 tocalls.txt $(INSTALLDIR)/share
+	$(INSTALL) -m 644 symbols-new.txt $(INSTALLDIR)/share
+	$(INSTALL) -m 644 symbolsX.txt $(INSTALLDIR)/share
+	$(INSTALL) -m 644 dw-icon.png $(INSTALLDIR)/share
 #
 # Documentation.  Various plain text files and PDF.
 #
-	$(INSTALL) -D --mode=644 README.md $(INSTALLDIR)/share/doc/direwolf/README.md
-	$(INSTALL) -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
-	$(INSTALL) -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
-	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
+	$(INSTALL) -d $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 README.md $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf
 #
-	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
-	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
-	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
-	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-SDR-IGate.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
-	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -m 644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf
 #
 # Sample config files also go into the doc directory.
 # When building from source, these can be put in home directory with "make install-conf".
@@ -358,23 +360,24 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 # the home directory or other desired location.
 # Someone suggested that these could go into an "examples" subdirectory under doc.
 #
-	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/direwolf.conf
-	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/telem-m0xer-3.txt
-	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/telem-balloon.conf
-	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-volts.conf $(INSTALLDIR)/share/doc/direwolf/telem-volts.conf
+	$(INSTALL) -m 644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf
+	$(INSTALL) -m 644 telemetry-toolkit/telem-volts.conf $(INSTALLDIR)/share/doc/direwolf
 #
 # "man" pages
 #
-	$(INSTALL) -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
-	$(INSTALL) -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
-	$(INSTALL) -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
-	$(INSTALL) -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
-	$(INSTALL) -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
-	$(INSTALL) -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
-	$(INSTALL) -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
-	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
-	$(INSTALL) -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
-	$(INSTALL) -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+	$(INSTALL) -d $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/aclients.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/atest.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/direwolf.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/gen_packets.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/ll2utm.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/log2gpx.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/text2tt.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/tt2text.1 $(INSTALLDIR)/man/man1
+	$(INSTALL) -m 644 man1/utm2ll.1 $(INSTALLDIR)/man/man1
 #
 	@echo " "
 	@echo "If this is your first install, not an upgrade, type this to put a copy"
