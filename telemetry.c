@@ -835,7 +835,16 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
 	  }
 	}
 
-/* Skip comma if first character of comment field. */
+/*
+ * Skip comma if first character of comment field.
+ *
+ * The protocol spec is inconsistent here.
+ * The definition shows the Project Title immediately after a fixed width field of 8 binary digits.
+ * The example has a comma in there.
+ *
+ * The toolkit telem-bits.pl script does insert the comma because it seems more sensible.
+ * Here we accept it either way.  i.e. Discard first character after data values if it is comma.
+ */
 
 	if (msg[n] == ',') n++;
 

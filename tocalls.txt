@@ -1,6 +1,7 @@
-APRS TO-CALL VERSION NUMBERS                            14 Nov 2016
+APRS TO-CALL VERSION NUMBERS                            6 Dec 2016
 -------------------------------------------------------------------
                                                              WB4APR
+16 Dec 16 added APYSxx for W2GMD's Python APRS
 14 Nov 16 Added APINxx for PinPoint by AB0WV
 09 Nov 16 added APNICx for SQ5EKU http://sq5eku.blogspot.com/
 24 Oct 16 added APTKPT TrackPoint N0LP, removed APZTKP
@@ -137,7 +138,7 @@ a TOCALL number series:
       APRRTx  RPC electronics
       APRS    Generic, (obsolete. Digis should use APNxxx instead)
       APRXxx  >40 APRSmax
-      APRXxx  <39 for OH2MQK's RX-igate
+      APRXxx  <39 for OH2MQK's igate
       APRTLM  used in MIM's and Mic-lites, etc
       APRtfc  APRStraffic
       APRSTx  APRStt (Touch tone)
@@ -176,6 +177,7 @@ a TOCALL number series:
       APY008  Yaesu VX-8 series
       APY350  Yaesu FTM-350 series
       APYTxx  for YagTracker
+      APYSxx  for W2GMD's Python APRS
  APZ  APZxxx  Experimental
       APZ247  for UPRS NR0Q
       APZ0xx  Xastir (old versions. See APX)

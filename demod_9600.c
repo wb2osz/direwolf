@@ -87,21 +87,21 @@ __attribute__((hot)) __attribute__((always_inline))
 static inline float agc (float in, float fast_attack, float slow_decay, float *ppeak, float *pvalley)
 {
 	if (in >= *ppeak) {
-	  *ppeak = in * fast_attack + *ppeak * (1. - fast_attack);
+	  *ppeak = in * fast_attack + *ppeak * (1.0f - fast_attack);
 	}
 	else {
-	  *ppeak = in * slow_decay + *ppeak * (1. - slow_decay);
+	  *ppeak = in * slow_decay + *ppeak * (1.0f - slow_decay);
 	}
 
 	if (in <= *pvalley) {
-	  *pvalley = in * fast_attack + *pvalley * (1. - fast_attack);
+	  *pvalley = in * fast_attack + *pvalley * (1.0f - fast_attack);
 	}
 	else  {   
-	  *pvalley = in * slow_decay + *pvalley * (1. - slow_decay);
+	  *pvalley = in * slow_decay + *pvalley * (1.0f - slow_decay);
 	}
 
 	if (*ppeak > *pvalley) {
-	  return ((in - 0.5 * (*ppeak + *pvalley)) / (*ppeak - *pvalley));
+	  return ((in - 0.5f * (*ppeak + *pvalley)) / (*ppeak - *pvalley));
 	}
 	return (0.0);
 }
@@ -144,8 +144,8 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 	    D->lp_filter_len_bits =  76 * 9600.0 / (44100.0 * 2.0);
 
 	    // Works best with odd number in some tests.  Even is better in others.
-	    //D->lp_filter_size = ((int) (0.5 * ( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud ))) * 2 + 1;
-	    D->lp_filter_size = (int) (( D->lp_filter_len_bits * (float)samples_per_sec / baud) + 0.5);
+	    //D->lp_filter_size = ((int) (0.5f * ( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud ))) * 2 + 1;
+	    D->lp_filter_size = (int) (( D->lp_filter_len_bits * (float)samples_per_sec / baud) + 0.5f);
 
 	    D->lp_window = BP_WINDOW_HAMMING;
 	    D->lpf_baud = 0.62;
@@ -199,7 +199,7 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 	/* Version 1.2: Experiment with different slicing levels. */
 
 	for (j = 0; j < MAX_SUBCHANS; j++) {
-	  slice_point[j] = 0.02 * (j - 0.5 * (MAX_SUBCHANS-1));
+	  slice_point[j] = 0.02f * (j - 0.5f * (MAX_SUBCHANS-1));
 	  //dw_printf ("slice_point[%d] = %+5.2f\n", j, slice_point[j]);
 	}
 
@@ -333,17 +333,17 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 // TODO:  probably no need for this.  Just use  D->m_peak, D->m_valley
 
 	if (amp >= D->alevel_mark_peak) {
-	  D->alevel_mark_peak = amp * D->quick_attack + D->alevel_mark_peak * (1. - D->quick_attack);
+	  D->alevel_mark_peak = amp * D->quick_attack + D->alevel_mark_peak * (1.0f - D->quick_attack);
 	}
 	else {
-	  D->alevel_mark_peak = amp * D->sluggish_decay + D->alevel_mark_peak * (1. - D->sluggish_decay);
+	  D->alevel_mark_peak = amp * D->sluggish_decay + D->alevel_mark_peak * (1.0f - D->sluggish_decay);
 	}
 
 	if (amp <= D->alevel_space_peak) {
-	  D->alevel_space_peak = amp * D->quick_attack + D->alevel_space_peak * (1. - D->quick_attack);
+	  D->alevel_space_peak = amp * D->quick_attack + D->alevel_space_peak * (1.0f - D->quick_attack);
 	}
 	else {
-	  D->alevel_space_peak = amp * D->sluggish_decay + D->alevel_space_peak * (1. - D->sluggish_decay);
+	  D->alevel_space_peak = amp * D->sluggish_decay + D->alevel_space_peak * (1.0f - D->sluggish_decay);
 	}
 
 /* 
@@ -544,10 +544,10 @@ static void inline nudge_pll (int chan, int subchan, int slice, float demod_out_
 	    fprintf (demod_log_fp, "Audio, Peak, Valley, Demod, SData, Descram, Clock\n");
 	  }
 	  fprintf (demod_log_fp, "%.3f, %.3f, %.3f, %.3f, %.2f, %.2f, %.2f\n", 
-			0.5 * fsam + 3.5,  
-			0.5 * D->m_peak + 3.5,
-			0.5 * D->m_valley + 3.5,
-			0.5 * demod_out + 2.0,
+			0.5f * fsam + 3.5,
+			0.5f * D->m_peak + 3.5,
+			0.5f * D->m_valley + 3.5,
+			0.5f * demod_out + 2.0,
 			demod_data ? 1.35 : 1.0,  
 			descram ? .9 : .55,  
 			(D->data_clock_pll & 0x80000000) ? .1 : .45);

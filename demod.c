@@ -403,8 +403,8 @@ int demod_init (struct audio_s *pa)
 	          /* For signal level reporting, we want a longer term view. */
 		  // TODO: Should probably move this into the init functions.
 
-	          D->quick_attack = D->agc_fast_attack * 0.2;
-	          D->sluggish_decay = D->agc_slow_decay * 0.2;
+	          D->quick_attack = D->agc_fast_attack * 0.2f;
+	          D->sluggish_decay = D->agc_slow_decay * 0.2f;
 	        }
 	      }
 	      else if (have_plus) {
@@ -458,8 +458,8 @@ int demod_init (struct audio_s *pa)
 
 	        /* For signal level reporting, we want a longer term view. */
 
-	        D->quick_attack = D->agc_fast_attack * 0.2;
-	        D->sluggish_decay = D->agc_slow_decay * 0.2;
+	        D->quick_attack = D->agc_fast_attack * 0.2f;
+	        D->sluggish_decay = D->agc_slow_decay * 0.2f;
 	      }	
 	      else {
 	        int d;
@@ -511,8 +511,8 @@ int demod_init (struct audio_s *pa)
 
 	          /* For signal level reporting, we want a longer term view. */
 
-	          D->quick_attack = D->agc_fast_attack * 0.2;
-	          D->sluggish_decay = D->agc_slow_decay * 0.2;
+	          D->quick_attack = D->agc_fast_attack * 0.2f;
+	          D->sluggish_decay = D->agc_slow_decay * 0.2f;
 
 	        } 	  /* for each freq pair */
 	      }	
@@ -687,7 +687,7 @@ int demod_init (struct audio_s *pa)
 	      dw_printf ("The ratio of audio samples per sec (%d) to data rate in baud (%d) is %.1f\n",
 				save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
 				save_audio_config_p->achan[chan].baud,
-				ratio);
+				(double)ratio);
 	      if (ratio < 3) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("There is little hope of success with such a low ratio.  Use a higher sample rate.\n");
@@ -718,8 +718,8 @@ int demod_init (struct audio_s *pa)
 
 	      /* For signal level reporting, we want a longer term view. */
 
-	      D->quick_attack = D->agc_fast_attack * 0.2;
-	      D->sluggish_decay = D->agc_slow_decay * 0.2;
+	      D->quick_attack = D->agc_fast_attack * 0.2f;
+	      D->sluggish_decay = D->agc_slow_decay * 0.2f;
 	      }
 	      break;
 

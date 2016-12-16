@@ -272,6 +272,8 @@ int morse_send (int chan, char *str, int wpm, int txdelay, int txtail)
 		time_units, morse_units_str(str));
 	}
 
+	audio_flush(ACHAN2ADEV(chan));
+
 	return (txdelay +
 		(int) (TIME_UNITS_TO_MS(time_units, wpm) + 0.5) +
 		txtail);

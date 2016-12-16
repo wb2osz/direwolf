@@ -293,9 +293,9 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
 
 	  D->ms_filter_len_bits = 1.25;		// Delay line > 13/12 * symbol period		
 
-	  D->coffs = (int) round( (11. / 12.) * (float)samples_per_sec / (float)correct_baud );
+	  D->coffs = (int) round( (11.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
 	  D->boffs = (int) round(               (float)samples_per_sec / (float)correct_baud );
-	  D->soffs = (int) round( (13. / 12.) * (float)samples_per_sec / (float)correct_baud );
+	  D->soffs = (int) round( (13.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
 	}
 	else {
 
@@ -380,18 +380,18 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
 
 	  D->ms_filter_len_bits = 1.25;		// Delay line > 10/9 * symbol period		
 
-	  D->coffs = (int) round( (8. / 9.)  * (float)samples_per_sec / (float)correct_baud );
+	  D->coffs = (int) round( (8.f / 9.f)  * (float)samples_per_sec / (float)correct_baud );
 	  D->boffs = (int) round(              (float)samples_per_sec / (float)correct_baud );
-	  D->soffs = (int) round( (10. / 9.) * (float)samples_per_sec / (float)correct_baud );
+	  D->soffs = (int) round( (10.f / 9.f) * (float)samples_per_sec / (float)correct_baud );
 	}
 
 
 	if (D->psk_use_lo) {
-	  D->lo_step = (int) round( 256. * 256. * 256. * 256. * carrier_freq / (float)samples_per_sec);
+	  D->lo_step = (int) round( 256. * 256. * 256. * 256. * carrier_freq / (double)samples_per_sec);
 
 	  assert (MAX_FILTER_SIZE >= 256);
 	  for (j = 0; j < 256; j++) {
-	    D->m_sin_table[j] = sinf(2. * M_PI * j / 256.);
+	    D->m_sin_table[j] = sinf(2.f * (float)M_PI * j / 256.f);
 	  }
 	}
 
@@ -491,11 +491,11 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
 	  f2 = carrier_freq + D->prefilter_baud * correct_baud;
 #if 0
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("Generating prefilter %.0f to %.0f Hz.\n", f1, f2);
+	  dw_printf ("Generating prefilter %.0f to %.0f Hz.\n", (double)f1, (double)f2);
 #endif
 	  if (f1 <= 0) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Prefilter of %.0f to %.0f Hz doesn't make sense.\n", f1, f2);
+	    dw_printf ("Prefilter of %.0f to %.0f Hz doesn't make sense.\n", (double)f1, (double)f2);
 	    f1 = 10;
 	  }
 
@@ -642,7 +642,7 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 	  /* 256 units/cycle makes modulo processing easier. */
 	  /* Make sure it is positive before truncating to integer. */
 
-	  id = ((int)((delta / (2.f * M_PI) + 1.f) * 256.f)) & 0xff;
+	  id = ((int)((delta / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
 	  
 	  if (D->modem_type == MODEM_QPSK) {
 	    demod_phase_shift = ((id + 32) >> 6) & 0x3;
@@ -686,7 +686,7 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 	    }
 #else
 	    a = my_atan2f(I,Q);
-	    int id = ((int)((a / (2.f * M_PI) + 1.f) * 256.f)) & 0xff;
+	    int id = ((int)((a / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
 	    // 128 compensates for 180 degree phase shift due
 	    // to 1 1/2 carrier cycles per symbol period.
 	    demod_phase_shift = ((id + 128) >> 6) & 0x3;
@@ -697,7 +697,7 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 	    int idelta;
 
 	    a = my_atan2f(I,Q);
-	    idelta = ((int)((a / (2.f * M_PI) + 1.f) * 256.f)) & 0xff;
+	    idelta = ((int)((a / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
 	    // 32 (90 degrees) compensates for 1800 carrier vs. 1800 baud.
 	    // 16 is to set threshold between constellation points.
 	    demod_phase_shift = ((idelta - 32 - 16) >> 5) & 0x7;
@@ -827,16 +827,20 @@ static void inline nudge_pll (int chan, int subchan, int slice, int demod_bits, 
 
 /*
  * If demodulated data has changed,
- * pull the PLL phase closer to zero.
+ * Pull the PLL phase closer to zero.
+ * Use "floor" instead of simply casting so the sign won't flip.
+ * For example if we had -0.7 we want to end up with -1 rather than 0.
  */
+
+// TODO: demod_9600 has an improved technique.  Would it help us here?
 
         if (demod_bits != D->slicer[slice].prev_demod_data) {
 
 	  if (hdlc_rec_gathering (chan, subchan, slice)) {
-	    D->slicer[slice].data_clock_pll = (int)floor((double)(D->slicer[slice].data_clock_pll) * D->pll_locked_inertia);
+	    D->slicer[slice].data_clock_pll = (int)floorf((float)(D->slicer[slice].data_clock_pll) * D->pll_locked_inertia);
 	  }
 	  else {
-	    D->slicer[slice].data_clock_pll = (int)floor((double)(D->slicer[slice].data_clock_pll) * D->pll_searching_inertia);
+	    D->slicer[slice].data_clock_pll = (int)floorf((float)(D->slicer[slice].data_clock_pll) * D->pll_searching_inertia);
 	  }
 	}
 
