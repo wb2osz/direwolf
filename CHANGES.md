@@ -5,6 +5,27 @@
 
 ----------
 
+## Version 1.4  -- Development snapshot E --  December 2016 ##
+
+This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
+
+
+### New Features: ###
+
+- DTMF tones can be sent by putting "DTMF" in the destination address,  similar to the way that Morse Code is sent.
+
+### Bugs Fixed: ###
+
+- The transmitter (PTT control) was being turned off too soon when sending Morse Code.
+
+- The -qd (quiet decode) command line option now suppresses errors about improperly formed Telemetry packets.
+
+- Longer tocall.txt files can now be handled.  
+
+
+
+----------
+
 ## Version 1.4  -- Development snapshot D --  November 2016 ##
 
 This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
