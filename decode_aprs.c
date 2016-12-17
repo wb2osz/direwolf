@@ -111,7 +111,7 @@ static void aprs_station_capabilities (decode_aprs_t *A, char *, int);
 static void aprs_status_report (decode_aprs_t *A, char *, int);
 static void aprs_general_query (decode_aprs_t *A, char *, int, int quiet);
 static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet);
-static void aprs_telemetry (decode_aprs_t *A, char *, int, int quiet);
+static void aprs_telemetry (decode_aprs_t *A, char *info, int info_len, int quiet);
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *, int);
 static void aprs_morse_code (decode_aprs_t *A, char *, int);
 static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *, int);
@@ -3076,7 +3076,7 @@ double get_latitude_8 (char *p, int quiet)
 	  return (G_UNKNOWN);
 	}
 
-	if (plat->minn[0] >= '0' || plat->minn[0] <= '5')
+	if (plat->minn[0] >= '0' && plat->minn[0] <= '5')
 	  result += ((plat->minn[0]) - '0') * (10. / 60.);
 	else if (plat->minn[0] == ' ')
 	  ;
@@ -3239,7 +3239,7 @@ double get_longitude_9 (char *p, int quiet)
 	  return (G_UNKNOWN);
 	}
 
-	if (plon->minn[0] >= '0' || plon->minn[0] <= '5')
+	if (plon->minn[0] >= '0' && plon->minn[0] <= '5')
 	  result += ((plon->minn[0]) - '0') * (10. / 60.);
 	else if (plon->minn[0] == ' ')
 	  ;
@@ -3683,7 +3683,15 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
  *
  *------------------------------------------------------------------*/
 
-#define MAX_TOCALLS 150
+// If I was more ambitious, this would dynamically allocate enough
+// storage based on the file contents.  Just stick in a constant for
+// now.  This takes an insignificant amount of space and
+// I don't anticipate tocalls.txt growing that quickly.
+// Version 1.4 - add message if too small instead of silently ignoring the rest.
+
+// Dec. 2016 tocalls.txt has 153 destination addresses.
+
+#define MAX_TOCALLS 200
 
 static struct tocalls_s {
 	unsigned char len;
@@ -3780,7 +3788,7 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	        if (strlen(tocalls[num_tocalls].prefix) > 2) {
 	          tocalls[num_tocalls].description = strdup(stuff+14);
 		  tocalls[num_tocalls].len = strlen(tocalls[num_tocalls].prefix);
-	          // dw_printf("debug: %d '%s' -> '%s'\n", tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
+	          // dw_printf("debug %d: %d '%s' -> '%s'\n", num_tocalls, tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
 
 	          num_tocalls++;
 	        }
@@ -3804,10 +3812,14 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	        if (strlen(tocalls[num_tocalls].prefix) > 2) {
 	          tocalls[num_tocalls].description = strdup(stuff+14);
 		  tocalls[num_tocalls].len = strlen(tocalls[num_tocalls].prefix);
-	          // dw_printf("debug: %d '%s' -> '%s'\n", tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
+	          // dw_printf("debug %d: %d '%s' -> '%s'\n", num_tocalls, tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
 
 	          num_tocalls++;
 	        }
+	      }
+	      if (num_tocalls == MAX_TOCALLS) {		// oops. might have discarded some.
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("MAX_TOCALLS needs to be larger than %d to handle contents of 'tocalls.txt'.\n", MAX_TOCALLS);
 	      }
 	    }
 	    fclose(fp);
@@ -3832,9 +3844,12 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	      dw_printf("System types in the destination field will not be decoded.\n");
 	    }
 	  }
-
 	
 	  first_time = 0;
+
+	  //for (n=0; n<num_tocalls; n++) {
+	  //  dw_printf("sorted %d: %d '%s' -> '%s'\n", n, tocalls[n].len, tocalls[n].prefix, tocalls[n].description);
+	  //}
 	}
 
 

@@ -107,6 +107,7 @@
 #include "aprs_tt.h"
 #include "tt_user.h"
 #include "igate.h"
+#include "pfilter.h"
 #include "symbols.h"
 #include "dwgps.h"
 #include "waypoint.h"
@@ -164,6 +165,8 @@ static struct tt_config_s tt_config;
 //struct digi_config_s digi_config;
 //struct cdigi_config_s cdigi_config;
 
+static const int audio_amplitude = 100;	/* % of audio sample range. */
+					/* This translates to +-32k for 16 bit samples. */
 
 static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in hexadecimal. */
 static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
@@ -254,7 +257,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -693,7 +696,7 @@ int main (int argc, char *argv[])
 /*
  * Initialize the touch tone decoder & APRStt gateway.
  */
-	dtmf_init (&audio_config);
+	dtmf_init (&audio_config, audio_amplitude);
 	aprs_tt_init (&tt_config);
 	tt_user_init (&audio_config, &tt_config);
 
@@ -702,8 +705,8 @@ int main (int argc, char *argv[])
  * Note:  This is not the same as a volume control you would see on the screen.
  * It is the range of the digital sound representation.
 */
-	gen_tone_init (&audio_config, 100, 0);
-	morse_init (&audio_config, 100);
+	gen_tone_init (&audio_config, audio_amplitude, 0);
+	morse_init (&audio_config, audio_amplitude);
 
 	assert (audio_config.adev[0].bits_per_sample == 8 || audio_config.adev[0].bits_per_sample == 16);
 	assert (audio_config.adev[0].num_channels == 1 || audio_config.adev[0].num_channels == 2);
@@ -746,6 +749,7 @@ int main (int argc, char *argv[])
 	digipeater_init (&audio_config, &digi_config);
 	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
 	cdigipeater_init (&audio_config, &cdigi_config);
+	//FIXME//pfilter_init (&igate_config, 0);
 	ax25_link_init (&misc_config);
 
 /*
@@ -1015,16 +1019,21 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	}
 
 
-/* Decode the contents of APRS frames and display in human-readable form. */
-/* Suppress decoding if "-q d" option used. */
-
+/*
+ * Decode the contents of UI frames and display in human-readable form.
+ * Could be APRS or anything random for old fashioned packet beacons.
+ *
+ * Suppress printed decoding if "-q d" option used.
+ */
 
 	if (ax25_is_aprs(pp)) {
 
 	  decode_aprs_t A;
 
-	  decode_aprs (&A, pp, 0);
+	  // we still want to decode it for logging and other processing.
+	  // Just be quiet about errors if "-qd" is set.
 
+	  decode_aprs (&A, pp, q_d_opt);
 
 	  if ( ! q_d_opt ) {
 
@@ -1046,9 +1055,10 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // temp experiment.
 	  //log_rr_bits (&A, pp);
 
-	  // Add to list of stations heard.
+	  // Add to list of stations heard over the radio.
 
 	  mheard_save (chan, &A, pp, alevel, retries);
+	  //FIXME//mheard_save_rf (chan, &A, pp, alevel, retries);
 
 
 	  // Convert to NMEA waypoint sentence if we have a location.

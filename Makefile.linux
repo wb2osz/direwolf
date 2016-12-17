@@ -325,7 +325,7 @@ log2gpx : log2gpx.c textcolor.o misc.a
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c misc.a
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c dtmf.c textcolor.c dsp.c misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Unit test for AFSK demodulator
@@ -588,7 +588,7 @@ install-rpi : dw-start.sh
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
 # Can we encode and decode at popular data rates?
 
@@ -632,8 +632,8 @@ check-modem4800 : gen_packets atest
 # Unit test for inner digipeater algorithm
 
 .PHONY : dtest
-dtest : digipeater.c dedupe.c \
-		pfilter.o ax25_pad.o fcs_calc.o tq.o textcolor.o \
+dtest : digipeater.c dedupe.c pfilter.c \
+		ax25_pad.o fcs_calc.o tq.o textcolor.o \
 		decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^ $(LDFLAGS)
 	./dtest
@@ -715,6 +715,15 @@ xidtest : xid.c textcolor.o misc.a
 	$(CC) $(CFLAGS) -DXIDTEST -o $@ $^  $(LDFLAGS)
 	./xidtest
 	rm xidtest
+
+
+# Unit Test for DTMF encode/decode.
+
+.PHONY: dtmftest
+dtmftest : dtmf.c textcolor.o
+	$(CC) $(CFLAGS) -DDTMF_TEST -o $@ $^  $(LDFLAGS)
+	./dtmftest
+	rm dtmftest
 
 
 

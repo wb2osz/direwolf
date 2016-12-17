@@ -74,6 +74,7 @@
 #include "gen_tone.h"
 #include "textcolor.h"
 #include "morse.h"
+#include "dtmf.h"
 
 
 /* Own random number generator so we can get */
@@ -107,6 +108,8 @@ static void send_packet (char *str)
 	int c;
 
 	if (g_morse_wpm > 0) {
+
+	  // TODO: Why not use the destination field instead of command line option?
 
 	  morse_send (0, str, g_morse_wpm, 100, 100);
 	}
@@ -404,6 +407,7 @@ int main(int argc, char **argv)
             case 'M':				/* -M for morse code speed */
 
 //TODO: document this.
+// Why not base it on the destination field instead?
 
               g_morse_wpm = atoi(optarg);
               text_color_set(DW_COLOR_INFO); 
@@ -465,6 +469,7 @@ int main(int argc, char **argv)
 
 	gen_tone_init (&modem, amplitude/2, 1);
 	morse_init (&modem, amplitude/2);
+	dtmf_init (&modem, amplitude/2);
 
 
         assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
@@ -956,3 +961,11 @@ static int audio_file_close (void)
 
 } /* end audio_close */
 
+
+// To keep dtmf.c happy.
+
+#include "hdlc_rec.h"    // for dcd_change
+
+void dcd_change (int chan, int subchan, int slice, int state)
+{
+}

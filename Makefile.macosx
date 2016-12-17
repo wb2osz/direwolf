@@ -437,7 +437,7 @@ log2gpx : log2gpx.c
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c dtmf.c textcolor.c dsp.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) -lm
 
 demod.o      : tune.h
