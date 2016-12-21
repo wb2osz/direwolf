@@ -71,7 +71,12 @@ endif
 
 #CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
 CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
-CFLAGS := -Os -pthread -Igeotranz $(EXTRA_CFLAGS)
+
+# _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
+# Explanation here:  https://github.com/wb2osz/direwolf/issues/62
+
+CFLAGS := -Os -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 $(EXTRA_CFLAGS)
+
 # $(info $$CC is [${CC}])
 
 #

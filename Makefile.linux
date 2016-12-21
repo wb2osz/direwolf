@@ -12,7 +12,14 @@ all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo " "
 
 CC := gcc
-CFLAGS := -O3 -pthread -Igeotranz
+
+# _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
+# Explanation here:  https://github.com/wb2osz/direwolf/issues/62
+
+# There are a few source files where it had been necessary to define __USE_XOPEN2KXSI,
+# __USE_XOPEN, or _POSIX_C_SOURCE.  Doesn't seem to be needed after adding this.
+
+CFLAGS := -O3 -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1
 
 LDFLAGS := -lm -lpthread -lrt
 
@@ -91,7 +98,7 @@ endif
 #         245	
 #          75	-01
 #          72 	-02
-#          71  	-03     
+#          71  	-03
 #          73  	-O3 -march=native
 #          42	-O3 -ffast-math  
 #          42  	-Ofast			(note below)   
