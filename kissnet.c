@@ -509,7 +509,7 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 
 	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
 	 
-	  assert (flen < sizeof(stemp));
+	  assert (flen < (int)(sizeof(stemp)));
 
 	  stemp[0] = (chan << 4) + 0;
 	  memcpy (stemp+1, fbuf, flen);

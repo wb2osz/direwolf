@@ -32,6 +32,8 @@
  * References:	http://eetimes.com/design/embedded/4024443/The-Goertzel-Algorithm
  * 		http://www.ti.com/ww/cn/uprogram/share/ppt/c5000/17dtmf_v13.ppt
  *
+ * Revisions:	1.4 - Added transmit capability.
+ *
  *---------------------------------------------------------------*/
 
 #include "direwolf.h"
@@ -107,7 +109,7 @@ static void push_button (int chan, char button, int ms);
  *
  *		amp		- Signal amplitude, for transmit, on scale of 0 .. 100.
  *
- *				  100 will produce maximum amplitude of +-32k samples. 
+ *				  100 will produce maximum amplitude of +-32k samples.
  *
  * Returns:     None.
  *
@@ -338,8 +340,8 @@ char dtmf_sample (int c, float input)
  *		str	- Character string to send.  0-9, A-D, *, #
  *		speed	- Number of tones per second.  Range 1 to 10.
  *		txdelay	- Delay (ms) from PTT to start.
- *		txtail	- Delay (ms) from end to PTT off.	
- *		
+ *		txtail	- Delay (ms) from end to PTT off.
+ *
  * Returns:	Total number of milliseconds to activate PTT.
  *		This includes delays before the first tone
  *		and after the last to avoid chopping off part of it.
@@ -353,7 +355,7 @@ int dtmf_send (int chan, char *str, int speed, int txdelay, int txtail)
 {
 	char *p;
 	int len_ms;	// Length of tone or gap between.
-	
+
 	len_ms = (int) ( ( 500.0f / (float)speed ) + 0.5f);
 
 	push_button (chan, ' ', txdelay);

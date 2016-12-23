@@ -122,7 +122,7 @@ static const struct morse_s {
 
 };
 
-#define NUM_MORSE (sizeof(morse) / sizeof(struct morse_s))
+#define NUM_MORSE ((int)(sizeof(morse) / sizeof(struct morse_s)))
 
 static void morse_tone (int chan, int tu, int wpm);
 static void morse_quiet (int chan, int tu, int wpm);

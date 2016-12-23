@@ -63,7 +63,7 @@
 #define MAX(a,b) ((a)>(b)?(a):(b))
 
 
-
+#ifndef GEN_FFF
 
 /* Quick approximation to sqrt(x*x+y*y) */
 /* No benefit for regular PC. */
@@ -136,6 +136,8 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
 	}
 	return (0.0f);
 }
+
+#endif	// ifndef GEN_FFF
 
 
 /*
@@ -806,7 +808,7 @@ int main (void)
  *
  *--------------------------------------------------------------------*/
 
-static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D);
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
@@ -1086,7 +1088,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 
 __attribute__((hot))
-static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D)
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D)
 {
 
 /*

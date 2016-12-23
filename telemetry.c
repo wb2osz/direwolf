@@ -74,8 +74,8 @@
 #define T_STR_LEN 16				/* Max len for labels and units. */
 
 
-#define MAGIC1  0xa51111a5			/* For checking storage allocation problems. */
-#define MAGIC2  0xa52222a5
+#define MAGIC1  0x5a1111a5			/* For checking storage allocation problems. */
+#define MAGIC2  0x5a2222a5
 
 #define C_A 0					/* Scaling coefficient positions. */
 #define C_B 1
@@ -354,7 +354,7 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	      strlcpy (comment, next+8, commentsize);
 	      next[8] = '\0';
 	    }
-	    for (k = 0; k < strlen(next); k++) {
+	    for (k = 0; k < (int)(strlen(next)); k++) {
 	      if (next[k] == '0') {
 	        draw[k] = 0;
 	      }
@@ -819,7 +819,7 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
 	  }
 	}
 
-	for (n = 0; n < T_NUM_DIGITAL && n < strlen(msg); n++) {
+	for (n = 0; n < T_NUM_DIGITAL && n < (int)(strlen(msg)); n++) {
 
 	  if (msg[n] == '1') {
 	    pm->sense[n] = 1;

@@ -283,7 +283,7 @@ static inline int ax25_get_num_info (packet_t this_p)
 #endif
 
 
-typedef enum ax25_modulo_e { modulo_8 = 8, modulo_128 = 128 } ax25_modulo_t;
+typedef enum ax25_modulo_e { modulo_unknown = 0, modulo_8 = 8, modulo_128 = 128 } ax25_modulo_t;
 
 typedef enum ax25_frame_type_e {
 

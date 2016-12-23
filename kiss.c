@@ -120,9 +120,6 @@
 #if __WIN32__
 #include <stdlib.h>
 #else
-#define __USE_XOPEN2KXSI 1
-#define __USE_XOPEN 1
-//#define __USE_POSIX 1
 #include <stdlib.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -256,7 +253,7 @@ void kiss_init (struct misc_config_s *mc)
 	HANDLE kiss_nullmodem_listen_th;
 #else
 	pthread_t kiss_pterm_listen_tid;
-	pthread_t kiss_nullmodem_listen_tid;
+	//pthread_t kiss_nullmodem_listen_tid;
 	int e;
 #endif
 
@@ -669,7 +666,7 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 
 	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
 	 
-	  assert (flen < sizeof(stemp));
+	  assert (flen < (int)(sizeof(stemp)));
 
 	  stemp[0] = (chan << 4) + 0;
 	  memcpy (stemp+1, fbuf, flen);
@@ -756,7 +753,7 @@ void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen)
 	      //nullmodem_fd = MYFDERROR;
 	    }
 	  }
-	  else if (nwritten != kiss_len)
+	  else if ((int)nwritten != kiss_len)
 	  {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("\nError sending KISS message to client application thru null modem.  Only %d of %d written.\n\n", (int)nwritten, kiss_len);

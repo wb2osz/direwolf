@@ -585,7 +585,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	struct hdlc_state_s H;	
 	int blen;			/* Block length in bits. */
 	int i;
-	unsigned int raw;			/* From demodulator. */
+	int raw;			/* From demodulator.  Should be 0 or 1. */
 #if DEBUGx
 	int crc_failed = 1;
 #endif

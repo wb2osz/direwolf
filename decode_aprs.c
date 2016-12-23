@@ -45,9 +45,6 @@
 #include <ctype.h>	/* for isdigit */
 #include <fcntl.h>
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 1
-#endif
 #include "regex.h"
 
 #include "ax25_pad.h"
@@ -640,14 +637,14 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  if ( ! A->g_quiet) {
 
 	    for (j=0; j<n; j++) {
-	      if ((unsigned)A->g_comment[j] == (char)0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
+	      if ((unsigned char)(A->g_comment[j]) == 0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf("Character code 0xb0 is probably an attempt at a degree symbol.\n");
 	        dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");
 	      }	    	
 	    }
 	    for (j=0; j<n; j++) {
-	      if ((unsigned)A->g_comment[j] == (char)0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
+	      if ((unsigned char)(A->g_comment[j]) == 0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf("Character code 0xf8 is probably an attempt at a degree symbol.\n");
 	        dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");	    	
@@ -4103,7 +4100,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * digipeated, causing the comment to be hundreds of characters long.
  */
 
-	if (clen > sizeof(A->g_comment) - 1) {
+	if (clen > (int)(sizeof(A->g_comment) - 1)) {
 	  if ( ! A->g_quiet) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Comment is extremely long, %d characters.\n", clen);

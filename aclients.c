@@ -59,8 +59,6 @@
 #include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
 
 #else 
-//#define __USE_XOPEN2KXSI 1
-//#define __USE_XOPEN 1
 #include <stdlib.h>
 #include <netdb.h>
 #include <sys/types.h>
@@ -466,7 +464,11 @@ static void * client_thread_net (void *arg)
 	// Try each address until we find one that is successful.
 
 	for (n=0; n<num_hosts; n++) {
+#if __WIN32__
+	  SOCKET is;
+#else
 	  int is;
+#endif
 
 	  ai = hosts[n];
 
@@ -576,7 +578,7 @@ static void * client_thread_net (void *arg)
 	  printf ("client %d received '%c' data, data_len = %d\n", 
 			my_index, mon_cmd.kind_lo, mon_cmd.data_len);
 #endif
-	  assert (mon_cmd.data_len >= 0 && mon_cmd.data_len < sizeof(data));
+	  assert (mon_cmd.data_len >= 0 && mon_cmd.data_len < (int)(sizeof(data)));
 
 	  if (mon_cmd.data_len > 0) {
 #if __WIN32__

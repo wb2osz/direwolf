@@ -1193,7 +1193,7 @@ void dl_data_request (dlq_item_t *E)
 	first_segment.original_pid = E->txdata->pid;
 	seglen = MIN(S->n1_paclen - 2, remaining_len);
 
-	if (seglen < 1 || seglen > S->n1_paclen - 2 || seglen > remaining_len || seglen > sizeof (first_segment.segdata)) {
+	if (seglen < 1 || seglen > S->n1_paclen - 2 || seglen > remaining_len || seglen > (int)(sizeof(first_segment.segdata))) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("INTERNAL ERROR, Segmentation line %d, data length = %d, N1 = %d, segment length = %d, number to follow = %d\n",
 					__LINE__, E->txdata->len, S->n1_paclen, seglen, nseg_to_follow);
@@ -1225,7 +1225,7 @@ void dl_data_request (dlq_item_t *E)
 	  subsequent_segment.header = nseg_to_follow;
 	  seglen = MIN(S->n1_paclen - 1, remaining_len);
 
-	  if (seglen < 1 || seglen > S->n1_paclen - 1 || seglen > remaining_len || seglen > sizeof (subsequent_segment.segdata)) {
+	  if (seglen < 1 || seglen > S->n1_paclen - 1 || seglen > remaining_len || seglen > (int)(sizeof(subsequent_segment.segdata))) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("INTERNAL ERROR, Segmentation line %d, data length = %d, N1 = %d, segment length = %d, number to follow = %d\n",
 					__LINE__, E->txdata->len, S->n1_paclen, seglen, nseg_to_follow);
@@ -1928,7 +1928,7 @@ void lm_data_indication (dlq_item_t *E)
 
 // Gather statistics useful for testing.
 
-	if (ftype >= 0 && ftype <= frame_not_AX25) {
+	if (ftype <= frame_not_AX25) {
 	  S->count_recv_frame_type[ftype]++;
 	}
 
@@ -6083,7 +6083,7 @@ static void negotiation_response (ax25_dlsm_t *S, struct xid_param_s *param)
 // Other end might want 8.
 // Seems unlikely.  If it implements XID it should have modulo 128.
 
-	if (param->modulo == G_UNKNOWN) {
+	if (param->modulo == modulo_unknown) {
 	  param->modulo = 8;			// Not specified.  Set default.
 	}
 	else {
@@ -6094,7 +6094,7 @@ static void negotiation_response (ax25_dlsm_t *S, struct xid_param_s *param)
 // Erratum:  2006 version, section, 4.3.3.7 says default selective reject - reject.
 // We can't do that.
 
-	if (param->rej == G_UNKNOWN) {
+	if (param->rej == unknown_reject) {
 	  param->rej = (param->modulo == 128) ? selective_reject : implicit_reject;	// not specified, set default
 	}
 	else {
@@ -6166,11 +6166,11 @@ static void negotiation_response (ax25_dlsm_t *S, struct xid_param_s *param)
 
 static void complete_negotiation (ax25_dlsm_t *S, struct xid_param_s *param)
 {
-	if (param->rej != G_UNKNOWN) {
+	if (param->rej != unknown_reject) {
 	  S->srej_enabled = param->rej >= selective_reject;
 	}
 
-	if (param->modulo != G_UNKNOWN) {
+	if (param->modulo != modulo_unknown) {
 	  // Disaster if aren't agreeing on this.
 	  S->modulo = param->modulo;
 	}

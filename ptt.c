@@ -571,6 +571,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	      /* Try to change protection. */
 	      err = system ("sudo chmod go+w /sys/class/gpio/export /sys/class/gpio/unexport");
+	      (void)err;
 	      
 	      if (stat("/sys/class/gpio/export", &finfo) < 0) {
 	        /* Unexpected because we could do it before. */

@@ -526,7 +526,7 @@ void symbols_list (void)
  *
  *------------------------------------------------------------------*/
 
-const static char ssid_to_sym[16] = {
+static const char ssid_to_sym[16] = {
 	  ' ',	/* 0 - No icon. */
 	  'a',	/* 1 - Ambulance */
 	  'U',	/* 2 - Bus */

@@ -108,7 +108,7 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 	HANDLE read_gps_th;
 #else
 	pthread_t read_gps_tid;
-	int e;
+	//int e;
 #endif
 
 	s_debug = debug;

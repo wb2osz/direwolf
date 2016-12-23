@@ -123,12 +123,12 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 // The  AX.25 v2.2 protocol spec says, for most of these,
 //	"If this field is not present, the current values are retained."
 
-// We set the values to our usual G_UNKNOWN to mean undefined and let the caller deal with it.
-
+// We set the numeric values to our usual G_UNKNOWN to mean undefined and let the caller deal with it.
+// rej and modulo are enum so we can't use G_UNKNOWN there.
 
 	result->full_duplex = G_UNKNOWN;
-	result->rej = G_UNKNOWN;
-	result->modulo = G_UNKNOWN;
+	result->rej = unknown_reject;
+	result->modulo = modulo_unknown;
 	result->i_field_length_rx = G_UNKNOWN;
 	result->window_size_rx = G_UNKNOWN;
 	result->ack_timer = G_UNKNOWN;
@@ -438,7 +438,7 @@ int xid_encode (struct xid_param_s *param, unsigned char *info)
 		PV_HDLC_Optional_Functions_16_bit_FCS | 
 		PV_HDLC_Optional_Functions_Synchronous_Tx;
 
-	if (param->rej == implicit_reject || param->rej == selective_reject_reject || param->rej == G_UNKNOWN)
+	if (param->rej == implicit_reject || param->rej == selective_reject_reject || param->rej == unknown_reject)
 	  x |= PV_HDLC_Optional_Functions_REJ_cmd_resp;
 
 	if (param->rej == selective_reject || param->rej == selective_reject_reject)	
@@ -446,7 +446,7 @@ int xid_encode (struct xid_param_s *param, unsigned char *info)
 
 	if (param->modulo == modulo_128)
 	  x |= PV_HDLC_Optional_Functions_Modulo_128;
-	else	// includes G_UNKNOWN
+	else	// includes modulo_8 and modulo_unknown
 	  x |= PV_HDLC_Optional_Functions_Modulo_8;
 
 	*p++ = (x >> 16) & 0xff;
@@ -689,8 +689,8 @@ int main (int argc, char *argv[]) {
 	text_color_set (DW_COLOR_ERROR);
 
 	assert (param2.full_duplex == G_UNKNOWN);
-	assert (param2.rej == G_UNKNOWN);
-	assert (param2.modulo == G_UNKNOWN);
+	assert (param2.rej == unknown_reject);
+	assert (param2.modulo == modulo_unknown);
 	assert (param2.i_field_length_rx == G_UNKNOWN);
 	assert (param2.window_size_rx == G_UNKNOWN);
 	assert (param2.ack_timer == G_UNKNOWN);

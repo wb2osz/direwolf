@@ -1212,6 +1212,7 @@ static void send_to_client (int client, void *reply_p)
 	send (client_sock[client], (char*)(ph), len, 0);
 #else
 	err = write (client_sock[client], ph, len);
+	(void)err;
 #endif
 }
 
@@ -1274,7 +1275,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	  int data_len = netle2host(cmd.hdr.data_len_NETLE);
 
-	  if (data_len < 0 || data_len > sizeof(cmd.data) - 1) {
+	  if (data_len < 0 || data_len > (int)(sizeof(cmd.data) - 1)) {
 
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("\nInvalid message from AGW client application %d.\n", client);

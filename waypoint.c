@@ -39,9 +39,6 @@
 #if __WIN32__
 #include <stdlib.h>
 #else
-#define __USE_XOPEN2KXSI 1
-#define __USE_XOPEN 1
-//#define __USE_POSIX 1
 #include <stdlib.h>
 #include <ctype.h>
 #include <sys/errno.h>
@@ -614,7 +611,7 @@ static void send_sentence (char *sent)
 
 
 
-void waypoint_term ()
+void waypoint_term (void)
 {
 
 	if (s_waypoint_port_fd != MYFDERROR) {

@@ -579,7 +579,7 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
 
 
 
-static void inline nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D);
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
@@ -758,7 +758,7 @@ static const int phase_to_gray_v27[8] = {1, 0, 2, 3, 7, 6, 4, 5};
 
 
 __attribute__((hot))
-static void inline nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D)
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D)
 {
 
 /*

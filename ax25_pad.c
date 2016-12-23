@@ -170,10 +170,6 @@
 #include <assert.h>
 #include <stdio.h>
 #include <ctype.h>
-#ifndef _POSIX_C_SOURCE
-
-#define _POSIX_C_SOURCE 1
-#endif
 
 #include "regex.h"
 

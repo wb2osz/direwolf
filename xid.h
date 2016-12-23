@@ -12,7 +12,7 @@ struct xid_param_s {
 	// Order is important because negotiation keeps the lower value.
 	// We will support only 1 & 2.
 
-	enum rej_e {implicit_reject=1, selective_reject=2, selective_reject_reject=3 } rej;
+	enum rej_e {unknown_reject=0, implicit_reject=1, selective_reject=2, selective_reject_reject=3 } rej;
 
 	enum ax25_modulo_e modulo;
 

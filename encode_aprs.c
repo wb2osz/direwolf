@@ -599,7 +599,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 	  result_len += strlen(comment);
 	}
 
-	if (result_len >= result_size) {
+	if (result_len >= (int)result_size) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("encode_position result of %d characters won't fit into space provided.\n", result_len);
 	}
@@ -683,7 +683,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 
 	memset (p->o.name, ' ', sizeof(p->o.name));
 	n = strlen(name);
-	if (n > sizeof(p->o.name)) n = sizeof(p->o.name);
+	if (n > (int)(sizeof(p->o.name))) n = sizeof(p->o.name);
 	memcpy (p->o.name, name, n);
 
 	p->o.live_killed = '*';
@@ -749,7 +749,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 	  result_len += strlen(comment);
 	}
 
-	if (result_len >= result_size) {
+	if (result_len >= (int)result_size) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("encode_object result of %d characters won't fit into space provided.\n", result_len);
 	}

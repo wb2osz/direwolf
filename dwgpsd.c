@@ -75,6 +75,7 @@ static struct gps_data_t gpsdata;
 #include "dwgpsd.h"
 
 
+#if ENABLE_GPSD
 
 static int s_debug = 0;		/* Enable debug output. */
 				/* >= 1 show results from dwgps_read. */
@@ -82,6 +83,7 @@ static int s_debug = 0;		/* Enable debug output. */
 
 static void * read_gpsd_thread (void *arg);
 
+#endif
 
 
 
@@ -157,7 +159,6 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 	int err;
 	int arg = 0;
 	char sport[12];
-	dwgps_info_t info;
 
 	s_debug = debug;
 
@@ -179,7 +180,6 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 	snprintf (sport, sizeof(sport), "%d", pconfig->gpsd_port);
 	err = gps_open (pconfig->gpsd_host, sport, &gpsdata);
 	if (err != 0) {
-	  dwgps_info_t info;
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Unable to connect to GPSD stream at %s:%s.\n", pconfig->gpsd_host, sport);
@@ -335,7 +335,7 @@ static void * read_gpsd_thread (void *arg)
 
 	return(0);	// Terminate thread on serious error.
 
-} /* end read_gps_thread */
+} /* end read_gpsd_thread */
 
 #endif
 

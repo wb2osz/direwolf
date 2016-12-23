@@ -184,7 +184,7 @@ int demod_init (struct audio_s *pa)
 	        }
 	      }
 
-	      assert (num_letters == strlen(just_letters));
+	      assert (num_letters == (int)(strlen(just_letters)));
 
 /*
  * Pick a good default demodulator if none specified. 
@@ -222,7 +222,7 @@ int demod_init (struct audio_s *pa)
 	      }
 
 
-	      assert (num_letters == strlen(just_letters));
+	      assert (num_letters == (int)(strlen(just_letters)));
 
 /*
  * Put it back together again.

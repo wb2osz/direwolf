@@ -261,7 +261,7 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
  *
  *--------------------------------------------------------------------*/
 
-static void inline nudge_pll (int chan, int subchan, int slice, float demod_out, struct demodulator_state_s *D);
+inline static void nudge_pll (int chan, int subchan, int slice, float demod_out, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D)
@@ -484,7 +484,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  *--------------------------------------------------------------------*/
 
 __attribute__((hot))
-static void inline nudge_pll (int chan, int subchan, int slice, float demod_out_f, struct demodulator_state_s *D)
+inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_f, struct demodulator_state_s *D)
 {
 
 /*

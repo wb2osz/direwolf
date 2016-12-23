@@ -207,7 +207,7 @@ packet_t ax25_u_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	packet_t this_p;
 	unsigned char *p;
 	int ctrl = 0;
-	int t = -1;		// 1 = must be cmd, 0 = must be response, 2 = can be either.
+	unsigned int t = 999;	// 1 = must be cmd, 0 = must be response, 2 = can be either.
 	int i = 0;		// Is Info part allowed?
 
 	this_p = ax25_new ();

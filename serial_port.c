@@ -44,8 +44,6 @@
 
 #else
 
-#define __USE_XOPEN2KXSI 1
-#define __USE_XOPEN 1
 #include <stdlib.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -305,7 +303,7 @@ int serial_port_write (MYFDTYPE fd, char *str, int len)
 	    dw_printf ("Error writing to serial port.  Error %d.\n\n", err);
 	  }
 	}
-	else if (nwritten != len) 
+	else if ((int)nwritten != len) 
 	{
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Error writing to serial port.  Only %d of %d written.\n\n", (int)nwritten, len);

@@ -337,9 +337,6 @@ rrbb_t rdq_remove (void)
 {
 
 	rrbb_t result_p;
-#ifndef __WIN32__
-	int err;
-#endif
 
 
 #if DEBUG

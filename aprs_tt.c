@@ -1447,7 +1447,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	  
 	  len = strlen(tt_config.ttloc_ptr[ipat].pattern);
 
-	  if (strlen(e) == len) {
+	  if ((int)(strlen(e)) == len) {
 
 	    match = 1;
 	    strlcpy (xstr, "", valstrsize);
