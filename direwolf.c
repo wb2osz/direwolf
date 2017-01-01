@@ -167,6 +167,7 @@ static struct tt_config_s tt_config;
 
 static const int audio_amplitude = 100;	/* % of audio sample range. */
 					/* This translates to +-32k for 16 bit samples. */
+					/* Currently no option to change this. */
 
 static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in hexadecimal. */
 static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
@@ -204,6 +205,8 @@ int main (int argc, char *argv[])
 	int d_g_opt = 0;	/* "-d g" option for GPS. Can be repeated for more detail. */
 	int d_o_opt = 0;	/* "-d o" option for output control such as PTT and DCD. */	
 	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */
+	int d_m_opt = 0;	/* "-d m" option for mheard list. */
+	int d_f_opt = 0;	/* "-d f" option for filtering.  Repeat for more detail. */
 #if USE_HAMLIB
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
@@ -257,7 +260,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -477,9 +480,11 @@ int main (int argc, char *argv[])
 	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      case 'o':  d_o_opt++; ptt_set_debug(d_o_opt); break;	
 	      case 'i':  d_i_opt++; break;
+	      case 'm':  d_m_opt++; break;
+	      case 'f':  d_f_opt++; break;
 #if AX25MEMDEBUG
-	      case 'm':  ax25memdebug_set(); break;		// Track down memory leak.  Not documented.		
-#endif
+	      case 'l':  ax25memdebug_set(); break;		// Track down memory Leak.  Not documented.
+#endif								// Previously 'm' but that is now used for mheard.
 #if USE_HAMLIB
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
@@ -749,7 +754,7 @@ int main (int argc, char *argv[])
 	digipeater_init (&audio_config, &digi_config);
 	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
 	cdigipeater_init (&audio_config, &cdigi_config);
-	//FIXME//pfilter_init (&igate_config, 0);
+	pfilter_init (&igate_config, d_f_opt);
 	ax25_link_init (&misc_config);
 
 /*
@@ -778,7 +783,7 @@ int main (int argc, char *argv[])
  */
 
 	log_init(misc_config.logdir);
-	mheard_init (0);		// might add debug option someday.
+	mheard_init (d_m_opt);
 	beacon_init (&audio_config, &misc_config, &igate_config);
 
 
@@ -1057,8 +1062,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	  // Add to list of stations heard over the radio.
 
-	  mheard_save (chan, &A, pp, alevel, retries);
-	  //FIXME//mheard_save_rf (chan, &A, pp, alevel, retries);
+	  mheard_save_rf (chan, &A, pp, alevel, retries);
 
 
 	  // Convert to NMEA waypoint sentence if we have a location.
@@ -1209,6 +1213,7 @@ static void usage (char **argv)
 	dw_printf ("       t             t = Tracker beacon.\n");
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
 	dw_printf ("       i             i = IGate.\n");
+	dw_printf ("       m             m = Monitor heard station list.\n");
 #if USE_HAMLIB
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif

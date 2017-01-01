@@ -18,6 +18,11 @@
 
 These dive into more detail for specialized topics or typical usage scenarios.
 
+- [Successful APRS IGate Operation](Successful-APRS-IGate-Operation.pdf)
+
+	Dire Wolf can serve as a gateway between the APRS radio network and APRS-IS servers on the Internet.
+
+    This explains how it all works, proper configuration, and troubleshooting.
 
 - [APRStt Implementation Notes](APRStt-Implementation-Notes.pdf)
 

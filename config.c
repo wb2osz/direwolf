@@ -138,7 +138,7 @@ static const struct units_s {
 	{	"league",	4828.032	},	
 	{	"lea",		4828.032	} };
 
-#define NUM_UNITS (sizeof(units) / sizeof(struct units_s))
+#define NUM_UNITS ((int)((sizeof(units) / sizeof(struct units_s))))
 
 static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_s *p_audio_config);
 
@@ -857,6 +857,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_igate_config->tx_chan = -1;			/* IS->RF not enabled */
 	p_igate_config->tx_limit_1 = IGATE_TX_LIMIT_1_DEFAULT;
 	p_igate_config->tx_limit_5 = IGATE_TX_LIMIT_5_DEFAULT;
+	p_igate_config->igmsp = 1;
 
 
 	/* People find this confusing. */
@@ -2503,7 +2504,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: TTPOINT pattern must begin with upper case 'B'.\n", line);
 	    }
-	    for (j=1; j<strlen(t); j++) {
+	    for (j=1; j<(int)(strlen(t)); j++) {
 	      if ( ! isdigit(t[j])) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTPOINT pattern must be B and digits only.\n", line);
@@ -2586,7 +2587,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: TTVECTOR pattern would normally contain \"5bbb\".\n", line);
 	    }
-	    for (j=1; j<strlen(t); j++) {
+	    for (j=1; j<(int)(strlen(t)); j++) {
 	      if ( ! isdigit(t[j]) && t[j] != 'b' && t[j] != 'd') {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTVECTOR pattern must contain only B, digits, b, and d.\n", line);
@@ -2697,7 +2698,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: TTGRID pattern must begin with upper case 'B'.\n", line);
 	    }
-	    for (j=1; j<strlen(t); j++) {
+	    for (j=1; j<(int)(strlen(t)); j++) {
 	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y') {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTGRID pattern must be B, optional digit, xxx, yyy.\n", line);
@@ -2801,7 +2802,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_tt_config->ttloc_len--;
 	      continue;
 	    }
-	    for (j=1; j<strlen(t); j++) {
+	    for (j=1; j < (int)(strlen(t)); j++) {
 	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y') {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTUTM pattern must be B, optional digit, xxx, yyy.\n", line);
@@ -2920,7 +2921,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    num_x = 0;
 	    num_y = 0;
-	    for (j=1; j<strlen(t); j++) {
+	    for (j=1; j<(int)(strlen(t)); j++) {
 	      if ( ! isdigit(t[j]) && t[j] != 'x' && t[j] != 'y') {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTUSNG/TTMGRS pattern must be B, optional digit, xxx, yyy.\n", line);
@@ -3039,7 +3040,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    count_x = 0;
 	    count_other = 0;
-	    for (k = j ; k < strlen(t); k++) {
+	    for (k = j ; k < (int)(strlen(t)); k++) {
 	      if (t[k] == 'x') count_x++;
 	      else count_other++;
 	    }
@@ -3296,7 +3297,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    p_count[0] = p_count[1] = p_count[2] = 0;
 
-	    for (j=0; j<strlen(t); j++) {
+	    for (j=0; j<(int)(strlen(t)); j++) {
 	      if ( strchr ("0123456789ABCDxyz", t[j]) == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: TTMACRO pattern can contain only digits, A, B, C, D, and lower case x, y, or z.\n", line);
@@ -3493,7 +3494,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    d_count[0] = d_count[1] = d_count[2] = 0;
 
-	    for (j=0; j<strlen(otemp); j++) {
+	    for (j=0; j<(int)(strlen(otemp)); j++) {
 	      if (otemp[j] >= 'x' && otemp[j] <= 'z') {
 		d_count[otemp[j]-'x']++;
 	      }
@@ -3903,7 +3904,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * IGFILTER 		- Filter for messages from IGate server
+ * IGFILTER 		- IGate Server side filters.
  *
  * IGFILTER  filter-spec ... 
  */
@@ -3972,6 +3973,37 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("You won't make friends by setting a limit this high.\n");
    	    }
 	  }
+
+
+/*
+ * IGMSP 		- Number of times to send position of message sender.
+ *
+ * IGMSP  n
+ */
+
+	  else if (strcasecmp(t, "IGMSP") == 0) {
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+
+	      int n = atoi(t);
+              if (n >= 0 && n <= 10) {
+	        p_igate_config->igmsp = n;
+	      }
+	      else {
+	        p_igate_config->satgate_delay = 1;
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Unreasonable number of times for message sender position.  Using default 1.\n", line);
+	      }
+	    }
+	    else {
+	      p_igate_config->satgate_delay = 1;
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Missing number of times for message sender position.  Using default 1.\n", line);
+	    }
+	  }
+
+
 
 /*
  * SATGATE 		- Special SATgate mode to delay packets heard directly.
@@ -4576,6 +4608,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: MYCALL must be set for receive channel %d before Rx IGate is allowed.\n", i);
 	      strlcpy (p_igate_config->t2_login, "", sizeof(p_igate_config->t2_login));
 	    }
+	    // Currently we can have only one transmit channel.
+	    // This might be generalized someday to allow more.
 	    if (p_igate_config->tx_chan >= 0 && 
 			( strcmp(p_audio_config->achan[p_igate_config->tx_chan].mycall, "") == 0 ||
 		          strcmp(p_audio_config->achan[p_igate_config->tx_chan].mycall, "NOCALL") == 0 ||
@@ -4586,11 +4620,23 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_igate_config->tx_chan = -1;
 	    }
 	  }
-
 	}
 
+// Apply default IS>RF IGate filter if none specified.  New in 1.4.
+// This will handle eventual case of multiple transmit channels.
+
+	for (j=0; j<MAX_CHANS; j++) {
+	  if (p_audio_config->achan[j].valid && strlen(p_igate_config->t2_login) > 0) {
+	    if (p_digi_config->filter_str[MAX_CHANS][j] == NULL) {
+	      p_digi_config->filter_str[MAX_CHANS][j] = strdup("i/30");
+	    }
+	  }
+	}
+
+// Terrible hack.  But what can we do?
+
 	if (p_misc_config->maxv22 < 0) {
-	  p_misc_config->maxv22 = p_misc_config->retry / 2;
+	  p_misc_config->maxv22 = p_misc_config->retry / 3;
 	}
 
 } /* end config_init */

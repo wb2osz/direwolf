@@ -241,14 +241,6 @@ static packet_t cdigipeat_match (int from_chan, packet_t pp, char *mycall_rec, c
 	if (filter_str != NULL) {
 
 	  if (pfilter(from_chan, to_chan, filter_str, pp, 0) != 1) {
-
-// Take out debug message?
-// Actually it turns out to be useful.
-// Maybe add a quiet option to suppress it.
-//#if DEBUG
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Packet was rejected for digipeating from channel %d to %d by cfilter: %s\n", from_chan, to_chan, filter_str);
-//#endif
 	    return(NULL);
 	  }
 	}

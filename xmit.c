@@ -72,6 +72,7 @@
 #include "ptt.h"
 #include "dtime_now.h"
 #include "morse.h"
+#include "dtmf.h"
 #include "xid.h"
 
 
@@ -116,6 +117,8 @@ static int g_debug_xmit_packet;		/* print packet in hexadecimal form for debuggi
 
 #define MS_TO_BITS(ms,ch) (((ms)*xmit_bits_per_sec[(ch)])/1000)
 
+#define MAXX(a,b) (((a)>(b)) ? (a) : (b))
+
 
 #if __WIN32__
 static unsigned __stdcall xmit_thread (void *arg);
@@ -139,6 +142,7 @@ static void xmit_ax25_frames (int c, int p, packet_t pp, int max_bundle);
 static int send_one_frame (int c, int p, packet_t pp);
 static void xmit_speech (int c, packet_t pp);
 static void xmit_morse (int c, packet_t pp, int wpm);
+static void xmit_dtmf (int c, packet_t pp, int speed);
 
 
 /*-------------------------------------------------------------------
@@ -366,13 +370,14 @@ void xmit_set_txtail (int channel, int value)
  *
  *		FLAVOR_SPEECH		- Destination address is SPEECH.
  *		FLAVOR_MORSE		- Destination address is MORSE.
+ *		FLAVOR_DTMF		- Destination address is DTMF.
  *		FLAVOR_APRS_NEW		- APRS original, i.e. not digipeating.
  *		FLAVOR_APRS_DIGI	- APRS digipeating.
  *		FLAVOR_OTHER		- Anything left over, i.e. connected mode.
  *
  *--------------------------------------------------------------------*/
 
-typedef enum flavor_e { FLAVOR_APRS_NEW, FLAVOR_APRS_DIGI, FLAVOR_SPEECH, FLAVOR_MORSE, FLAVOR_OTHER } flavor_t;
+typedef enum flavor_e { FLAVOR_APRS_NEW, FLAVOR_APRS_DIGI, FLAVOR_SPEECH, FLAVOR_MORSE, FLAVOR_DTMF, FLAVOR_OTHER } flavor_t;
 
 static flavor_t frame_flavor (packet_t pp)
 {
@@ -390,6 +395,10 @@ static flavor_t frame_flavor (packet_t pp)
 
 	  if (strcmp(dest, "MORSE") == 0) {
 	   return (FLAVOR_MORSE);
+	  }
+
+	  if (strcmp(dest, "DTMF") == 0) {
+	   return (FLAVOR_DTMF);
 	  }
 
 	  /* Is there at least one digipeater AND has first one been used? */
@@ -448,7 +457,7 @@ static flavor_t frame_flavor (packet_t pp)
  *
  * Version 1.4:	Rearranged logic for bundling multiple frames into a single transmission.
  *
- *		The rule is that Speech, Morse Code, and APRS digipeated frames
+ *		The rule is that Speech, Morse Code, DTMF, and APRS digipeated frames
  *		are all sent separately.  The rest can be bundled.
  *
  *--------------------------------------------------------------------*/
@@ -507,9 +516,10 @@ static void * xmit_thread (void *arg)
  *
  * If destination is "SPEECH" send info part to speech synthesizer.
  * If destination is "MORSE" send as morse code.
+ * If destination is "DTMF" send as Touch Tones.
  */
 
-	        int ssid, wpm;
+	        int ssid, wpm, speed;
 
 	        switch (frame_flavor(pp)) {
 
@@ -532,6 +542,14 @@ static void * xmit_thread (void *arg)
 		      SLEEP_MS (700);
 		    }
 	            xmit_morse (chan, pp, wpm);
+	            break;
+
+	          case FLAVOR_DTMF:
+		    speed = ax25_get_ssid(pp, AX25_DESTINATION);
+		    if (speed == 0) speed = 5;	// default half of maximum
+	            if (speed > 10) speed = 10;
+
+	            xmit_dtmf (chan, pp, speed);
 	            break;
 
 	          case FLAVOR_APRS_DIGI:
@@ -740,6 +758,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 
 	      case FLAVOR_SPEECH:
 	      case FLAVOR_MORSE:
+	      case FLAVOR_DTMF:
 	      case FLAVOR_APRS_DIGI:
 	      default:
 		done = 1;		// not eligible for bundling.
@@ -938,7 +957,7 @@ static int send_one_frame (int c, int p, packet_t pp)
  * Transmit the frame.
  */
 	flen = ax25_pack (pp, fbuf);
-	assert (flen >= 1 && flen <= sizeof(fbuf));
+	assert (flen >= 1 && flen <= (int)(sizeof(fbuf)));
 
 	int send_invalid_fcs2 = 0;
 
@@ -1091,6 +1110,7 @@ int xmit_speak_it (char *script, int c, char *orig_msg)
  *
  * Description:	Turn on transmitter.
  *		Send text as Morse code.
+ *		A small amount of quiet padding will appear at start and end.
  *		Turn off transmitter.
  *
  *--------------------------------------------------------------------*/
@@ -1100,6 +1120,8 @@ static void xmit_morse (int c, packet_t pp, int wpm)
 {
 	int info_len;
 	unsigned char *pinfo;
+	int length_ms, wait_ms;
+	double start_ptt, wait_until, now;
 
 
 	info_len = ax25_get_info (pp, &pinfo);
@@ -1108,13 +1130,93 @@ static void xmit_morse (int c, packet_t pp, int wpm)
 	dw_printf ("[%d.morse] \"%s\"\n", c, pinfo);
 
 	ptt_set (OCTYPE_PTT, c, 1);
+	start_ptt = dtime_now();
 
-	morse_send (c, (char*)pinfo, wpm, xmit_txdelay[c] * 10, xmit_txtail[c] * 10);
+	// make txdelay at least 300 and txtail at least 250 ms.
+
+	length_ms = morse_send (c, (char*)pinfo, wpm, MAXX(xmit_txdelay[c] * 10, 300), MAXX(xmit_txtail[c] * 10, 250));
+
+	// there is probably still sound queued up in the output buffers.
+
+	wait_until = start_ptt + length_ms * 0.001;
+
+	now = dtime_now();
+
+	wait_ms = (int) ( ( wait_until - now ) * 1000 );
+	if (wait_ms > 0) {
+	  SLEEP_MS(wait_ms);
+	}
 
 	ptt_set (OCTYPE_PTT, c, 0);
 	ax25_delete (pp);
 
 } /* end xmit_morse */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        xmit_dtmf
+ *
+ * Purpose:     After we have a clear channel, and possibly waited a random time,
+ *		we transmit information part of frame as DTMF tones.
+ *
+ * Inputs:	c	- Channel number.
+ *
+ *		pp	- Packet object pointer.
+ *			  It will be deleted so caller should not try
+ *			  to reference it after this.
+ *
+ *		speed	- Button presses per second.
+ *
+ * Description:	Turn on transmitter.
+ *		Send text as touch tones.
+ *		A small amount of quiet padding will appear at start and end.
+ *		Turn off transmitter.
+ *
+ *--------------------------------------------------------------------*/
+
+
+static void xmit_dtmf (int c, packet_t pp, int speed)
+{
+	int info_len;
+	unsigned char *pinfo;
+	int length_ms, wait_ms;
+	double start_ptt, wait_until, now;
+
+
+	info_len = ax25_get_info (pp, &pinfo);
+	(void)info_len;
+	text_color_set(DW_COLOR_XMIT);
+	dw_printf ("[%d.dtmf] \"%s\"\n", c, pinfo);
+
+	ptt_set (OCTYPE_PTT, c, 1);
+	start_ptt = dtime_now();
+
+	// make txdelay at least 300 and txtail at least 250 ms.
+
+	length_ms = dtmf_send (c, (char*)pinfo, speed, MAXX(xmit_txdelay[c] * 10, 300), MAXX(xmit_txtail[c] * 10, 250));
+
+	// there is probably still sound queued up in the output buffers.
+
+	wait_until = start_ptt + length_ms * 0.001;
+
+	now = dtime_now();
+
+	wait_ms = (int) ( ( wait_until - now ) * 1000 );
+	if (wait_ms > 0) {
+	  SLEEP_MS(wait_ms);
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Oops.  CPU too slow to keep up with DTMF generation.\n");
+	}
+
+	ptt_set (OCTYPE_PTT, c, 0);
+	ax25_delete (pp);
+
+} /* end xmit_dtmf */
+
 
 
 /*-------------------------------------------------------------------

@@ -1725,25 +1725,27 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 {
 
 	struct aprs_item_s {
-	  char dti;			/* ) */
-	  char name[9];			/* Actually variable length 3 - 9 bytes. */
+	  char dti;			/* ')' */
+	  char name[10];		/* Actually variable length 3 - 9 bytes. */
 					/* DON'T refer to the rest of this structure; */
 					/* the offsets will be wrong! */
+					/* We make it 10 here so we don't get subscript out of bounds */
+					/* warning when looking for following '!' or '_' character. */
 
-	  char live_killed;		/* ! for live or _ for killed */
-	  position_t pos;
-	  char comment[43]; 		/* First 7 bytes could be data extension. */
+	  char live_killed__;		/* ! for live or _ for killed */
+	  position_t pos__;
+	  char comment__[43]; 		/* First 7 bytes could be data extension. */
 	} *p;
 
 	struct aprs_compressed_item_s {
-	  char dti;			/* ) */
-	  char name[9];			/* Actually variable length 3 - 9 bytes. */
+	  char dti;			/* ')' */
+	  char name[10];		/* Actually variable length 3 - 9 bytes. */
 					/* DON'T refer to the rest of this structure; */
 					/* the offsets will be wrong! */
 
-	  char live_killed;		/* ! for live or _ for killed */
-	  compressed_position_t cpos;
-	  char comment[40]; 		/* No data extension in this case. */
+	  char live_killed__;		/* ! for live or _ for killed */
+	  compressed_position_t cpos__;
+	  char comment__[40]; 		/* No data extension in this case. */
 	} *q;
 
 

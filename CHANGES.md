@@ -2,6 +2,36 @@
 # Revision History #
 
 
+----------
+
+## Version 1.4  -- Development snapshot G --  January 2017 ##
+
+This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
+
+
+### New Features: ###
+
+- New client side packet filter to select "messages" only to stations that have been heard nearby recently.  This is now the default if no IS to RF filter is specified.
+
+- Expanded debug options so you can understand what is going on with packet filtering.
+
+- Added new document ***Successful-APRS-IGate-Operation.pdf*** with IGate background, configuration, and troubleshooting tips.
+
+
+----------
+
+## Version 1.4  -- Development snapshot F --  December 2016 ##
+
+This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
+
+
+### Bugs Fixed: ###
+
+- -p command line option caused segmentation fault with glibc >= 2.24.
+
+
+
+
 
 ----------
 

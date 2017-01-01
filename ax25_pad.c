@@ -1822,6 +1822,64 @@ void ax25_format_addrs (packet_t this_p, char *result)
 
 /*------------------------------------------------------------------
  *
+ * Function:	ax25_format_via_path
+ *
+ * Purpose:	Format via path addresses suitable for printing.
+ *
+ * Inputs:	Current packet.
+ *
+ *		result_size	- Number of bytes available for result.
+ *				  We can have up to 8 addresses x 9 characters
+ *				  plus 7 commas, possible *, and nul = 81 minimum.
+ *
+ * Outputs:	result	- Digipeater field addresses combined into a single string of the form:
+ *
+ *				"repeater, repeater ..."
+ *
+ *			An asterisk is displayed after the last digipeater
+ *			with the "H" bit set.  e.g.  If we hear RPT2,
+ *
+ *			RPT1,RPT2*,RPT3
+ *
+ *			No asterisk means the source is being heard directly.
+ *
+ *------------------------------------------------------------------*/
+
+void ax25_format_via_path (packet_t this_p, char *result, size_t result_size)
+{
+	int i;
+	int heard;
+	char stemp[AX25_MAX_ADDR_LEN];
+
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+	*result = '\0';
+
+	/* Don't get upset if no addresses.  */
+	/* This will allow packets that do not comply to AX.25 format. */
+
+	if (this_p->num_addr == 0) {
+	  return;
+	}
+
+	heard = ax25_get_heard(this_p);
+
+	for (i=(int)AX25_REPEATER_1; i<this_p->num_addr; i++) {
+	  if (i > (int)AX25_REPEATER_1) {
+	    strlcat (result, ",", result_size);
+	  }
+	  ax25_get_addr_with_ssid (this_p, i, stemp);
+	  strlcat (result, stemp, result_size);
+	  if (i == heard) {
+	    strlcat (result, "*", result_size);
+	  }
+	}
+
+} /* end ax25_format_via_path */
+
+
+/*------------------------------------------------------------------
+ *
  * Function:	ax25_pack
  *
  * Purpose:	Put all the pieces into format ready for transmission.

@@ -954,7 +954,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		  case SENDTO_RECV:
 
-	            /* Simulated reception. */
+	            /* Simulated reception from radio. */
 
 		    memset (&alevel, 0xff, sizeof(alevel));
 	            dlq_rec_frame (g_misc_config_p->beacon[j].sendto_chan, 0, 0, pp, alevel, 0, "");

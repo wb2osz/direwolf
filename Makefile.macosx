@@ -77,6 +77,12 @@ CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
 
 CFLAGS := -Os -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 $(EXTRA_CFLAGS)
 
+# That was fine for a recent Ubuntu and Raspbian Jessie.
+# However, Raspbian wheezy was then missing declaration for strsep and definition of fd_set.
+
+CFLAGS += -D_BSD_SOURCE
+
+
 # $(info $$CC is [${CC}])
 
 #

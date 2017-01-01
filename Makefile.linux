@@ -13,13 +13,25 @@ all :  $(APPS) direwolf.desktop direwolf.conf
 
 CC := gcc
 
+# Just for fun, let's see how clang compares to gcc.  First install like this:
+#	sudo apt-get update
+#	apt-cache search clang
+#	sudo apt-get install clang-3.5
+#
+# CC := clang-3.5
+
 # _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
 # Explanation here:  https://github.com/wb2osz/direwolf/issues/62
 
 # There are a few source files where it had been necessary to define __USE_XOPEN2KXSI,
 # __USE_XOPEN, or _POSIX_C_SOURCE.  Doesn't seem to be needed after adding this.
 
-CFLAGS := -O3 -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1
+CFLAGS := -O3 -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 -Wall
+
+# That was fine for a recent Ubuntu and Raspbian Jessie.
+# However, Raspbian wheezy was then missing declaration for strsep and definition of fd_set.
+
+CFLAGS += -D_BSD_SOURCE
 
 LDFLAGS := -lm -lpthread -lrt
 
@@ -113,7 +125,26 @@ endif
 # One article said it was added with gcc 4.2 but I haven't verified that.
 #
 
-# Add -ffastmath in only if compiler version recognizes it.
+# ---------- How does clang compare? - Ubuntu x86_64  ----------
+#
+# I keep hearing a lot about "clang."  Let's see how it compares with gcc.
+# Simply use different compiler and keep all options the same.
+#
+# 	test case:	atest 02_Track_2.wav
+#
+#	gcc 4.8.4:	988 packets decoded in 40.503 seconds.  38.3 x realtime
+#			988 packets decoded in 40.403 seconds.  38.4 x realtime
+#
+#	clang 3.8.0-2:	988 packets decoded in 77.454 seconds.  20.0 x realtime
+#			988 packets decoded in 77.232 seconds.  20.1 x realtime
+#
+# I'm not impressed.  Almost twice as long. Maybe we need to try some other compiler options.
+# -march=native did not help.
+# Makefile.macosx, which uses clang, has these:
+# -fvectorize -fslp-vectorize -fslp-vectorize-aggressive
+# Those did not help.
+#
+
 
 useffast := $(shell gcc --help -v 2>/dev/null | grep ffast-math)
 ifneq ($(useffast),)
@@ -146,7 +177,7 @@ endif
 #
 
 #
-# ---------- ARM - Raspberry Pi 2  ---------- 
+# ---------- ARM - Raspberry Pi 2  ----------
 #
 # Besides the higher clock speed, the Raspberry Pi 2 has the NEON instruction set 
 # which which should make things considerably faster.  
@@ -200,9 +231,26 @@ endif
 # cause compatibility issues for those with older computers.
 #
 
+# ---------- How does clang compare? - ARM - Raspberry Pi 2  ----------
+#
+# I keep hearing a lot about "clang."  Let's see how it compares with gcc.
+# Simply use different compiler and keep all options the same.
+#
+# 	test case:	atest 02_Track_2.wav
+#
+#	gcc 4.9.2-10:	988 packets decoded in 353.025 seconds.  4.4 x realtime
+#			988 packets decoded in 352.752 seconds.  4.4 x realtime
+#
+#	clang 3.5.0-10:	988 packets decoded in 825.879 seconds.  1.9 x realtime
+#			988 packets decoded in 831.469 seconds.  1.9 x realtime
+#
+# There might be a different set of options which produce faster code
+# but the initial test doesn't look good.  About 2.3 times as slow.
 
 # If you want to use OSS (for FreeBSD, OpenBSD) instead of
 # ALSA (for Linux), comment out (or remove) the two lines below.
+
+# TODO:  Can we automate this somehow?
 
 CFLAGS += -DUSE_ALSA
 LDFLAGS += -lasound
@@ -220,6 +268,8 @@ endif
 
 
 # Uncomment following lines to enable hamlib support.
+# TODO:  automate this too.  See if hamlib has been installed.
+
 #CFLAGS += -DUSE_HAMLIB
 #LDFLAGS += -lhamlib
 
