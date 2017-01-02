@@ -5,7 +5,7 @@
 
 In the early days of Amateur Packet Radio, it was necessary to use a “Terminal Node Controller” (TNC) with specialized hardware.  Those days are gone.  You can now get better results at lower cost by connecting your radio to the “soundcard” interface of a computer and using software to decode the signals.
  
-Dire Wolf is a software "soundcard" modem/TNC and [APRS](http://www.aprs.org/) encoder/decoder.   It can be used stand-alone to observe APRS traffic, as a digipeater, [APRStt](http://www.aprs.org/aprstt.html) gateway, or Internet Gateway (IGate).    It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [UI-View32](http://www.ui-view.net/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [RMS Express](http://www.winlink.org/RMSExpress), and many others.
+Dire Wolf is a software "soundcard" modem/TNC and [APRS](http://www.aprs.org/) encoder/decoder.   It can be used stand-alone to observe APRS traffic, as a digipeater, [APRStt](http://www.aprs.org/aprstt.html) gateway, or Internet Gateway (IGate).    It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [UI-View32](http://www.ui-view.net/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [RMS Express](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/) and many others.
  
  
 ## Features ##
@@ -15,7 +15,7 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
 
 - Ideal for building a Raspberry Pi digipeater & IGate.
 
-- 300, 1200, and 9600 baud operation.
+- Data rates: 300 AFSK, 1200 AFSK, 2400 QPSK, 4800 8PSK, and 9600/19200/38400 K9NG/G3RUH.
 
 - Interface with applications by
       - [AGW](http://uz7.ho.ua/includes/agwpeapi.htm) network protocol
@@ -23,6 +23,8 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
       - [KISS](http://www.ax25.net/kiss.aspx) network protocol
       
 - Decoding of received information for troubleshooting.
+
+- Conversion from APRS to waypoint sentences in popular formats:  $GPWPL, $PGRMW, $PMGNWPL, $PKWDWPL.
 
 - Logging and conversion to GPX file format.
 
@@ -39,6 +41,8 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
 - Compatible with software defined radios (SDR) such as [gqrx](http://gqrx.dk/),  [rtl_fm](http://sdr.osmocom.org/trac/wiki/rtl-sdr), and SDR#.
 
 - Includes separate raw packet decoder, decode_aprs.
+
+- AX.25 v2.2 connected mode.  (New in version 1.4.)
 
 - Open source so you can see how it works and make your own modifications.
 
