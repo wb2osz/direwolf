@@ -5,6 +5,9 @@
 # equal to some value.   Your mileage my vary.
 
 win := $(shell uname | grep CYGWIN)
+ifeq ($(win),)
+   win := $(shell uname | grep MINGW)
+endif
 dar := $(shell uname | grep Darwin)
 
 ifneq ($(win),)
