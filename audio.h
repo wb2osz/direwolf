@@ -30,7 +30,8 @@ enum ptt_method_e {
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
 	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
 	PTT_METHOD_LPT,	    /* Parallel printer port, Linux only. */
-    PTT_METHOD_HAMLIB }; /* HAMLib, Linux only. */
+    PTT_METHOD_HAMLIB,  /* HAMLib, Linux only. */
+    PTT_METHOD_AUDIO }; /* Audio channel. */
 
 typedef enum ptt_method_e ptt_method_t;
 

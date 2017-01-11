@@ -1582,7 +1582,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with RIG is only available when hamlib support is enabled.\n", line, otname);
 #endif
 	    }
-	    else  {
+        else if (strcasecmp( t, "CHN") == 0) {
+          p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_AUDIO;
+        }
+        else  {
 
 /* serial port case. */
 
