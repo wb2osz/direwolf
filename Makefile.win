@@ -70,7 +70,7 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hd
 		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
+		gen_tone.o morse.o audio_win.o audio_ptt_win.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o \
 		dwgps.o dwgpsnmea.o dtime_now.o \

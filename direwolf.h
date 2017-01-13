@@ -39,6 +39,14 @@
 #endif
 
 /*
+ * PTT frequency settings
+ */
+
+#define PTT_FREQ_MIN        50
+#define PTT_FREQ_MAX        20000
+#define PTT_FREQ_DEFAULT    1000
+
+/*
  * Get audio device number for given channel.
  * and first channel for given device.
  */

@@ -196,6 +196,16 @@ struct audio_s {
 	        int ptt_invert;		/* Invert the output. */
 	        int ptt_invert2;	/* Invert the secondary output. */
 
+            int ptt_channel;    /* Channel number for audio PTT. */
+            int ptt_frequency;  /* Audio frequency for audio PTT. */
+#if __WIN32__
+            HANDLE ptt_start;   /* Handle for event that starts ptt tone. */
+            HANDLE ptt_stop;    /* Handle for event that stops ptt tone. */
+            HANDLE ptt_close;   /* Handle for event that closes ptt. */
+#else
+
+#endif
+
 #ifdef USE_HAMLIB
 
 	        int ptt_model;		/* HAMLIB model.  -1 for AUTO.  2 for rigctld.  Others are radio model. */

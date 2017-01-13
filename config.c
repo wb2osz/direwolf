@@ -666,7 +666,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->achan[channel].octrl[ot].ptt_lpt_bit = 0;
 	    p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	    p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 0;
-	  }
+        p_audio_config->achan[channel].octrl[ot].ptt_channel = 0;
+        p_audio_config->achan[channel].octrl[ot].ptt_frequency = PTT_FREQ_DEFAULT;
+      }
 
 	  p_audio_config->achan[channel].dwait = DEFAULT_DWAIT;				
 	  p_audio_config->achan[channel].slottime = DEFAULT_SLOTTIME;				
@@ -1582,8 +1584,52 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with RIG is only available when hamlib support is enabled.\n", line, otname);
 #endif
 	    }
-        else if (strcasecmp( t, "CHN") == 0) {
+        else if (strcasecmp( t, "CHANNEL") == 0) {
+          t = split(NULL, 0);
+          if (t == NULL) {
+            text_color_set( DW_COLOR_ERROR );
+            dw_printf ("Config file line %d: Missing channel number for %s.\n", line, otname);
+            continue;
+          }
+
+          int channel_ptt = atoi(t);
+
+          if (channel_ptt < 0 || channel_ptt >= MAX_CHANS) {
+            text_color_set( DW_COLOR_ERROR );
+            dw_printf ( "Config file line %d: Invalid PTT channel number for %s.\n", line, otname );
+            continue;
+          }
+
+          if (channel == channel_ptt) {
+            text_color_set( DW_COLOR_ERROR );
+            dw_printf ( "Config file line %d: PTT channel number must not be the same as the channel number itself.\n", line );
+            continue;
+          }
+
+          int freq_ptt = PTT_FREQ_DEFAULT;
+          
+          t = split(NULL, 0);
+          if (t != NULL) {
+            freq_ptt = atoi(t);
+
+            if (freq_ptt < PTT_FREQ_MIN || freq_ptt > PTT_FREQ_MAX) {
+              text_color_set( DW_COLOR_ERROR );
+              dw_printf ("Config file line %d: Invalid value %d for PTT frequency. Using default of %d.\n",
+                  line, freq_ptt, PTT_FREQ_DEFAULT );
+
+              freq_ptt = PTT_FREQ_DEFAULT;
+            }
+          }
+
           p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_AUDIO;
+          p_audio_config->achan[channel].octrl[ot].ptt_channel = channel_ptt;
+          p_audio_config->achan[channel].octrl[ot].ptt_frequency = freq_ptt;
+#ifdef __WIN32__
+          p_audio_config->achan[channel].octrl[ot].ptt_start = CreateEvent (NULL, FALSE, FALSE, NULL);
+          p_audio_config->achan[channel].octrl[ot].ptt_stop = CreateEvent (NULL, FALSE, FALSE, NULL);
+          p_audio_config->achan[channel].octrl[ot].ptt_close = CreateEvent (NULL, FALSE, FALSE, NULL);
+#else
+#endif
         }
         else  {
 

@@ -126,6 +126,7 @@ typedef int HANDLE;
 #include "textcolor.h"
 #include "audio.h"
 #include "ptt.h"
+#include "audio_ptt.h"
 
 
 #if __WIN32__
@@ -357,6 +358,13 @@ void ptt_init (struct audio_s *audio_config_p)
 {
 	int ch;
 	HANDLE fd = INVALID_HANDLE_VALUE;
+
+#if __WIN32__
+    HANDLE audio_ptt_th[MAX_CHANS];
+#else
+    pthread_t audio_ptt_tid[MAX_CHANS];
+#endif
+
 #if __WIN32__
 #else
 	int using_gpio;
@@ -386,7 +394,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	    if (ptt_debug_level >= 2) {
 
 	      text_color_set(DW_COLOR_DEBUG);
-              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, gpio=%d, lpt_bit=%d, invert=%d\n",
+              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, gpio=%d, lpt_bit=%d, invert=%d, channel=%d, freq=%d\n",
 		ch,
 		otnames[ot],
 		audio_config_p->achan[ch].octrl[ot].ptt_method, 
@@ -394,7 +402,9 @@ void ptt_init (struct audio_s *audio_config_p)
 		audio_config_p->achan[ch].octrl[ot].ptt_line,
 		audio_config_p->achan[ch].octrl[ot].ptt_gpio,
 		audio_config_p->achan[ch].octrl[ot].ptt_lpt_bit,
-		audio_config_p->achan[ch].octrl[ot].ptt_invert);
+		audio_config_p->achan[ch].octrl[ot].ptt_invert,
+        audio_config_p->achan[ch].octrl[ot].ptt_channel,
+        audio_config_p->achan[ch].octrl[ot].ptt_frequency );
 	    }
 	  }
 	}
@@ -501,6 +511,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	        ptt_set (ot, ch, 0);
 
 	      }    /* if serial method. */
+
 	    }	 /* for each output type. */
 	  }    /* if channel valid. */
 	}    /* For each channel. */
@@ -747,6 +758,35 @@ void ptt_init (struct audio_s *audio_config_p)
 
 #endif
 
+    /*
+    * Set up audio channel.
+    */
+
+    for (ch = 0; ch<MAX_CHANS; ch++) {
+      if (audio_config_p->achan[ch].valid) {
+        if (audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_AUDIO) {
+#if __WIN32__
+          audio_ptt_th[ch] = start_ptt_thread (audio_config_p, ch);
+          if (audio_ptt_th[ch] == NULL) {
+            text_color_set(DW_COLOR_ERROR);
+            dw_printf ("Could not create audio_ptt thread on channel %d for PTT of channel %d.\n", 
+                audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_channel, ch);
+            return;
+          }
+#else
+          int e;
+
+          e = pthread_create (&(ptt_tid[j]), NULL, ptt_thread, (void *)(long)ch);
+          if (e != 0) {
+            text_color_set(DW_COLOR_ERROR);
+            dw_printf ("Could not create audio_ptt thread on channel %d for PTT of channel %d.\n",
+                audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_channel, ch );
+            return;
+          }
+#endif
+        }
+      }
+    }
 
 /* Why doesn't it transmit?  Probably forgot to specify PTT option. */
 
@@ -968,7 +1008,21 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	}
 #endif
 
-
+    if( save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_AUDIO ) {
+        if( ptt_signal ) {
+#ifdef __WIN32__
+            SetEvent( save_audio_config_p->achan[chan].octrl[ot].ptt_start );
+#else
+#endif
+        }
+        else
+        {
+#ifdef __WIN32__
+            SetEvent( save_audio_config_p->achan[chan].octrl[ot].ptt_stop );
+#else
+#endif
+        }
+    }
 } /* end ptt_set */
 
 /*-------------------------------------------------------------------
