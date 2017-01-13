@@ -668,6 +668,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 0;
         p_audio_config->achan[channel].octrl[ot].ptt_channel = 0;
         p_audio_config->achan[channel].octrl[ot].ptt_frequency = PTT_FREQ_DEFAULT;
+#ifdef __WIN32__
+        p_audio_config->achan[channel].octrl[ot].ptt_start = NULL;
+        p_audio_config->achan[channel].octrl[ot].ptt_stop = NULL;
+        p_audio_config->achan[channel].octrl[ot].ptt_close = NULL;
+#else
+#endif
       }
 
 	  p_audio_config->achan[channel].dwait = DEFAULT_DWAIT;				

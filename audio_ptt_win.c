@@ -40,6 +40,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <math.h>
+#include <limits.h>
 
 #include <windows.h>		
 #include <mmsystem.h>
@@ -115,13 +116,13 @@ unsigned __stdcall ptt_thread (void *arg)
 
             if( save_audio_config_p->adev[a].num_channels == 1 ) {
                 for( i = 0; i < nsamples; i++ ) {
-                    sample = (SHORT)( 32000.0 * sin( ( (double)i / (double)nsamples ) * 2.0 * M_PI ) );
+                    sample = (SHORT)( (double)SHRT_MAX * sin( ( (double)i / (double)nsamples ) * 2.0 * M_PI ) );
                     pnData[i] = sample;
                 }
             }
             else {
                 for( i = 0; i < nsamples; i++ ) {
-                    sample = (SHORT)( 32000.0 * sin( ( (double)i / (double)nsamples ) * 2.0 * M_PI ) );
+                    sample = (SHORT)( (double)SHRT_MAX * sin( ( (double)i / (double)nsamples ) * 2.0 * M_PI ) );
                     if( channel == ADEVFIRSTCHAN( a ) ) {
 
                         // Stereo, left channel.

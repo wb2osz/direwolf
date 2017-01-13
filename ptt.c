@@ -1008,11 +1008,16 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	}
 #endif
 
+    /*
+    * Using audio channel?
+    */
+
     if( save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_AUDIO ) {
         if( ptt_signal ) {
 #ifdef __WIN32__
             SetEvent( save_audio_config_p->achan[chan].octrl[ot].ptt_start );
 #else
+
 #endif
         }
         else
@@ -1020,6 +1025,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 #ifdef __WIN32__
             SetEvent( save_audio_config_p->achan[chan].octrl[ot].ptt_stop );
 #else
+
 #endif
         }
     }
@@ -1110,7 +1116,7 @@ void ptt_term (void)
 	      ptt_set (ot, n, 0);
 	    }
 	  }
-	}
+    }
 
 	for (n = 0; n < MAX_CHANS; n++) {
 	  if (save_audio_config_p->achan[n].valid) {
@@ -1127,6 +1133,16 @@ void ptt_term (void)
 	    }
 	  }
 	}
+
+    for (n = 0; n < MAX_CHANS; n++) {
+      if (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_AUDIO) {
+#ifdef __WIN32__
+        SetEvent (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_close) ;
+#else
+
+#endif
+      }
+    }
 
 #ifdef USE_HAMLIB
 
