@@ -96,33 +96,28 @@ unsigned __stdcall ptt_thread (void *arg)
         err = waveOutOpen ( &hWaveOut, atoi( save_audio_config_p->adev[a].adevice_out ), &wf, (DWORD_PTR)NULL, 0, CALLBACK_NULL );
         if( err == MMSYSERR_NOERROR ) {
             WAVEHDR waveHeader;
-            SHORT* pnData;
-            SHORT sample;
-            int nsamples = save_audio_config_p->adev[a].samples_per_sec / freq;
+            short* pnData;
+            short sample;
+            int nSamples = save_audio_config_p->adev[a].samples_per_sec / freq;
             int i;
 
-            if( save_audio_config_p->adev[a].num_channels == 1 ) {
-                waveHeader.dwBufferLength = 1 * nsamples * sizeof( SHORT );
-            }
-            else {
-                waveHeader.dwBufferLength = 2 * nsamples * sizeof( SHORT );
-            }
+            waveHeader.dwBufferLength = save_audio_config_p->adev[a].num_channels * nSamples * sizeof( short );
             waveHeader.lpData = malloc( waveHeader.dwBufferLength );
             waveHeader.dwUser = 0;
             waveHeader.dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
             waveHeader.dwLoops = 0xFFFF;
 
-            pnData = (SHORT*)waveHeader.lpData;
+            pnData = (short*)waveHeader.lpData;
 
             if( save_audio_config_p->adev[a].num_channels == 1 ) {
-                for( i = 0; i < nsamples; i++ ) {
-                    sample = (SHORT)( (double)SHRT_MAX * sin( ( (double)i / (double)nsamples ) * 2.0 * M_PI ) );
+                for( i = 0; i < nSamples; i++ ) {
+                    sample = (short)( (double)SHRT_MAX * sin( ( (double)i / (double)nSamples ) * 2.0 * M_PI ) );
                     pnData[i] = sample;
                 }
             }
             else {
-                for( i = 0; i < nsamples; i++ ) {
-                    sample = (SHORT)( (double)SHRT_MAX * sin( ( (double)i / (double)nsamples ) * 2.0 * M_PI ) );
+                for( i = 0; i < nSamples; i++ ) {
+                    sample = (short)( (double)SHRT_MAX * sin( ( (double)i / (double)nSamples ) * 2.0 * M_PI ) );
                     if( channel == ADEVFIRSTCHAN( a ) ) {
 
                         // Stereo, left channel.

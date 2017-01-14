@@ -774,10 +774,8 @@ void ptt_init (struct audio_s *audio_config_p)
             return;
           }
 #else
-          int e;
-
-          e = pthread_create (&(ptt_tid[j]), NULL, ptt_thread, (void *)(long)ch);
-          if (e != 0) {
+	  audio_ptt_tid[ch] = start_ptt_thread (audio_config_p, ch);
+          if (audio_ptt_tid[ch] == 0) {
             text_color_set(DW_COLOR_ERROR);
             dw_printf ("Could not create audio_ptt thread on channel %d for PTT of channel %d.\n",
                 audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_channel, ch );
