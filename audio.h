@@ -30,10 +30,16 @@ enum ptt_method_e {
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
 	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
 	PTT_METHOD_LPT,	    /* Parallel printer port, Linux only. */
-    PTT_METHOD_HAMLIB,  /* HAMLib, Linux only. */
-    PTT_METHOD_AUDIO }; /* Audio channel. */
+  PTT_METHOD_HAMLIB,  /* HAMLib, Linux only. */
+  PTT_METHOD_AUDIO }; /* Audio channel. */
 
 typedef enum ptt_method_e ptt_method_t;
+
+enum ptt_audio_state_e {
+  PTT_AUDIO_STATE_STOP,
+  PTT_AUDIO_STATE_START,
+  PTT_AUDIO_STATE_CLOSE };
+typedef enum ptt_audio_state_e ptt_audio_state_t;
 
 enum ptt_line_e { PTT_LINE_NONE = 0, PTT_LINE_RTS = 1, PTT_LINE_DTR = 2 };	  //  Important: 0 for neither.	
 typedef enum ptt_line_e ptt_line_t;
@@ -196,14 +202,16 @@ struct audio_s {
 	        int ptt_invert;		/* Invert the output. */
 	        int ptt_invert2;	/* Invert the secondary output. */
 
-            int ptt_channel;    /* Channel number for audio PTT. */
-            int ptt_frequency;  /* Audio frequency for audio PTT. */
+          int ptt_channel;    /* Channel number for audio PTT. */
+          int ptt_frequency;  /* Audio frequency for audio PTT. */
 #if __WIN32__
-            HANDLE ptt_start;   /* Handle for event that starts ptt tone. */
-            HANDLE ptt_stop;    /* Handle for event that stops ptt tone. */
-            HANDLE ptt_close;   /* Handle for event that closes ptt. */
+          HANDLE ptt_start;   /* Handle for event that starts ptt tone. */
+          HANDLE ptt_stop;    /* Handle for event that stops ptt tone. */
+          HANDLE ptt_close;   /* Handle for event that closes ptt. */
 #else
-
+          pthread_mutex_t ptt_mutex;    /* Mutex for controlling ptt tone state. */
+          pthread_cond_t ptt_condition; /* Condition for controlling ptt tone state. */
+          ptt_audio_state_t ptt_state;  /* State of ptt tone. */
 #endif
 
 #ifdef USE_HAMLIB

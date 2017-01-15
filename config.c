@@ -673,6 +673,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
         p_audio_config->achan[channel].octrl[ot].ptt_stop = NULL;
         p_audio_config->achan[channel].octrl[ot].ptt_close = NULL;
 #else
+        p_audio_config->achan[channel].octrl[ot].ptt_state = PTT_AUDIO_STATE_STOP;
 #endif
       }
 
@@ -1635,6 +1636,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
           p_audio_config->achan[channel].octrl[ot].ptt_stop = CreateEvent (NULL, FALSE, FALSE, NULL);
           p_audio_config->achan[channel].octrl[ot].ptt_close = CreateEvent (NULL, FALSE, FALSE, NULL);
 #else
+          p_audio_config->achan[channel].octrl[ot].ptt_state = PTT_AUDIO_STATE_STOP;
+          pthread_mutex_init(&p_audio_config->achan[channel].octrl[ot].ptt_mutex, 0);
+          pthread_cond_init(&p_audio_config->achan[channel].octrl[ot].ptt_condition, 0);
 #endif
         }
         else  {

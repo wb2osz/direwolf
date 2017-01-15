@@ -64,126 +64,110 @@ static unsigned __stdcall ptt_thread ( void *arg );
 
 HANDLE start_ptt_thread (struct audio_s *pa , int ch)
 {
-    save_audio_config_p = pa;
+  save_audio_config_p = pa;
 
-    return (HANDLE)_beginthreadex (NULL, 0, ptt_thread, (void*)(long)ch, 0, NULL);
+  return (HANDLE)_beginthreadex (NULL, 0, ptt_thread, (void*)(long)ch, 0, NULL);
 }
 
 unsigned __stdcall ptt_thread (void *arg)
 {
-    WAVEFORMATEX wf;
-    HWAVEOUT hWaveOut;
-    int ch = (int)(long)arg; // channel number.
-    int channel = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_channel;
-    int freq = save_audio_config_p->achan[channel].octrl[OCTYPE_PTT].ptt_frequency;
-    int a = ACHAN2ADEV( channel );
-    int err;
+  WAVEFORMATEX wf;
+  HWAVEOUT hWaveOut;
+  int ch = (int)(long)arg; // channel number.
+  int channel = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_channel;
+  int freq = save_audio_config_p->achan[channel].octrl[OCTYPE_PTT].ptt_frequency;
+  int a = ACHAN2ADEV( channel );
+  int err;
 
-    if( save_audio_config_p->adev[a].defined ) {
-        wf.wFormatTag = WAVE_FORMAT_PCM;
-        wf.nChannels = save_audio_config_p->adev[a].num_channels;
-        wf.nSamplesPerSec = save_audio_config_p->adev[a].samples_per_sec;
-        wf.wBitsPerSample = save_audio_config_p->adev[a].bits_per_sample;
-        wf.nBlockAlign = ( wf.wBitsPerSample / 8 ) * wf.nChannels;
-        wf.nAvgBytesPerSec = wf.nBlockAlign * wf.nSamplesPerSec;
-        wf.cbSize = 0;
+  if (save_audio_config_p->adev[a].defined) {
+    wf.wFormatTag = WAVE_FORMAT_PCM;
+    wf.nChannels = save_audio_config_p->adev[a].num_channels;
+    wf.nSamplesPerSec = save_audio_config_p->adev[a].samples_per_sec;
+    wf.wBitsPerSample = save_audio_config_p->adev[a].bits_per_sample;
+    wf.nBlockAlign = ( wf.wBitsPerSample / 8 ) * wf.nChannels;
+    wf.nAvgBytesPerSec = wf.nBlockAlign * wf.nSamplesPerSec;
+    wf.cbSize = 0;
 
-          /*
-          * Open the audio output device.
-          * Soundcard is only possibility at this time.
-          */
+   /*
+    * Open the audio output device.
+    * Soundcard is only possibility at this time.
+    */
 
-        err = waveOutOpen ( &hWaveOut, atoi( save_audio_config_p->adev[a].adevice_out ), &wf, (DWORD_PTR)NULL, 0, CALLBACK_NULL );
-        if( err == MMSYSERR_NOERROR ) {
-            WAVEHDR waveHeader;
-            short* pnData;
-            short sample;
-            int nSamples = save_audio_config_p->adev[a].samples_per_sec / freq;
-            int i;
+    err = waveOutOpen ( &hWaveOut, atoi( save_audio_config_p->adev[a].adevice_out ), &wf, (DWORD_PTR)NULL, 0, CALLBACK_NULL );
+    if (err == MMSYSERR_NOERROR) {
+      WAVEHDR waveHeader;
+      short* pnData;
+      short sample;
+      int nSamples = save_audio_config_p->adev[a].samples_per_sec / freq;
+      int i;
+      int j;
 
-            waveHeader.dwBufferLength = save_audio_config_p->adev[a].num_channels * nSamples * sizeof( short );
-            waveHeader.lpData = malloc( waveHeader.dwBufferLength );
-            waveHeader.dwUser = 0;
-            waveHeader.dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
-            waveHeader.dwLoops = 0xFFFF;
+      waveHeader.dwBufferLength = save_audio_config_p->adev[a].num_channels * nSamples * sizeof( short );
+      waveHeader.lpData = malloc( waveHeader.dwBufferLength );
+      waveHeader.dwUser = 0;
+      waveHeader.dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
+      waveHeader.dwLoops = 0xFFFF;
 
-            pnData = (short*)waveHeader.lpData;
+      pnData = (short*)waveHeader.lpData;
 
-            if( save_audio_config_p->adev[a].num_channels == 1 ) {
-                for( i = 0; i < nSamples; i++ ) {
-                    sample = (short)( (double)SHRT_MAX * sin( ( (double)i / (double)nSamples ) * 2.0 * M_PI ) );
-                    pnData[i] = sample;
-                }
-            }
-            else {
-                for( i = 0; i < nSamples; i++ ) {
-                    sample = (short)( (double)SHRT_MAX * sin( ( (double)i / (double)nSamples ) * 2.0 * M_PI ) );
-                    if( channel == ADEVFIRSTCHAN( a ) ) {
-
-                        // Stereo, left channel.
-
-                        pnData[i*2 + 0] = sample;
-                        pnData[i*2 + 1] = 0;
-                    }
-                    else {
-
-                        // Stereo, right channel.
-
-                        pnData[i*2 + 0] = 0;
-                        pnData[i*2 + 1] = sample;
-                    }
-                }
-            }
-
-            err = waveOutPrepareHeader ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
-            if( err == MMSYSERR_NOERROR ) {
-                HANDLE handles[3];
-                DWORD dwWait;
-
-                handles[0] = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_start;
-                handles[1] = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_stop;
-                handles[2] = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_close;
-
-                while( 1 )
-                {
-                    dwWait = WaitForMultipleObjects ( 3, handles, FALSE, INFINITE );
-
-                    if( dwWait == WAIT_OBJECT_0 + 0 )
-                    {
-                        //
-                        // ptt_set on
-                        //
-
-                        waveOutWrite ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
-                    }
-                    else if( dwWait == WAIT_OBJECT_0 + 1 )
-                    {
-                        //
-                        // ptt_set off
-                        //
-
-                        waveOutReset ( hWaveOut );
-                    }
-                    else if( dwWait == WAIT_OBJECT_0 + 2 )
-                    {
-                        //
-                        // close
-                        //
-
-                        waveOutReset ( hWaveOut );
-                        waveOutUnprepareHeader ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
-
-                        break;
-                    }
-                }
-            }
-
-            waveOutClose ( hWaveOut );
-
-            free( waveHeader.lpData );
+	    for (i = 0; i < nSamples; i++) {
+        sample = (short)( (double)SHRT_MAX * sin( ( (double)i / (double)nSamples ) * 2.0 * M_PI ) );
+          
+        for (j = 0; j < save_audio_config_p->adev[a].num_channels; j++) {
+	        if (channel == ADEVFIRSTCHAN( a ) + j) {
+            pnData[i*save_audio_config_p->adev[a].num_channels + j] = sample;
+          } else {
+		        pnData[i*save_audio_config_p->adev[a].num_channels + j] = 0;
+          }
         }
-    }
+      }
 
-    return 0;
+      err = waveOutPrepareHeader (hWaveOut, &waveHeader, sizeof( WAVEHDR ));
+      if (err == MMSYSERR_NOERROR) {
+        HANDLE handles[3];
+        DWORD dwWait;
+
+        handles[0] = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_start;
+        handles[1] = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_stop;
+        handles[2] = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_close;
+
+        while (1)
+        {
+          dwWait = WaitForMultipleObjects (3, handles, FALSE, INFINITE);
+
+          if (dwWait == WAIT_OBJECT_0 + 0) {
+            //
+            // ptt_set on
+            //
+
+            waveOutWrite ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
+          }
+          else if (dwWait == WAIT_OBJECT_0 + 1) {
+            //
+            // ptt_set off
+            //
+
+            waveOutReset ( hWaveOut );
+          }
+          else if( dwWait == WAIT_OBJECT_0 + 2 ) {
+            //
+            // close
+            //
+
+            waveOutReset ( hWaveOut );
+            waveOutUnprepareHeader ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
+
+            break;
+          }
+        }
+      }
+
+      waveOutClose ( hWaveOut );
+
+      free( waveHeader.lpData );
+    }
+  }
+
+  return 0;
 }
 #endif

@@ -1010,22 +1010,27 @@ void ptt_set (int ot, int chan, int ptt_signal)
     * Using audio channel?
     */
 
-    if( save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_AUDIO ) {
-        if( ptt_signal ) {
+    if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_AUDIO) {
+      if (ptt_signal) {
 #ifdef __WIN32__
-            SetEvent( save_audio_config_p->achan[chan].octrl[ot].ptt_start );
+        SetEvent (save_audio_config_p->achan[chan].octrl[ot].ptt_start);
 #else
-
+        pthread_mutex_lock (&save_audio_config_p->achan[chan].octrl[ot].ptt_mutex);
+        save_audio_config_p->achan[chan].octrl[ot].ptt_state = PTT_AUDIO_STATE_START;
+        pthread_cond_signal (&save_audio_config_p->achan[chan].octrl[ot].ptt_condition);
+        pthread_mutex_unlock (&save_audio_config_p->achan[chan].octrl[ot].ptt_mutex);
 #endif
-        }
-        else
-        {
+      }
+      else
+      {
 #ifdef __WIN32__
-            SetEvent( save_audio_config_p->achan[chan].octrl[ot].ptt_stop );
+        SetEvent (save_audio_config_p->achan[chan].octrl[ot].ptt_stop);
 #else
-
+        pthread_mutex_lock (&save_audio_config_p->achan[chan].octrl[ot].ptt_mutex);
+        save_audio_config_p->achan[chan].octrl[ot].ptt_state = PTT_AUDIO_STATE_STOP;
+        pthread_mutex_unlock (&save_audio_config_p->achan[chan].octrl[ot].ptt_mutex);
 #endif
-        }
+      }
     }
 } /* end ptt_set */
 
@@ -1137,7 +1142,10 @@ void ptt_term (void)
 #ifdef __WIN32__
         SetEvent (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_close) ;
 #else
-
+        pthread_mutex_lock (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_mutex);
+        save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_state = PTT_AUDIO_STATE_CLOSE;
+        pthread_cond_signal (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_condition);
+        pthread_mutex_unlock (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_mutex);
 #endif
       }
     }

@@ -91,67 +91,64 @@ static void * ptt_thread (void *arg)
 
 	  err = snd_pcm_open(&handle, save_audio_config_p->adev[a].adevice_out, SND_PCM_STREAM_PLAYBACK, 0);
 	  if (err == 0) {
-		  snd_pcm_sframes_t frames;
 		  snd_pcm_format_t format = SND_PCM_FORMAT_S16_LE;
 
 	    err = snd_pcm_set_params(handle, format, SND_PCM_ACCESS_RW_INTERLEAVED,
 			                  save_audio_config_p->adev[a].num_channels,
 			                  save_audio_config_p->adev[a].samples_per_sec, 1, 500000);
   	  if (err == 0) {
-		    short* pnData;
+ 		    short* pnData;
 		    short sample;
-		    int nSamples = save_audio_config_p->adev[a].samples_per_sec / 10;
+		    int nSamples = save_audio_config_p->adev[a].samples_per_sec / 5;
 		    int nBufferLength = save_audio_config_p->adev[a].num_channels * nSamples * sizeof(short);
 		    int i;
+        int j;
 
 		    pnData = (short*)malloc (nBufferLength);
 
-		    if (save_audio_config_p->adev[a].num_channels == 1) {
-			    for (i = 0; i < nSamples; i++) {
-			      sample = (short)( (double)SHRT_MAX * sin( ( (double)i * freq / (double)save_audio_config_p->adev[a].samples_per_sec ) * 2.0 * M_PI ) );
-			      pnData[i] = sample;
+  	    for (i = 0; i < nSamples; i++) {
+	        sample = (short)( (double)SHRT_MAX * sin( ( (double)i * freq / (double)save_audio_config_p->adev[a].samples_per_sec ) * 2.0 * M_PI ) );
+			      
+          for (j = 0; j < save_audio_config_p->adev[a].num_channels; j++) {
+  	        if (channel == ADEVFIRSTCHAN( a ) + j) {
+              pnData[i*save_audio_config_p->adev[a].num_channels + j] = sample;
+            } else {
+  		        pnData[i*save_audio_config_p->adev[a].num_channels + j] = 0;
+            }
 			    }
 		    }
-		    else {
-			    for (i = 0; i < nSamples; i++) {
-			      sample = (short)( (double)SHRT_MAX * sin( ( (double)i * freq / (double)save_audio_config_p->adev[a].samples_per_sec ) * 2.0 * M_PI ) );
-			      if (channel == ADEVFIRSTCHAN( a )) {
+        
+        while (1) {
+          pthread_mutex_lock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+          ptt_audio_state_t ptt_state = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_state;
+          pthread_mutex_unlock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
 
-			        // Stereo, left channel.
+          if (ptt_state == PTT_AUDIO_STATE_STOP) {
+            snd_pcm_drop (handle);
 
-			        pnData[i*2 + 0] = sample;
-			        pnData[i*2 + 1] = 0;
-			      }
-			      else {
+            pthread_mutex_lock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+            pthread_cond_wait (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_condition, &save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+            ptt_state = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_state;
+            pthread_mutex_unlock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
 
-			        // Stereo, right channel.
+            if (ptt_state == PTT_AUDIO_STATE_START) {
+              snd_pcm_prepare (handle); 
+            }
+          }
+         
+          if (ptt_state == PTT_AUDIO_STATE_START) {
+    		    snd_pcm_writei (handle, pnData, nSamples);
+          }
+          else if (ptt_state == PTT_AUDIO_STATE_CLOSE) {
+            snd_pcm_drop (handle);
 
-			        pnData[i*2 + 0] = 0;
-			        pnData[i*2 + 1] = sample;
-			      }
-			    }
-		    }       
-		    
-		    //
-		    // ptt_set on
-		    //
-
-		    for (i=0; i<50; i++) {
-			    frames = snd_pcm_writei(handle, pnData, nSamples);
-		    }
-
-		    //
-		    // ptt_set off
-		    //
-
-		    //
-		    // close
-		    //
+            break;
+          }
+        }
 
 		    free (pnData);
 		  }
-
-		  snd_pcm_close(handle);
+		  snd_pcm_close (handle);
 	  }
 #else
     int oss_audio_device_fd;
@@ -165,3 +162,4 @@ static void * ptt_thread (void *arg)
 }
 
 #endif
+
