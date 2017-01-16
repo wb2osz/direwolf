@@ -35,6 +35,13 @@
 #include <limits.h>
 #include <math.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 
 #if USE_ALSA
 #include <alsa/asoundlib.h>
@@ -89,11 +96,11 @@ static void * ptt_thread (void *arg)
     snd_pcm_t *handle;
     int err;
 
-	  err = snd_pcm_open(&handle, save_audio_config_p->adev[a].adevice_out, SND_PCM_STREAM_PLAYBACK, 0);
+	  err = snd_pcm_open (&handle, save_audio_config_p->adev[a].adevice_out, SND_PCM_STREAM_PLAYBACK, 0);
 	  if (err == 0) {
 		  snd_pcm_format_t format = SND_PCM_FORMAT_S16_LE;
 
-	    err = snd_pcm_set_params(handle, format, SND_PCM_ACCESS_RW_INTERLEAVED,
+	    err = snd_pcm_set_params (handle, format, SND_PCM_ACCESS_RW_INTERLEAVED,
 			                  save_audio_config_p->adev[a].num_channels,
 			                  save_audio_config_p->adev[a].samples_per_sec, 1, 500000);
   	  if (err == 0) {
@@ -136,8 +143,8 @@ static void * ptt_thread (void *arg)
             }
           }
          
-          if (ptt_state == PTT_AUDIO_STATE_START) {
-    		    snd_pcm_writei (handle, pnData, nSamples);
+          if (ptt_state == PTT_AUDIO_STATE_START) { 		    
+            snd_pcm_writei (handle, pnData, nSamples);
           }
           else if (ptt_state == PTT_AUDIO_STATE_CLOSE) {
             snd_pcm_drop (handle);
@@ -147,15 +154,97 @@ static void * ptt_thread (void *arg)
         }
 
 		    free (pnData);
-		  }
+      } else {
+        dw_printf("Failed to configure ALSA device. PTT tone will not be enabled.\n");
+      }
 		  snd_pcm_close (handle);
-	  }
+    } else {
+      dw_printf("Failed to open ALSA device. PTT tone will not be enabled.\n");
+    }
 #else
     int oss_audio_device_fd;
 
     oss_audio_device_fd = open (save_audio_config_p->adev[a].adevice_out, O_WRONLY);
-    if (oss_audio_device_fd != -1) {
+    if (oss_audio_device_fd >= 0) {
+     	int devcaps;
+      int num_channels;
+      int samples_per_sec;
+      int bits_per_sample;
+      int err;
 
+      num_channels = save_audio_config_p->adev[a].num_channels;
+      err = ioctl (oss_audio_device_fd, SNDCTL_DSP_CHANNELS, &num_channels);
+
+      if (err != -1) {
+        samples_per_sec = save_audio_config_p->adev[a].samples_per_sec;
+        err = ioctl (oss_audio_device_fd, SNDCTL_DSP_SPEED, &samples_per_sec);
+      }
+
+      if (err != -1) {
+        bits_per_sample = save_audio_config_p->adev[a].bits_per_sample;
+        err = ioctl (oss_audio_device_fd, SNDCTL_DSP_SETFMT, &bits_per_sample);
+      }
+
+      if (err != -1) {
+        err = ioctl (oss_audio_device_fd, SNDCTL_DSP_GETCAPS, &devcaps);
+      }
+
+      if (err != -1) {
+	      short* pnData;
+        short sample;
+        int nBufferLength;
+        int nSamples;
+        int written;
+        int i;
+        int j;
+    
+        nSamples = samples_per_sec / 5;
+        nBufferLength = num_channels * nSamples * sizeof(short);
+        pnData = (short*)malloc (nBufferLength);
+
+  	    for (i = 0; i < nSamples; i++) {
+	        sample = (short)( (double)SHRT_MAX * sin( ( (double)i * freq / (double)samples_per_sec ) * 2.0 * M_PI ) );
+
+          for (j = 0; j < num_channels; j++) {
+  	        if (channel == ADEVFIRSTCHAN( a ) + j) {
+              pnData[i*num_channels + j] = sample;
+            } else {
+  		        pnData[i*num_channels + j] = 0;
+            }
+			    }
+		    }
+        
+        while (1) {
+          pthread_mutex_lock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+          ptt_audio_state_t ptt_state = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_state;
+          pthread_mutex_unlock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+
+          if (ptt_state == PTT_AUDIO_STATE_STOP) {
+            ioctl (oss_audio_device_fd, SNDCTL_DSP_RESET, NULL);
+
+            pthread_mutex_lock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+            pthread_cond_wait (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_condition, &save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+            ptt_state = save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_state;
+            pthread_mutex_unlock (&save_audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_mutex);
+          }
+         
+          if (ptt_state == PTT_AUDIO_STATE_START) {
+            written = write (oss_audio_device_fd, pnData, nBufferLength);
+          }
+          else if (ptt_state == PTT_AUDIO_STATE_CLOSE) {
+            ioctl (oss_audio_device_fd, SNDCTL_DSP_RESET, NULL);
+
+            break;
+          }
+        }
+
+        free (pnData);
+      } else {
+        dw_printf("Failed to configure OSS device. PTT tone will not be enabled.\n");
+      }
+      close (oss_audio_device_fd);
+    } else {
+      dw_printf("Failed to open OSS device. PTT tone will not be enabled.\n");
     }
 #endif
   }

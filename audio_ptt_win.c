@@ -149,13 +149,13 @@ unsigned __stdcall ptt_thread (void *arg)
 
             waveOutReset ( hWaveOut );
           }
-          else if( dwWait == WAIT_OBJECT_0 + 2 ) {
+          else if (dwWait == WAIT_OBJECT_0 + 2) {
             //
             // close
             //
 
-            waveOutReset ( hWaveOut );
-            waveOutUnprepareHeader ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
+            waveOutReset (hWaveOut);
+            waveOutUnprepareHeader (hWaveOut, &waveHeader, sizeof(WAVEHDR));
 
             break;
           }
