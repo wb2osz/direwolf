@@ -16,18 +16,31 @@
 #
 
 #
+# For normal operation as TNC, digipeater, IGate, etc.
+# Print audio statistics each 100 seconds for troubleshooting.
+#
+
+DWCMD="direwolf -a 100"
+
+#
+# Set the logfile location
+#
+
+LOGFILE=/tmp/dw-start.log
+
+#
 # When running from cron, we have a very minimal environment
 # including PATH=/usr/bin:/bin.
 #
 
 export PATH=/usr/local/bin:$PATH
 
-# First wait a little while in case we just rebooted
-# and the desktop hasn't started up yet.
 #
+# If we are going to use screen, we put our screen binary in
+# the USESCREEN variable, otherwise, set it to 0
 
-sleep 30
-LOGFILE=/tmp/dw-start.log
+USESCREEN=/usr/bin/screen
+
 
 #
 # Nothing to do if it is already running.
@@ -41,6 +54,35 @@ then
   exit
 fi
 
+# First wait a little while in case we just rebooted
+# and the desktop hasn't started up yet.
+#
+
+sleep 30
+
+#
+# If we are going the SCREEN route, then we need to 
+# see if we have a session open and if not, open it.
+#
+if [ -x $USESCREEN ]
+then
+
+  # If there is no screen running, then we need one to attach to
+  #
+  if screen -list | awk '{print $1}' | grep -q "direwolf$"; then
+    echo "screen direwolf already exists" >> $LOGFILE
+  else
+    echo "creating direwolf screen session" >> $LOGFILE
+    screen -d -m -S direwolf
+  fi
+  sleep 1
+
+  screen -S direwolf -X screen -t Direwolf $DWCMD 
+  exit 0
+
+fi
+
+
 #
 # In my case, the Raspberry Pi is not connected to a monitor.
 # I access it remotely using VNC as described here:
@@ -50,7 +92,7 @@ fi
 # Otherwise default to :0.
 #
 
-date >> /tmp/dw-start.log
+date >> $LOGFILE
 
 export DISPLAY=":0"
 
@@ -65,12 +107,6 @@ echo "DISPLAY=$DISPLAY" >> $LOGFILE
 
 echo "Start up application." >> $LOGFILE
 
-#
-# For normal operation as TNC, digipeater, IGate, etc.
-# Print audio statistics each 100 seconds for troubleshooting.
-#
-
-DWCMD="direwolf -a 100"
 
 # Alternative for running with SDR receiver.
 # Piping one application into another makes it a little more complicated.
