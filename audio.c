@@ -692,7 +692,6 @@ static int set_oss_params (int a, int fd, struct audio_s *pa)
 	char message[100];
 	int ossbuf_size_in_bytes;
 
-
 	err = ioctl (fd, SNDCTL_DSP_CHANNELS, &(pa->adev[a].num_channels));
    	if (err == -1) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1249,6 +1248,7 @@ int audio_flush (int a)
 	  }
 	  if (k < len) {
 	    /* presumably full but didn't block. */
+      dw_printf("problem\n");
 	    usleep (10000);
 	  }
 	  ptr += k;

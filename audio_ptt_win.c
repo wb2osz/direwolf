@@ -93,7 +93,7 @@ unsigned __stdcall ptt_thread (void *arg)
     * Soundcard is only possibility at this time.
     */
 
-    err = waveOutOpen ( &hWaveOut, atoi( save_audio_config_p->adev[a].adevice_out ), &wf, (DWORD_PTR)NULL, 0, CALLBACK_NULL );
+    err = waveOutOpen (&hWaveOut, atoi( save_audio_config_p->adev[a].adevice_out ), &wf, (DWORD_PTR)NULL, 0, CALLBACK_NULL);
     if (err == MMSYSERR_NOERROR) {
       WAVEHDR waveHeader;
       short* pnData;
@@ -103,7 +103,7 @@ unsigned __stdcall ptt_thread (void *arg)
       int j;
 
       waveHeader.dwBufferLength = save_audio_config_p->adev[a].num_channels * nSamples * sizeof( short );
-      waveHeader.lpData = malloc( waveHeader.dwBufferLength );
+      waveHeader.lpData = malloc (waveHeader.dwBufferLength);
       waveHeader.dwUser = 0;
       waveHeader.dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
       waveHeader.dwLoops = 0xFFFF;
@@ -140,31 +140,31 @@ unsigned __stdcall ptt_thread (void *arg)
             // ptt_set on
             //
 
-            waveOutWrite ( hWaveOut, &waveHeader, sizeof( WAVEHDR ) );
+            waveOutWrite (hWaveOut, &waveHeader, sizeof( WAVEHDR ));
           }
           else if (dwWait == WAIT_OBJECT_0 + 1) {
             //
             // ptt_set off
             //
 
-            waveOutReset ( hWaveOut );
+            waveOutReset (hWaveOut);
           }
-          else if (dwWait == WAIT_OBJECT_0 + 2) {
+          else if( dwWait == WAIT_OBJECT_0 + 2 ) {
             //
             // close
             //
 
             waveOutReset (hWaveOut);
-            waveOutUnprepareHeader (hWaveOut, &waveHeader, sizeof(WAVEHDR));
+            waveOutUnprepareHeader (hWaveOut, &waveHeader, sizeof( WAVEHDR ));
 
             break;
           }
         }
       }
 
-      waveOutClose ( hWaveOut );
+      waveOutClose (hWaveOut);
 
-      free( waveHeader.lpData );
+      free (waveHeader.lpData);
     }
   }
 
