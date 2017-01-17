@@ -1591,7 +1591,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with RIG is only available when hamlib support is enabled.\n", line, otname);
 #endif
 	    }
-        else if (strcasecmp( t, "CHANNEL") == 0) {
+        else if (strcasecmp(t, "CHANNEL") == 0) {
           t = split(NULL, 0);
           if (t == NULL) {
             text_color_set( DW_COLOR_ERROR );

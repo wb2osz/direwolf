@@ -1138,15 +1138,17 @@ void ptt_term (void)
 	}
 
     for (n = 0; n < MAX_CHANS; n++) {
-      if (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_AUDIO) {
+  	  if (save_audio_config_p->achan[n].valid) {
+        if (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_AUDIO) {
 #ifdef __WIN32__
-        SetEvent (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_close) ;
+          SetEvent (save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_close) ;
 #else
-        pthread_mutex_lock (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_mutex);
-        save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_state = PTT_AUDIO_STATE_CLOSE;
-        pthread_cond_signal (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_condition);
-        pthread_mutex_unlock (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_mutex);
+          pthread_mutex_lock (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_mutex);
+          save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_state = PTT_AUDIO_STATE_CLOSE;
+          pthread_cond_signal (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_condition);
+          pthread_mutex_unlock (&save_audio_config_p->achan[n].octrl[OCTYPE_PTT].ptt_mutex);
 #endif
+        }
       }
     }
 

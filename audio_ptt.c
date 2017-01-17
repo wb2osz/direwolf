@@ -106,7 +106,7 @@ static void * ptt_thread (void *arg)
   	  if (err == 0) {
  		    short* pnData;
 		    short sample;
-		    int nSamples = save_audio_config_p->adev[a].samples_per_sec / 5;
+		    int nSamples = (int)( ( (double)save_audio_config_p->adev[a].samples_per_sec / (double)freq ) * ceil( (double)freq / 5.0 ) );
 		    int nBufferLength = save_audio_config_p->adev[a].num_channels * nSamples * sizeof(short);
 		    int i;
         int j;
@@ -198,7 +198,7 @@ static void * ptt_thread (void *arg)
         int i;
         int j;
     
-        nSamples = samples_per_sec / 5;
+        nSamples = (int)( ( (double)samples_per_sec / (double)freq ) * ceil( (double)freq / 5.0 ) );
         nBufferLength = num_channels * nSamples * sizeof(short);
         pnData = (short*)malloc (nBufferLength);
 
