@@ -197,7 +197,7 @@ endif
 # If you want to use OSS (for FreeBSD, OpenBSD) instead of
 # ALSA (for Linux), comment out (or remove) the two lines below.
 
-# CFLAGS += -DUSE_ALSA
+CFLAGS += -DUSE_ALSA
 LDFLAGS += -lasound
 
 
