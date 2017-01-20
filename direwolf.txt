@@ -234,10 +234,16 @@ C# Both can be used for interfaces that want them driven with opposite polarity.
 C#
 L# COM1 can be used instead of /dev/ttyS0, COM2 for /dev/ttyS1, and so on.
 L#
+C# With a suitable interface circuit an audio channel can also be used to  
+C# trigger the PTT control. The device should be specified as CHANNEL, 
+C# followed by the channel number and (optionally) the desired frequency, 
+C# in Hz, of the audio tone to be used. The frequency must be between  
+C# 50 and 20000 Hz and defaults to 1000 Hz.
 C
 C#PTT COM1 RTS
 C#PTT COM1 RTS -DTR
 L#PTT /dev/ttyUSB0 RTS
+C#PTT CHANNEL 1 1000
 C
 L#
 L# On Linux, you can also use general purpose I/O pins if
