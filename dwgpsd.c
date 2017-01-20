@@ -77,8 +77,9 @@ static void * read_gpsd_thread (void *arg);
  * Information for interface to gpsd daemon. 
  */
 
+#if ENABLE_GPSD
 static struct gps_data_t gpsdata;
-
+#endif
 
 /*-------------------------------------------------------------------
  *

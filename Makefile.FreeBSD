@@ -1,0 +1,558 @@
+#
+# Makefile for FreeBSD version of Dire Wolf.
+#
+
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
+
+all :  $(APPS) direwolf.desktop direwolf.conf
+	@echo " "
+	@echo "Next step - install with:"
+	@echo " "
+	@echo "        sudo make install"
+	@echo " "
+
+CFLAGS += -pthread -Igeotranz
+
+LDFLAGS := -lm -lpthread
+
+# This needs work FreeBSD does support neon
+#CFLAGS += -mfpu=neon
+
+#FreeBSD prefers OSS
+#CFLAGS += -DUSE_ALSA
+#LDFLAGS += -lasound
+
+# FreeBSD can support gpsd just not for initial port ;)
+#enable_gpsd := $(wildcard /usr/local/include/gps.h)
+#ifneq ($(enable_gpsd),)
+#CFLAGS += -DENABLE_GPSD
+#LDFLAGS += -lgps
+#endif
+
+
+# Uncomment following lines to enable hamlib support.
+# FreeBSD also support hamlib not tested yet
+#CFLAGS += -DUSE_HAMLIB
+#LDFLAGS += -lhamlib
+
+
+# Name of current directory.
+# Used to generate zip file name for distribution.
+
+z := $(notdir ${CURDIR})
+
+
+
+# --------------------------------  Main application  -----------------------------------------
+
+
+
+direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
+		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
+		fcs_calc.o ax25_pad.o \
+		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
+		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
+		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o \
+		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o \
+		geotranz.a
+	$(CC) -o $@ $^ $(LDFLAGS)
+ifneq ($(enable_gpsd),)
+	@echo " "
+	@echo "This includes support for gpsd."
+else
+	@echo " "
+	@echo "This does NOT include support for gpsd."
+endif
+
+# Optimization for slow processors.
+
+demod.o : fsk_fast_filter.h
+
+demod_afsk.o : fsk_fast_filter.h
+
+
+fsk_fast_filter.h : demod_afsk.c
+	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c $(LDFLAGS)
+	./gen_fff > fsk_fast_filter.h
+
+
+
+# Separate application to decode raw data.
+
+decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o 
+	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ $(LDFLAGS)
+
+# Convert between text and touch tone representation.
+
+text2tt : tt_text.c 
+	$(CC) $(CFLAGS) -DENC_MAIN -o $@ $^ $(LDFLAGS)
+
+tt2text : tt_text.c 
+	$(CC) $(CFLAGS) -DDEC_MAIN -o $@ $^ $(LDFLAGS)
+
+
+# Convert between Latitude/Longitude and UTM coordinates.
+
+ll2utm : ll2utm.c geotranz.a textcolor.o 
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+utm2ll : utm2ll.c geotranz.a textcolor.o 
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+# Convert from log file to GPX.
+
+log2gpx : log2gpx.c textcolor.o 
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+# Test application to generate sound.
+
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c 
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Unit test for AFSK demodulator
+
+atest : atest.c demod.o demod_afsk.o demod_9600.o \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.o ax25_pad.o decode_aprs.o dwgpsnmea.o \
+		dwgps.o dwgpsd.o serial_port.o telemetry.o latlong.o symbols.o tt_text.o textcolor.o
+		
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+# Multiple AGWPE network or serial port clients to test TNCs side by side.
+
+aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o 
+	$(CC) $(CFLAGS) -g -o $@ $^ 
+
+
+# Touch Tone to Speech sample application.
+
+ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o 
+	$(CC) $(CFLAGS) -g -o $@ $^ 
+
+
+# -----------------------------------------  Libraries  --------------------------------------------
+
+# UTM, USNG, MGRS conversions.
+
+geotranz.a : error_string.o  mgrs.o  polarst.o  tranmerc.o  ups.o  usng.o  utm.o
+	ar -cr $@ $^
+
+error_string.o : geotranz/error_string.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+mgrs.o : geotranz/mgrs.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+polarst.o : geotranz/polarst.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+tranmerc.o : geotranz/tranmerc.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+ups.o : geotranz/ups.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+usng.o : geotranz/usng.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+utm.o : geotranz/utm.c
+	$(CC) $(CFLAGS) -c -o $@ $^
+
+
+
+# -------------------------------------  Installation  ----------------------------------
+
+
+
+# Generate apprpriate sample configuration file for this platform.
+# Originally, there was one sample for all platforms.  It got too cluttered
+# and confusing saying, this is for windows, and this is for Linux, and this ...
+# Trying to maintain 3 different versions in parallel is error prone.
+# We now have a single generic version which can be used to generate
+# the various platform specific versions.
+
+# generic.conf should be checked into source control.
+# direwolf.conf should NOT.  It is generated when compiling on the target platform.
+
+direwolf.conf : generic.conf
+	egrep '^C|^L' generic.conf | cut -c2-999 > direwolf.conf
+
+
+# Where should we install it?
+
+# My understanding, of the convention, is that something you compile
+# from source, that is not a standard part of the operating system,
+# should go in /usr/local/bin.
+
+# However, if you are preparing a "binary" DEB or RPM package, the
+# installation location should be /usr/bin.
+
+# This is a step in the right direction but not sufficient to use /usr instead.
+# Eventually I'd like to have targets here to build the .DEB and .RPM packages.
+
+# FreeBSD installs into a staging dir before generating the package
+# Many other systems do similiar so account for this for now
+#STAGEDIR   :=
+# PREFIX is the local install directory relative to / for FreeBSD
+PREFIX	   := "/usr/local"
+
+INSTALLDIR := ${STAGEDIR}${PREFIX}
+SHAREDIR   := ${INSTALLDIR}/share
+
+# Command to "install" to system directories.  Use "ginstall" for Mac.
+
+INSTALL=install
+
+# direwolf.desktop was previously handcrafted for the Raspberry Pi.
+# It was hardcoded with lxterminal, /home/pi, and so on.
+# In version 1.2, try to customize this to match other situations better.
+
+# TODO:  Test this better.
+
+
+direwolf.desktop :
+	@echo "Generating customized direwolf.desktop ..."
+	@echo '[Desktop Entry]' > $@
+	@echo 'Type=Application' >> $@
+ifneq ($(wildcard /usr/bin/lxterminal),)
+	@echo "Exec=lxterminal -t \"Dire Wolf\" -e \"$(INSTALLDIR)/bin/direwolf\"" >> $@ 
+else ifneq ($(wildcard /usr/local/bin/lxterm),)
+	@echo "Exec=lxterm -hold -title \"Dire Wolf\" -bg white -e \"$(INSTALLDIR)/bin/direwolf\"" >> $@ 
+else
+	@echo "Exec=xterm -hold -title \"Dire Wolf\" -bg white -e \"$(INSTALLDIR)/bin/direwolf\"" >> $@
+endif
+	@echo 'Name=Dire Wolf' >> $@
+	@echo 'Comment=APRS Soundcard TNC' >> $@
+	@echo 'Icon=/usr/local/share/direwolf/dw-icon.png' >> $@
+	@echo "Path=$(HOME)" >> $@
+	@echo '#Terminal=true' >> $@
+	@echo 'Categories=HamRadio' >> $@
+	@echo 'Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25' >> $@
+
+
+# Installation into /usr/local/...
+# Needs to be run as root or with sudo.
+
+
+.PHONY: install
+install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+#
+# Applications, not installed with package manager, normally go in /usr/local/bin.
+# /usr/bin is used instead when installing from .DEB or .RPM package.
+#
+	$(INSTALL) direwolf $(INSTALLDIR)/bin
+	$(INSTALL) decode_aprs $(INSTALLDIR)/bin
+	$(INSTALL) text2tt $(INSTALLDIR)/bin
+	$(INSTALL) tt2text $(INSTALLDIR)/bin
+	$(INSTALL) ll2utm $(INSTALLDIR)/bin
+	$(INSTALL) utm2ll $(INSTALLDIR)/bin
+	$(INSTALL) aclients $(INSTALLDIR)/bin
+	$(INSTALL) log2gpx $(INSTALLDIR)/bin
+	$(INSTALL) gen_packets $(INSTALLDIR)/bin
+	$(INSTALL) atest $(INSTALLDIR)/bin
+	$(INSTALL) ttcalc $(INSTALLDIR)/bin
+	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
+#
+# Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.
+#
+	$(INSTALL) telemetry-toolkit/telem-balloon.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-bits.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-data.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-data91.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-eqns.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-parm.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-seq.sh $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-unit.pl $(INSTALLDIR)/bin
+	$(INSTALL) telemetry-toolkit/telem-volts.py $(INSTALLDIR)/bin
+#
+# Misc. data such as "tocall" to system mapping.
+#
+	mkdir -p ${SHAREDIR}/direwolf
+	$(INSTALL) -D --mode=644 tocalls.txt ${SHAREDIR}/direwolf/tocalls.txt
+	$(INSTALL) -D --mode=644 symbols-new.txt ${SHAREDIR}/direwolf/symbols-new.txt
+	$(INSTALL) -D --mode=644 symbolsX.txt ${SHAREDIR}/direwolf/symbolsX.txt
+	$(INSTALL) -D --mode=644 dw-icon.png ${SHAREDIR}/direwolf/dw-icon.png
+	mkdir -p ${SHAREDIR}/applications
+	$(INSTALL) -D --mode=644 direwolf.desktop ${SHAREDIR}/applications/direwolf.desktop
+#
+# Documentation.  Various plain text files and PDF.
+# $(INSTALL) -D --mode=644 CHANGES.md $(INSTALLDIR)/share/doc/direwolf/CHANGES.md
+	mkdir -p ${INSTALLDIR}/share/doc/direwolf
+	mkdir -p ${INSTALLDIR}/share/direwolf
+	$(INSTALL) -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
+	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
+#
+# ./README.md is an overview for the project main page.
+# doc/README.md contains an overview of the PDF file contents and is more useful here.
+#
+	$(INSTALL) -D --mode=644 doc/README.md $(INSTALLDIR)/share/doc/direwolf/README.md
+	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
+	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
+	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-SDR-IGate.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
+	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+#
+# Various sample config and other files go into examples under the doc directory.
+# When building from source, these can be put in home directory with "make install-conf".
+# When installed from .DEB or .RPM package, the user will need to copy these to
+# the home directory or other desired location.
+#
+	mkdir -p ${INSTALLDIR}/share/doc/direwolf/examples
+	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/examples/direwolf.conf
+	$(INSTALL) -D --mode=644 dw-start.sh $(INSTALLDIR)/share/doc/direwolf/examples/dw-start.sh
+	$(INSTALL) -D --mode=644 sdr.conf $(INSTALLDIR)/share/doc/direwolf/examples/sdr.conf
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/examples/telem-m0xer-3.txt
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/examples/telem-balloon.conf
+	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-volts.conf $(INSTALLDIR)/share/doc/direwolf/examples/telem-volts.conf
+#
+# "man" pages
+#
+	$(INSTALL) -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
+	$(INSTALL) -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
+	$(INSTALL) -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
+	$(INSTALL) -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
+	$(INSTALL) -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
+	$(INSTALL) -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
+	$(INSTALL) -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
+	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
+	$(INSTALL) -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
+	$(INSTALL) -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+#
+	@echo " "
+	@echo "If this is your first install, not an upgrade, type this to put a copy"
+	@echo "of the sample configuration file (direwolf.conf) in your home directory:"
+	@echo " "
+	@echo "        make install-conf"
+	@echo " "
+
+
+# These would be done as ordinary user.
+
+# The Raspberry Pi has ~/Desktop but Ubuntu does not.
+
+# TODO: Handle Linux variations correctly.
+
+
+.PHONY: install-conf
+install-conf : direwolf.conf
+	cp direwolf.conf ~
+	cp sdr.conf ~
+	cp telemetry-toolkit/telem-m0xer-3.txt ~
+	cp telemetry-toolkit/telem-*.conf ~
+ifneq ($(wildcard $(HOME)/Desktop),)
+	@echo " "
+	@echo "This will add a desktop icon on some systems:"
+	@echo " "
+	@echo "        make install-rpi"
+	@echo " "
+endif
+
+
+.PHONY: install-rpi
+install-rpi : dw-start.sh
+	cp dw-start.sh ~
+	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
+
+
+
+# ----------------------------------  Automated Smoke Test  --------------------------------
+
+
+
+# Combine some unit tests into a single regression sanity check.
+
+
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600
+
+# Can we encode and decode at popular data rates?
+
+check-modem1200 : gen_packets atest
+	./gen_packets -n 100 -o /tmp/test1.wav
+	./atest -F0 -PE -L70 -G71 /tmp/test1.wav
+	./atest -F1 -PE -L73 -G75 /tmp/test1.wav
+	#rm /tmp/test1.wav
+
+check-modem300 : gen_packets atest
+	./gen_packets -B300 -n 100 -o /tmp/test3.wav
+	./atest -B300 -F0 -L68 -G69 /tmp/test3.wav
+	./atest -B300 -F1 -L73 -G75 /tmp/test3.wav
+	rm /tmp/test3.wav
+
+check-modem9600 : gen_packets atest
+	./gen_packets -B9600 -n 100 -o /tmp/test9.wav
+	./atest -B9600 -F0 -L57 -G59 /tmp/test9.wav
+	./atest -B9600 -F1 -L66 -G67 /tmp/test9.wav
+	rm /tmp/test9.wav
+
+
+
+# Unit test for inner digipeater algorithm
+
+.PHONY : dtest
+dtest : digipeater.c dedupe.c \
+		pfilter.o ax25_pad.o fcs_calc.o tq.o textcolor.o \
+		decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o 
+	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^ $(LDFLAGS)
+	./dtest
+	rm dtest
+
+
+# Unit test for APRStt tone sequence parsing.
+
+.PHONY : ttest
+ttest : aprs_tt.c tt_text.c latlong.o textcolor.o geotranz.a 
+	$(CC) $(CFLAGS) -DTT_MAIN  -o $@ $^ $(LDFLAGS)
+	./ttest
+	rm ttest
+
+
+# Unit test for APRStt tone sequence / text conversions.
+
+.PHONY: tttexttest
+tttexttest : tt_text.c textcolor.o 
+	$(CC) $(CFLAGS) -DTTT_TEST -o $@ $^ $(LDFLAGS)
+	./tttexttest
+	rm tttexttest
+
+
+# Unit test for Packet Filtering.
+
+.PHONY: pftest
+pftest : pfilter.c ax25_pad.o textcolor.o fcs_calc.o decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o symbols.o telemetry.o tt_text.o  
+	$(CC) $(CFLAGS) -DPFTEST -o $@ $^ $(LDFLAGS)
+	./pftest
+	rm pftest
+
+# Unit test for telemetry decoding.
+
+.PHONY: tlmtest
+tlmtest : telemetry.c ax25_pad.o fcs_calc.o textcolor.o 
+	$(CC) $(CFLAGS) -DTEST -o $@ $^ $(LDFLAGS)
+	./tlmtest
+	rm tlmtest
+
+# Unit test for location coordinate conversion.
+
+.PHONY: lltest
+lltest : latlong.c textcolor.o 
+	$(CC) $(CFLAGS) -DLLTEST -o $@ $^ $(LDFLAGS)
+	./lltest
+	rm lltest
+
+# Unit test for encoding position & object report.
+
+.PHONY: enctest
+enctest : encode_aprs.c latlong.c textcolor.c 
+	$(CC) $(CFLAGS) -DEN_MAIN -o $@ $^ $(LDFLAGS)
+	./enctest
+	rm enctest
+
+
+# Unit test for KISS encapsulation.
+
+.PHONY: kisstest
+kisstest : kiss_frame.c
+	$(CC) $(CFLAGS) -DKISSTEST -o $@ $^ $(LDFLAGS)
+	./kisstest
+	rm kisstest
+
+
+
+#  -----------------------------  Manual tests and experiments  ---------------------------
+
+# These are not included in a normal build.  Might be broken.
+
+# Unit test for IGate
+
+itest : igate.c textcolor.c ax25_pad.c fcs_calc.c textcolor.o 
+	$(CC) $(CFLAGS) -DITEST -o $@ $^
+	./itest
+
+# Unit test for UDP reception with AFSK demodulator.
+# Temporary during development.  Might not be useful anymore.
+
+udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.o ax25_pad.o decode_aprs.o symbols.o textcolor.o 
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	./udptest
+
+# For demodulator tweaking experiments.
+# Dependencies of demod*.c, rather than .o, are intentional.
+
+demod.o : tune.h
+demod_afsk.o : tune.h
+demod_9600.o : tune.h
+
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.o ax25_pad.o decode_aprs.o telemetry.o latlong.o symbols.o tune.h textcolor.o 
+	$(CC) $(CFLAGS) -o atest $^ $(LDFLAGS)
+	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
+
+
+
+
+
+
+# -------------------------------   Source distribution  ---------------------------------
+
+# probably obsolete and can be removed after move to github.
+
+
+
+.PHONY: dist-src
+dist-src : README.md CHANGES.md 
+		doc/User-Guide.pdf doc/Raspberry-Pi-APRS.pdf \
+		doc/Raspberry-Pi-APRS-Tracker.pdf doc/APRStt-Implementation-Notes.pdf \
+		dw-start.sh dwespeak.bat dwespeak.sh \
+		tocalls.txt symbols-new.txt symbolsX.txt direwolf.spec
+	rm -f fsk_fast_filter.h
+	echo " " > tune.h
+	rm -f ../$z-src.zip
+	(cd .. ; zip $z-src.zip \
+		$z/README.md \
+		$z/CHANGES.md \
+		$z/LICENSE* \
+		$z/doc/User-Guide.pdf \
+		$z/doc/Raspberry-Pi-APRS.pdf \
+		$z/doc/Raspberry-Pi-APRS-Tracker.pdf \
+		$z/doc/APRStt-Implementation-Notes.pdf \
+		$z/doc/APRS-Telemetry-Toolkit.pdf \
+		$z/Makefile* \
+		$z/*.c $z/*.h \
+		$z/regex/* $z/misc/* $z/geotranz/* \
+		$z/man1/* \
+		$z/generic.conf \
+		$z/tocalls.txt $z/symbols-new.txt $z/symbolsX.txt \
+		$z/dw-icon.png $z/dw-icon.rc $z/dw-icon.ico \
+		$z/dw-start.sh $z/direwolf.spec \
+		$z/dwespeak.bat $z/dwespeak.sh \
+		$z/telemetry-toolkit/* )
+		
+
+# -----------------------------------------------------------------------------------------
+
+
+.PHONY: clean
+clean :
+	rm -f $(APPS) fsk_fast_filter.h *.o *.a direwolf.desktop
+	echo " " > tune.h
+
+
+depend : $(wildcard *.c)
+	makedepend -f $(lastword $(MAKEFILE_LIST)) -- $(CFLAGS) -- $^
+
+
+#
+# The following is updated by "make depend"
+#
+# DO NOT DELETE
+
+
