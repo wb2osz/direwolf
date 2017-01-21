@@ -11,37 +11,46 @@ all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo "        sudo make install"
 	@echo " "
 
+#
+# Freebsd usually looks for non-base install libs and include in LOCALBASE
+# which is usually /usr/local
+#
+LOCALBASE=	/usr/local
+CFLAGS += -I${LOCALBASE}/include
 CFLAGS += -pthread -Igeotranz
+LDFLAGS := -lm -lpthread -L${LOCALBASE}/lib
 
-LDFLAGS := -lm -lpthread
+# FreeBSD installs into a staging dir before generating the package
+# Many other systems do similiar so account for this for now
+#STAGEDIR   :=
+# PREFIX is the local install directory relative to / for FreeBSD
+# Usually the same as LOCALBASE
+#
+PREFIX	   := /usr/local
 
-# This needs work FreeBSD does support neon
+INSTALLDIR := ${STAGEDIR}${PREFIX}
+SHAREDIR   := ${INSTALLDIR}/share
+ 
 #CFLAGS += -mfpu=neon
 
 #FreeBSD prefers OSS
 #CFLAGS += -DUSE_ALSA
 #LDFLAGS += -lasound
 
-# FreeBSD can support gpsd just not for initial port ;)
-#enable_gpsd := $(wildcard /usr/local/include/gps.h)
-#ifneq ($(enable_gpsd),)
-#CFLAGS += -DENABLE_GPSD
-#LDFLAGS += -lgps
-#endif
-
+enable_gpsd := $(wildcard ${LOCALBASE}/include/gps.h)
+ifneq ($(enable_gpsd),)
+CFLAGS += -DENABLE_GPSD
+LDFLAGS += -lgps
+endif
 
 # Uncomment following lines to enable hamlib support.
-# FreeBSD also support hamlib not tested yet
-#CFLAGS += -DUSE_HAMLIB
-#LDFLAGS += -lhamlib
-
+CFLAGS += -DUSE_HAMLIB
+LDFLAGS += -lhamlib
 
 # Name of current directory.
 # Used to generate zip file name for distribution.
 
 z := $(notdir ${CURDIR})
-
-
 
 # --------------------------------  Main application  -----------------------------------------
 
@@ -194,14 +203,6 @@ direwolf.conf : generic.conf
 # This is a step in the right direction but not sufficient to use /usr instead.
 # Eventually I'd like to have targets here to build the .DEB and .RPM packages.
 
-# FreeBSD installs into a staging dir before generating the package
-# Many other systems do similiar so account for this for now
-#STAGEDIR   :=
-# PREFIX is the local install directory relative to / for FreeBSD
-PREFIX	   := "/usr/local"
-
-INSTALLDIR := ${STAGEDIR}${PREFIX}
-SHAREDIR   := ${INSTALLDIR}/share
 
 # Command to "install" to system directories.  Use "ginstall" for Mac.
 
