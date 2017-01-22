@@ -50,7 +50,7 @@ fi
 # Otherwise default to :0.
 #
 
-date >> /tmp/dw-start.log
+date >> $LOGFILE
 
 export DISPLAY=":0"
 
