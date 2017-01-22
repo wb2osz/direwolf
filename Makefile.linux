@@ -26,14 +26,18 @@ CC := gcc
 # There are a few source files where it had been necessary to define __USE_XOPEN2KXSI,
 # __USE_XOPEN, or _POSIX_C_SOURCE.  Doesn't seem to be needed after adding this.
 
-CFLAGS := -O3 -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 -Wall
+# The first assignment to CFLAGS and LDFLAGS uses +=, rather than :=, so
+# we will inherit options already set in build environment.
+# Explanation - https://github.com/wb2osz/direwolf/pull/38
+
+CFLAGS += -O3 -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 -Wall
 
 # That was fine for a recent Ubuntu and Raspbian Jessie.
 # However, Raspbian wheezy was then missing declaration for strsep and definition of fd_set.
 
 CFLAGS += -D_BSD_SOURCE
 
-LDFLAGS := -lm -lpthread -lrt
+LDFLAGS += -lm -lpthread -lrt
 
 
 
