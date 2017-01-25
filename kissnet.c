@@ -2,6 +2,7 @@
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
 //    Copyright (C) 2011-2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2016  Angus Ainslie angus at akkea.ca, VE6GUS
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -130,15 +131,21 @@
 
 void hex_dump (unsigned char *p, int len);	// This should be in a .h file.
 
+// TODO: no idea how to do this on windows
+#if __WIN32__
+#define MAX_NET_CLIENTS		1
+#else
+#define MAX_NET_CLIENTS		4
+#endif
 
-static kiss_frame_t kf;		/* Accumulated KISS frame and state of decoder. */
-				// TODO: multiple instances if multiple KISS network clients!
+static kiss_frame_t kf[MAX_NET_CLIENTS];		/* Accumulated KISS frame and state of decoder. */
+							// TODO: multiple instances if multiple KISS network clients!
 
 
-static int client_sock;		/* File descriptor for socket for */
-				/* communication with client application. */
-				/* Set to -1 if not connected. */
-				/* (Don't use SOCKET type because it is unsigned.) */
+static int client_sock[MAX_NET_CLIENTS];		/* File descriptor for socket for */
+							/* communication with client application. */
+							/* Set to -1 if not connected. */
+							/* (Don't use SOCKET type because it is unsigned.) */
 
 
 // TODO:  define in one place, use everywhere.
@@ -196,6 +203,7 @@ void kissnet_init (struct misc_config_s *mc)
 	int e;
 #endif
 	int kiss_port = mc->kiss_port;
+	int i;
 
 
 #if DEBUG
@@ -203,9 +211,10 @@ void kissnet_init (struct misc_config_s *mc)
 	dw_printf ("kissnet_init ( %d )\n", kiss_port);
 #endif
 
-	memset (&kf, 0, sizeof(kf));
-	
-	client_sock = -1;
+	for( i=0; i<MAX_NET_CLIENTS; i++ ) {
+		client_sock[i] = -1;
+		memset (&kf, 0, sizeof(kf));
+	}
 
 	if (kiss_port == 0) {
 	  text_color_set(DW_COLOR_INFO);
@@ -352,8 +361,12 @@ static THREAD_F connect_listen_thread (void *arg)
 
  	while (1) {
   	 
-	  while (client_sock > 0) {
-	    SLEEP_SEC(1);			/* Already connected.  Try again later. */
+	  i = 0
+	  while (client_sock[i] > 0) {
+	    if(( ++i % MAX_NET_CLIENTS ) == 0 ) {
+	      SLEEP_SEC(1);			/* All clients already connected.  Try again later. */
+	      i = 0 ;
+	    }
 	  }
 
 #define QUEUE_SIZE 5
@@ -368,9 +381,9 @@ static THREAD_F connect_listen_thread (void *arg)
 	  text_color_set(DW_COLOR_INFO);
           dw_printf("Ready to accept KISS client application on port %s ...\n", kiss_port_str);
          
-          client_sock = accept(listen_sock, NULL, NULL);
+          client_sock[i] = accept(listen_sock, NULL, NULL);
 
-	  if (client_sock == -1) {
+	  if (client_sock[i] == -1) {
 	    text_color_set(DW_COLOR_ERROR);
             dw_printf("Accept failed with error: %d\n", WSAGetLastError());
             closesocket(listen_sock);
@@ -392,6 +405,7 @@ static THREAD_F connect_listen_thread (void *arg)
 	int kiss_port = (int)(long)arg;
 	int listen_sock;  
 	int bcopt = 1;
+	int i;
 
 	listen_sock= socket(AF_INET,SOCK_STREAM,0);
 	if (listen_sock == -1) {
@@ -418,12 +432,12 @@ static THREAD_F connect_listen_thread (void *arg)
 #endif
 
         if (bind(listen_sock,(struct sockaddr*)&sockaddr,sizeof(sockaddr))  == -1) {
-	  text_color_set(DW_COLOR_ERROR);
-          dw_printf("Bind failed with error: %d\n", errno);	
-          dw_printf("%s\n", strerror(errno));
-	  dw_printf("Some other application is probably already using port %d.\n", kiss_port);
-	  dw_printf("Try using a different port number with KISSPORT in the configuration file.\n");
-          return (NULL);
+	        text_color_set(DW_COLOR_ERROR);
+            dw_printf("Bind failed with error: %d\n", errno);	
+            dw_printf("%s\n", strerror(errno));
+	        dw_printf("Some other application is probably already using port %d.\n", kiss_port);
+	        dw_printf("Try using a different port number with KISSPORT in the configuration file.\n");
+            return (NULL);
 	}
 
 	getsockname( listen_sock, (struct sockaddr *)(&sockaddr), &sockaddr_size);
@@ -435,8 +449,12 @@ static THREAD_F connect_listen_thread (void *arg)
 
  	while (1) {
   	 
-	  while (client_sock > 0) {
-	    SLEEP_SEC(1);			/* Already connected.  Try again later. */
+	  i = 0;
+	  while (client_sock[i] > 0) {
+	    if(( ++i % MAX_NET_CLIENTS ) == 0 ) {
+	      i = 0;
+	      SLEEP_SEC(1);			/* Already connected.  Try again later. */
+	    }
 	  }
 
 #define QUEUE_SIZE 5
@@ -449,12 +467,12 @@ static THREAD_F connect_listen_thread (void *arg)
 	  }
 	
 	  text_color_set(DW_COLOR_INFO);
-          dw_printf("Ready to accept KISS client application on port %d ...\n", kiss_port);
+      dw_printf("Ready to accept KISS client %d application on port %d ...\n", i, kiss_port);
          
-          client_sock = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
+      client_sock[i] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
 	  text_color_set(DW_COLOR_INFO);
-	  dw_printf("\nConnected to KISS client application ...\n\n");
+	  dw_printf("\nConnected to KISS client %d application on fd %d...\n\n", i, client_sock[i] );
 
  	}
 #endif
@@ -491,64 +509,66 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
 	int kiss_len;
 	int err;
+	int i;
+	
+	for( i = 0; i<MAX_NET_CLIENTS; i++ ) {
+		if (client_sock[i] == -1) {
+		  return;
+		}
+		if (flen < 0) {
+		  flen = strlen((char*)fbuf);
+		  if (kiss_debug) {
+		    kiss_debug_print (TO_CLIENT, "Fake command prompt", fbuf, flen);
+		  }
+		  strlcpy ((char *)kiss_buff, (char *)fbuf, sizeof(kiss_buff));
+		  kiss_len = strlen((char *)kiss_buff);
+		}
+		else {
 
 
-	if (client_sock == -1) {
-	  return;
-	}
-	if (flen < 0) {
-	  flen = strlen((char*)fbuf);
-	  if (kiss_debug) {
-	    kiss_debug_print (TO_CLIENT, "Fake command prompt", fbuf, flen);
-	  }
-	  strlcpy ((char *)kiss_buff, (char *)fbuf, sizeof(kiss_buff));
-	  kiss_len = strlen((char *)kiss_buff);
-	}
-	else {
+		  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
+		 
+		  assert (flen < (int)(sizeof(stemp)));
 
+		  stemp[0] = (chan << 4) + 0;
+		  memcpy (stemp+1, fbuf, flen);
 
-	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
-	 
-	  assert (flen < (int)(sizeof(stemp)));
+		  if (kiss_debug >= 2) {
+		    /* AX.25 frame with the CRC removed. */
+		    text_color_set(DW_COLOR_DEBUG);
+		    dw_printf ("\n");
+		    dw_printf ("Packet content before adding KISS framing and any escapes:\n");
+		    hex_dump (fbuf, flen);
+		  }
 
-	  stemp[0] = (chan << 4) + 0;
-	  memcpy (stemp+1, fbuf, flen);
+		  kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
 
-	  if (kiss_debug >= 2) {
-	    /* AX.25 frame with the CRC removed. */
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("\n");
-	    dw_printf ("Packet content before adding KISS framing and any escapes:\n");
-	    hex_dump (fbuf, flen);
-	  }
+		  /* This has the escapes and the surrounding FENDs. */
 
-	  kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
-
-	  /* This has the escapes and the surrounding FENDs. */
-
-	  if (kiss_debug) {
-	    kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
-	  }
-	}
+		  if (kiss_debug) {
+		    kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
+		  }
+		}
 
 #if __WIN32__	
-        err = send (client_sock, (char*)kiss_buff, kiss_len, 0);
-	if (err == SOCKET_ERROR)
-	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError %d sending message to KISS client application.  Closing connection.\n\n", WSAGetLastError());
-	  closesocket (client_sock);
-	  client_sock = -1;
-	  WSACleanup();
-	}
+		err = send (client_sock[i], (char*)kiss_buff, kiss_len, 0);
+		if (err == SOCKET_ERROR)
+		{
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("\nError %d sending message to KISS client application.  Closing connection.\n\n", WSAGetLastError());
+		  closesocket (client_sock[i]);
+		  client_sock[i] = -1;
+		  WSACleanup();
+		}
 #else
-        err = write (client_sock, kiss_buff, kiss_len);
-	if (err <= 0)
-	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError sending message to KISS client application.  Closing connection.\n\n");
-	  close (client_sock);
-	  client_sock = -1;    
+		err = write (client_sock[i], kiss_buff, kiss_len);
+		if (err <= 0)
+		{
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("\nError sending message to KISS client application.  Closing connection %d.\n\n", i);
+		  close (client_sock[i]);
+		  client_sock[i] = -1;    
+		}
 	}
 #endif
 	
@@ -635,20 +655,21 @@ static int read_from_socket (int fd, char *ptr, int len)
 /* Return one byte (value 0 - 255) */
 
 
-static int kiss_get (void)
+static int kiss_get ( int socket_id )
 {
 	unsigned char ch;
 	int n;
 
 	while (1) {
 
-	  while (client_sock <= 0) {
+#if __WIN32__
+	  while (client_sock[socket_id] <= 0) {
 	    SLEEP_SEC(1);			/* Not connected.  Try again later. */
 	  }
-
+#endif
 	  /* Just get one byte at a time. */
 
-	  n = read_from_socket (client_sock, (char *)(&ch), 1);
+	  n = read_from_socket (client_sock[socket_id], (char *)(&ch), 1);
 
 	  if (n == 1) {
 #if DEBUG9
@@ -670,11 +691,13 @@ static int kiss_get (void)
           text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\nError reading KISS byte from client application.  Closing connection.\n\n");
 #if __WIN32__
-	  closesocket (client_sock);
+	  closesocket (client_sock[socket_id]);
 #else
-	  close (client_sock);
+	  close (client_sock[socket_id]);
 #endif
-	  client_sock = -1;
+	  client_sock[socket_id] = -1;
+
+      return( -1 );
 	}
 }
 
@@ -683,15 +706,65 @@ static int kiss_get (void)
 static THREAD_F kissnet_listen_thread (void *arg)
 {
 	unsigned char ch;
-			
+	int i = 0;
+	int count;
+    int max_fd;
+	fd_set set;
+	struct timeval tv;
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("kissnet_listen_thread ( socket = %d )\n", client_sock);
+	dw_printf ("kissnet_listen_thread ( socket = %d )\n", client_sock[i]);
 #endif
 
 	while (1) {
-	  ch = kiss_get();
-	  kiss_rec_byte (&kf, ch, kiss_debug, kissnet_send_rec_packet);
+#if __WIN32__
+	  ch = kiss_get( i );
+	  kiss_rec_byte (&kf[i], ch, kiss_debug, kissnet_send_rec_packet);
+#else
+	  FD_ZERO( &set );
+	  for( max_fd=0, i=0; i<MAX_NET_CLIENTS; i++ )
+	    if( client_sock[i] > 0 ) {
+		  FD_SET( client_sock[i], &set);
+		  if( client_sock[i] > max_fd )
+            max_fd = client_sock[i];
+	    }
+	  
+	  if( max_fd == 0 ) {
+	    SLEEP_SEC(1);
+	    continue;
+	  }
+	  else
+	  {
+	    tv.tv_sec = 1;
+	    tv.tv_usec = 0;
+	    count = select( max_fd + 1, &set, NULL, NULL, &tv );
+	  }
+
+      if( count > 0 ) {
+          for( i=0; i<MAX_NET_CLIENTS; i++ ) {
+            if( client_sock[i] > 0 && FD_ISSET( client_sock[i], &set )) {
+              ch = kiss_get( i );
+              if( ch != -1 )
+                kiss_rec_byte (&kf[i], ch, kiss_debug,
+                       kissnet_send_rec_packet);
+            }
+          }
+	  }
+      else if ( count == 0 )
+      {
+        #if DEBUG
+	    dw_printf ("kissnet_listen_thread timeout\n");
+        #endif
+      }
+      else
+      {
+        // TODO : Should we do something here ?
+        #if DEBUG
+	    dw_printf ("kissnet_listen_thread error\n");
+        #endif
+      }
+
+#endif
 	}  
 
 #if __WIN32__
