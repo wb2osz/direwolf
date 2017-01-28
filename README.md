@@ -55,9 +55,9 @@ Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf
 
 ### Windows ###
 
-Go to the [releases page](https://github.com/wb2osz/direwolf/releases).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
+Go to the [**releases** page](https://github.com/wb2osz/direwolf/releases).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
 
-For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  
+For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  
 
 
 ### Linux - Download with web browser ###
@@ -69,7 +69,7 @@ Go to the [releases page](https://github.com/wb2osz/direwolf/releases).  Chose d
 	sudo make install
 	make install-conf
 
-For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
+For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
 ### Linux - Using git clone ###
 
@@ -82,11 +82,11 @@ For more details see the **User Guide** in the [doc directory](https://github.co
 
 This should give you the most recent stable release.  If you want the latest (unstable) development version, use "git checkout dev" instead before the first "make" command.
 
-For more details see the **User Guide** in the [doc directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
+For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
 ## Join the conversation  ##
  
-Here are some good places to share information:
+Here are some good places to ask questions and share your experience:
 
 - [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) 
 

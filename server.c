@@ -981,6 +981,8 @@ void server_link_established (int chan, int client, char *remote_call, char *own
 	strlcpy (reply.hdr.call_from, remote_call, sizeof(reply.hdr.call_from));
 	strlcpy (reply.hdr.call_to,   own_call,    sizeof(reply.hdr.call_to));
 
+	// Question:  Should the via path be provided too?
+
 	if (incoming) {
 	  // Other end initiated the connection.
 	  snprintf (reply.info, sizeof(reply.info), "*** CONNECTED To Station %s\r", remote_call);
@@ -1431,7 +1433,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      {
 		struct {
 		  struct agwpe_s hdr;
-	 	  unsigned char on_air_baud_rate; 	/* 0=1200, 3=9600 */
+	 	  unsigned char on_air_baud_rate; 	/* 0=1200, 1=2400, 2=4800, 3=9600, ... */
 		  unsigned char traffic_level;		/* 0xff if not in autoupdate mode */
 		  unsigned char tx_delay;
 		  unsigned char tx_tail;

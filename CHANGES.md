@@ -6,7 +6,7 @@
 
 ## Version 1.4  -- Development snapshot G --  January 2017 ##
 
-This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
+**This is beta test quality.  If no significant issues are reported this will be the version 1.4 release.**
 
 
 ### New Features: ###
