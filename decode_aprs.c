@@ -3621,7 +3621,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
  *
  *------------------------------------------------------------------*/
 
-#define MAX_TOCALLS 150
+#define MAX_TOCALLS 200
 
 static struct tocalls_s {
 	unsigned char len;
