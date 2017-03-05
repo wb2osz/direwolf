@@ -118,7 +118,7 @@ static packet_t dp_queue_head;
 
 static void satgate_delay_packet (packet_t pp, int chan);
 static void send_packet_to_server (packet_t pp, int chan);
-static void send_msg_to_server (const char *msg);
+static void send_msg_to_server (const char *msg, int msg_len);
 static void maybe_xmit_packet_from_igate (char *message, int chan);
 
 static void rx_to_ig_init (void);
@@ -266,7 +266,7 @@ int main (int argc, char *argv[])
 	  SLEEP_SEC (20);
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Send received packet\n");
-	  send_msg_to_server ("W1ABC>APRS:?");
+	  send_msg_to_server ("W1ABC>APRS:?", strlen("W1ABC>APRS:?");
 	}
 #endif
 	return 0;
@@ -797,7 +797,7 @@ static void * connnect_thread (void *arg)
 	        strlcat (stemp, " filter ", sizeof(stemp));
 	        strlcat (stemp, save_igate_config_p->t2_filter, sizeof(stemp));
 	      }
-	      send_msg_to_server (stemp);
+	      send_msg_to_server (stemp, strlen(stemp));
 
 /* Delay until it is ok to start sending packets. */
 
@@ -827,7 +827,7 @@ static void * connnect_thread (void *arg)
 	    strlcpy (heartbeat, "#", sizeof(heartbeat));
 
 	    /* This will close the socket if any error. */
-	    send_msg_to_server (heartbeat);
+	    send_msg_to_server (heartbeat, strlen(heartbeat));
 
 	  }
 	}
@@ -861,7 +861,9 @@ static void * connnect_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
-#define IGATE_MAX_MSG 520	/* Message to IGate max 512 characters. */
+#define IGATE_MAX_MSG 512	/* "All 'packets' sent to APRS-IS must be in the TNC2 format terminated */
+				/* by a carriage return, line feed sequence. No line may exceed 512 bytes */
+				/* including the CR/LF sequence." */
 
 void igate_send_rec_packet (int chan, packet_t recv_pp)
 {
@@ -993,6 +995,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 /*
  * Cut the information part at the first CR or LF.
+ * Do NOT trim trailing spaces.
  */
 
 	info_len = ax25_get_info (pp, &pinfo);
@@ -1074,13 +1077,13 @@ static void send_packet_to_server (packet_t pp, int chan)
 
 
 	info_len = ax25_get_info (pp, &pinfo);
-	(void)(info_len);
 
 /*
  * We will often see the same packet multiple times close together due to digipeating.
  * The consensus seems to be that we should just send the first and drop the later duplicates.
  * There is some dissent on this issue. http://www.tapr.org/pipermail/aprssig/2016-July/045907.html
  * There could be some value to sending them all to provide information about digipeater paths.
+ * However, the servers should drop all duplicates so we wasting everyone's time but sending duplicates.
  * If you feel strongly about this issue, you could remove the following section.
  * Currently rx_to_ig_allow only checks for recent duplicates.
  */
@@ -1132,9 +1135,74 @@ static void send_packet_to_server (packet_t pp, int chan)
 
 	strlcat (msg, save_audio_config_p->achan[chan].mycall, sizeof(msg));
 	strlcat (msg, ":", sizeof(msg));
-	strlcat (msg, (char*)pinfo, sizeof(msg));
 
-	send_msg_to_server (msg);
+
+
+// It was reported that APRS packets, containing a nul byte in the information part,
+// are being truncated.  https://github.com/wb2osz/direwolf/issues/84
+//
+// One might argue that the packets are invalid and the proper behavior would be
+// to simply discard them, the same way we do if the CRC is bad.  One might argue
+// that we should simply pass along whatever we receive even if we don't like it.
+// We really shouldn't modify it and make the situation even worse.
+//
+// Chapter 5 of the APRS spec ( http://www.aprs.org/doc/APRS101.PDF ) says:
+//
+// 	"The comment may contain any printable ASCII characters (except | and ~,
+// 	which are reserved for TNC channel switching)."
+//
+// "Printable" would exclude character values less than space (00100000), e.g.
+// tab, carriage return, line feed, nul.  Sometimes we see carriage return
+// (00001010) at the end of APRS packets.   This would be in violation of the
+// specification.
+//
+// The MIC-E position format can have non printable characters (0x1c ... 0x1f, 0x7f)
+// in the information part.  An unfortunate decision, but it is not in the comment part.
+//
+// The base 91 telemetry format (http://he.fi/doc/aprs-base91-comment-telemetry.txt ),
+// which is not part of the APRS spec, uses the | character in the comment to delimit encoded
+// telemetry data.   This would be in violation of the original spec.  No one cares.
+//
+// The APRS Spec Addendum 1.2 Proposals ( http://www.aprs.org/aprs12/datum.txt)
+// adds use of UTF-8 (https://en.wikipedia.org/wiki/UTF-8 )for the free form text in
+// messages and comments. It can't be used in the fixed width fields.
+//
+// Non-ASCII characters are represented by multi-byte sequences.  All bytes in these
+// multi-byte sequences have the most significant bit set to 1.  Using UTF-8 would not
+// add any nul (00000000) bytes to the stream.
+//
+// Based on all of that, we would not expect to see a nul character in the information part.
+//
+// There are two known cases where we can have a nul character value.
+//
+// * The Kenwood TM-D710A sometimes sends packets like this:
+//
+// 	VA3AJ-9>T2QU6X,VE3WRC,WIDE1,K8UNS,WIDE2*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`nW<0x1f>oS8>/]"6M}driving fast= 
+// 	K4JH-9>S5UQ6X,WR4AGC-3*,WIDE1*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`jP}l"&>/]"47}QRV from the EV =
+//
+//   Notice that the data type indicator of "4" is not valid.  If we remove
+//   4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>   we are left with a good MIC-E format.
+//   This same thing has been observed from others and is intermittent.
+//
+// * AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
+//   This is wrong, it should be using UTF-8.
+//
+// Rather than using strlcat here, we need to use memcpy and maintain our
+// own lengths, being careful to avoid buffer overflow.
+
+	int msg_len = strlen(msg);	// What we have so far before info part.
+
+	if (info_len > IGATE_MAX_MSG - msg_len - 2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Rx IGate: Too long. Truncating.\n");
+	  info_len = IGATE_MAX_MSG - msg_len - 2;
+	}
+	if (info_len > 0) {
+	  memcpy (msg + msg_len, pinfo, info_len);
+	  msg_len += info_len;
+	}
+
+	send_msg_to_server (msg, msg_len);
 	stats_uplink_packets++;
 
 /*
@@ -1152,58 +1220,74 @@ static void send_packet_to_server (packet_t pp, int chan)
  *
  * Name:        send_msg_to_server
  *
- * Purpose:     Send to the IGate server.
+ * Purpose:     Send something to the IGate server.
  *		This one function should be used for login, hearbeats,
  *		and packets.
  *
- * Inputs:	imsg	- Message.  We will add CR/LF.
+ * Inputs:	imsg	- Message.  We will add CR/LF here.
  *		
+ *		imsg_len - Length of imsg in bytes.
+ *			  It could contain nul characters so we can't
+ *			  use the normal C string functions.
  *
  * Description:	Send message to IGate Server if connected.
  *		Disconnect from server, and notify user, if any error.
+ *		Should use a word other than message because that has
+ *		a specific meaning for APRS.
  *
  *--------------------------------------------------------------------*/
 
 
-static void send_msg_to_server (const char *imsg)
+static void send_msg_to_server (const char *imsg, int imsg_len)
 {
 	int err;
-	char stemp[IGATE_MAX_MSG];
+	char stemp[IGATE_MAX_MSG+1];
+	int stemp_len;
 
 	if (igate_sock == -1) {
 	  return;	/* Silently discard if not connected. */
 	}
 
-	strlcpy(stemp, imsg, sizeof(stemp));
+	stemp_len = imsg_len;
+	if (stemp_len + 2 > IGATE_MAX_MSG) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Rx IGate: Too long. Truncating.\n");
+	  stemp_len = IGATE_MAX_MSG - 2;
+	}
+
+	memcpy (stemp, imsg, stemp_len);
 
 	if (s_debug >= 1) {
 	  text_color_set(DW_COLOR_XMIT);
 	  dw_printf ("[rx>ig] ");
-	  ax25_safe_print (stemp, strlen(stemp), 0);
+	  ax25_safe_print (stemp, stemp_len, 0);
 	  dw_printf ("\n");
 	}
 
-	strlcat (stemp, "\r\n", sizeof(stemp));
+	stemp[stemp_len++] = '\r';
+	stemp[stemp_len++] = '\n';
+	stemp[stemp_len] = '\0';
 
-	stats_uplink_bytes += strlen(stemp);
+	stats_uplink_bytes += stemp_len;
+
 
 #if __WIN32__	
-        err = send (igate_sock, stemp, strlen(stemp), 0);
+        err = send (igate_sock, stemp, stemp_len, 0);
 	if (err == SOCKET_ERROR)
 	{
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError %d sending message to IGate server.  Closing connection.\n\n", WSAGetLastError());
+	  dw_printf ("\nError %d sending to IGate server.  Closing connection.\n\n", WSAGetLastError());
 	  //dw_printf ("DEBUG: igate_sock=%d, line=%d\n", igate_sock, __LINE__);
 	  closesocket (igate_sock);
 	  igate_sock = -1;
 	  WSACleanup();
 	}
 #else
-        err = write (igate_sock, stemp, strlen(stemp));
+        err = write (igate_sock, stemp, stemp_len);
 	if (err <= 0)
 	{
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError sending message to IGate server.  Closing connection.\n\n");
+	  dw_printf ("\nError sending to IGate server.  Closing connection.\n\n");
 	  close (igate_sock);
 	  igate_sock = -1;    
 	}
@@ -1295,7 +1379,7 @@ static void * igate_recv_thread (void *arg)
 #endif
 {
 	unsigned char ch;
-	unsigned char message[1000];  // Spec says max 500 or so.
+	unsigned char message[1000];  // Spec says max 512.
 	int len;
 	
 			
@@ -1313,13 +1397,26 @@ static void * igate_recv_thread (void *arg)
 	    ch = get1ch();
 	    stats_downlink_bytes++;
 
-	    if (len < (int)(sizeof(message)))
-	    {
-	      message[len] = ch;
+	    // I never expected to see a nul character but it can happen.
+	    // If found, change it to <0x00> and ax25_from_text will change it back to a single byte.
+	    // Along the way we can use the normal C string handling.
+
+	    if (ch == 0 && len < (int)(sizeof(message)) - 5) {
+	      message[len++] = '<';
+	      message[len++] = '0';
+	      message[len++] = 'x';
+	      message[len++] = '0';
+	      message[len++] = '0';
+	      message[len++] = '>';
 	    }
-	    len++;
+	    else if (len < (int)(sizeof(message)))
+	    {
+	      message[len++] = ch;
+	    }
 	    
 	  } while (ch != '\n');
+
+	  message[sizeof(message)-1] = '\0';
 
 /*
  * We have a complete message terminated by LF.
@@ -1335,10 +1432,13 @@ static void * igate_recv_thread (void *arg)
  * I've seen a case where the original RF packet had a trailing CR but
  * after someone else sent it to the server and it came back to me, that
  * CR was now a trailing space.
+ *
  * At first I was tempted to trim a trailing space as well.
  * By fixing this one case it might corrupt the data in other cases.
  * We compensate for this by ignoring trailing spaces when performing
  * the duplicate detection and removal.
+ *
+ * We need to transmit exactly as we get it.
  */
 
 /*
@@ -1383,6 +1483,19 @@ static void * igate_recv_thread (void *arg)
 	    dw_printf ("\n[ig>tx] ");		// formerly just [ig]
 	    ax25_safe_print ((char *)message, len, 0);
 	    dw_printf ("\n");
+
+	    if ((int)strlen((char*)message) != len) {
+
+	      // Invalid.  Either drop it or pass it along as-is.  Don't change.
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("'nul' character found in packet from IS.  This should never happen.\n");
+	      dw_printf("The source station is probably transmitting with defective software.\n");
+
+	      //if (strcmp((char*)pinfo, "4P") == 0) {
+	      //  dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");
+	      //}
+	    }
 
 /*
  * Record that we heard from the source address.
@@ -2038,10 +2151,12 @@ static int rx_to_ig_allow (packet_t pp)
  *		At first I thought duplicate removal was broken but it turns out they
  *		are not exactly the same.
  *
- *		The receive IGate spec says a packet should be cut at a CR.
+ *		>>> The receive IGate spec says a packet should be cut at a CR. <<<
+ *
  *		In one case it is removed as expected   In another case, it is replaced by a trailing
  *		space character.  Maybe someone thought non printable characters should be
- *		replaced by spaces???
+ *		replaced by spaces???  (I have since been told someone thought it would be a good
+ *		idea to replace unprintable characters with spaces.  How's that working out for MIC-E position???)
  *
  *		At first I was tempted to remove any trailing spaces to make up for the other
  *		IGate adding it.  Two wrongs don't make a right.   Trailing spaces are not that

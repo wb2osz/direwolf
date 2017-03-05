@@ -335,8 +335,17 @@ void ax25_delete (packet_t this_p)
  * Purpose:	Parse a frame in human-readable monitoring format and change
  *		to internal representation.
  *
- * Input:	monitor	- "TNC-2" format of a monitored packet.  i.e.
+ * Input:	monitor	- "TNC-2" monitor format for packet.  i.e.
  *				source>dest[,repeater1,repeater2,...]:information
+ *
+ *			The information part can have non-printable characters
+ *			in the form of <0xff>.  This will be converted to single
+ *			bytes.  e.g.  <0x0d> is carriage return.
+ *			In version 1.4H we will allow nul characters which means
+ *			we have to maintain a length rather than using strlen().
+ *			I maintain that it violates the spec but want to handle it
+ *			because it does happen and we want to preserve it when
+ *			acting as an IGate rather than corrupting it.
  *
  *		strict	- True to enforce rules for packets sent over the air.
  *			  False to be more lenient for packets from IGate server.
@@ -369,17 +378,11 @@ packet_t ax25_from_text (char *monitor, int strict)
 	char *pa;
 	char *saveptr;		/* Used with strtok_r because strtok is not thread safe. */
 
-	static int first_time = 1;
-	static regex_t unhex_re;
-	int e;
-	char emsg[100];
-#define MAXMATCH 1
-	regmatch_t match[MAXMATCH];
-	int keep_going;
-	char temp[512];
 	int ssid_temp, heard_temp;
 	char atemp[AX25_MAX_ADDR_LEN];
 
+	char info_part[AX25_MAX_INFO_LEN+1];
+	int info_len;
 
 	packet_t this_p = ax25_new ();
 
@@ -392,58 +395,15 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 	/* Is it possible to have a nul character (zero byte) in the */
 	/* information field of an AX.25 frame? */
-	/* Yes, but it would be difficult in the from-text case. */
+	/* At this point, we have a normal C string. */
+	/* It is possible that will convert <0x00> to a nul character later. */
+	/* There we need to maintain a separate length and not use normal C string functions. */
 
 	strlcpy (stuff, monitor, sizeof(stuff));
 
-/* 
- * Translate hexadecimal values like <0xff> to non-printing characters.
- * MIC-E message type uses 5 different non-printing characters.
- */
-
-	if (first_time) 
-	{
-	  e = regcomp (&unhex_re, "<0x[0-9a-fA-F][0-9a-fA-F]>", 0);
-	  if (e) {
-	    regerror (e, &unhex_re, emsg, sizeof(emsg));
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("%s:%d: %s\n", __FILE__, __LINE__, emsg);
-	  }
-
-	  first_time = 0;
-	}
-
-#if 0
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("BEFORE: %s\n", stuff);
-	ax25_safe_print (stuff, -1, 0);
-	dw_printf ("\n");
-#endif
-	keep_going = 1;
-	while (keep_going) {
-	  if (regexec (&unhex_re, stuff, MAXMATCH, match, 0) == 0) {
-	    int n;
-	    char *p;
-  
-	    stuff[match[0].rm_so + 5] = '\0';
-	    n = strtol (stuff + match[0].rm_so + 3, &p, 16);
-	    stuff[match[0].rm_so] = n;
-	    strlcpy (temp, stuff + match[0].rm_eo, sizeof(temp));
-	    strlcpy (stuff + match[0].rm_so + 1, temp, sizeof(stuff)-match[0].rm_so-1);
-	  }
-	  else {
-	    keep_going = 0;
-	  }
-	}
-#if 0
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("AFTER:  %s\n", stuff);
-	ax25_safe_print (stuff, -1, 0);
-	dw_printf ("\n");
-#endif
 
 /*
- * Initialize the packet with two addresses and control/pid
+ * Initialize the packet structure with two addresses and control/pid
  * for APRS.
  */
 	memset (this_p->frame_data + AX25_DESTINATION*7, ' ' << 1, 6);
@@ -473,12 +433,6 @@ packet_t ax25_from_text (char *monitor, int strict)
 	*pinfo = '\0';
 	pinfo++;
 
-	if (strlen(pinfo) > AX25_MAX_INFO_LEN) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Warning: Information part truncated to %d characters.\n", AX25_MAX_INFO_LEN);
-	  pinfo[AX25_MAX_INFO_LEN] = '\0';
-	}
-	
 /*
  * Separate the addresses.
  * Note that source and destination order is swappped.
@@ -535,7 +489,6 @@ packet_t ax25_from_text (char *monitor, int strict)
  */
 	while (( pa = strtok_r (NULL, ",", &saveptr)) != NULL && this_p->num_addr < AX25_MAX_ADDRS ) {
 
-	  //char *last;
 	  int k;
 
 	  k = this_p->num_addr;
@@ -561,11 +514,61 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  }
         }
 
+
+/*
+ * Finally, process the information part.
+ *
+ * Translate hexadecimal values like <0xff> to single bytes.
+ * MIC-E format uses 5 different non-printing characters.
+ * We might want to manually generate UTF-8 characters such as degree.
+ */
+
+//#define DEBUG14H 1
+
+#if DEBUG14H
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("BEFORE: %s\nSAFE:   ", pinfo);
+	ax25_safe_print (pinfo, -1, 0);
+	dw_printf ("\n");
+#endif
+
+	info_len = 0;
+	while (*pinfo != '\0' && info_len < AX25_MAX_INFO_LEN) {
+
+	  if (strlen(pinfo) >= 6 &&
+		pinfo[0] == '<' &&
+		pinfo[1] == '0' &&
+		pinfo[2] == 'x' &&
+		isxdigit(pinfo[3]) &&
+		isxdigit(pinfo[4]) &&
+		pinfo[5] == '>') {
+
+	    char *p;
+
+	    info_part[info_len] = strtol (pinfo + 3, &p, 16);
+	    info_len++;
+	    pinfo += 6;
+	  }
+	  else {
+	    info_part[info_len] = *pinfo;
+	    info_len++;
+	    pinfo++;
+	  }
+	}
+	info_part[info_len] = '\0';
+
+#if DEBUG14H
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("AFTER:  %s\nSAFE:   ", info_part);
+	ax25_safe_print (info_part, info_len, 0);
+	dw_printf ("\n");
+#endif
+
 /*
  * Append the info part.  
  */
-	strlcpy ((char*)(this_p->frame_data+this_p->frame_len), pinfo, sizeof(this_p->frame_data)-this_p->frame_len);
-	this_p->frame_len += strlen(pinfo);
+	memcpy ((char*)(this_p->frame_data+this_p->frame_len), info_part, info_len);
+	this_p->frame_len += info_len;
 
 	return (this_p);
 }
@@ -2536,7 +2539,7 @@ unsigned short ax25_m_m_crc (packet_t pp)
  *
  * Inputs:	pstr	- Pointer to string.
  *
- *		len	- Maximum length if not -1.
+ *		len	- Number of bytes.  If < 0 we use strlen().
  *
  *		ascii_only	- Restrict output to only ASCII.
  *				  Normally we allow UTF-8.
@@ -2587,7 +2590,6 @@ void ax25_safe_print (char *pstr, int len, int ascii_only)
 	if (len > MAXSAFE)
 	  len = MAXSAFE;
 
-	//while (len > 0 && *pstr != '\0')
 	while (len > 0)
 	{
 	  ch = *((unsigned char *)pstr);

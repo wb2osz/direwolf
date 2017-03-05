@@ -2,6 +2,23 @@
 # Revision History #
 
 
+## Version 1.4  -- Development snapshot H --  March 2017 ##
+
+**This is beta test quality.  If no significant issues are reported this will be the version 1.4 release.**
+
+### New Features: ###
+
+- Take advantage of new 'gpio' group and new /sys/class/gpio ownership in Raspbian Jessie.
+
+- Handle more complicated gpio naming for CubieBoard, etc.
+
+ 
+### Bugs Fixed: ###
+
+- IGate did not retain nul characters in the information part of a packet.  This should never happen with a valid APRS packet but there are a couple cases where it has.  If we encounter these malformed packets, pass them along as-is, rather than truncating.
+
+- Don't digipeat packets when the source is my call.
+
 ----------
 
 ## Version 1.4  -- Development snapshot G --  January 2017 ##

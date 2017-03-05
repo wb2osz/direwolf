@@ -199,6 +199,33 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
 
+/*
+ * Report error if the information part contains a nul character.
+ * There are two known cases where this can happen.
+ *
+ *  - The Kenwood TM-D710A sometimes sends packets like this:
+ *
+ * 	VA3AJ-9>T2QU6X,VE3WRC,WIDE1,K8UNS,WIDE2*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`nW<0x1f>oS8>/]"6M}driving fast= 
+ * 	K4JH-9>S5UQ6X,WR4AGC-3*,WIDE1*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`jP}l"&>/]"47}QRV from the EV =
+ *
+ *     Notice that the data type indicator of "4" is not valid.  If we remove
+ *     4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>   we are left with a good MIC-E format.
+ *     This same thing has been observed from others and is intermittent.
+ *
+ *  - AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
+ *    This is wrong, it should be using UTF-8.
+ */
+
+	if ( ( ! A->g_quiet ) && ( (int)strlen((char*)pinfo) != info_len) ) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("'nul' character found in Information part.  This should never happen.\n");
+	  dw_printf("It seems that %s is transmitting with defective software.\n", A->g_src);
+
+	  if (strcmp((char*)pinfo, "4P") == 0) {
+	    dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");
+	  }
+	}
 
 	switch (*pinfo) {	/* "DTI" data type identifier. */
 
@@ -3907,7 +3934,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		clen		- Length of comment or -1 to take it all.
  *
  * Outputs:	A->g_telemetry	- Base 91 telemetry |ss1122|
- *		A->g_altitude_ft	- from /A=123456
+ *		A->g_altitude_ft - from /A=123456
  *		A->g_lat	- Might be adjusted from !DAO!
  *		A->g_lon	- Might be adjusted from !DAO!
  *		A->g_aprstt_loc	- Private extension to !DAO!
@@ -3938,6 +3965,49 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *
  *			/A=123456		Altitude
  *
+ * What can appear in a comment?
+ *
+ *		Chapter 5 of the APRS spec ( http://www.aprs.org/doc/APRS101.PDF ) says:
+ *
+ *			"The comment may contain any printable ASCII characters (except | and ~,
+ *			which are reserved for TNC channel switching)."
+ *
+ *		"Printable" would exclude character values less than space (00100000), e.g.
+ *		tab, carriage return, line feed, nul.  Sometimes we see carriage return
+ *		(00001010) at the end of APRS packets.   This would be in violation of the
+ *		specification.
+ *
+ *		The base 91 telemetry format (http://he.fi/doc/aprs-base91-comment-telemetry.txt ),
+ *		which is not part of the APRS spec, uses the | character in the comment to delimit encoded
+ *		telemetry data.   This would be in violation of the original spec.
+ *
+ *		The APRS Spec Addendum 1.2 Proposals ( http://www.aprs.org/aprs12/datum.txt)
+ *		adds use of UTF-8 (https://en.wikipedia.org/wiki/UTF-8 )for the free form text in
+ *		messages and comments. It can't be used in the fixed width fields.
+ *
+ *		Non-ASCII characters are represented by multi-byte sequences.  All bytes in these
+ *		multi-byte sequences have the most significant bit set to 1.  Using UTF-8 would not
+ *		add any nul (00000000) bytes to the stream.
+ *
+ *		There are two known cases where we can have a nul character value.
+ *
+ *		* The Kenwood TM-D710A sometimes sends packets like this:
+ *
+ *			VA3AJ-9>T2QU6X,VE3WRC,WIDE1,K8UNS,WIDE2*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`nW<0x1f>oS8>/]"6M}driving fast= 
+ *			K4JH-9>S5UQ6X,WR4AGC-3*,WIDE1*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`jP}l"&>/]"47}QRV from the EV =
+ *
+ *		  Notice that the data type indicator of "4" is not valid.  If we remove
+ *		  4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>   we are left with a good MIC-E format.
+ *		  This same thing has been observed from others and is intermittent.
+ *
+ *		* AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
+ *		  This is wrong.  It should be using UTF-8 and I'm not going to accomodate it here.
+ *
+ *
+ *		The digipeater and IGate functions should pass along anything exactly the
+ *		we received it, even if it is invalid.  If different implementations try to fix it up
+ *		somehow, like changing unprintable characters to spaces, we will only make things
+ *		worse and thwart the duplicate detection.
  *
  *------------------------------------------------------------------*/
 
