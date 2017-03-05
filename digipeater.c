@@ -283,6 +283,7 @@ static char *dest_ssid_path[16] = {
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
 				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *filter_str)
 {
+	char source[AX25_MAX_ADDR_LEN];
 	int ssid;
 	int r;
 	char repeater[AX25_MAX_ADDR_LEN];
@@ -292,8 +293,6 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 /*
  * First check if filtering has been configured.
  */
-
-
 	if (filter_str != NULL) {
 
 	  if (pfilter(from_chan, to_chan, filter_str, pp, 1) != 1) {
@@ -351,10 +350,13 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 
 /*
- * First check for explicit use of my call.
+ * First check for explicit use of my call, including SSID.
+ * Someone might explicitly specify a particular path for testing purposes.
+ * This will bypass the usual checks for duplicates and my call in the source.
+ *
  * In this case, we don't check the history so it would be possible
  * to have a loop (of limited size) if someone constructed the digipeater paths
- * correctly.
+ * correctly.  I would expect it only for testing purposes.
  */
 	
 	if (strcmp(repeater, mycall_rec) == 0) {
@@ -371,12 +373,23 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	}
 
 /*
+ * Don't digipeat my own.  Fixed in 1.4 dev H.
+ * Alternatively we might feed everything transmitted into
+ * dedupe_remember rather than only frames out of digipeater.
+ */
+	ax25_get_addr_with_ssid(pp, AX25_SOURCE, source);
+	if (strcmp(source, mycall_rec) == 0) {
+	  return (NULL);
+	}
+
+
+/*
  * Next try to avoid retransmitting redundant information.
  * Duplicates are detected by comparing only:
  *	- source
  *	- destination
  *	- info part
- *	- but none of the digipeaters
+ *	- but not the via path.  (digipeater addresses)
  * A history is kept for some amount of time, typically 30 seconds.
  * For efficiency, only a checksum, rather than the complete fields
  * might be kept but the result is the same.
@@ -384,7 +397,6 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  * the specified time period.
  *
  */
-
 
 	if (dedupe_check(pp, to_chan)) {
 //#if DEBUG
@@ -399,7 +411,10 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 /*
  * For the alias pattern, we unconditionally digipeat it once.
- * i.e.  Just replace it with MYCALL don't even look at the ssid.
+ * i.e.  Just replace it with MYCALL.
+ *
+ * My call should be an implied member of this set.
+ * In this implementation, we already caught it further up.
  */
 	err = regexec(alias,repeater,0,NULL,0);
 	if (err == 0) {
@@ -812,6 +827,7 @@ int main (int argc, char *argv[])
 /*
  * Drop duplicates within specified time interval.
  * Only the first 1 of 3 should be retransmitted.
+ * The 4th case might be controversial.
  */
 
 	test (	"W1XYZ>TEST,R1*,WIDE3-2:info1",
@@ -822,6 +838,10 @@ int main (int argc, char *argv[])
 
 	test (	"W1XYZ>TEST,R3*,WIDE3-2:info1",
 		"");
+
+	test (	"W1XYZ>TEST,R1*,WB2OSZ-9:has explicit routing",
+		"W1XYZ>TEST,R1,WB2OSZ-9*:has explicit routing");
+
 
 /*
  * Allow same thing after adequate time.
@@ -882,7 +902,22 @@ int main (int argc, char *argv[])
 
 /* 
  * Did I miss any cases?
+ * Yes.  Don't retransmit my own.  1.4H
  */
+
+	test (	"WB2OSZ-7>TEST14,WIDE1-1,WIDE1-1:stuff",
+		"WB2OSZ-7>TEST14,WB2OSZ-9*,WIDE1-1:stuff");
+
+	test (	"WB2OSZ-9>TEST14,WIDE1-1,WIDE1-1:from myself",
+		"");
+
+	test (	"WB2OSZ-9>TEST14,WIDE1-1*,WB2OSZ-9:from myself but explicit routing",
+		"WB2OSZ-9>TEST14,WIDE1-1,WB2OSZ-9*:from myself but explicit routing");
+
+	test (	"WB2OSZ-15>TEST14,WIDE1-1,WIDE1-1:stuff",
+		"WB2OSZ-15>TEST14,WB2OSZ-9*,WIDE1-1:stuff");
+
+
 
 	if (failed == 0) {
 	  dw_printf ("SUCCESS -- All digipeater tests passed.\n");
