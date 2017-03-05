@@ -157,7 +157,10 @@
 
 /*
  * Previously, we allowed only one network connection at a time to each port.
- * In version 1.1, we allow multiple concurrent client apps to connect.
+ * In version 1.1, we allow multiple concurrent client apps to attach with the AGW network protocol.
+ * The default is a limit of 3 client applications at the same time.
+ * You can increase the limit by changing the line below.
+ * A larger number consumes more resources so don't go crazy by making it larger than needed.
  */
 
 #define MAX_NET_CLIENTS 3
@@ -226,7 +229,7 @@ static THREAD_F cmd_listen_thread (void *arg);
 
 #if defined(__BIG_ENDIAN__) || (defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
 
-// gcc >= 4.2 has __builtin_swap32() but be compatible with older versions.
+// gcc >= 4.2 has __builtin_swap32() but might not be compatible with older versions or other compilers.
 
 #define host2netle(x) ( (((x)>>24)&0x000000ff) | (((x)>>8)&0x0000ff00) | (((x)<<8)&0x00ff0000) | (((x)<<24)&0xff000000) )
 #define netle2host(x) ( (((x)>>24)&0x000000ff) | (((x)>>8)&0x0000ff00) | (((x)<<8)&0x00ff0000) | (((x)<<24)&0xff000000) )
