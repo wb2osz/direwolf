@@ -2341,9 +2341,17 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      t = " ";				/* Empty means permit nothing. */
 	    }
 
+	    if (p_digi_config->filter_str[from_chan][to_chan] != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Replacing previous filter for same from/to pair:\n        %s\n",
+				line, p_digi_config->filter_str[from_chan][to_chan]);
+	      free (p_digi_config->filter_str[from_chan][to_chan]);
+	      p_digi_config->filter_str[from_chan][to_chan] = NULL;
+	    }
+
 	    p_digi_config->filter_str[from_chan][to_chan] = strdup(t);
 
-//TODO1.2:  Do a test run to see errors now instead of waiting.
+//TODO:  Do a test run to see errors now instead of waiting.
 
 	  }
 
