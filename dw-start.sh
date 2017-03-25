@@ -83,15 +83,15 @@ DWCMD="direwolf -a 100"
 #
 
 
-if [ -x /usr/bin/lxterminal ]
+if [ $(which lxterminal) ]
 then
-  /usr/bin/lxterminal -t "Dire Wolf" -e "$DWCMD" &
-elif [ -x /usr/bin/xterm ] 
+  lxterminal -t "Dire Wolf" -e "$DWCMD" &
+elif [ $(which xterm) ]
 then
-  /usr/bin/xterm -bg white -fg black -e "$DWCMD" &
-elif [ -x /usr/bin/x-terminal-emulator ]
+  xterm -bg white -fg black -e "$DWCMD" &
+elif [ $(which x-terminal-emulator) ]
 then
-  /usr/bin/x-terminal-emulator -e "$DWCMD" &
+  x-terminal-emulator -e "$DWCMD" &
 else
   echo "Did not find an X terminal emulator."
 fi
