@@ -187,7 +187,7 @@ struct audio_s {
 #define OCTYPE_DCD 1
 #define OCTYPE_CON 2
 
-#define NUM_OCTYPES 4		/* number of values above.   WHY IS THIS NOT 3? */
+#define NUM_OCTYPES 3		/* number of values above.   i.e. last value +1. */
 	
 	    struct {  		
 
@@ -199,8 +199,19 @@ struct audio_s {
 	        ptt_line_t ptt_line;	/* Control line when using serial port. PTT_LINE_RTS, PTT_LINE_DTR. */
 	        ptt_line_t ptt_line2;	/* Optional second one:  PTT_LINE_NONE when not used. */
 
-	        int ptt_gpio;		/* GPIO number. */
-	
+	        int out_gpio_num;	/* GPIO number.  Originally this was only for PTT. */
+					/* It is now more general. */
+					/* octrl array is indexed by PTT, DCD, or CONnected indicator. */
+
+#define MAX_GPIO_NAME_LEN 16	// 12 would cover any case I've seen so this should be safe
+
+		char out_gpio_name[MAX_GPIO_NAME_LEN];
+					/* orginally, gpio number NN was assumed to simply */
+					/* have the name gpioNN but this turned out not to be */
+					/* the case for CubieBoard where it was longer. */
+					/* This is filled in by ptt_init so we don't have to */
+					/* recalculate it each time we access it. */
+
 	        int ptt_lpt_bit;	/* Bit number for parallel printer port.  */
 					/* Bit 0 = pin 2, ..., bit 7 = pin 9. */
 
@@ -214,13 +225,26 @@ struct audio_s {
 
 	    } octrl[NUM_OCTYPES];
 
+
+	/* Each channel can also have associated input lines. */
+	/* So far, we just have one for transmit inhibit. */
+
 #define ICTYPE_TXINH 0
 
-#define NUM_ICTYPES 1
+#define NUM_ICTYPES 1		/* number of values above. i.e. last value +1. */
 
 	    struct {
 		ptt_method_t method;	/* none, serial port, GPIO, LPT. */
-		int gpio;		/* GPIO number */
+
+		int in_gpio_num;	/* GPIO number */
+
+		char in_gpio_name[MAX_GPIO_NAME_LEN];
+					/* orginally, gpio number NN was assumed to simply */
+					/* have the name gpioNN but this turned out not to be */
+					/* the case for CubieBoard where it was longer. */
+					/* This is filled in by ptt_init so we don't have to */
+					/* recalculate it each time we access it. */
+
 		int invert;		/* 1 = active low */
 	    } ictrl[NUM_ICTYPES];
 

@@ -748,7 +748,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_audio_config->adev[0].defined = 1;
 
 	for (channel=0; channel<MAX_CHANS; channel++) {
-	  int ot;
+	  int ot, it;
 
 	  p_audio_config->achan[channel].valid = 0;				/* One or both channels will be */
 								/* set to valid when corresponding */
@@ -773,10 +773,16 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "", sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 	    p_audio_config->achan[channel].octrl[ot].ptt_line = PTT_LINE_NONE;
 	    p_audio_config->achan[channel].octrl[ot].ptt_line2 = PTT_LINE_NONE;
-	    p_audio_config->achan[channel].octrl[ot].ptt_gpio = 0;
+	    p_audio_config->achan[channel].octrl[ot].out_gpio_num = 0;
 	    p_audio_config->achan[channel].octrl[ot].ptt_lpt_bit = 0;
 	    p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	    p_audio_config->achan[channel].octrl[ot].ptt_invert2 = 0;
+	  }
+
+	  for (it = 0; it < NUM_ICTYPES; it++) {
+	    p_audio_config->achan[channel].ictrl[it].method = PTT_METHOD_NONE;
+	    p_audio_config->achan[channel].ictrl[it].in_gpio_num = 0;
+	    p_audio_config->achan[channel].ictrl[it].invert = 0;
 	  }
 
 	  p_audio_config->achan[channel].dwait = DEFAULT_DWAIT;				
@@ -1644,11 +1650,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 
 	      if (*t == '-') {
-	        p_audio_config->achan[channel].octrl[ot].ptt_gpio = atoi(t+1);
+	        p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t+1);
 		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
 	      }
 	      else {
-	        p_audio_config->achan[channel].octrl[ot].ptt_gpio = atoi(t);
+	        p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t);
 		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	      }
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIO;
@@ -1841,11 +1847,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 
 	      if (*t == '-') {
-	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].gpio = atoi(t+1);
+	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t+1);
 		p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 1;
 	      }
 	      else {
-	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].gpio = atoi(t);
+	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t);
 		p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 0;
 	      }
 	      p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].method = PTT_METHOD_GPIO;

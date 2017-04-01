@@ -162,6 +162,8 @@ typedef int HANDLE;
 #endif
 
 
+static struct audio_s *save_audio_config_p;	/* Save config information for later use. */
+
 static int ptt_debug_level = 0;
 
 void ptt_set_debug(int debug)
@@ -368,44 +370,44 @@ static void get_access_to_gpio (const char *path)
  * Purpose:	Tell the GPIO subsystem to export a GPIO line for
  * 		us to use, and set the initial state of the GPIO.
  *
- * Inputs:	gpio		- GPIO line number to export.
+ * Inputs:	ch		- Radio Channel.
+ *		ot		- Output type.
  *		invert:		- Is the GPIO active low?
  *		direction:	- 0 for input, 1 for output
  *
- * Outputs:	gpio_name	- See below.
+ * Outputs:	out_gpio_name	- in the audio configuration structure.
+ *		in_gpio_name
  *
  *------------------------------------------------------------------*/
 
 #ifndef __WIN32__
 
-#define MAX_GPIO_NUM 100		// 76 would handle any case I've seen.
-#define MAX_GPIO_NAME_LEN 16		// 12 would handle any case I've seen.
 
-// Raspberry Pi was easy.  GPIO 24 has the name gpio24.
-// Others, such as the Cubieboard, take a little more effort.
-// The name might be gpio24_ph11 meaning connector H, pin 11.
-// When we "export" GPIO number, we will store the corresponding device name
-// here for future use when we want to access it.
-// I never saw any references to anything above gpio75 so we will take the easy
-// way out and simply index into a fixed size array.
-
-
-static char gpio_name[MAX_GPIO_NUM][MAX_GPIO_NAME_LEN];
-
-
-void export_gpio(int gpio, int invert, int direction)
+void export_gpio(int ch, int ot, int invert, int direction)
 {
 	HANDLE fd;
 	const char gpio_export_path[] = "/sys/class/gpio/export";
 	char gpio_direction_path[80];
+	char gpio_value_path[80];
 	char stemp[16];
+	int gpio_num;
+	char *gpio_name;
 
+// Raspberry Pi was easy.  GPIO 24 has the name gpio24.
+// Others, such as the Cubieboard, take a little more effort.
+// The name might be gpio24_ph11 meaning connector H, pin 11.
+// When we "export" GPIO number, we will store the corresponding
+// device name for future use when we want to access it.
 
-	if (gpio < 0 || gpio >= MAX_GPIO_NUM) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("GPIO line number %d is invalid.  Must be in range of 0 to %d.\n", gpio, MAX_GPIO_NUM - 1);
-	  exit (1);
+	if (direction) {
+	  gpio_num  = save_audio_config_p->achan[ch].octrl[ot].out_gpio_num;
+	  gpio_name = save_audio_config_p->achan[ch].octrl[ot].out_gpio_name;
 	}
+	else {
+	  gpio_num  = save_audio_config_p->achan[ch].ictrl[ot].in_gpio_num;
+	  gpio_name = save_audio_config_p->achan[ch].ictrl[ot].in_gpio_name;
+	}
+
 
 	get_access_to_gpio (gpio_export_path);
 
@@ -417,7 +419,7 @@ void export_gpio(int gpio, int invert, int direction)
 	  exit (1);
 	}
 
-	snprintf (stemp, sizeof(stemp), "%d", gpio);
+	snprintf (stemp, sizeof(stemp), "%d", gpio_num);
 	if (write (fd, stemp, strlen(stemp)) != strlen(stemp)) {
 	  int e = errno;
 	  /* Ignore EBUSY error which seems to mean */
@@ -473,7 +475,7 @@ void export_gpio(int gpio, int invert, int direction)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR! Could not get directory listing for /sys/class/gpio\n");
 
-	  snprintf (gpio_name[gpio], sizeof(gpio_name[gpio]), "gpio%d", gpio);
+	  snprintf (gpio_name, MAX_GPIO_NAME_LEN, "gpio%d", gpio_num);
 	  num_files = 0;
 	  ok = 1;
 	}
@@ -491,22 +493,22 @@ void export_gpio(int gpio, int invert, int direction)
 	  // Look for exact name gpioNN
 
 	  char lookfor[16];
-	  snprintf (lookfor, sizeof(lookfor), "gpio%d", gpio);
+	  snprintf (lookfor, sizeof(lookfor), "gpio%d", gpio_num);
 
 	  for (i = 0; i < num_files && ! ok; i++) {
 	    if (strcmp(lookfor, file_list[i]->d_name) == 0) {
-	      strlcpy (gpio_name[gpio], file_list[i]->d_name, sizeof(gpio_name[gpio]));
+	      strlcpy (gpio_name, file_list[i]->d_name, MAX_GPIO_NAME_LEN);
 	      ok = 1;
 	    }
 	  }
 
 	  // If not found, Look for gpioNN_*
 
-	  snprintf (lookfor, sizeof(lookfor), "gpio%d_", gpio);
+	  snprintf (lookfor, sizeof(lookfor), "gpio%d_", gpio_num);
 
 	  for (i = 0; i < num_files && ! ok; i++) {
 	    if (strncmp(lookfor, file_list[i]->d_name, strlen(lookfor)) == 0) {
-	      strlcpy (gpio_name[gpio], file_list[i]->d_name, sizeof(gpio_name[gpio]));
+	      strlcpy (gpio_name, file_list[i]->d_name, MAX_GPIO_NAME_LEN);
 	      ok = 1;
 	    }
 	  }
@@ -526,13 +528,13 @@ void export_gpio(int gpio, int invert, int direction)
 
 	  if (ptt_debug_level >= 2) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("Path for gpio number %d is /sys/class/gpio/%s\n", gpio, gpio_name[gpio]);
+	    dw_printf ("Path for gpio number %d is /sys/class/gpio/%s\n", gpio_num, gpio_name);
 	  }
 	}
 	else {
 
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR! Could not find Path for gpio number %d.n", gpio);
+	  dw_printf ("ERROR! Could not find Path for gpio number %d.n", gpio_num);
 	  exit (1);
 	}
 
@@ -540,7 +542,7 @@ void export_gpio(int gpio, int invert, int direction)
  * Set output direction and initial state
  */
 
-	snprintf (gpio_direction_path, sizeof(gpio_direction_path), "/sys/class/gpio/%s/direction", gpio_name[gpio]);
+	snprintf (gpio_direction_path, sizeof(gpio_direction_path), "/sys/class/gpio/%s/direction", gpio_name);
 	get_access_to_gpio (gpio_direction_path);
 
 	fd = open(gpio_direction_path, O_WRONLY);
@@ -572,6 +574,14 @@ void export_gpio(int gpio, int invert, int direction)
 	  exit (1);
 	}
 	close (fd);
+
+/*
+ * Make sure that we have access to 'value'.
+ * Do it once here, rather than each time we want to use it.
+ */
+
+	snprintf (gpio_value_path, sizeof(gpio_value_path), "/sys/class/gpio/%s/value", gpio_name);
+	get_access_to_gpio (gpio_value_path);
 }
 
 #endif   /* not __WIN32__ */
@@ -600,7 +610,7 @@ void export_gpio(int gpio, int invert, int direction)
  *			
  *			ptt_line	RTS or DTR when using serial port. 
  *			
- *			ptt_gpio	GPIO number.  Only used for Linux. 
+ *			out_gpio_num	GPIO number.  Only used for Linux. 
  *					 Valid only when ptt_method is PTT_METHOD_GPIO. 
  *					
  *			ptt_lpt_bit	Bit number for parallel printer port.  
@@ -623,7 +633,6 @@ void export_gpio(int gpio, int invert, int direction)
 
 
 
-static struct audio_s *save_audio_config_p;	/* Save config information for later use. */
 
 static HANDLE ptt_fd[MAX_CHANS][NUM_OCTYPES];	
 					/* Serial port handle or fd.  */
@@ -674,7 +683,7 @@ void ptt_init (struct audio_s *audio_config_p)
 		audio_config_p->achan[ch].octrl[ot].ptt_method, 
 		audio_config_p->achan[ch].octrl[ot].ptt_device,
 		audio_config_p->achan[ch].octrl[ot].ptt_line,
-		audio_config_p->achan[ch].octrl[ot].ptt_gpio,
+		audio_config_p->achan[ch].octrl[ot].out_gpio_num,
 		audio_config_p->achan[ch].octrl[ot].ptt_lpt_bit,
 		audio_config_p->achan[ch].octrl[ot].ptt_invert);
 	    }
@@ -818,8 +827,6 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	if (using_gpio) {
 	  get_access_to_gpio ("/sys/class/gpio/export");
-
-
 	}
 
 /*
@@ -829,15 +836,18 @@ void ptt_init (struct audio_s *audio_config_p)
 	    
 	for (ch = 0; ch < MAX_CHANS; ch++) {
 	  if (save_audio_config_p->achan[ch].valid) {
-	    int ot;
+
+	    int ot;	// output control type, PTT, DCD, CON, ...
+	    int it;	// input control type
+
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIO) {
-	        export_gpio(audio_config_p->achan[ch].octrl[ot].ptt_gpio, audio_config_p->achan[ch].octrl[ot].ptt_invert, 1);
+	        export_gpio(ch, ot, audio_config_p->achan[ch].octrl[ot].ptt_invert, 1);
 	      }
 	    }
-	    for (ot = 0; ot < NUM_ICTYPES; ot++) {
-	      if (audio_config_p->achan[ch].ictrl[ot].method == PTT_METHOD_GPIO) {
-	        export_gpio(audio_config_p->achan[ch].ictrl[ot].gpio, audio_config_p->achan[ch].ictrl[ot].invert, 0);
+	    for (it = 0; it < NUM_ICTYPES; it++) {
+	      if (audio_config_p->achan[ch].ictrl[it].method == PTT_METHOD_GPIO) {
+	        export_gpio(ch, it, audio_config_p->achan[ch].ictrl[it].invert, 0);
 	      }
 	    }
 	  }
@@ -1125,9 +1135,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  char gpio_value_path[80];
 	  char stemp[16];
 
-	  snprintf (gpio_value_path, sizeof(gpio_value_path), "/sys/class/gpio/%s/value", gpio_name[save_audio_config_p->achan[chan].octrl[ot].ptt_gpio]);
-
-	  get_access_to_gpio (gpio_value_path);
+	  snprintf (gpio_value_path, sizeof(gpio_value_path), "/sys/class/gpio/%s/value", save_audio_config_p->achan[chan].octrl[ot].out_gpio_name);
 
 	  fd = open(gpio_value_path, O_WRONLY);
 	  if (fd < 0) {
@@ -1143,7 +1151,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  if (write (fd, stemp, 1) != 1) {
 	    int e = errno;
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Error setting GPIO %d for %s\n", save_audio_config_p->achan[chan].octrl[ot].ptt_gpio, otnames[ot]);
+	    dw_printf ("Error setting GPIO %d for %s\n", save_audio_config_p->achan[chan].octrl[ot].out_gpio_num, otnames[ot]);
 	    dw_printf ("%s\n", strerror(e));
 	  }
 	  close (fd);
@@ -1246,7 +1254,7 @@ int get_input (int it, int chan)
 	  int fd;
 	  char gpio_value_path[80];
 
-	  snprintf (gpio_value_path, sizeof(gpio_value_path), "/sys/class/gpio/%s/value", gpio_name[save_audio_config_p->achan[chan].ictrl[it].gpio]);
+	  snprintf (gpio_value_path, sizeof(gpio_value_path), "/sys/class/gpio/%s/value", save_audio_config_p->achan[chan].ictrl[it].in_gpio_name);
 
 	  get_access_to_gpio (gpio_value_path);
 
@@ -1263,7 +1271,7 @@ int get_input (int it, int chan)
 	  if (read (fd, vtemp, 1) != 1) {
 	    int e = errno;
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Error getting GPIO %d value\n", save_audio_config_p->achan[chan].ictrl[it].gpio);
+	    dw_printf ("Error getting GPIO %d value\n", save_audio_config_p->achan[chan].ictrl[it].in_gpio_num);
 	    dw_printf ("%s\n", strerror(e));
 	  }
 	  close (fd);
@@ -1449,9 +1457,9 @@ main ()
 	my_audio_config.adev[0].num_channels = 1;
 	my_audio_config.valid[0] = 1;
 	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_GPIO;
-	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_gpio = 25;
+	my_audio_config.adev[0].octrl[OCTYPE_PTT].out_gpio_num = 25;
 
-	dw_printf ("Try GPIO %d a few times...\n", my_audio_config.ptt_gpio[0]);
+	dw_printf ("Try GPIO %d a few times...\n", my_audio_config.out_gpio_num[0]);
 
 	ptt_init (&my_audio_config);
 
