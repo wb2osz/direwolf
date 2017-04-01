@@ -1578,9 +1578,9 @@ int ax25_get_rr (packet_t this_p, int n)
  * 
  * Purpose:	Obtain Information part of current packet.
  *
- * Inputs:	None.
+ * Inputs:	this_p	- Packet object pointer.
  *
- * Outputs:	paddr	- Starting address is returned here.
+ * Outputs:	paddr	- Starting address of information part is returned here.
  *
  * Assumption:	ax25_from_text or ax25_from_frame was called first.
  *
@@ -1621,6 +1621,56 @@ int ax25_get_info (packet_t this_p, unsigned char **paddr)
 
 	*paddr = info_ptr;
 	return (info_len);
+
+} /* end ax25_get_info */
+
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_cut_at_crlf
+ *
+ * Purpose:	Truncate the information part at the first CR or LF.
+ *		This is used for the RF>IS IGate function.
+ *		CR/LF is used as record separator so we must remove it
+ *		before packaging up packet to sending to server.
+ *
+ * Inputs:	this_p	- Packet object pointer.
+ *
+ * Outputs:	Packet is modified in place.
+ *
+ * Returns:	Number of characters removed from the end.
+ *		0 if not changed.
+ *
+ * Assumption:	ax25_from_text or ax25_from_frame was called first.
+ *
+ *------------------------------------------------------------------------------*/
+
+int ax25_cut_at_crlf (packet_t this_p)
+{
+	unsigned char *info_ptr;
+	int info_len;
+	int j;
+
+
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	info_len = ax25_get_info (this_p, &info_ptr);
+
+	// Can't use strchr because there is potential of nul character.
+
+	for (j = 0; j < info_len; j++) {
+
+	  if (info_ptr[j] == '\r' || info_ptr[j] == '\n') {
+
+	    int chop = info_len - j;
+
+	    this_p->frame_len -= chop;
+	    return (chop);
+	  }
+	}
+
+	return (0);
 }
 
 

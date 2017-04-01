@@ -397,6 +397,7 @@ extern int ax25_get_first_not_repeated(packet_t pp);
 extern int ax25_get_rr (packet_t this_p, int n);
 
 extern int ax25_get_info (packet_t pp, unsigned char **paddr);
+extern int ax25_cut_at_crlf (packet_t this_p);
 
 extern void ax25_set_nextp (packet_t this_p, packet_t next_p);
 

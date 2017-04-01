@@ -870,7 +870,6 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	packet_t pp;
 	int n;
 	unsigned char *pinfo;
-	char *p;
 	int info_len;
 	
 
@@ -995,33 +994,25 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 /*
  * Cut the information part at the first CR or LF.
+ * This is required because CR/LF is used as record separator when sending to server.
  * Do NOT trim trailing spaces.
+ * Starting in 1.4 we preserve any nul characters in the information part.
  */
 
-	info_len = ax25_get_info (pp, &pinfo);
-	(void)(info_len);
-
-	if ((p = strchr ((char*)pinfo, '\r')) != NULL) {
+	if (ax25_cut_at_crlf (pp) > 0) {
 	  if (s_debug >= 1) {
 	    text_color_set(DW_COLOR_DEBUG);
 	    dw_printf ("Rx IGate: Truncated information part at CR.\n");
 	  }
-          *p = '\0';
 	}
 
-	if ((p = strchr ((char*)pinfo, '\n')) != NULL) {
-	  if (s_debug >= 1) {
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("Rx IGate: Truncated information part at LF.\n");
-	  }
-          *p = '\0';
-	}
+	info_len = ax25_get_info (pp, &pinfo);
 
 
 /*
  * Someone around here occasionally sends a packet with no information part.
  */
-	if (strlen((char*)pinfo) == 0) {
+	if (info_len == 0) {
 
 	  if (s_debug >= 1) {
 	    text_color_set(DW_COLOR_DEBUG);
