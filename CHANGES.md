@@ -2,100 +2,22 @@
 # Revision History #
 
 
-## Version 1.4  -- Development snapshot H --  March 2017 ##
+## Version 1.4  -- Beta Test-- April 2017 ##
 
 **This is beta test quality.  If no significant issues are reported this will be the version 1.4 release.**
 
-### New Features: ###
+### New Features (since 1.3): ###
 
-- Take advantage of new 'gpio' group and new /sys/class/gpio ownership in Raspbian Jessie.
-
-- Handle more complicated gpio naming for CubieBoard, etc.
-
- 
-### Bugs Fixed: ###
-
-- IGate did not retain nul characters in the information part of a packet.  This should never happen with a valid APRS packet but there are a couple cases where it has.  If we encounter these malformed packets, pass them along as-is, rather than truncating.
-
-- Don't digipeat packets when the source is my call.
-
-----------
-
-## Version 1.4  -- Development snapshot G --  January 2017 ##
-
-**This is beta test quality.  If no significant issues are reported this will be the version 1.4 release.**
-
-
-### New Features: ###
+- AX.25 v2.2 connected mode.  See chapter 10 of User Guide for details.
 
 - New client side packet filter to select "messages" only to stations that have been heard nearby recently.  This is now the default if no IS to RF filter is specified.
+
+- New beacon type, IBEACON, for sending IGate statistics.
 
 - Expanded debug options so you can understand what is going on with packet filtering.
 
 - Added new document ***Successful-APRS-IGate-Operation.pdf*** with IGate background, configuration, and troubleshooting tips.
-
-
-----------
-
-## Version 1.4  -- Development snapshot F --  December 2016 ##
-
-This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
-
-
-### Bugs Fixed: ###
-
-- -p command line option caused segmentation fault with glibc >= 2.24.
-
-
-
-
-
-----------
-
-## Version 1.4  -- Development snapshot E --  December 2016 ##
-
-This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
-
-
-### New Features: ###
-
-- DTMF tones can be sent by putting "DTMF" in the destination address,  similar to the way that Morse Code is sent.
-
-### Bugs Fixed: ###
-
-- The transmitter (PTT control) was being turned off too soon when sending Morse Code.
-
-- The -qd (quiet decode) command line option now suppresses errors about improperly formed Telemetry packets.
-
-- Longer tocall.txt files can now be handled.  
-
-
-
-----------
-
-## Version 1.4  -- Development snapshot D --  November 2016 ##
-
-This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
-
-
-### New Features: ###
-
-- AX.25 v2.2 connected mode.  See chapter 10 of User Guide for details.
-
-
-----------
-
-## Version 1.4  -- Development snapshot C --  June 2016 ##
-
-This is a snapshot at some semi-stable point in the development of the next version.  It is not well tested.  New features might be incomplete, poorly documented, and subject to change.
-
-
-### New Features: ###
-
-- New beacon type, IBEACON, for sending IGate statistics.
-
 - 2400 & 4800 bps PSK modems.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** in the doc directory for discussion.
-
 
 - The top speed of 9600 bps has been increased to 38400.  You will need a sound card capable of 96k or 192k samples per second for the higher rates.  Radios must also have adequate bandwidth.  See ***Going-beyond-9600-baud.pdf*** in the doc directory for more details.
 
@@ -107,7 +29,23 @@ This is a snapshot at some semi-stable point in the development of the next vers
  - $PMGNWPL	- Magellan, more complete for stationary objects.
  - $PKWDWPL	- Kenwood with APRS style symbol but missing comment.
 
-### Bugs Fixed: ###
+- DTMF tones can be sent by putting "DTMF" in the destination address,  similar to the way that Morse Code is sent.
+
+- Take advantage of new 'gpio' group and new /sys/class/gpio ownership in Raspbian Jessie.
+
+- Handle more complicated gpio naming for CubieBoard, etc.
+
+- More flexible dw-start.sh start up script for both GUI and CLI environments.
+
+
+ 
+### Bugs Fixed (since 1.3): ###
+
+- The transmitter (PTT control) was being turned off too soon when sending Morse Code.
+
+- The -qd (quiet decode) command line option now suppresses errors about improperly formed Telemetry packets.
+
+- Longer tocall.txt files can now be handled.  
 
 - Sometimes kissattach would have an issue with the Dire Wolf pseudo terminal.  This showed up most often on Raspbian but sometimes occurred with other versions of Linux.
 
@@ -124,8 +62,16 @@ received frames are not being printed.  After a while this message will appear:
   	frozen.  This can be caused by using a pseudo terminal (direwolf -p) where 
   	another application is not reading the frames from the other side.*
 
+- -p command line option caused segmentation fault with glibc >= 2.24.
+
 
 - The Windows version 1.3 would crash when starting to transmit on Windows XP. There have also been some other reports of erratic behavior on Windows. The crashing problem was fixed in in the 1.3.1 patch release.   Linux version was not affected.
+
+- IGate did not retain nul characters in the information part of a packet.  This should never happen with a valid APRS packet but there are a couple cases where it has.  If we encounter these malformed packets, pass them along as-is, rather than truncating.
+
+- Don't digipeat packets when the source is my call.
+
+
 
 ----------
 

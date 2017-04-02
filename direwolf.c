@@ -259,8 +259,8 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "H", __DATE__);
+	dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "H", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -1214,6 +1214,7 @@ static void usage (char **argv)
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
 	dw_printf ("       i             i = IGate.\n");
 	dw_printf ("       m             m = Monitor heard station list.\n");
+	dw_printf ("       f             f = packet Filtering.\n");
 #if USE_HAMLIB
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif
