@@ -3,8 +3,14 @@
 # Run this from crontab periodically to start up
 # Dire Wolf automatically.
 
-# Versioning
+# See User Guide for more discussion.
+# For release 1.4 it is section 5.7 "Automatic Start Up After Reboot"
+# but it could change in the future as more information is added.
+
+
+# Versioning (this file, not direwolf version)
 #-----------
+# v1.3 - KI6ZHD - added variable support for direwolf binary location
 # v1.2 - KI6ZHD - support different versions of VNC
 # v1.1 - KI6ZHD - expanded version to support running on text-only displays with 
 #        auto support; log placement change
@@ -25,18 +31,26 @@
 
 RUNMODE=AUTO
 
+# Location of the direwolf binary.  Depends on $PATH as shown.
+# change this if you want to use some other specific location.
+# e.g.  DIREWOLF="/usr/local/bin/direwolf"
+
+DIREWOLF="direwolf"
 
 #Direwolf start up command :: two examples where example one is enabled
 #
 # 1. For normal operation as TNC, digipeater, IGate, etc.
 #    Print audio statistics each 100 seconds for troubleshooting.
 #    Change this command to however you wish to start Direwolf
-DWCMD="direwolf -a 100"
+
+DWCMD="$DIREWOLF -a 100"
+
 #---------------------------------------------------------------
 #
 # 2. Alternative for running with SDR receiver.
 #    Piping one application into another makes it a little more complicated.
-#    We need to use bash for the | to be recognized. 
+#    We need to use bash for the | to be recognized.
+
 #DWCMD="bash -c 'rtl_fm -f 144.39M - | direwolf -c sdr.conf -r 24000 -D 1 -'"
 
 
@@ -64,11 +78,11 @@ function CLI {
    # Screen commands
    #  -d m :: starts the command in detached mode
    #  -S   :: name the session
-   $SCREEN -d -m -S direwolf $DWCMD
+   $SCREEN -d -m -S direwolf $DWCMD >> $LOGFILE
    SUCCESS=1
 
-   screen -list direwolf
-   screen -list direwolf >> $LOGFILE
+   $SCREEN -list direwolf
+   $SCREEN -list direwolf >> $LOGFILE
 
    echo "-----------------------"
    echo "-----------------------" >> $LOGFILE

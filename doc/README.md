@@ -41,6 +41,10 @@ These dive into more detail for specialized topics or typical usage scenarios.
 
     Don’t have your own QIKCOM-2 Satellite Transponder?  No Problem.  You can do the same thing with an ordinary computer and the APRStt gateway built into Dire Wolf.   Here’s how.
 
+- [**Raspberry Pi APRS Tracker**](Raspberry-Pi-APRS-Tracker.pdf)   [ [*download*](../../../raw/dev/doc/Raspberry-Pi-APRS-Tracker.pdf) ]
+
+	Build a tracking device which transmits position from a GPS receiver.
+
 - [**Raspberry Pi SDR IGate**](Raspberry-Pi-SDR-IGate.pdf)   [ [*download*](../../../raw/dev/doc/Raspberry-Pi-SDR-IGate.pdf) ]
 
 	It's easy to build a receive-only APRS Internet Gateway (IGate) with only a Raspberry Pi and a software defined radio (RTL-SDR) dongle.  Here’s how.

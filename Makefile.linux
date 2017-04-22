@@ -586,7 +586,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 # the home directory or other desired location.
 #
 	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/examples/direwolf.conf
-	$(INSTALL) -D --mode=644 dw-start.sh $(INSTALLDIR)/share/doc/direwolf/examples/dw-start.sh
+	$(INSTALL) -D --mode=755 dw-start.sh $(INSTALLDIR)/share/doc/direwolf/examples/dw-start.sh
 	$(INSTALL) -D --mode=644 sdr.conf $(INSTALLDIR)/share/doc/direwolf/examples/sdr.conf
 	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/examples/telem-m0xer-3.txt
 	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/examples/telem-balloon.conf
@@ -637,6 +637,7 @@ endif
 
 .PHONY: install-rpi
 install-rpi : dw-start.sh
+	chmod +x dw-start.sh
 	cp dw-start.sh ~
 	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
 
