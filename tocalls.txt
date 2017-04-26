@@ -1,6 +1,8 @@
-APRS TO-CALL VERSION NUMBERS                            6 Dec 2016
+APRS TO-CALL VERSION NUMBERS                            06 Feb 2017
 -------------------------------------------------------------------
                                                              WB4APR
+06 Feb 17 added APIExx for W7KMV's PiAPRS system
+25 Jan 17 added APSFxx F5OPV embedded devices - was APZ40
 16 Dec 16 added APYSxx for W2GMD's Python APRS
 14 Nov 16 Added APINxx for PinPoint by AB0WV
 09 Nov 16 added APNICx for SQ5EKU http://sq5eku.blogspot.com/
@@ -51,7 +53,8 @@ a TOCALL number series:
       APBLO   MOdel Rocketry K7RKT
       APBPQx  John G8BPQ Digipeater/IGate 
  APC  APCxxx  Cellular applications
-      APCBBx  for VE7UDP Blackberry Applications
+      APCBBx  VE7UDP Blackberry Applications
+      APCDS0  Leon Lessing ZS6LMG's cell tracker
       APCLEY  EYTraker GPRS/GSM tracker by ZS6EY
       APCLWX  EYWeather GPRS/GSM WX station by ZS6EY
       APCLEZ  Telit EZ10 GSM application ZS6CEY
@@ -85,8 +88,9 @@ a TOCALL number series:
       APHAXn  SM2APRS by PY2UEP
       APHTxx  HMTracker by IU0AAC 
  API  APICQx  for ICQ
-      APICxx  for HA9MCQ Pic IGate
-      APINxx for PinPoint by AB0WV
+      APICxx  HA9MCQ's Pic IGate
+      APIExx  W7KMV's PiAPRS system
+      APINxx  PinPoint by AB0WV
  APJ  APJAxx  JavAPRS
       APJExx  JeAPRS
       APJIxx  jAPRSIgate
@@ -145,6 +149,7 @@ a TOCALL number series:
  APS  APSxxx  APRS+SA, etc
       APSARx  ZL4FOX's SARTRACK
       APSCxx  aprsc APRS-IS core server (OH7LZB, OH2MQK)
+      APSFxx  F5OPV embedded devices - was APZ40
       APSK63  APRS Messenger -over-PSK63
       APSK25  APRS Messenger GMSK-250
       APSMSx  Paul Dufresne's SMSGTE - SMS Gateway
