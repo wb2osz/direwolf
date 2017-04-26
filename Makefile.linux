@@ -613,19 +613,22 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	@echo " "
 
 
+# Put sample configuration files in home directory.
 # These would be done as ordinary user.
 
 # The Raspberry Pi has ~/Desktop but Ubuntu does not.
 
 # TODO: Handle Linux variations correctly.
 
+# Version 1.4 - Add "-n" option to avoid clobbering existing, probably customized, config files.
+
 
 .PHONY: install-conf
 install-conf : direwolf.conf
-	cp direwolf.conf ~
-	cp sdr.conf ~
-	cp telemetry-toolkit/telem-m0xer-3.txt ~
-	cp telemetry-toolkit/telem-*.conf ~
+	cp -n direwolf.conf ~
+	cp -n sdr.conf ~
+	cp -n telemetry-toolkit/telem-m0xer-3.txt ~
+	cp -n telemetry-toolkit/telem-*.conf ~
 ifneq ($(wildcard $(HOME)/Desktop),)
 	@echo " "
 	@echo "This will add a desktop icon on some systems:"
@@ -635,10 +638,13 @@ ifneq ($(wildcard $(HOME)/Desktop),)
 endif
 
 
+# dw-start.sh is greatly improved in version 1.4.
+# It should probably be part of install-conf because it is not just for the RPi.
+
 .PHONY: install-rpi
 install-rpi : dw-start.sh
 	chmod +x dw-start.sh
-	cp dw-start.sh ~
+	cp -n dw-start.sh ~
 	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
 
 
