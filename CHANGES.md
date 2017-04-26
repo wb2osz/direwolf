@@ -2,11 +2,10 @@
 # Revision History #
 
 
-## Version 1.4  -- Beta Test-- April 2017 ##
+## Version 1.4  -- April 2017 ##
 
-**This is beta test quality.  If no significant issues are reported this will be the version 1.4 release.**
 
-### New Features (since 1.3): ###
+### New Features: ###
 
 - AX.25 v2.2 connected mode.  See chapter 10 of User Guide for details.
 
@@ -29,6 +28,7 @@
  - $PMGNWPL	- Magellan, more complete for stationary objects.
  - $PKWDWPL	- Kenwood with APRS style symbol but missing comment.
 
+
 - DTMF tones can be sent by putting "DTMF" in the destination address,  similar to the way that Morse Code is sent.
 
 - Take advantage of new 'gpio' group and new /sys/class/gpio ownership in Raspbian Jessie.
@@ -39,7 +39,7 @@
 
 
  
-### Bugs Fixed (since 1.3): ###
+### Bugs Fixed: ###
 
 - The transmitter (PTT control) was being turned off too soon when sending Morse Code.
 
