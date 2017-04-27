@@ -135,13 +135,13 @@ gqrx (2.3 and later) has the ability to send streaming audio through a UDP socke
 direwolf can listen over a UDP port with options like this:
 .RS
 .P
-direwolf -n 1 -r 48000 -b 16 udp:7355
+direwolf \-n 1 \-r 48000 \-b 16 udp:7355
 .RE
 .P
 Other SDR applications might produce audio on stdout so it is convenient to pipe into the next application.  In this example, the final "-" means read from stdin.
 .RS
 .P
-rtl_fm -f 144.39M -o 4 - | direwolf -n 1 -r 24000 -b 16 -
+rtl_fm \-f 144.39M \-o 4 \- | direwolf \-n 1 \-r 24000 \-b 16 \-
 .RE
 
 

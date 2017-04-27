@@ -1461,7 +1461,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  *		A->g_message_number	Message number if any.  Required for ack/rej.
  *
- * Description:	An APRS message is a text string with a specifed addressee.
+ * Description:	An APRS message is a text string with a specified addressee.
  *
  *		It's a lot more complicated with different types of addressees
  *		and replies with acknowledgement or rejection.
