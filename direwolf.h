@@ -1,6 +1,36 @@
 
+/* direwolf.h - Common stuff used many places. */
+
+// TODO:   include this file first before anything else in each .c file.
+
+
 #ifndef DIREWOLF_H
 #define DIREWOLF_H 1
+
+/*
+ * Support Windows XP and later.
+ *
+ * We need this before "#include <ws2tcpip.h>".
+ *
+ * Don't know what other impact it might have on others.
+ */
+
+#if __WIN32__
+
+#ifdef _WIN32_WINNT
+#error	Include "direwolf.h" before any windows system files.
+#endif
+#ifdef WINVER
+#error	Include "direwolf.h" before any windows system files.
+#endif
+
+#define _WIN32_WINNT 0x0501     /* Minimum OS version is XP. */
+#define WINVER       0x0501     /* Minimum OS version is XP. */
+
+#include <windows.h>
+
+#endif
+
 
 
 /*
@@ -9,6 +39,8 @@
  * In version 1.2, we relax this restriction and allow more audio devices.
  * Three is probably adequate for standard version.
  * Larger reasonable numbers should also be fine.
+ *
+ * For example, if you wanted to use 4 audio devices at once, change this to 4.
  */
 
 #define MAX_ADEVS 3			
@@ -69,7 +101,6 @@
 
 
 #if __WIN32__
-#include <windows.h>
 #define SLEEP_SEC(n) Sleep((n)*1000)
 #define SLEEP_MS(n) Sleep(n)
 #else
@@ -191,9 +222,8 @@ char *strsep(char **stringp, const char *delim);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
-//#if __WIN32__
+// Don't recall why for everyone.
 char *strcasestr(const char *S, const char *FIND);
-//#endif
 
 
 #if defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
@@ -201,6 +231,11 @@ char *strcasestr(const char *S, const char *FIND);
 // strlcpy and strlcat should be in string.h and the C library.
 
 #else   // Use our own copy
+
+
+// These prevent /usr/include/gps.h from providing its own definition.
+#define HAVE_STRLCAT 1
+#define HAVE_STRLCPY 1
 
 
 #define DEBUG_STRL 1

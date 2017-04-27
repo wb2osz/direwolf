@@ -45,12 +45,12 @@
  *---------------------------------------------------------------*/
 
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
+
 #if __WIN32__
 
 #include <winsock2.h>
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0501	/* Minimum OS version is XP. */
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
 #else 
 #include <stdlib.h>
 #include <netdb.h>
@@ -146,6 +146,7 @@ int main (int argc, char *argv[])
 	send (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd), 0);
 #else
 	err = write (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
+	(void)err;
 #endif
 
 
@@ -167,7 +168,7 @@ int main (int argc, char *argv[])
 	    exit (1);
 	  }
 
-	  assert (mon_cmd.data_len >= 0 && mon_cmd.data_len < sizeof(data));
+	  assert (mon_cmd.data_len >= 0 && mon_cmd.data_len < (int)(sizeof(data)));
 
 	  if (mon_cmd.data_len > 0) {
 #if __WIN32__
@@ -356,7 +357,7 @@ static int connect_to_server (char *hostname, char *port)
 
 #if __WIN32__
 #else
-	int e;
+	//int e;
 #endif
 
 #define MAX_HOSTS 30
@@ -426,8 +427,11 @@ static int connect_to_server (char *hostname, char *port)
 	// Try each address until we find one that is successful.
 
 	for (n=0; n<num_hosts; n++) {
+#if __WIN32__
+	  SOCKET is;
+#else
 	  int is;
-
+#endif
 	  ai = hosts[n];
 
 	  ia_to_text (ai->ai_family, ai->ai_addr, ipaddr_str, sizeof(ipaddr_str));

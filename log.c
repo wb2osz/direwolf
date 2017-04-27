@@ -31,6 +31,8 @@
  *
  *------------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <time.h>
 #include <assert.h>
@@ -42,8 +44,6 @@
 #include <unistd.h>
 #include <errno.h>
 
-
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "decode_aprs.h"
@@ -338,6 +338,89 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_
 	}
 
 } /* end log_write */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	log_rr_bits
+ *
+ * Purpose:	Quick hack to look at the C and RR bits just to see what is there.
+ *		This seems like a good place because it is a small subset of the function above.
+ *
+ * Inputs:	A	- Explode information from APRS packet.
+ *
+ *		pp	- Received packet object.
+ *
+ *------------------------------------------------------------------*/
+
+void log_rr_bits (decode_aprs_t *A, packet_t pp)
+{
+
+	if (1) {
+
+	  char heard[AX25_MAX_ADDR_LEN+1];
+	  char smfr[60];
+	  char *p;
+	  int src_c, dst_c;
+	  int src_rr, dst_rr;
+
+	  // Sanitize system type (manufacturer) changing any comma to period.
+
+	  strlcpy (smfr, A->g_mfr, sizeof(smfr));
+	  for (p=smfr; *p!='\0'; p++) {
+	    if (*p == ',') *p = '.';
+	  }
+
+          /* Who are we hearing?   Original station or digipeater? */
+	  /* Similar code in direwolf.c.  Combine into one function? */
+
+	  strlcpy(heard, "", sizeof(heard));
+
+	  if (pp != NULL) {
+	    int h;
+
+	    if (ax25_get_num_addr(pp) == 0) {
+	      /* Not AX.25. No station to display below. */
+	      h = -1;
+	      strlcpy (heard, "", sizeof(heard));
+	    }
+	    else {
+	      h = ax25_get_heard(pp);
+              ax25_get_addr_with_ssid(pp, h, heard);
+	    }
+
+	    if (h >= AX25_REPEATER_2 &&
+	        strncmp(heard, "WIDE", 4) == 0 &&
+	        isdigit(heard[4]) &&
+	        heard[5] == '\0') {
+
+	      ax25_get_addr_with_ssid(pp, h-1, heard);
+	      strlcat (heard, "?", sizeof(heard));
+	    }
+
+	    src_c = ax25_get_h (pp, AX25_SOURCE);
+	    dst_c = ax25_get_h (pp, AX25_DESTINATION);
+	    src_rr = ax25_get_rr (pp, AX25_SOURCE);
+	    dst_rr = ax25_get_rr (pp, AX25_DESTINATION);
+
+	    // C RR	for source
+	    // C RR	for destination
+	    // system type
+	    // source
+	    // station heard
+
+	    text_color_set(DW_COLOR_INFO);
+
+	    dw_printf ("%d %d%d  %d %d%d,%s,%s,%s\n",
+			src_c, (src_rr >> 1) & 1, src_rr & 1,
+			dst_c, (dst_rr >> 1) & 1, dst_rr & 1,
+			smfr, A->g_src, heard);
+	  }
+	}
+
+} /* end log_rr_bits */
+
 
 
 

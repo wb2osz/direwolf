@@ -35,6 +35,13 @@
  *
  *---------------------------------------------------------------*/
 
+
+#define DIREWOLF_C 1
+
+#include "direwolf.h"
+
+
+
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
@@ -72,9 +79,7 @@
 #endif
 
 
-#define DIREWOLF_C 1
 
-#include "direwolf.h"
 #include "version.h"
 #include "audio.h"
 #include "config.h"
@@ -83,29 +88,34 @@
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
 #include "ax25_pad.h"
+#include "xid.h"
 #include "decode_aprs.h"
 #include "textcolor.h"
 #include "server.h"
 #include "kiss.h"
 #include "kissnet.h"
 #include "kiss_frame.h"
-#include "nmea.h"
+#include "waypoint.h"
 #include "gen_tone.h"
 #include "digipeater.h"
+#include "cdigipeater.h"
 #include "tq.h"
 #include "xmit.h"
 #include "ptt.h"
 #include "beacon.h"
-#include "redecode.h"
 #include "dtmf.h"
 #include "aprs_tt.h"
 #include "tt_user.h"
 #include "igate.h"
+#include "pfilter.h"
 #include "symbols.h"
 #include "dwgps.h"
+#include "waypoint.h"
 #include "log.h"
 #include "recv.h"
 #include "morse.h"
+#include "mheard.h"
+#include "ax25_link.h"
 
 
 //static int idx_decoded = 0;
@@ -152,14 +162,19 @@ static void __cpuid(int cpuinfo[4], int infotype){
 
 static struct audio_s audio_config;
 static struct tt_config_s tt_config;
-struct digi_config_s digi_config;
+//struct digi_config_s digi_config;
+//struct cdigi_config_s cdigi_config;
 
+static const int audio_amplitude = 100;	/* % of audio sample range. */
+					/* This translates to +-32k for 16 bit samples. */
+					/* Currently no option to change this. */
 
 static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in hexadecimal. */
 static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
-static int q_d_opt = 0;			/* "-q d" Quiet, suppress the decoding of APRS packets. */
+static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
+
 
 
 static struct misc_config_s misc_config;
@@ -174,6 +189,7 @@ int main (int argc, char *argv[])
 	int xmit_calibrate_option = 0;
 	int enable_pseudo_terminal = 0;
 	struct digi_config_s digi_config;
+	struct cdigi_config_s cdigi_config;
 	struct igate_config_s igate_config;
 	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0;	/* Command line options. */
 	char P_opt[16];
@@ -189,9 +205,13 @@ int main (int argc, char *argv[])
 	int d_g_opt = 0;	/* "-d g" option for GPS. Can be repeated for more detail. */
 	int d_o_opt = 0;	/* "-d o" option for output control such as PTT and DCD. */	
 	int d_i_opt = 0;	/* "-d i" option for IGate.  Repeat for more detail */
+	int d_m_opt = 0;	/* "-d m" option for mheard list. */
+	int d_f_opt = 0;	/* "-d f" option for filtering.  Repeat for more detail. */
 #if USE_HAMLIB
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
+	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering trasmit frames. */
+	int E_rx_opt = 0;		/* "-E Rn" Error rate % for clobbering receive frames. */
 
 	strlcpy(l_opt, "", sizeof(l_opt));
 	strlcpy(P_opt, "", sizeof(P_opt));
@@ -234,10 +254,13 @@ int main (int argc, char *argv[])
 	// TODO: control development/beta/release by version.h instead of changing here.
 	// Print platform.  This will provide more information when people send a copy the information displayed.
 
+	// Might want to print OS version here.   For Windows, see:
+	// https://msdn.microsoft.com/en-us/library/ms724451(v=VS.85).aspx
+
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "K", __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "H", __DATE__);
 	dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
@@ -322,7 +345,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:",
+          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:E:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -367,9 +390,9 @@ int main (int argc, char *argv[])
           case 'B':				/* -B baud rate and modem properties. */
 	 
 	    B_opt = atoi(optarg);
-            if (B_opt < 100 || B_opt > 10000) {
+            if (B_opt < MIN_BAUD || B_opt > MAX_BAUD) {
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Use a more reasonable data baud rate in range of 100 - 10000.\n");
+              dw_printf ("Use a more reasonable data baud rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
               exit (EXIT_FAILURE);
             }
             break;
@@ -451,15 +474,17 @@ int main (int argc, char *argv[])
 		// separate out gps & waypoints.
 
 	      case 'g':  d_g_opt++; break;
+	      case 'w':	 waypoint_set_debug (1); break;		// not documented yet.
 	      case 't':  d_t_opt++; beacon_tracker_set_debug (d_t_opt); break;
 
-	      case 'w':	 nmea_set_debug (1); break;		// not documented yet.
 	      case 'p':  d_p_opt = 1; break;			// TODO: packet dump for xmit side.
 	      case 'o':  d_o_opt++; ptt_set_debug(d_o_opt); break;	
 	      case 'i':  d_i_opt++; break;
+	      case 'm':  d_m_opt++; break;
+	      case 'f':  d_f_opt++; break;
 #if AX25MEMDEBUG
-	      case 'm':  ax25memdebug_set(); break;		// Track down memory leak.  Not documented.		
-#endif
+	      case 'l':  ax25memdebug_set(); break;		// Track down memory Leak.  Not documented.
+#endif								// Previously 'm' but that is now used for mheard.
 #if USE_HAMLIB
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
@@ -508,6 +533,27 @@ int main (int argc, char *argv[])
 	    exit (0);
 	    break;
 
+          case 'E':				/* -E Error rate (%) for corrupting frames. */
+						/* Just a number is transmit.  Precede by R for receive. */
+
+	    if (*optarg == 'r' || *optarg == 'R') {
+	      E_rx_opt = atoi(optarg+1);
+	      if (E_rx_opt < 1 || E_rx_opt > 99) {
+	        text_color_set(DW_COLOR_ERROR);
+                  dw_printf("-ER must be in range of 1 to 99.\n");
+	      E_rx_opt = 10;
+	      }
+	    }
+	    else {
+	      E_tx_opt = atoi(optarg);
+	      if (E_tx_opt < 1 || E_tx_opt > 99) {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf("-E must be in range of 1 to 99.\n");
+	        E_tx_opt = 10;
+	      }
+	    }
+            break;
+
           default:
 
             /* Should not be here. */
@@ -542,7 +588,7 @@ int main (int argc, char *argv[])
 
 	symbols_init ();
 
-	config_init (config_file, &audio_config, &digi_config, &tt_config, &igate_config, &misc_config);
+	config_init (config_file, &audio_config, &digi_config, &cdigi_config, &tt_config, &igate_config, &misc_config);
 
 	if (r_opt != 0) {
 	  audio_config.adev[0].samples_per_sec = r_opt;
@@ -559,21 +605,42 @@ int main (int argc, char *argv[])
 	if (B_opt != 0) {
 	  audio_config.achan[0].baud = B_opt;
 
+	  /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
+	  /* that need to be kept in sync.  Maybe it could be a common function someday. */
+
 	  if (audio_config.achan[0].baud < 600) {
             audio_config.achan[0].modem_type = MODEM_AFSK;
-            audio_config.achan[0].mark_freq = 1600;
+            audio_config.achan[0].mark_freq = 1600;		// Typical for HF SSB.
             audio_config.achan[0].space_freq = 1800;
-	    audio_config.achan[0].decimate = 3;
+	    audio_config.achan[0].decimate = 3;			// Reduce CPU load.
 	  }
-	  else if (audio_config.achan[0].baud > 2400) {
+	  else if (audio_config.achan[0].baud < 1800) {
+            audio_config.achan[0].modem_type = MODEM_AFSK;
+            audio_config.achan[0].mark_freq = DEFAULT_MARK_FREQ;
+            audio_config.achan[0].space_freq = DEFAULT_SPACE_FREQ;
+	  }
+	  else if (audio_config.achan[0].baud < 3600) {
+            audio_config.achan[0].modem_type = MODEM_QPSK;
+            audio_config.achan[0].mark_freq = 0;
+            audio_config.achan[0].space_freq = 0;
+	    if (audio_config.achan[0].baud != 2400) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Bit rate should be standard 2400 rather than specified %d.\n", audio_config.achan[0].baud);
+	    }
+	  }
+	  else if (audio_config.achan[0].baud < 7200) {
+            audio_config.achan[0].modem_type = MODEM_8PSK;
+            audio_config.achan[0].mark_freq = 0;
+            audio_config.achan[0].space_freq = 0;
+	    if (audio_config.achan[0].baud != 4800) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Bit rate should be standard 4800 rather than specified %d.\n", audio_config.achan[0].baud);
+	    }
+	  }
+	  else {
             audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
             audio_config.achan[0].mark_freq = 0;
             audio_config.achan[0].space_freq = 0;
-	  }
-	  else {
-            audio_config.achan[0].modem_type = MODEM_AFSK;
-            audio_config.achan[0].mark_freq = 1200;
-            audio_config.achan[0].space_freq = 2200;
 	  }
 	}
 
@@ -589,6 +656,12 @@ int main (int argc, char *argv[])
 	    // Reduce audio sampling rate to reduce CPU requirements.
 	    audio_config.achan[0].decimate = D_opt;
 	}
+
+	// temp - only xmit errors.
+
+	audio_config.xmit_error_rate = E_tx_opt;
+	audio_config.recv_error_rate = E_rx_opt;
+
 
 	if (strlen(l_opt) > 0) {
 	  strlcpy (misc_config.logdir, l_opt, sizeof(misc_config.logdir));
@@ -621,14 +694,14 @@ int main (int argc, char *argv[])
 	}
 
 /*
- * Initialize the AFSK demodulator and HDLC decoder.
+ * Initialize the demodulator(s) and HDLC decoder.
  */
 	multi_modem_init (&audio_config);
 
 /*
  * Initialize the touch tone decoder & APRStt gateway.
  */
-	dtmf_init (&audio_config);
+	dtmf_init (&audio_config, audio_amplitude);
 	aprs_tt_init (&tt_config);
 	tt_user_init (&audio_config, &tt_config);
 
@@ -637,8 +710,8 @@ int main (int argc, char *argv[])
  * Note:  This is not the same as a volume control you would see on the screen.
  * It is the range of the digital sound representation.
 */
-	gen_tone_init (&audio_config, 100);
-	morse_init (&audio_config, 100);
+	gen_tone_init (&audio_config, audio_amplitude, 0);
+	morse_init (&audio_config, audio_amplitude);
 
 	assert (audio_config.adev[0].bits_per_sample == 8 || audio_config.adev[0].bits_per_sample == 16);
 	assert (audio_config.adev[0].num_channels == 1 || audio_config.adev[0].num_channels == 2);
@@ -680,6 +753,9 @@ int main (int argc, char *argv[])
  */
 	digipeater_init (&audio_config, &digi_config);
 	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
+	cdigipeater_init (&audio_config, &cdigi_config);
+	pfilter_init (&igate_config, d_f_opt);
+	ax25_link_init (&misc_config);
 
 /*
  * Provide the AGW & KISS socket interfaces for use by a client application.
@@ -698,12 +774,7 @@ int main (int argc, char *argv[])
  */
 	dwgps_init (&misc_config, d_g_opt);
 
-	nmea_init (&misc_config);  //  TODO: revisit.
-
-/* 
- * Create thread for trying to salvage frames with bad FCS.
- */
-	redecode_init (&audio_config);
+	waypoint_init (&misc_config);  
 
 /*
  * Enable beaconing.
@@ -712,7 +783,8 @@ int main (int argc, char *argv[])
  */
 
 	log_init(misc_config.logdir);
-	beacon_init (&audio_config, &misc_config);
+	mheard_init (d_m_opt);
+	beacon_init (&audio_config, &misc_config, &igate_config);
 
 
 /*
@@ -863,7 +935,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	    text_color_set(DW_COLOR_REC);
 	  }
 	  else {
-	    text_color_set(DW_COLOR_DEBUG);
+	    text_color_set(DW_COLOR_DECODED);
 	  }
 
 	  if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers == 1) {
@@ -882,14 +954,46 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	dw_printf ("%s", stemp);			/* stations followed by : */
 
-	// for APRS we generally want to display non-ASCII to see UTF-8.
-	// for other, probably want to restrict to ASCII only because we are
-	// more likely to have compressed data than UTF-8 text.
+/* Demystify non-APRS.  Use same format for transmitted frames in xmit.c. */
 
-	// TODO: Might want to use d_u_opt for transmitted frames too.
+	if ( ! ax25_is_aprs(pp)) {
+	  ax25_frame_type_t ftype;
+	  cmdres_t cr;
+	  char desc[80];
+	  int pf;
+	  int nr;
+	  int ns;
 
-	ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
-	dw_printf ("\n");
+	  ftype = ax25_frame_type (pp, &cr, desc, &pf, &nr, &ns);
+
+	  /* Could change by 1, since earlier call, if we guess at modulo 128. */
+	  info_len = ax25_get_info (pp, &pinfo);
+
+	  dw_printf ("(%s)", desc);
+	  if (ftype == frame_type_U_XID) {
+	    struct xid_param_s param;
+	    char info2text[100];
+
+	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
+	    dw_printf (" %s\n", info2text);
+	  }
+	  else {
+	    ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
+	    dw_printf ("\n");
+	  }
+	}
+	else {
+
+	  // for APRS we generally want to display non-ASCII to see UTF-8.
+	  // for other, probably want to restrict to ASCII only because we are
+	  // more likely to have compressed data than UTF-8 text.
+
+	  // TODO: Might want to use d_u_opt for transmitted frames too.
+
+	  ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
+	  dw_printf ("\n");
+	}
+
 
 // Also display in pure ASCII if non-ASCII characters and "-d u" option specified.
 
@@ -920,18 +1024,28 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	}
 
 
-/* Decode the contents of APRS frames and display in human-readable form. */
-/* Suppress decoding if "-q d" option used. */
+/*
+ * Decode the contents of UI frames and display in human-readable form.
+ * Could be APRS or anything random for old fashioned packet beacons.
+ *
+ * Suppress printed decoding if "-q d" option used.
+ */
 
-	if ( ( ! q_d_opt ) && ax25_is_aprs(pp)) {
+	if (ax25_is_aprs(pp)) {
 
 	  decode_aprs_t A;
 
-	  decode_aprs (&A, pp, 0);
+	  // we still want to decode it for logging and other processing.
+	  // Just be quiet about errors if "-qd" is set.
 
-	  //Print it all out in human readable format.
+	  decode_aprs (&A, pp, q_d_opt);
 
-	  decode_aprs_print (&A);
+	  if ( ! q_d_opt ) {
+
+	    // Print it all out in human readable format unless "-q d" option used.
+
+	    decode_aprs_print (&A);
+	  }
 
 	  /*
 	   * Perform validity check on each address.
@@ -943,10 +1057,18 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	  log_write (chan, &A, pp, alevel, retries);
 
+	  // temp experiment.
+	  //log_rr_bits (&A, pp);
+
+	  // Add to list of stations heard over the radio.
+
+	  mheard_save_rf (chan, &A, pp, alevel, retries);
+
+
 	  // Convert to NMEA waypoint sentence if we have a location.
 
  	  if (A.g_lat != G_UNKNOWN && A.g_lon != G_UNKNOWN) {
-	    nmea_send_waypoint (strlen(A.g_name) > 0 ? A.g_name : A.g_src, 
+	    waypoint_send_sentence (strlen(A.g_name) > 0 ? A.g_name : A.g_src, 
 		A.g_lat, A.g_lon, A.g_symbol_table, A.g_symbol_code, 
 		DW_FEET_TO_METERS(A.g_altitude_ft), A.g_course, DW_MPH_TO_KNOTS(A.g_speed_mph), 
 		A.g_comment);
@@ -955,7 +1077,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 
 /* Send to another application if connected. */
-// TODO1.3:  Put a wrapper around this so we only call one function to send by all methods.
+// TODO:  Put a wrapper around this so we only call one function to send by all methods.
 
 	int flen;
 	unsigned char fbuf[AX25_MAX_PACKET_LEN];
@@ -997,22 +1119,29 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  digi_regen (chan, pp);
 
 
-/* 
- * Note that the digipeater function can modify the packet in place so 
- * this is the last thing we should do with it. 
- * Again, use only those with correct CRC; We don't want to spread corrupted data!
- * Single bit change appears to be safe from observations so far but be cautious. 
+/*
+ * APRS digipeater.
+ * Use only those with correct CRC; We don't want to spread corrupted data!
  */
 
 	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
 
 	    digipeater (chan, pp);
 	  }
+
+/*
+ * Connected mode digipeater.
+ * Use only those with correct CRC.
+ */
+
+	  if (retries == RETRY_NONE) {
+
+	    cdigipeater (chan, pp);
+	  }
 	}
 
-	ax25_delete (pp);
-	
 } /* end app_process_rec_packet */
+
 
 
 /* Process control C and window close events. */
@@ -1026,6 +1155,7 @@ static BOOL cleanup_win (int ctrltype)
 	  dw_printf ("\nQRT\n");
 	  log_term ();
 	  ptt_term ();
+	  waypoint_term ();
 	  dwgps_term ();
 	  SLEEP_SEC(1);
 	  ExitProcess (0);
@@ -1065,10 +1195,12 @@ static void usage (char **argv)
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
 	dw_printf ("    -b n           Bits per audio sample, 8 or 16.\n");
-	dw_printf ("    -B n           Data rate in bits/sec for channel 0.  Standard values are 300, 1200, 9600.\n");
-	dw_printf ("                     If < 600, AFSK tones are set to 1600 & 1800.\n");
-	dw_printf ("                     If > 2400, K9NG/G3RUH style encoding is used.\n");
-	dw_printf ("                     Otherwise, AFSK tones are set to 1200 & 2200.\n");
+	dw_printf ("    -B n           Data rate in bits/sec for channel 0.  Standard values are 300, 1200, 2400, 4800, 9600.\n");
+	dw_printf ("                     300 bps defaults to AFSK tones of 1600 & 1800.\n");
+	dw_printf ("                     1200 bps uses AFSK tones of 1200 & 2200.\n");
+	dw_printf ("                     2400 bps uses QPSK based on V.26 standard.\n");
+	dw_printf ("                     4800 bps uses 8PSK based on V.27 standard.\n");
+	dw_printf ("                     9600 bps and up uses K9NG/G3RUH standard.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");
@@ -1077,9 +1209,12 @@ static void usage (char **argv)
 	dw_printf ("       u             u = Display non-ASCII text in hexadecimal.\n");
 	dw_printf ("       p             p = dump Packets in hexadecimal.\n");
 	dw_printf ("       g             g = GPS interface.\n");
+	dw_printf ("       w             w = Waypoints for Position or Object Reports.\n");
 	dw_printf ("       t             t = Tracker beacon.\n");
 	dw_printf ("       o             o = output controls such as PTT and DCD.\n");
 	dw_printf ("       i             i = IGate.\n");
+	dw_printf ("       m             m = Monitor heard station list.\n");
+	dw_printf ("       f             f = packet Filtering.\n");
 #if USE_HAMLIB
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif

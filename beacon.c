@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -30,6 +30,8 @@
 
 //#define DEBUG 1
 
+#include "direwolf.h"
+
 
 #include <stdio.h>
 #include <unistd.h>
@@ -40,7 +42,6 @@
 #include <time.h>
 
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "audio.h"
@@ -55,6 +56,7 @@
 #include "log.h"
 #include "dlq.h"
 #include "aprs_tt.h"		// for dw_run_cmd - should relocate someday.
+#include "mheard.h"
 
 
 #if __WIN32__
@@ -83,6 +85,7 @@ struct tm *localtime_r(time_t *clock, struct tm *res)
 
 static struct audio_s        *g_modem_config_p;
 static struct misc_config_s  *g_misc_config_p;
+static struct igate_config_s *g_igate_config_p;
 
 
 #if __WIN32__
@@ -118,6 +121,10 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo);
  *				  Used only to find valid channels.
  *
  *		pconfig		- misc. configuration from config file.
+ *				  Beacon stuff ended up here.
+ *
+ *		pigate		- IGate configuration.
+ *				  Need this for calculating IGate statistics.
  *
  *
  * Outputs:	Remember required information for future use.
@@ -131,7 +138,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo);
 
 
 
-void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig)
+void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct igate_config_s *pigate)
 {
 	time_t now;
 	int j;
@@ -156,6 +163,7 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig)
  */
 	g_modem_config_p = pmodem;
 	g_misc_config_p = pconfig;
+	g_igate_config_p = pigate;
 
 /*
  * Precompute the packet contents so any errors are 
@@ -226,6 +234,22 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig)
 		    g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
 		    continue;
 		  }	
+		  break;
+
+	        case BEACON_IGATE:
+
+		  /* Doesn't make sense if IGate is not configured. */
+
+	          if (strlen(g_igate_config_p->t2_server_name) == 0 ||
+	              strlen(g_igate_config_p->t2_login) == 0 ||
+	              strlen(g_igate_config_p->t2_passcode) == 0) {
+
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Config file, line %d: Doesn't make sense to use IBEACON without IGate Configured.\n", g_misc_config_p->beacon[j].lineno);
+	            dw_printf ("IBEACON has been disabled.\n");
+		    g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
+		    continue;
+		  }
 		  break;
 
 	        case BEACON_IGNORE:
@@ -870,6 +894,25 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	          }
 		  break;
 
+		case BEACON_IGATE:
+
+	          {
+	            int last_minutes = 30;
+	            char stuff[256];
+
+		    snprintf (stuff, sizeof(stuff), "<IGATE,MSG_CNT=%d,PKT_CNT=%d,DIR_CNT=%d,LOC_CNT=%d,RF_CNT=%d,UPL_CNT=%d,DNL_CNT=%d",
+						igate_get_msg_cnt(),
+						igate_get_pkt_cnt(),
+						mheard_count(0,last_minutes),
+						mheard_count(g_igate_config_p->max_digi_hops,last_minutes),
+						mheard_count(8,last_minutes),
+						igate_get_upl_cnt(),
+						igate_get_dnl_cnt());
+
+		    strlcat (beacon_text, stuff, sizeof(beacon_text));
+	          }
+		  break;
+
 		case BEACON_IGNORE:		
 	        default:
 		  break;
@@ -911,10 +954,10 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		  case SENDTO_RECV:
 
-	            /* Simulated reception. */
+	            /* Simulated reception from radio. */
 
 		    memset (&alevel, 0xff, sizeof(alevel));
-	            dlq_append (DLQ_REC_FRAME, g_misc_config_p->beacon[j].sendto_chan, 0, 0, pp, alevel, 0, "");
+	            dlq_rec_frame (g_misc_config_p->beacon[j].sendto_chan, 0, 0, pp, alevel, 0, "");
 	            break; 
 		}
 	      }

@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -23,42 +23,36 @@
  *
  * Module:      xid.c
  *
- * Purpose:   	....
+ * Purpose:   	Encode and decode the info field of XID frames.
  *		
- * Description:	
+ * Description:	If we originate the connection, and the other end is
+ *		capable of AX.25 version 2.2,
  *
- * References:	...
+ *		 - We send an XID command frame with our capabilities.
+ *		 - the other sends back an XID response, possibly
+ *			reducing some values to be acceptable there.
+ *		 - Both ends use the values in that response.
  *
- *		
+ *		If the other end originates the connection,
+ *
+ *		  - It sends XID command frame with its capabilities.
+ *		  - We might decrease some of them to be acceptable.
+ *		  - Send XID response.
+ *		  - Both ends use values in my response.
+ *
+ * References:	AX.25 Protocol Spec, sections 4.3.3.7 & 6.3.2.
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include "textcolor.h"
-//#include "xid.h"
-
-
-struct ax25_param_s {
-
-	int full_duplex;
-	
-	// Order is important because negotiation keeps the lower.  
-	enum rej_e {implicit_reject, selective_reject, selective_reject_reject } rej;
-
-	enum modulo_e {modulo_8 = 8, modulo_128 = 128} modulo;
-
-	int i_field_length_rx;	/* In bytes.  XID has it in bits. */
-
-	int window_size;	
-
-	int ack_timer;		/* "T1" in mSec. */
-
-	int retries;		/* Inconsistently refered to as "N1" or "N2" */
-};
+#include "xid.h"
 
 
 
@@ -90,44 +84,76 @@ struct ax25_param_s {
 
 /*-------------------------------------------------------------------
  *
- * Name:        ...
+ * Name:        xid_parse
  *
- * Purpose:    	...
+ * Purpose:    	Decode information part of XID frame into individual values.
  *
- * Inputs:	...
+ * Inputs:	info		- pointer to information part of frame.
  *
- * Outputs:	...
+ *		info_len	- Number of bytes in information part of frame.
+ *				  Could be 0.
  *
- * Description:	
+ *		desc_size	- Size of desc.  100 is good.
+ *
+ * Outputs:	result		- Structure with extracted values.
+ *
+ *		desc		- Text description for troubleshooting.
+ *
+ * Returns:	1 for mostly successful (with possible error messages), 0 for failure.
+ *
+ * Description:	6.3.2 "The receipt of an XID response from the other station
+ *		establishes that both stations are using AX.25 version
+ *		2.2 or higher and enables the use of the segmenter/reassembler
+ *		and selective reject."
  *
  *--------------------------------------------------------------------*/
 
 
-//Returns:	1 for mostly successful (with possible error messages), 0 for failure.
-
-
-int xid_parse (unsigned char *info, int info_len, struct ax25_param_s *result)
+int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, char *desc, int desc_size)
 {
 	unsigned char *p;
 	int group_len;
+	char stemp[64];
 
 
-	result->full_duplex = 0;
-	result->rej = selective_reject;
-	result->modulo = modulo_8;
-	result->i_field_length_rx = 256;
-	result->window_size = result->modulo == modulo_128 ? 32 : 4;
-	result->ack_timer = 3000;
-	result->retries = 10;
+	strlcpy (desc, "", desc_size);
+
+// What should we do when some fields are missing?
+
+// The  AX.25 v2.2 protocol spec says, for most of these,
+//	"If this field is not present, the current values are retained."
+
+// We set the numeric values to our usual G_UNKNOWN to mean undefined and let the caller deal with it.
+// rej and modulo are enum so we can't use G_UNKNOWN there.
+
+	result->full_duplex = G_UNKNOWN;
+	result->rej = unknown_reject;
+	result->modulo = modulo_unknown;
+	result->i_field_length_rx = G_UNKNOWN;
+	result->window_size_rx = G_UNKNOWN;
+	result->ack_timer = G_UNKNOWN;
+	result->retries = G_UNKNOWN;
+
+
+/* Information field is optional but that seems pretty lame. */
+
+	if (info_len == 0) {
+	  return (1);
+	}
 
 	p = info;
 
 	if (*p != FI_Format_Indicator) {
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("XID error: First byte of info field should be Format Indicator, %02x.\n", FI_Format_Indicator);
+	  dw_printf ("XID info part: %02x %02x %02x %02x %02x ... length=%d\n", info[0], info[1], info[2], info[3], info[4], info_len);
 	  return 0;
 	}
 	p++;
 
 	if (*p != GI_Group_Identifier) {
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("XID error: Second byte of info field should be Group Indicator, %d.\n", GI_Group_Identifier);
 	  return 0;
 	}
 	p++;
@@ -141,6 +167,11 @@ int xid_parse (unsigned char *info, int info_len, struct ax25_param_s *result)
 
 	  pind = *p++;
 	  plen = *p++;		// should have sanity checking
+	  if (plen < 1 || plen > 4) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("XID error: Length ?????   TODO   ????  %d.\n", plen);
+	    return (1);		// got this far.
+	  }
 	  pval = 0;
 	  for (j=0; j<plen; j++) {
 	    pval = (pval << 8) + *p++;
@@ -157,38 +188,46 @@ int xid_parse (unsigned char *info, int info_len, struct ax25_param_s *result)
 
 	      if (pval & PV_Classes_Procedures_Half_Duplex && ! (pval & PV_Classes_Procedures_Full_Duplex)) {
 	        result->full_duplex = 0;
+	        strlcat (desc, "Half-Duplex ", desc_size);
 	      }
 	      else if (pval & PV_Classes_Procedures_Full_Duplex && ! (pval & PV_Classes_Procedures_Half_Duplex)) {
 	        result->full_duplex = 1;
+	        strlcat (desc, "Full-Duplex ", desc_size);
 	      }
 	      else {
 	        text_color_set (DW_COLOR_ERROR);
 	        dw_printf ("XID error: Expected one of Half or Full Duplex be set.\n");	
+	        result->full_duplex = 0;
 	      }
 
 	      break;
 
 	    case PI_HDLC_Optional_Functions:	
 
-	      if (pval & PV_HDLC_Optional_Functions_REJ_cmd_resp && pval & PV_HDLC_Optional_Functions_SREJ_cmd_resp) {
+	      if ((pval & PV_HDLC_Optional_Functions_REJ_cmd_resp) && (pval & PV_HDLC_Optional_Functions_SREJ_cmd_resp)) {
 	        result->rej = selective_reject_reject;		/* Both bits set */
+	        strlcat (desc, "SREJ-REJ ", desc_size);
 	      }
-	      else if (pval & PV_HDLC_Optional_Functions_REJ_cmd_resp && ! (pval & PV_HDLC_Optional_Functions_SREJ_cmd_resp)) {
+	      else if ((pval & PV_HDLC_Optional_Functions_REJ_cmd_resp) && ! (pval & PV_HDLC_Optional_Functions_SREJ_cmd_resp)) {
 	        result->rej = implicit_reject;			/* Only REJ is set */
+	        strlcat (desc, "REJ ", desc_size);
 	      }
 	      else if ( ! (pval & PV_HDLC_Optional_Functions_REJ_cmd_resp) && pval & PV_HDLC_Optional_Functions_SREJ_cmd_resp) {
 	        result->rej = selective_reject;			/* Only SREJ is set */
+	        strlcat (desc, "SREJ ", desc_size);
 	      }
 	      else {
 	        text_color_set (DW_COLOR_ERROR);
 	        dw_printf ("XID error: Expected one or both of REJ, SREJ to be set.\n");	
 	      }
 
-	      if (pval & PV_HDLC_Optional_Functions_Modulo_8 && ! (pval & PV_HDLC_Optional_Functions_Modulo_128)) {
+	      if ((pval & PV_HDLC_Optional_Functions_Modulo_8) && ! (pval & PV_HDLC_Optional_Functions_Modulo_128)) {
 	        result->modulo = modulo_8;
+	        strlcat (desc, "modulo-8 ", desc_size);
 	      }
-	      else if (pval & PV_HDLC_Optional_Functions_Modulo_128 && ! (pval & PV_HDLC_Optional_Functions_Modulo_8)) {
+	      else if ((pval & PV_HDLC_Optional_Functions_Modulo_128) && ! (pval & PV_HDLC_Optional_Functions_Modulo_8)) {
 	        result->modulo = modulo_128;
+	        strlcat (desc, "modulo-128 ", desc_size);
 	      }
 	      else {
 	        text_color_set (DW_COLOR_ERROR);
@@ -221,38 +260,52 @@ int xid_parse (unsigned char *info, int info_len, struct ax25_param_s *result)
 	      
 	      result->i_field_length_rx = pval / 8;
 
+	      snprintf (stemp, sizeof(stemp), "I-Field-Length-Rx=%d ", result->i_field_length_rx);
+	      strlcat (desc, stemp, desc_size);
+
 	      if (pval & 0x7) {
 	        text_color_set (DW_COLOR_ERROR);
-	        dw_printf ("XID error: I Field Length Rx is not a whole number of bytes.\n");	
+	        dw_printf ("XID error: I Field Length Rx, %d, is not a whole number of bytes.\n", pval);
 	      }
 
 	      break;
 
 	    case PI_Window_Size_Rx:	
 
-	      result->window_size = pval;
+	      result->window_size_rx = pval;
 
-// TODO must be 1-7 for modulo 8 or 1-127 for modulo 128;
+	      snprintf (stemp, sizeof(stemp), "Window-Size-Rx=%d ", result->window_size_rx);
+	      strlcat (desc, stemp, desc_size);
 
-//	      if (pval & 0x7) {
-//	        text_color_set (DW_COLOR_ERROR);
-//	        dw_printf ("XID error: Window Size Rx is not in range of 1 thru ???\n");	
-//	      }
+	      if (pval < 1 || pval > 127) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("XID error: Window Size Rx, %d, is not in range of 1 thru 127.\n", pval);
+	        result->window_size_rx = 127;
+		// Let the caller deal with modulo 8 consideration.
+	      }
 
-//continue here.
+//continue here with more error checking.
 
 	      break;
 
 	    case PI_Ack_Timer:	
 	      result->ack_timer = pval;
+
+	      snprintf (stemp, sizeof(stemp), "Ack-Timer=%d ", result->ack_timer);
+	      strlcat (desc, stemp, desc_size);
+
 	      break;
 
-	    case PI_Retries:
+	    case PI_Retries:			// Is it retrys or retries?
 	      result->retries = pval;
+
+	      snprintf (stemp, sizeof(stemp), "Retries=%d ", result->retries);
+	      strlcat (desc, stemp, desc_size);
+
 	      break;
 
 	    default:		
-	      break;
+	      break;	// Ignore anything we don't recognize.
 	  }
 	}
 
@@ -261,7 +314,7 @@ int xid_parse (unsigned char *info, int info_len, struct ax25_param_s *result)
 	  dw_printf ("XID error: Frame / Group Length mismatch.\n");	
 	}
 
-	return 1; 
+	return (1);
 
 } /* end xid_parse */
 
@@ -270,45 +323,112 @@ int xid_parse (unsigned char *info, int info_len, struct ax25_param_s *result)
  *
  * Name:        xid_encode
  *
- * Purpose:    	...
+ * Purpose:    	Encode the information part of an XID frame.
  *
- * Inputs:	param	- 
+ * Inputs:	param->
+ *			full_duplex	- As command, am I capable of full duplex operation?
+ *					  When a response, are we both?
+ *					  0 = half duplex.
+ *					  1 = full duplex.
+ *
+ *			rej		- One of: implicit_reject, selective_reject, selective_reject_reject.
+ *					  As command, what am I capable of processing?
+ *					  As response, take minimum of
+ *
+ *
+ *			modulo	- 8 or 128.
+ *
+ *			i_field_length_rx - Maximum number of bytes I can handle in info part.
+ *					    Default is 256.
+ *					    Up to 8191 will fit into the field.
+ *					    Use G_UNKNOWN to omit this.
+ *
+ *			window_size_rx 	- Maximum window size ("k") that I can handle.
+ *				   Defaults are are 4 for modulo 8 and 32 for modulo 128.
+ *
+ *			ack_timer	- Acknowledge timer in milliseconds.
+ *					*** describe meaning.  ***
+ *				  Default is 3000.
+ *				  Use G_UNKNOWN to omit this.
+ *
+ *			retries		- Allows negotiation of retries.
+ *				  Default is 10.
+ *				  Use G_UNKNOWN to omit this.
  *
  * Outputs:	info	- Information part of XID frame.
  *			  Does not include the control byte.
+ *			  Use buffer of 40 bytes just to be safe.
  *
- * Returns:	Number of bytes in the info part.
+ * Returns:	Number of bytes in the info part.  Should be at most 27.
+ *		Again, provide a larger space just to be safe in case this ever changes.
  *
- * Description:	
+ * Description:	6.3.2  "Parameter negotiation occurs at any time. It is accomplished by sending
+ *		the XID command frame and receiving the XID response frame. Implementations of
+ *		AX.25 prior to version 2.2 respond to an XID command frame with a FRMR response
+ *		frame. The TNC receiving the FRMR uses a default set of parameters compatible
+ *		with previous versions of AX.25."
+ *
+ *		"This version of AX.25 implements the negotiation or notification of six AX.25
+ *		parameters. Notification simply tells the distant TNC some limit that cannot be exceeded.
+ *		The distant TNC can choose to use the limit or some other value that is within the
+ *		limits. Notification is used with the Window Size Receive (k) and Information
+ *		Field Length Receive (N1) parameters. Negotiation involves both TNCs choosing a
+ *		value that is mutually acceptable. The XID command frame contains a set of values
+ *		acceptable to the originating TNC. The distant TNC chooses to accept the values
+ *		offered, or other acceptable values, and places these values in the XID response.
+ *		Both TNCs set themselves up based on the values used in the XID response. Negotiation
+ *		is used by Classes of Procedures, HDLC Optional Functions, Acknowledge Timer and Retries."
+ *
+ * Comment:	I have a problem with "... occurs at any time."  What if we were in the middle
+ *		of transferring a large file with k=32 then along comes XID which says switch to modulo 8?
  *
  *--------------------------------------------------------------------*/
 
 
-int xid_encode (struct ax25_param_s *param, unsigned char *info)
+int xid_encode (struct xid_param_s *param, unsigned char *info)
 {
 	unsigned char *p;
 	int len;
 	int x;
+	int m = 0;
+
 
 	p = info;
 
 	*p++ = FI_Format_Indicator;
 	*p++ = GI_Group_Identifier;
 	*p++ = 0;
-	*p++ = 0x17;
+
+	m = 4;		// classes of procedures
+	m += 5;		// HDLC optional features
+	if (param->i_field_length_rx != G_UNKNOWN) m += 4;
+	if (param->window_size_rx != G_UNKNOWN) m += 3;
+	if (param->ack_timer != G_UNKNOWN) m += 4;
+	if (param->retries != G_UNKNOWN) m += 3;
+
+	*p++ = m;		// 0x17 if all present.
+
+// "Classes of Procedures" has half / full duplex.
+
+// We always send this.
 
 	*p++ = PI_Classes_of_Procedures;
 	*p++ = 2;
 	
 	x = PV_Classes_Procedures_Balanced_ABM;
 
-	if (param->full_duplex)
+	if (param->full_duplex == 1)
 	  x |= PV_Classes_Procedures_Full_Duplex;
-	else
+	else	// includes G_UNKNOWN
 	  x |= PV_Classes_Procedures_Half_Duplex;
 
 	*p++ = (x >> 8) & 0xff;
 	*p++ = x & 0xff;
+
+// "HDLC Optional Functions" contains REJ/SREJ & modulo 8/128.
+
+// We always send this.
+// Watch out for unknown values and do something reasonable.
 
 	*p++ = PI_HDLC_Optional_Functions;
 	*p++ = 3;
@@ -318,7 +438,7 @@ int xid_encode (struct ax25_param_s *param, unsigned char *info)
 		PV_HDLC_Optional_Functions_16_bit_FCS | 
 		PV_HDLC_Optional_Functions_Synchronous_Tx;
 
-	if (param->rej == implicit_reject || param->rej == selective_reject_reject)
+	if (param->rej == implicit_reject || param->rej == selective_reject_reject || param->rej == unknown_reject)
 	  x |= PV_HDLC_Optional_Functions_REJ_cmd_resp;
 
 	if (param->rej == selective_reject || param->rej == selective_reject_reject)	
@@ -326,34 +446,53 @@ int xid_encode (struct ax25_param_s *param, unsigned char *info)
 
 	if (param->modulo == modulo_128)
 	  x |= PV_HDLC_Optional_Functions_Modulo_128;
-	else
+	else	// includes modulo_8 and modulo_unknown
 	  x |= PV_HDLC_Optional_Functions_Modulo_8;
 
 	*p++ = (x >> 16) & 0xff;
 	*p++ = (x >> 8) & 0xff;
 	*p++ = x & 0xff;
 
-	*p++ = PI_I_Field_Length_Rx;
-	*p++ = 2;
-	x = param->i_field_length_rx * 8;
-	*p++ = (x >> 8) & 0xff;
-	*p++ = x & 0xff;
+// The rest are skipped if undefined values.
 
-	*p++ = PI_Window_Size_Rx;
-	*p++ = 1;
-	*p++ = param->window_size;
+// "I Field Length Rx" - max I field length acceptable to me.
+// This is in bits.  8191 would be max number of bytes to fit in field.
 
-	*p++ = PI_Ack_Timer;
-	*p++ = 2;
-	*p++ = param->ack_timer >> 8;
-	*p++ = param->ack_timer & 0xff;
+	if (param->i_field_length_rx != G_UNKNOWN) {
+	  *p++ = PI_I_Field_Length_Rx;
+	  *p++ = 2;
+	  x = param->i_field_length_rx * 8;
+	  *p++ = (x >> 8) & 0xff;
+	  *p++ = x & 0xff;
+	}
 
-	*p++ = PI_Retries;
-	*p++ = 1;
-	*p++ = param->retries;
+// "Window Size Rx"
+
+	if (param->window_size_rx != G_UNKNOWN) {
+	  *p++ = PI_Window_Size_Rx;
+	  *p++ = 1;
+	  *p++ = param->window_size_rx;
+	}
+
+// "Ack Timer" milliseconds.  We could handle up to 65535 here.
+
+	if (param->ack_timer != G_UNKNOWN) {
+	  *p++ = PI_Ack_Timer;
+	  *p++ = 2;
+	  *p++ = (param->ack_timer >> 8) & 0xff;
+	  *p++ = param->ack_timer & 0xff;
+	}
+
+// "Retries."
+
+	if (param->retries != G_UNKNOWN) {
+	  *p++ = PI_Retries;
+	  *p++ = 1;
+	  *p++ = param->retries;
+	}
 
 	len = p - info;
-	assert (len == 27);
+
 	return (len);
 
 } /* end xid_encode */
@@ -368,7 +507,7 @@ int xid_encode (struct ax25_param_s *param, unsigned char *info)
  *
  * Description:	Run with:
  *
- *			gcc -DTEST -g xid.c textcolor.c ; ./a
+ *			gcc -DXIDTEST -g xid.c textcolor.o && ./a
  *
  *		Result should be:
  *
@@ -379,7 +518,7 @@ int xid_encode (struct ax25_param_s *param, unsigned char *info)
  *--------------------------------------------------------------------*/
 
 
-#if TEST
+#if XIDTEST
 
 /* From Figure 4.6. Typical XID frame, from AX.25 protocol spec, v. 2.2 */
 /* This is the info part after a control byte of 0xAF. */
@@ -417,19 +556,24 @@ static unsigned char example[27] = {
 	/* PV */	0x00,	/* */
 	/* PI */	0x0A,	/* Parameter Indicator - Retries (N1) */
 	/* PL */	0x01,	/* Parameter Length */
-	/* PV */	0x03 	/* Parameter Variable - 3 ret */
+	/* PV */	0x03 	/* Parameter Variable - 3 retries */
 };
 
 int main (int argc, char *argv[]) {
 
-	struct ax25_param_s param;
-	struct ax25_param_s param2;
+	struct xid_param_s param;
+	struct xid_param_s param2;
 	int n;
-	unsigned char info[40];
+	unsigned char info[40];	// Currently max of 27 but things can change.
+	char desc[100];		// 80 is not adequate.
+
 
 /* parse example. */
 
-	n = xid_parse (example, sizeof(example), &param);
+	n = xid_parse (example, sizeof(example), &param, desc, sizeof(desc));
+
+	text_color_set (DW_COLOR_DEBUG);
+	dw_printf ("%s\n", desc);
 
 	text_color_set (DW_COLOR_ERROR);
 
@@ -438,7 +582,7 @@ int main (int argc, char *argv[]) {
 	assert (param.rej == selective_reject_reject);
 	assert (param.modulo == modulo_128);
 	assert (param.i_field_length_rx == 128);	
-	assert (param.window_size == 2);	
+	assert (param.window_size_rx == 2);
 	assert (param.ack_timer == 4096);	
 	assert (param.retries == 3);	
 
@@ -461,43 +605,99 @@ int main (int argc, char *argv[]) {
 	param.rej = implicit_reject;
 	param.modulo = modulo_8;
 	param.i_field_length_rx = 2048;
-	param.window_size = 3;
-	param.ack_timer = 3000;
-	param.retries = 10;
+	param.window_size_rx = 3;
+	param.ack_timer = 1234;
+	param.retries = 12;
 
 	n = xid_encode (&param, info);
-	n = xid_parse (info, n, &param2);
+	n = xid_parse (info, n, &param2, desc, sizeof(desc));
+
+	text_color_set (DW_COLOR_DEBUG);
+	dw_printf ("%s\n", desc);
+
+	text_color_set (DW_COLOR_ERROR);
 
 	assert (param2.full_duplex == 1);
 	assert (param2.rej == implicit_reject);
 	assert (param2.modulo == modulo_8);
 	assert (param2.i_field_length_rx == 2048);
-	assert (param2.window_size == 3);
-	assert (param2.ack_timer == 3000);
-	assert (param2.retries == 10);
+	assert (param2.window_size_rx == 3);
+	assert (param2.ack_timer == 1234);
+	assert (param2.retries == 12);
 
-/* Finally the third possbility for rej. */
+/* The third possbility for rej.   We don't use this. */
 
 	param.full_duplex = 0;
 	param.rej = selective_reject;
 	param.modulo = modulo_8;
-	param.i_field_length_rx = 256;
-	param.window_size = 4;
-	param.ack_timer = 3000;
-	param.retries = 10;
+	param.i_field_length_rx = 61;
+	param.window_size_rx = 4;
+	param.ack_timer = 5555;
+	param.retries = 9;
 
 	n = xid_encode (&param, info);
-	n = xid_parse (info, n, &param2);
+	n = xid_parse (info, n, &param2, desc, sizeof(desc));
+
+	text_color_set (DW_COLOR_DEBUG);
+	dw_printf ("%s\n", desc);
+
+	text_color_set (DW_COLOR_ERROR);
 
 	assert (param2.full_duplex == 0);
 	assert (param2.rej == selective_reject);
 	assert (param2.modulo == modulo_8);
-	assert (param2.i_field_length_rx == 256);
-	assert (param2.window_size == 4);
-	assert (param2.ack_timer == 3000);
-	assert (param2.retries == 10);
+	assert (param2.i_field_length_rx == 61);
+	assert (param2.window_size_rx == 4);
+	assert (param2.ack_timer == 5555);
+	assert (param2.retries == 9);
 
-	text_color_set (DW_COLOR_INFO);
+
+/* Specify some and not others. */
+
+	param.full_duplex = 0;
+	param.rej = selective_reject;
+	param.modulo = modulo_8;
+	param.i_field_length_rx = G_UNKNOWN;
+	param.window_size_rx = G_UNKNOWN;
+	param.ack_timer = 999;
+	param.retries = G_UNKNOWN;
+
+	n = xid_encode (&param, info);
+	n = xid_parse (info, n, &param2, desc, sizeof(desc));
+
+	text_color_set (DW_COLOR_DEBUG);
+	dw_printf ("%s\n", desc);
+
+	text_color_set (DW_COLOR_ERROR);
+
+	assert (param2.full_duplex == 0);
+	assert (param2.rej == selective_reject);
+	assert (param2.modulo == modulo_8);
+	assert (param2.i_field_length_rx == G_UNKNOWN);
+	assert (param2.window_size_rx == G_UNKNOWN);
+	assert (param2.ack_timer == 999);
+	assert (param2.retries == G_UNKNOWN);
+
+/* Default values for empty info field. */
+
+	n = 0;
+	n = xid_parse (info, n, &param2, desc, sizeof(desc));
+
+	text_color_set (DW_COLOR_DEBUG);
+	dw_printf ("%s\n", desc);
+
+	text_color_set (DW_COLOR_ERROR);
+
+	assert (param2.full_duplex == G_UNKNOWN);
+	assert (param2.rej == unknown_reject);
+	assert (param2.modulo == modulo_unknown);
+	assert (param2.i_field_length_rx == G_UNKNOWN);
+	assert (param2.window_size_rx == G_UNKNOWN);
+	assert (param2.ack_timer == G_UNKNOWN);
+	assert (param2.retries == G_UNKNOWN);
+
+
+	text_color_set (DW_COLOR_REC);
 	dw_printf ("XID test:  Success.\n");	
 	
 	exit (0);

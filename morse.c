@@ -30,6 +30,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -39,8 +41,6 @@
 #include <time.h>
 #include <math.h>
 
-
-#include "direwolf.h"
 #include "textcolor.h"
 #include "audio.h"
 #include "ptt.h"
@@ -122,7 +122,7 @@ static const struct morse_s {
 
 };
 
-#define NUM_MORSE (sizeof(morse) / sizeof(struct morse_s))
+#define NUM_MORSE ((int)(sizeof(morse) / sizeof(struct morse_s)))
 
 static void morse_tone (int chan, int tu, int wpm);
 static void morse_quiet (int chan, int tu, int wpm);
@@ -271,6 +271,8 @@ int morse_send (int chan, char *str, int wpm, int txdelay, int txtail)
 	  dw_printf ("morse: Internal error.  Inconsistent length, %d vs. %d calculated.\n", 
 		time_units, morse_units_str(str));
 	}
+
+	audio_flush(ACHAN2ADEV(chan));
 
 	return (txdelay +
 		(int) (TIME_UNITS_TO_MS(time_units, wpm) + 0.5) +

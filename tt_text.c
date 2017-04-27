@@ -154,6 +154,7 @@ static const char grid[10][10][3] =
         { "PH", "QH", "OG", "PG", "QG", "OF", "PF", "QF", "RF", "RE" },		// 8 - Aus / NZ
         { "IL", "IK", "IJ", "JJ", "JI", "JH", "JG", "KG", "JF", "KF" }  };	// 9 - Africa
 
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -162,7 +163,6 @@ static const char grid[10][10][3] =
 #include <assert.h>
 #include <stdarg.h>
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "tt_text.h"
 

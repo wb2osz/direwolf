@@ -33,6 +33,8 @@
  *
  *------------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <time.h>
 #include <assert.h>
@@ -43,12 +45,8 @@
 #include <ctype.h>	/* for isdigit */
 #include <fcntl.h>
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 1
-#endif
 #include "regex.h"
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "symbols.h"
@@ -110,7 +108,7 @@ static void aprs_station_capabilities (decode_aprs_t *A, char *, int);
 static void aprs_status_report (decode_aprs_t *A, char *, int);
 static void aprs_general_query (decode_aprs_t *A, char *, int, int quiet);
 static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet);
-static void aprs_telemetry (decode_aprs_t *A, char *, int, int quiet);
+static void aprs_telemetry (decode_aprs_t *A, char *info, int info_len, int quiet);
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *, int);
 static void aprs_morse_code (decode_aprs_t *A, char *, int);
 static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *, int);
@@ -166,7 +164,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 	A->g_quiet = quiet;
 
-	snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown message type %c", *pinfo);
+	snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
 
 	A->g_symbol_table = '/';	/* Default to primary table. */
 	A->g_symbol_code = ' ';		/* What should we have for default symbol? */
@@ -201,6 +199,33 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
 
+/*
+ * Report error if the information part contains a nul character.
+ * There are two known cases where this can happen.
+ *
+ *  - The Kenwood TM-D710A sometimes sends packets like this:
+ *
+ * 	VA3AJ-9>T2QU6X,VE3WRC,WIDE1,K8UNS,WIDE2*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`nW<0x1f>oS8>/]"6M}driving fast= 
+ * 	K4JH-9>S5UQ6X,WR4AGC-3*,WIDE1*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`jP}l"&>/]"47}QRV from the EV =
+ *
+ *     Notice that the data type indicator of "4" is not valid.  If we remove
+ *     4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>   we are left with a good MIC-E format.
+ *     This same thing has been observed from others and is intermittent.
+ *
+ *  - AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
+ *    This is wrong, it should be using UTF-8.
+ */
+
+	if ( ( ! A->g_quiet ) && ( (int)strlen((char*)pinfo) != info_len) ) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("'nul' character found in Information part.  This should never happen.\n");
+	  dw_printf("It seems that %s is transmitting with defective software.\n", A->g_src);
+
+	  if (strcmp((char*)pinfo, "4P") == 0) {
+	    dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");
+	  }
+	}
 
 	switch (*pinfo) {	/* "DTI" data type identifier. */
 
@@ -254,8 +279,9 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      break;
 
 
-	    case ':':		/* Message */
+	    case ':':		/* Message: for one person, a group, or a bulletin. */
 				/* Directed Station Query */
+				/* Telemetry metadata. */
 
 	      aprs_message (A, pinfo, info_len, quiet);
 	      break;
@@ -638,14 +664,14 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  if ( ! A->g_quiet) {
 
 	    for (j=0; j<n; j++) {
-	      if ((unsigned)A->g_comment[j] == (char)0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
+	      if ((unsigned char)(A->g_comment[j]) == 0xb0 &&  (j == 0 || ! (A->g_comment[j-1] & 0x80))) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf("Character code 0xb0 is probably an attempt at a degree symbol.\n");
 	        dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");
 	      }	    	
 	    }
 	    for (j=0; j<n; j++) {
-	      if ((unsigned)A->g_comment[j] == (char)0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
+	      if ((unsigned char)(A->g_comment[j]) == 0xf8 && (j == n-1 || (A->g_comment[j+1] & 0xc0) != 0xc0)) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf("Character code 0xf8 is probably an attempt at a degree symbol.\n");
 	        dw_printf("The correct encoding is 0xc2 0xb0 in UTF-8.\n");	    	
@@ -974,6 +1000,7 @@ N1ZZN-9>T2SP0W:`c_Vm6hk/ "49}Originl Mic-E (leading space)
 
 N1ZZN-9>T2SP0W:`c_Vm6hk/>"49}TH-D7A walkie Talkie
 N1ZZN-9>T2SP0W:`c_Vm6hk/>"49}TH-D72 walkie Talkie=
+W6GPS>S4PT3R:`p(1oR0K\>TH-D74A^
 N1ZZN-9>T2SP0W:`c_Vm6hk/]"49}TM-D700 MObile Radio
 N1ZZN-9>T2SP0W:`c_Vm6hk/]"49}TM-D710 Mobile Radio=
 
@@ -1328,38 +1355,44 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 #define isT(c) ((c) == ' ' || (c) == '>' || (c) == ']' || (c) == '`' || (c) == '\'')
 
+// Last updated Sept. 2016 for TH-D74A
 
 	if (isT(*pfirst)) {
 	
-	  if (*pfirst == ' ') { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
+	  if      (*pfirst == ' '                                       )  { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == '>' && *plast == '=') { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == '>') { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
+	  else if (*pfirst == '>'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == '>'                       && *plast == '^')  { strlcpy (A->g_mfr, "Kenwood TH-D74", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == '>'                                       )  { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == ']' && *plast == '=') { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == ']') { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
+	  else if (*pfirst == ']'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == ']'                                       )  { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
 
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ' ') { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '"') { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '#') { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '$') { strlcpy (A->g_mfr, "Yaesu FT1D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '%') { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == ')') { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`' && *(plast-1) == '_' && *plast == '(') { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ' ')  { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '"')  { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '#')  { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '$')  { strlcpy (A->g_mfr, "Yaesu FT1D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '%')  { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ')')  { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '(')  { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3') { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4') { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*(plast-1) == '\\') { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '/') { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '^') { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '*') { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*(plast-1) == '~') { strlcpy (A->g_mfr, "OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'                                       )  { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; }
 
-	  // Should Original Mic-E and Kenwood be moved down to here?
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3')  { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4')  { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '`') { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'') { strlcpy (A->g_mfr, "McTrackr", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '4')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7400 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '8')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7800 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+
+	  else if (*pfirst == '\''                                      )  { strlcpy (A->g_mfr, "McTrackr", sizeof(A->g_mfr)); pfirst++; }
+
+	  else if (                   *(plast-1) == '\\'                )  { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '/'                 )  { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '^'                 )  { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '*'                 )  { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '~'                 )  { strlcpy (A->g_mfr, "OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	}
 
 /*
@@ -1409,22 +1442,45 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  * Function:	aprs_message
  *
- * Purpose:	Decode "Message Format"
+ * Purpose:	Decode "Message Format."
+ *		The word message is used loosely all over the place, but it has a very specific meaning here.
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
  *		quiet	- supress error messages.
  *
- * Outputs:	??? TBD
+ * Outputs:	A->g_msg_type		Text description for screen display.
+ *
+ *		A->g_addressee		To whom is it addressed.
+ *					Could be a specific station, alias, bulletin, etc.
+ *					For telemetry metadata is is about this station,
+ *					not being sent to it.
+ *
+ *		A->g_message_subtype	Subtype so caller might avoid replicating
+ *					all the code to distinguish them.
+ *
+ *		A->g_message_number	Message number if any.  Required for ack/rej.
  *
  * Description:	An APRS message is a text string with a specifed addressee.
  *
  *		It's a lot more complicated with different types of addressees
  *		and replies with acknowledgement or rejection.
  *
+ *		There is even a special case for telemetry metadata.
  *
- * Examples:	...
- *		
+ *
+ * Cases:	:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
+ *		:xxxxxxxxx:UNIT.		Telemetry metadata, unit/label
+ *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficents
+ *		:xxxxxxxxx:BITS.		Telemetry metadata, Bit Sense/Project Name
+ *		:xxxxxxxxx:?			Directed Station Query
+ *		:xxxxxxxxx:ack			Message acknowledged (received)
+ *		:xxxxxxxxx:rej			Message rejected (unable to accept)
+ *
+ *		:xxxxxxxxx: ...			Message with no message number.
+ *						(Text may not contain the { character because
+ *						 it indicates beginning of optional message number.)
+ *		:xxxxxxxxx: ... {num		Message with message number.
  *
  *------------------------------------------------------------------*/
 
@@ -1436,7 +1492,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char addressee[9];
 	  char colon;			/* : */
 	  char message[73];		/* 0-67 characters for message */
-					/* { followed by 1-5 characters for message number */
+					/* Optional { followed by 1-5 characters for message number */
 
 					/* If the first chracter is '?' it is a Directed Station Query. */
 	} *p;
@@ -1447,20 +1503,23 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	p = (struct aprs_message_s *)info;
 
 	strlcpy (A->g_msg_type, "APRS Message", sizeof(A->g_msg_type));
+	A->g_message_subtype = message_subtype_message;			/* until found otherwise */
 
 	if (ilen < 11) {
 	  if (! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Message must have a minimum of 11 characters for : addressee :\n");
+	    dw_printf("APRS Message must have a minimum of 11 characters for : 9 character addressee :\n");
 	  }
+	  A->g_message_subtype = message_subtype_invalid;
 	  return;
 	}
 
 	if (p->colon != ':') {
 	  if (! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Message must begin with : addressee :\n");
+	    dw_printf("APRS Message must begin with : 9 character addressee :\n");
 	  }
+	  A->g_message_subtype = message_subtype_invalid;
 	  return;
 	}
 
@@ -1475,6 +1534,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	strlcpy (A->g_addressee, addressee, sizeof(A->g_addressee));
 
+
 /*
  * Special message formats contain telemetry metadata.
  * It applies to the addressee, not the sender.
@@ -1488,18 +1548,22 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	if (strncmp(p->message,"PARM.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Parameter Name Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_parm;
 	  telemetry_name_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"UNIT.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Unit/Label Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_unit;
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficents Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_eqns;
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
 	else if (strncmp(p->message,"BITS.",5) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
+	  A->g_message_subtype = message_subtype_telem_bits;
 	  telemetry_bit_sense_message (addressee, p->message+5, quiet);
 	}
 
@@ -1510,11 +1574,33 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	else if (p->message[0] == '?') {
 
 	  strlcpy (A->g_msg_type, "Directed Station Query", sizeof(A->g_msg_type));
+	  A->g_message_subtype = message_subtype_directed_query;
 
 	  aprs_directed_station_query (A, addressee, p->message+1, quiet);
 	}
+
+/* ack or rej?  Message number is required for these. */
+
+	else if (strncmp(p->message,"ack",3) == 0) {
+	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "ACK message %s for \"%s\"", A->g_message_number, addressee);
+	  A->g_message_subtype = message_subtype_ack;
+	}
+	else if (strncmp(p->message,"rej",3) == 0) {
+	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "REJ message %s for \"%s\"", A->g_message_number, addressee);
+	  A->g_message_subtype = message_subtype_ack;
+	}
+
+/* message number is optional here. */
+
 	else {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message for \"%s\"", addressee);
+	  char *pno = strchr(p->message, '{');
+	  if (pno != NULL) {
+	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+	  }
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message %s for \"%s\"", A->g_message_number, addressee);
+	  A->g_message_subtype = message_subtype_message;
 
 	  /* No location so don't use  process_comment () */
 
@@ -1666,25 +1752,27 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 {
 
 	struct aprs_item_s {
-	  char dti;			/* ) */
-	  char name[9];			/* Actually variable length 3 - 9 bytes. */
+	  char dti;			/* ')' */
+	  char name[10];		/* Actually variable length 3 - 9 bytes. */
 					/* DON'T refer to the rest of this structure; */
 					/* the offsets will be wrong! */
+					/* We make it 10 here so we don't get subscript out of bounds */
+					/* warning when looking for following '!' or '_' character. */
 
-	  char live_killed;		/* ! for live or _ for killed */
-	  position_t pos;
-	  char comment[43]; 		/* First 7 bytes could be data extension. */
+	  char live_killed__;		/* ! for live or _ for killed */
+	  position_t pos__;
+	  char comment__[43]; 		/* First 7 bytes could be data extension. */
 	} *p;
 
 	struct aprs_compressed_item_s {
-	  char dti;			/* ) */
-	  char name[9];			/* Actually variable length 3 - 9 bytes. */
+	  char dti;			/* ')' */
+	  char name[10];		/* Actually variable length 3 - 9 bytes. */
 					/* DON'T refer to the rest of this structure; */
 					/* the offsets will be wrong! */
 
-	  char live_killed;		/* ! for live or _ for killed */
-	  compressed_position_t cpos;
-	  char comment[40]; 		/* No data extension in this case. */
+	  char live_killed__;		/* ! for live or _ for killed */
+	  compressed_position_t cpos__;
+	  char comment__[40]; 		/* No data extension in this case. */
 	} *q;
 
 
@@ -3014,7 +3102,7 @@ double get_latitude_8 (char *p, int quiet)
 	  return (G_UNKNOWN);
 	}
 
-	if (plat->minn[0] >= '0' || plat->minn[0] <= '5')
+	if (plat->minn[0] >= '0' && plat->minn[0] <= '5')
 	  result += ((plat->minn[0]) - '0') * (10. / 60.);
 	else if (plat->minn[0] == ' ')
 	  ;
@@ -3177,7 +3265,7 @@ double get_longitude_9 (char *p, int quiet)
 	  return (G_UNKNOWN);
 	}
 
-	if (plon->minn[0] >= '0' || plon->minn[0] <= '5')
+	if (plon->minn[0] >= '0' && plon->minn[0] <= '5')
 	  result += ((plon->minn[0]) - '0') * (10. / 60.);
 	else if (plon->minn[0] == ' ')
 	  ;
@@ -3621,7 +3709,15 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
  *
  *------------------------------------------------------------------*/
 
-#define MAX_TOCALLS 150
+// If I was more ambitious, this would dynamically allocate enough
+// storage based on the file contents.  Just stick in a constant for
+// now.  This takes an insignificant amount of space and
+// I don't anticipate tocalls.txt growing that quickly.
+// Version 1.4 - add message if too small instead of silently ignoring the rest.
+
+// Dec. 2016 tocalls.txt has 153 destination addresses.
+
+#define MAX_TOCALLS 200
 
 static struct tocalls_s {
 	unsigned char len;
@@ -3718,7 +3814,7 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	        if (strlen(tocalls[num_tocalls].prefix) > 2) {
 	          tocalls[num_tocalls].description = strdup(stuff+14);
 		  tocalls[num_tocalls].len = strlen(tocalls[num_tocalls].prefix);
-	          // dw_printf("debug: %d '%s' -> '%s'\n", tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
+	          // dw_printf("debug %d: %d '%s' -> '%s'\n", num_tocalls, tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
 
 	          num_tocalls++;
 	        }
@@ -3742,10 +3838,14 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	        if (strlen(tocalls[num_tocalls].prefix) > 2) {
 	          tocalls[num_tocalls].description = strdup(stuff+14);
 		  tocalls[num_tocalls].len = strlen(tocalls[num_tocalls].prefix);
-	          // dw_printf("debug: %d '%s' -> '%s'\n", tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
+	          // dw_printf("debug %d: %d '%s' -> '%s'\n", num_tocalls, tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
 
 	          num_tocalls++;
 	        }
+	      }
+	      if (num_tocalls == MAX_TOCALLS) {		// oops. might have discarded some.
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("MAX_TOCALLS needs to be larger than %d to handle contents of 'tocalls.txt'.\n", MAX_TOCALLS);
 	      }
 	    }
 	    fclose(fp);
@@ -3770,9 +3870,12 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
 	      dw_printf("System types in the destination field will not be decoded.\n");
 	    }
 	  }
-
 	
 	  first_time = 0;
+
+	  //for (n=0; n<num_tocalls; n++) {
+	  //  dw_printf("sorted %d: %d '%s' -> '%s'\n", n, tocalls[n].len, tocalls[n].prefix, tocalls[n].description);
+	  //}
 	}
 
 
@@ -3831,7 +3934,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		clen		- Length of comment or -1 to take it all.
  *
  * Outputs:	A->g_telemetry	- Base 91 telemetry |ss1122|
- *		A->g_altitude_ft	- from /A=123456
+ *		A->g_altitude_ft - from /A=123456
  *		A->g_lat	- Might be adjusted from !DAO!
  *		A->g_lon	- Might be adjusted from !DAO!
  *		A->g_aprstt_loc	- Private extension to !DAO!
@@ -3862,6 +3965,49 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *
  *			/A=123456		Altitude
  *
+ * What can appear in a comment?
+ *
+ *		Chapter 5 of the APRS spec ( http://www.aprs.org/doc/APRS101.PDF ) says:
+ *
+ *			"The comment may contain any printable ASCII characters (except | and ~,
+ *			which are reserved for TNC channel switching)."
+ *
+ *		"Printable" would exclude character values less than space (00100000), e.g.
+ *		tab, carriage return, line feed, nul.  Sometimes we see carriage return
+ *		(00001010) at the end of APRS packets.   This would be in violation of the
+ *		specification.
+ *
+ *		The base 91 telemetry format (http://he.fi/doc/aprs-base91-comment-telemetry.txt ),
+ *		which is not part of the APRS spec, uses the | character in the comment to delimit encoded
+ *		telemetry data.   This would be in violation of the original spec.
+ *
+ *		The APRS Spec Addendum 1.2 Proposals ( http://www.aprs.org/aprs12/datum.txt)
+ *		adds use of UTF-8 (https://en.wikipedia.org/wiki/UTF-8 )for the free form text in
+ *		messages and comments. It can't be used in the fixed width fields.
+ *
+ *		Non-ASCII characters are represented by multi-byte sequences.  All bytes in these
+ *		multi-byte sequences have the most significant bit set to 1.  Using UTF-8 would not
+ *		add any nul (00000000) bytes to the stream.
+ *
+ *		There are two known cases where we can have a nul character value.
+ *
+ *		* The Kenwood TM-D710A sometimes sends packets like this:
+ *
+ *			VA3AJ-9>T2QU6X,VE3WRC,WIDE1,K8UNS,WIDE2*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`nW<0x1f>oS8>/]"6M}driving fast= 
+ *			K4JH-9>S5UQ6X,WR4AGC-3*,WIDE1*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`jP}l"&>/]"47}QRV from the EV =
+ *
+ *		  Notice that the data type indicator of "4" is not valid.  If we remove
+ *		  4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>   we are left with a good MIC-E format.
+ *		  This same thing has been observed from others and is intermittent.
+ *
+ *		* AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
+ *		  This is wrong.  It should be using UTF-8 and I'm not going to accomodate it here.
+ *
+ *
+ *		The digipeater and IGate functions should pass along anything exactly the
+ *		we received it, even if it is invalid.  If different implementations try to fix it up
+ *		somehow, like changing unprintable characters to spaces, we will only make things
+ *		worse and thwart the duplicate detection.
  *
  *------------------------------------------------------------------*/
 
@@ -4026,7 +4172,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * digipeated, causing the comment to be hundreds of characters long.
  */
 
-	if (clen > sizeof(A->g_comment) - 1) {
+	if (clen > (int)(sizeof(A->g_comment) - 1)) {
 	  if ( ! A->g_quiet) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Comment is extremely long, %d characters.\n", clen);

@@ -577,6 +577,9 @@ long UTM_To_USNG (long Zone,
     Northing = 0.0;
   }
 
+  ltr2_low_value = LETTER_A;	// Make compiler shut up about possibly uninitialized value.
+				// It should be set by the following but compiler doesn't know.
+
   USNG_Get_Grid_Values(Zone, &ltr2_low_value, &ltr2_high_value, &pattern_offset);
 
   error_code = USNG_Get_Latitude_Letter(Latitude, &letters[0]);
@@ -959,6 +962,9 @@ long Convert_USNG_To_UTM (char   *USNG,
           *Hemisphere = 'S';
         else
           *Hemisphere = 'N';
+
+        ltr2_low_value = LETTER_A;	// Make compiler shut up about possibly uninitialized values.
+	ltr2_high_value = LETTER_Z;	// They should be set by the following but compiler doesn't know.
 
         USNG_Get_Grid_Values(*Zone, &ltr2_low_value, &ltr2_high_value, &pattern_offset);
 

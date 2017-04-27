@@ -1,5 +1,7 @@
 /* Latitude / Longitude to UTM conversion */
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>

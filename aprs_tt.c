@@ -39,6 +39,8 @@
 
 #define APRS_TT_C 1
 
+#include "direwolf.h"
+
 
 // TODO:  clean up terminolgy.  
 // "Message" has a specific meaning in APRS and this is not it.  
@@ -56,7 +58,6 @@
 #include <ctype.h>
 #include <assert.h>
 
-#include "direwolf.h"
 #include "version.h"
 #include "ax25_pad.h"
 #include "hdlc_rec2.h"		/* for process_rec_frame */
@@ -105,7 +106,9 @@ static int parse_aprstt3_call (char *e);
 static int parse_location (char *e);
 static int parse_comment (char *e);
 static int expand_macro (char *e);
+#ifndef TT_MAIN
 static void raw_tt_data_to_app (int chan, char *msg);
+#endif
 static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *bstr, char *dstr, size_t valstrsize);
 
 #if TT_MAIN
@@ -378,6 +381,7 @@ void aprs_tt_sequence (int chan, char *msg)
 #endif
 
 #if TT_MAIN
+	(void)err;		// suppress variable set but not used warning.
 	check_result ();	// for unit testing.
 #else
 
@@ -1443,7 +1447,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 	  
 	  len = strlen(tt_config.ttloc_ptr[ipat].pattern);
 
-	  if (strlen(e) == len) {
+	  if ((int)(strlen(e)) == len) {
 
 	    match = 1;
 	    strlcpy (xstr, "", valstrsize);
@@ -1658,6 +1662,7 @@ static int parse_comment (char *e)
  *
  *----------------------------------------------------------------*/
 
+#ifndef TT_MAIN
 
 static void raw_tt_data_to_app (int chan, char *msg)
 {
@@ -1668,9 +1673,6 @@ static void raw_tt_data_to_app (int chan, char *msg)
 	char src[10], dest[10];
 	char raw_tt_msg[256];
 	packet_t pp;
-	char *c, *s;
-	int i;
-	int err;
 	alevel_t alevel;
 
 
@@ -1706,7 +1708,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
 	  alevel.mark = -2;
 	  alevel.space = -2;
 
-	  dlq_append (DLQ_REC_FRAME, chan, -1, 0, pp, alevel, RETRY_NONE, "tt");
+	  dlq_rec_frame (chan, -1, 0, pp, alevel, RETRY_NONE, "tt");
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1716,6 +1718,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
 #endif
 }
 
+#endif
 
 
 /*------------------------------------------------------------------

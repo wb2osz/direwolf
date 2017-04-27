@@ -1,6 +1,15 @@
-APRS TO-CALL VERSION NUMBERS                            21 Jan 2016
+APRS TO-CALL VERSION NUMBERS                            06 Feb 2017
 -------------------------------------------------------------------
                                                              WB4APR
+06 Feb 17 added APIExx for W7KMV's PiAPRS system
+25 Jan 17 added APSFxx F5OPV embedded devices - was APZ40
+16 Dec 16 added APYSxx for W2GMD's Python APRS
+14 Nov 16 Added APINxx for PinPoint by AB0WV
+09 Nov 16 added APNICx for SQ5EKU http://sq5eku.blogspot.com/
+24 Oct 16 added APTKPT TrackPoint N0LP, removed APZTKP
+24 Aug 16 added APK004 for Kenwood THD-74
+29 Apr 16 added APFPRS for FreeDV by Jeroen PE1RXQ
+25 Feb 16 Added APCDS0 for Leon Lessing ZS6LMG's cell tracker
 21 Jan 16 added APDNOx for APRSduino by DO3SWW
 18 Nov 15 Added APSTPO for N0AGI
 03 Nov 15 Updated APAND1 and APDRxx for androids
@@ -10,12 +19,7 @@ APRS TO-CALL VERSION NUMBERS                            21 Jan 2016
 27 Apr 15 added APZMAJ for Martyn M1MAJ DeLorme inReach Tracker
 21 Apr 15 added APB2MF & APR2MF DL2MF - MF2APRS Radiosonde   
 06 Apr 15 added APAVT5 SainSonic AP510 - a 1watt tracker 
-13 Mar 14 added APECAN Pecan Pico APRS Balloon Tracker
-02 Sep 14 added APSTMx W7QO's Balloon trackers
-21 Aug 14 added APSMSx Paul Defrusne's SMS gateway
-11 Aug 14 added APCWP8 John GM7HHB, WinphoneAPRS
-18 Dec 13 added APZWKR GM1WKR NetSked application
-
+. . . . . ...
 11 Jan 12 added APYTxx for YagTracker and updated Yaesu APY008/350
 
 In APRS, the AX.25  Destination address is not used for packet 
@@ -49,7 +53,8 @@ a TOCALL number series:
       APBLO   MOdel Rocketry K7RKT
       APBPQx  John G8BPQ Digipeater/IGate 
  APC  APCxxx  Cellular applications
-      APCBBx  for VE7UDP Blackberry Applications
+      APCBBx  VE7UDP Blackberry Applications
+      APCDS0  Leon Lessing ZS6LMG's cell tracker
       APCLEY  EYTraker GPRS/GSM tracker by ZS6EY
       APCLWX  EYWeather GPRS/GSM WX station by ZS6EY
       APCLEZ  Telit EZ10 GSM application ZS6CEY
@@ -76,13 +81,16 @@ a TOCALL number series:
  APF  APFxxx  Firenet
       APFGxx  Flood Gage (KP4DJT)
       APFIxx  for APRS.FI OH7LZB, Hessu
+      APFPRS  for FreeDV by Jeroen PE1RXQ
  APG  APGxxx  Gates, etc
       APGOxx  for AA3NJ PDA application
  APH  APHKxx  for LA1BR tracker/digipeater
       APHAXn  SM2APRS by PY2UEP
       APHTxx  HMTracker by IU0AAC 
  API  APICQx  for ICQ
-      APICxx  for HA9MCQ Pic IGate
+      APICxx  HA9MCQ's Pic IGate
+      APIExx  W7KMV's PiAPRS system
+      APINxx  PinPoint by AB0WV
  APJ  APJAxx  JavAPRS
       APJExx  JeAPRS
       APJIxx  jAPRSIgate
@@ -90,6 +98,7 @@ a TOCALL number series:
       APJYnn  KA2DDO Yet another APRS system
  APK  APK0xx  Kenwood TH-D7's
       APK003  Kenwood TH-D72
+      APK004  Kenwood TH-D74
       APK1xx  Kenwood D700's
       APK102  Kenwood D710
       APKRAM  KRAMstuff.com - Mark. G7LEU
@@ -104,6 +113,7 @@ a TOCALL number series:
       APN9xx  Kantronics KPC-9612 Roms
       APNAxx  WB6ZSU's APRServe
       APNDxx  DIGI_NED
+      APNICx  SQ5EKU http://sq5eku.blogspot.com/
       APNK01  Kenwood D700 (APK101) type
       APNK80  KAM version 8.0
       APNKMP  KAM+
@@ -132,23 +142,25 @@ a TOCALL number series:
       APRRTx  RPC electronics
       APRS    Generic, (obsolete. Digis should use APNxxx instead)
       APRXxx  >40 APRSmax
-      APRXxx  <39 for OH2MQK's RX-igate
+      APRXxx  <39 for OH2MQK's igate
       APRTLM  used in MIM's and Mic-lites, etc
       APRtfc  APRStraffic
       APRSTx  APRStt (Touch tone)
  APS  APSxxx  APRS+SA, etc
       APSARx  ZL4FOX's SARTRACK
       APSCxx  aprsc APRS-IS core server (OH7LZB, OH2MQK)
+      APSFxx  F5OPV embedded devices - was APZ40
       APSK63  APRS Messenger -over-PSK63
       APSK25  APRS Messenger GMSK-250
-      APSMSx  Paul Defrusne's SMS gateway
+      APSMSx  Paul Dufresne's SMSGTE - SMS Gateway
       APSTMx  for W7QO's Balloon trackers
       APSTPO  for N0AGI Satellite Tracking and Operations
- APT  APTIGR  TigerTrack
-      APTTxx  Tiny Track
-      APT2xx  Tiny Track II
+ APT  APT2xx  Tiny Track II
       APT3xx  Tiny Track III
       APTAxx  K4ATM's tiny track
+      APTIGR  TigerTrack
+      APTKPT  TrackPoint N0LP
+      APTTxx  Tiny Track
       APTWxx  Byons WXTrac
       APTVxx  for ATV/APRN and SSTV applications
  APU  APU1xx  UIview 16 bit applications
@@ -170,13 +182,14 @@ a TOCALL number series:
       APY008  Yaesu VX-8 series
       APY350  Yaesu FTM-350 series
       APYTxx  for YagTracker
+      APYSxx  for W2GMD's Python APRS
  APZ  APZxxx  Experimental
       APZ247  for UPRS NR0Q
       APZ0xx  Xastir (old versions. See APX)
       APZMAJ  Martyn M1MAJ DeLorme inReach Tracker
       APZMDR  for HaMDR trackers - hessu * hes.iki.fi]
       APZPAD  Smart Palm 
-      APZTKP  TrackPoint, Nick N0LP (Balloon tracking)
+      APZTKP  TrackPoint, Nick N0LP (Balloon tracking)(depricated)
       APZWIT  MAP27 radio (Mountain Rescue) EI7IG
       APZWKR  GM1WKR NetSked application
 

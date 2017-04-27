@@ -39,7 +39,7 @@
  *
  *---------------------------------------------------------------*/
 
-
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -50,9 +50,7 @@
 #include <assert.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "audio.h"
-
 #include "tune.h"
 #include "fsk_demod_state.h"
 #include "fsk_gen_filter.h"
@@ -65,7 +63,7 @@
 #define MAX(a,b) ((a)>(b)?(a):(b))
 
 
-
+#ifndef GEN_FFF
 
 /* Quick approximation to sqrt(x*x+y*y) */
 /* No benefit for regular PC. */
@@ -105,7 +103,7 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	int j;
 
 
-#pragma GCC ivdep				// ignored until gcc 4.9
+//#pragma GCC ivdep				// ignored until gcc 4.9
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}
@@ -138,6 +136,8 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
 	}
 	return (0.0f);
 }
+
+#endif	// ifndef GEN_FFF
 
 
 /*
@@ -530,7 +530,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
           for (j=0; j<D->ms_filter_size; j++) {
 	    float am;
 	    float center;
-	    float shape = 1;		/* Shape is an attempt to smooth out the */
+	    float shape = 1.0f;		/* Shape is an attempt to smooth out the */
 					/* abrupt edges in hopes of reducing */
 					/* overshoot and ringing. */
 					/* My first thought was to use a cosine shape. */
@@ -538,16 +538,16 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 					/* windows mentioned in the literature. */
 					/* http://en.wikipedia.org/wiki/Window_function */
 
-	    center = 0.5 * (D->ms_filter_size - 1);
-	    am = ((float)(j - center) / (float)samples_per_sec) * ((float)mark_freq) * (2 * M_PI);
+	    center = 0.5f * (D->ms_filter_size - 1);
+	    am = ((float)(j - center) / (float)samples_per_sec) * ((float)mark_freq) * (2.0f * (float)M_PI);
 
 	    shape = window (D->ms_window, D->ms_filter_size, j);
 
-	    D->m_sin_table[j] = sin(am) * shape;
-  	    D->m_cos_table[j] = cos(am) * shape;
+	    D->m_sin_table[j] = sinf(am) * shape;
+	    D->m_cos_table[j] = cosf(am) * shape;
 
-	    Gs += D->m_sin_table[j] * sin(am);
-	    Gc += D->m_cos_table[j] * cos(am);
+	    Gs += D->m_sin_table[j] * sinf(am);
+	    Gc += D->m_cos_table[j] * cosf(am);
 
 #if DEBUG1
 	    dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, D->m_sin_table[j], D->m_cos_table[j]) ;
@@ -578,18 +578,18 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
           for (j=0; j<D->ms_filter_size; j++) {
 	    float as;
 	    float center;
-	    float shape = 1;
+	    float shape = 1.0f;
 
 	    center = 0.5 * (D->ms_filter_size - 1);
-	    as = ((float)(j - center) / (float)samples_per_sec) * ((float)space_freq) * (2 * M_PI);
+	    as = ((float)(j - center) / (float)samples_per_sec) * ((float)space_freq) * (2.0f * (float)M_PI);
 
 	    shape = window (D->ms_window, D->ms_filter_size, j);
 
-	    D->s_sin_table[j] = sin(as) * shape;
-  	    D->s_cos_table[j] = cos(as) * shape;
+	    D->s_sin_table[j] = sinf(as) * shape;
+	    D->s_cos_table[j] = cosf(as) * shape;
 
-	    Gs += D->s_sin_table[j] * sin(as);
-	    Gc += D->s_cos_table[j] * cos(as);
+	    Gs += D->s_sin_table[j] * sinf(as);
+	    Gc += D->s_cos_table[j] * cosf(as);
 
 #if DEBUG1
 	    dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, D->s_sin_table[j], D->s_cos_table[j] ) ;
@@ -756,7 +756,7 @@ int main (void)
 	emit_macro ("CALC_S_SUM1", ds.ms_filter_size, ds.s_sin_table);
 	emit_macro ("CALC_S_SUM2", ds.ms_filter_size, ds.s_cos_table);
 
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 
 #endif
@@ -808,7 +808,7 @@ int main (void)
  *
  *--------------------------------------------------------------------*/
 
-static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D);
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D);
 
 __attribute__((hot))
 void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
@@ -1088,7 +1088,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 
 __attribute__((hot))
-static void inline nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D)
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, struct demodulator_state_s *D)
 {
 
 /*

@@ -4,9 +4,11 @@
 
 #include "rpack.h"
 
+#include "audio.h"		// for enum modem_t
 
 /*
  * Demodulator state.
+ * The name of the file is from we only had FSK.  Now we have other techniques.
  * Different copy is required for each channel & subchannel being processed concurrently.
  */
 
@@ -24,6 +26,7 @@ struct demodulator_state_s
 /*
  * These are set once during initialization.
  */
+	enum modem_t modem_type;		// MODEM_AFSK, MODEM_8PSK, etc.
 
 	char profile;			// 'A', 'B', etc.	Upper case.
 					// Only needed to see if we are using 'F' to take fast path.
@@ -133,8 +136,26 @@ struct demodulator_state_s
 	float s_cos_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
 /*
+ * These are for PSK only.
+ * They are number of delay line taps into previous symbol.
+ * They are one symbol period and + or - 45 degrees of the carrier frequency.
+ */
+	int boffs;		/* symbol length based on sample rate and baud. */
+	int coffs;		/* to get cos component of previous symbol. */
+	int soffs;		/* to get sin component of previous symbol. */
+
+	unsigned int lo_step;	/* How much to advance the local oscillator */
+				/* phase for each audio sample. */
+
+	int psk_use_lo;		/* Use local oscillator rather than self correlation. */
+
+
+/*
  * The rest are continuously updated.
  */
+
+	unsigned int lo_phase;	/* Local oscillator for PSK. */
+
 
 /*
  * Most recent raw audio samples, before/after prefiltering.
@@ -213,6 +234,7 @@ struct demodulator_state_s
 
 		int prev_demod_data;			// Previous data bit detected.
 							// Used to look for transitions.
+		float prev_demod_out_f;
 
 		/* This is used only for "9600" baud data. */
 

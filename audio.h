@@ -89,6 +89,14 @@ struct audio_s {
 					/* statistics reports.  This is set by */
 					/* the "-a" option.  0 to disable feature. */
 
+	int xmit_error_rate;		/* For testing purposes, we can generate frames with an invalid CRC */
+					/* to simulate corruption while going over the air. */
+					/* This is the probability, in per cent, of randomly corrupting it. */
+					/* Normally this is 0.  25 would mean corrupt it 25% of the time. */
+
+	int recv_error_rate;		/* Similar but the % probablity of dropping a received frame. */
+
+
 	/* Properties for each audio channel, common to receive and transmit. */
 	/* Can be different for each radio channel. */
 
@@ -101,11 +109,12 @@ struct audio_s {
                                 	/* Could all be the same or different. */
 
 
-	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_OFF } modem_type;
+	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_QPSK, MODEM_8PSK, MODEM_OFF } modem_type;
 
 					/* Usual AFSK. */
 					/* Baseband signal. Not used yet. */
 					/* Scrambled http://www.amsat.org/amsat/articles/g3ruh/109/fig03.gif */
+					/* Might try MFJ-2400 / CCITT v.26 / Bell 201 someday. */
 					/* No modem.  Might want this for DTMF only channel. */
 
 
@@ -130,8 +139,9 @@ struct audio_s {
             int mark_freq;		/* Two tones for AFSK modulation, in Hz. */
 	    int space_freq;		/* Standard tones are 1200 and 2200 for 1200 baud. */
 
-	    int baud;			/* Data bits (more accurately, symbols) per second. */
+	    int baud;			/* Data bits per second. */
 					/* Standard rates are 1200 for VHF and 300 for HF. */
+					/* This should really be called bits per second. */
 
 	/* Next 3 come from config file or command line. */
 
@@ -164,18 +174,20 @@ struct audio_s {
 	    int passall;		/* Allow thru even with bad CRC. */
 
 
+
 	/* Additional properties for transmit. */
 	
 	/* Originally we had control outputs only for PTT. */
 	/* In version 1.2, we generalize this to allow others such as DCD. */
+	/* In version 1.4 we add CON for connected to another station. */
 	/* Index following structure by one of these: */
 
 
 #define OCTYPE_PTT 0
 #define OCTYPE_DCD 1
-#define OCTYPE_FUTURE 2
+#define OCTYPE_CON 2
 
-#define NUM_OCTYPES 4		/* number of values above */
+#define NUM_OCTYPES 3		/* number of values above.   i.e. last value +1. */
 	
 	    struct {  		
 
@@ -187,8 +199,19 @@ struct audio_s {
 	        ptt_line_t ptt_line;	/* Control line when using serial port. PTT_LINE_RTS, PTT_LINE_DTR. */
 	        ptt_line_t ptt_line2;	/* Optional second one:  PTT_LINE_NONE when not used. */
 
-	        int ptt_gpio;		/* GPIO number. */
-	
+	        int out_gpio_num;	/* GPIO number.  Originally this was only for PTT. */
+					/* It is now more general. */
+					/* octrl array is indexed by PTT, DCD, or CONnected indicator. */
+
+#define MAX_GPIO_NAME_LEN 16	// 12 would cover any case I've seen so this should be safe
+
+		char out_gpio_name[MAX_GPIO_NAME_LEN];
+					/* orginally, gpio number NN was assumed to simply */
+					/* have the name gpioNN but this turned out not to be */
+					/* the case for CubieBoard where it was longer. */
+					/* This is filled in by ptt_init so we don't have to */
+					/* recalculate it each time we access it. */
+
 	        int ptt_lpt_bit;	/* Bit number for parallel printer port.  */
 					/* Bit 0 = pin 2, ..., bit 7 = pin 9. */
 
@@ -202,13 +225,26 @@ struct audio_s {
 
 	    } octrl[NUM_OCTYPES];
 
+
+	/* Each channel can also have associated input lines. */
+	/* So far, we just have one for transmit inhibit. */
+
 #define ICTYPE_TXINH 0
 
-#define NUM_ICTYPES 1
+#define NUM_ICTYPES 1		/* number of values above. i.e. last value +1. */
 
 	    struct {
 		ptt_method_t method;	/* none, serial port, GPIO, LPT. */
-		int gpio;		/* GPIO number */
+
+		int in_gpio_num;	/* GPIO number */
+
+		char in_gpio_name[MAX_GPIO_NAME_LEN];
+					/* orginally, gpio number NN was assumed to simply */
+					/* have the name gpioNN but this turned out not to be */
+					/* the case for CubieBoard where it was longer. */
+					/* This is filled in by ptt_init so we don't have to */
+					/* recalculate it each time we access it. */
+
 		int invert;		/* 1 = active low */
 	    } ictrl[NUM_ICTYPES];
 
@@ -278,8 +314,12 @@ struct audio_s {
 					/* 44100 works a little better than 22050. */
 					/* If you have a reasonable machine, use the highest rate. */
 #define MIN_SAMPLES_PER_SEC	8000
-#define MAX_SAMPLES_PER_SEC	48000	/* Formerly 44100. */
-					/* Software defined radio often uses 48000. */
+//#define MAX_SAMPLES_PER_SEC	48000	/* Originally 44100.  Later increased because */
+					/* Software Defined Radio often uses 48000. */
+
+#define MAX_SAMPLES_PER_SEC	192000	/* The cheap USB-audio adapters (e.g. CM108) can handle 44100 and 48000. */
+					/* The "soundcard" in my desktop PC can do 96kHz or even 192kHz. */
+					/* We will probably need to increase the sample rate to go much above 9600 baud. */
 
 #define DEFAULT_BITS_PER_SAMPLE	16
 
@@ -301,12 +341,12 @@ struct audio_s {
 #define DEFAULT_BAUD		1200
 
 /* Used for sanity checking in config file and command line options. */
-/* 9600 is known to work.  */
-/* TODO: Is 19200 possible with a soundcard at 44100 samples/sec? */
+/* 9600 baud is known to work.  */
+/* TODO: Is 19200 possible with a soundcard at 44100 samples/sec or do we need a higher sample rate? */
 
 #define MIN_BAUD		100
-#define MAX_BAUD		10000
-
+//#define MAX_BAUD		10000
+#define MAX_BAUD		40000		// Anyone want to try 38.4 k baud?
 
 /*
  * Typical transmit timings for VHF.

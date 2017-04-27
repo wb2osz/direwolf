@@ -74,14 +74,14 @@
  *--------------------------------------------------------------------*/
 
 
+#include "direwolf.h"		// Should be first.  includes windows.h
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 
 
 #if __WIN32__
-
-#include <windows.h>
 
 #define BACKGROUND_WHITE (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY)
 
@@ -128,10 +128,10 @@ static const char background_white[] = "\e[5;47m";
 static const char black[]	= "\e[0;30m" "\e[5;47m";
 static const char red[] 	= "\e[1;31m" "\e[5;47m";
 static const char green[] 	= "\e[1;32m" "\e[5;47m";
-static const char yellow[] 	= "\e[1;33m" "\e[5;47m";
+//static const char yellow[] 	= "\e[1;33m" "\e[5;47m";
 static const char blue[] 	= "\e[1;34m" "\e[5;47m";
 static const char magenta[] 	= "\e[1;35m" "\e[5;47m";
-static const char cyan[] 	= "\e[1;36m" "\e[5;47m";
+//static const char cyan[] 	= "\e[1;36m" "\e[5;47m";
 static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
 
 /* Clear from cursor to end of screen. */
@@ -153,10 +153,10 @@ static const char background_white[] = "\e[48;2;255;255;255m";
 static const char black[]	= "\e[0;30m" "\e[48;2;255;255;255m";
 static const char red[] 	= "\e[0;31m" "\e[48;2;255;255;255m";
 static const char green[] 	= "\e[0;32m" "\e[48;2;255;255;255m";
-static const char yellow[] 	= "\e[0;33m" "\e[48;2;255;255;255m";
+//static const char yellow[] 	= "\e[0;33m" "\e[48;2;255;255;255m";
 static const char blue[] 	= "\e[0;34m" "\e[48;2;255;255;255m";
 static const char magenta[] 	= "\e[0;35m" "\e[48;2;255;255;255m";
-static const char cyan[] 	= "\e[0;36m" "\e[48;2;255;255;255m";
+//static const char cyan[] 	= "\e[0;36m" "\e[48;2;255;255;255m";
 static const char dark_green[]	= "\e[0;32m" "\e[48;2;255;255;255m";
 
 
@@ -171,10 +171,10 @@ static const char background_white[] = "\e[47;1m";
 static const char black[]	= "\e[0;30m" "\e[1;47m";
 static const char red[] 	= "\e[1;31m" "\e[1;47m";
 static const char green[] 	= "\e[1;32m" "\e[1;47m"; 
-static const char yellow[] 	= "\e[1;33m" "\e[1;47m";
+//static const char yellow[] 	= "\e[1;33m" "\e[1;47m";
 static const char blue[] 	= "\e[1;34m" "\e[1;47m";
 static const char magenta[] 	= "\e[1;35m" "\e[1;47m";
-static const char cyan[] 	= "\e[1;36m" "\e[1;47m";
+//static const char cyan[] 	= "\e[1;36m" "\e[1;47m";
 static const char dark_green[]	= "\e[0;32m" "\e[1;47m";
 
 

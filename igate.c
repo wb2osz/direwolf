@@ -63,18 +63,15 @@
  * Cygwin:		Can use either one.
  */
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
 
 #if __WIN32__
 
 /* The goal is to support Windows XP and later. */
 
 #include <winsock2.h>
-// default is 0x0400
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0501	/* Minimum OS version is XP. */
-//#define _WIN32_WINNT 0x0502	/* Minimum OS version is XP with SP2. */
-//#define _WIN32_WINNT 0x0600	/* Minimum OS version is Vista. */
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
+
 #else 
 #include <stdlib.h>
 #include <netdb.h>
@@ -102,6 +99,7 @@
 #include "latlong.h"
 #include "pfilter.h"
 #include "dtime_now.h"
+#include "mheard.h"
 
 
 #if __WIN32__
@@ -120,8 +118,8 @@ static packet_t dp_queue_head;
 
 static void satgate_delay_packet (packet_t pp, int chan);
 static void send_packet_to_server (packet_t pp, int chan);
-static void send_msg_to_server (const char *msg);
-static void xmit_packet (char *message, int chan);
+static void send_msg_to_server (const char *msg, int msg_len);
+static void maybe_xmit_packet_from_igate (char *message, int chan);
 
 static void rx_to_ig_init (void);
 static void rx_to_ig_remember (packet_t pp);
@@ -268,7 +266,7 @@ int main (int argc, char *argv[])
 	  SLEEP_SEC (20);
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Send received packet\n");
-	  send_msg_to_server ("W1ABC>APRS:?");
+	  send_msg_to_server ("W1ABC>APRS:?", strlen("W1ABC>APRS:?");
 	}
 #endif
 	return 0;
@@ -293,8 +291,10 @@ static int 			s_debug;
 
 
 /*
- * Statistics.  
- * TODO: need print function.
+ * Statistics for IGate function.
+ * Note that the RF related counters are just a subset of what is happening on radio channels.
+ *
+ * TODO: should have debug option to print these occasionally.
  */
 
 static int stats_failed_connect;	/* Number of times we tried to connect to */
@@ -312,8 +312,10 @@ static time_t stats_connect_at;		/* Most recent time connection was established.
 					/* can be used to determine elapsed connect time. */
 
 static int stats_rf_recv_packets;	/* Number of candidate packets from the radio. */
+					/* This is not the total number of AX.25 frames received */
+					/* over the radio; only APRS packets get this far. */
 
-static int stats_rx_igate_packets;	/* Number of packets passed along to the IGate */
+static int stats_uplink_packets;	/* Number of packets passed along to the IGate */
 					/* server after filtering. */
 
 static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
@@ -322,40 +324,44 @@ static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
 static int stats_downlink_bytes;	/* Total number of bytes from IGate server including */
 					/* packets, heartbeats, other messages. */
 
-static int stats_tx_igate_packets;	/* Number of packets from IGate server. */
+static int stats_downlink_packets;	/* Number of packets from IGate server for possible transmission. */
+					/* Fewer might be transmitted due to filtering or rate limiting. */
 
-static int stats_rf_xmit_packets;	/* Number of packets passed along to radio */
-					/* after rate limiting or other restrictions. */
+static int stats_rf_xmit_packets;	/* Number of packets passed along to radio, for the IGate function, */
+					/* after filtering, rate limiting, or other restrictions. */
+					/* Number of packets transmitted for beacons, digipeating, */
+					/* or client applications are not included here. */
 
-/* We have some statistics.  What do we do with them?
+static int stats_msg_cnt;		/* Number of "messages" transmitted.  Subset of above. */
+					/* A "message" has the data type indicator of ":" and it is */
+					/* not the special case of telemetry metadata. */
 
 
-	IGate stations often send packets like this:
+/*
+ * Make some of these available for IGate statistics beacon like
+ *
+ *	WB2OSZ>APDW14,WIDE1-1:<IGATE,MSG_CNT=2,PKT_CNT=0,DIR_CNT=10,LOC_CNT=35,RF_CNT=45
+ *
+ * MSG_CNT is only "messages."   From original spec.
+ * PKT_CNT is other (non-message) packets.  Followed precedent of APRSISCE32.
+ */
 
-	<IGATE MSG_CNT=1238 LOC_CNT=0 FILL_CNT=0
-	<IGATE,MSG_CNT=1,LOC_CNT=25
-	<IGATE,MSG_CNT=0,LOC_CNT=46,DIR_CNT=13,RF_CNT=49,RFPORT_ID=0
+int igate_get_msg_cnt (void) {
+	return (stats_msg_cnt);
+}
 
-	What does it all mean?
-	Why do some have spaces instead of commas between the capabilities?
+int igate_get_pkt_cnt (void) {
+	return (stats_rf_xmit_packets - stats_msg_cnt);
+}
 
-	The APRS Protocol Reference ( http://www.aprs.org/doc/APRS101.PDF ),
-	section 15, briefly discusses station capabilities and gives the example
-	IGATE,MSG_CNT=n,LOC_CNT=n
+int igate_get_upl_cnt (void) {
+	return (stats_uplink_packets);
+}
 
-	IGate Design ( http://www.aprs-is.net/IGating.aspx ) barely mentions
-	<IGATE,MSG_CNT=n,LOC_CNT=n
+int igate_get_dnl_cnt (void) {
+	return (stats_downlink_packets);
+}
 
-	This leaves many questions.  Does "number of messages transmitted" mean only
-	the APRS "Message" (data type indicator ":") or does it mean any type of
-	APRS packet?   What are "local" stations?   Those we hear directly without
-	going thru a digipeater?
-
-	What are DIR_CNT, RF_CNT, and so on?
-
-	Are the counts since the system started up or are they for some interval?
-
-*/
 
 
 /*-------------------------------------------------------------------
@@ -421,14 +427,15 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	save_digi_config_p = p_digi_config;
 
 	stats_failed_connect = 0;	
-	stats_connects = 0;		
-	stats_connect_at = 0;		
-	stats_rf_recv_packets = 0;	
-	stats_rx_igate_packets = 0;	
-	stats_uplink_bytes = 0;		
-	stats_downlink_bytes = 0;	
-	stats_tx_igate_packets = 0;	
+	stats_connects = 0;
+	stats_connect_at = 0;
+	stats_rf_recv_packets = 0;
+	stats_uplink_packets = 0;
+	stats_uplink_bytes = 0;
+	stats_downlink_bytes = 0;
+	stats_downlink_packets = 0;
 	stats_rf_xmit_packets = 0;
+	stats_msg_cnt = 0;
 	
 	rx_to_ig_init ();
 	ig_to_tx_init ();
@@ -685,8 +692,11 @@ static void * connnect_thread (void *arg)
 	    // Try each address until we find one that is successful.
 
 	    for (n=0; n<num_hosts; n++) {
+#if __WIN32__
+	      SOCKET is;
+#else
 	      int is;
-
+#endif
 	      ai = hosts[n];
 
 	      ia_to_text (ai->ai_family, ai->ai_addr, ipaddr_str, sizeof(ipaddr_str));
@@ -787,7 +797,7 @@ static void * connnect_thread (void *arg)
 	        strlcat (stemp, " filter ", sizeof(stemp));
 	        strlcat (stemp, save_igate_config_p->t2_filter, sizeof(stemp));
 	      }
-	      send_msg_to_server (stemp);
+	      send_msg_to_server (stemp, strlen(stemp));
 
 /* Delay until it is ok to start sending packets. */
 
@@ -817,10 +827,13 @@ static void * connnect_thread (void *arg)
 	    strlcpy (heartbeat, "#", sizeof(heartbeat));
 
 	    /* This will close the socket if any error. */
-	    send_msg_to_server (heartbeat);
+	    send_msg_to_server (heartbeat, strlen(heartbeat));
 
 	  }
 	}
+
+	exit(0);	// Unreachable but stops compiler from complaining
+			// about function not returning a value.
 } /* end connnect_thread */
 
 
@@ -848,14 +861,15 @@ static void * connnect_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
-#define IGATE_MAX_MSG 520	/* Message to IGate max 512 characters. */
+#define IGATE_MAX_MSG 512	/* "All 'packets' sent to APRS-IS must be in the TNC2 format terminated */
+				/* by a carriage return, line feed sequence. No line may exceed 512 bytes */
+				/* including the CR/LF sequence." */
 
 void igate_send_rec_packet (int chan, packet_t recv_pp)
 {
 	packet_t pp;
 	int n;
 	unsigned char *pinfo;
-	char *p;
 	int info_len;
 	
 
@@ -867,25 +881,33 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 	  return;	/* Login not complete. */
 	}
 
+	/* Gather statistics. */
+
+	stats_rf_recv_packets++;
+
 /*
  * Check for filtering from specified channel to the IGate server.
+ *
+ * Should we do this after unwrapping the payload from a third party packet?
+ * In my experience, third party packets have only been seen coming from IGates.
+ * In that case, the payload will have TCPIP in the path and it will be dropped.
  */
 
 	if (save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
 
-	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp) != 1) {
+	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp, 1) != 1) {
 
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
+	    // Is this useful troubleshooting information or just distracting noise?
+	    // Originally this was always printed but there was a request to add a "quiet" option to suppress this.
+	    // version 1.4: Instead, make the default off and activate it only with the debug igate option.
 
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
+	    }
 	    return;
 	  }
 	}
-
-
-	/* Gather statistics. */
-
-	stats_rf_recv_packets++;
 
 /*
  * First make a copy of it because it might be modified in place.
@@ -972,32 +994,25 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 /*
  * Cut the information part at the first CR or LF.
+ * This is required because CR/LF is used as record separator when sending to server.
+ * Do NOT trim trailing spaces.
+ * Starting in 1.4 we preserve any nul characters in the information part.
  */
 
-	info_len = ax25_get_info (pp, &pinfo);
-	(void)(info_len);
-
-	if ((p = strchr ((char*)pinfo, '\r')) != NULL) {
+	if (ax25_cut_at_crlf (pp) > 0) {
 	  if (s_debug >= 1) {
 	    text_color_set(DW_COLOR_DEBUG);
 	    dw_printf ("Rx IGate: Truncated information part at CR.\n");
 	  }
-          *p = '\0';
 	}
 
-	if ((p = strchr ((char*)pinfo, '\n')) != NULL) {
-	  if (s_debug >= 1) {
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("Rx IGate: Truncated information part at LF.\n");
-	  }
-          *p = '\0';
-	}
+	info_len = ax25_get_info (pp, &pinfo);
 
 
 /*
  * Someone around here occasionally sends a packet with no information part.
  */
-	if (strlen((char*)pinfo) == 0) {
+	if (info_len == 0) {
 
 	  if (s_debug >= 1) {
 	    text_color_set(DW_COLOR_DEBUG);
@@ -1053,10 +1068,15 @@ static void send_packet_to_server (packet_t pp, int chan)
 
 
 	info_len = ax25_get_info (pp, &pinfo);
-	(void)(info_len);
 
 /*
- * Do not relay if a duplicate of something sent recently.
+ * We will often see the same packet multiple times close together due to digipeating.
+ * The consensus seems to be that we should just send the first and drop the later duplicates.
+ * There is some dissent on this issue. http://www.tapr.org/pipermail/aprssig/2016-July/045907.html
+ * There could be some value to sending them all to provide information about digipeater paths.
+ * However, the servers should drop all duplicates so we wasting everyone's time but sending duplicates.
+ * If you feel strongly about this issue, you could remove the following section.
+ * Currently rx_to_ig_allow only checks for recent duplicates.
  */
 
 	if ( ! rx_to_ig_allow(pp)) {
@@ -1072,15 +1092,109 @@ static void send_packet_to_server (packet_t pp, int chan)
  * Finally, append ",qAR," and my call to the path.
  */
 
+/*
+ * It seems that the specification has changed recently.
+ * http://www.tapr.org/pipermail/aprssig/2016-December/046456.html
+ *
+ * We can see the history at the Internet Archive Wayback Machine.
+ *
+ * http://www.aprs-is.net/Connecting.aspx
+ *	captured Oct 19, 2016:
+ *		... Only the qAR construct may be generated by a client (IGate) on APRS-IS.
+ * 	Captured Dec 1, 2016:
+ *		... Only the qAR and qAO constructs may be generated by a client (IGate) on APRS-IS.
+ *
+ * http://www.aprs-is.net/q.aspx
+ *	Captured April 23, 2016:
+ *		(no mention of client generating qAO.)
+ *	Captured July 19, 2016:
+ *		qAO - (letter O) Packet is placed on APRS-IS by a receive-only IGate from RF.
+ *		The callSSID following the qAO is the callSSID of the IGate. Note that receive-only
+ *		IGates are discouraged on standard APRS frequencies. Please consider a bidirectional
+ *		IGate that only gates to RF messages for stations heard directly.
+ */
+
 	ax25_format_addrs (pp, msg);
 	msg[strlen(msg)-1] = '\0';    /* Remove trailing ":" */
-	strlcat (msg, ",qAR,", sizeof(msg));
+
+	if (save_igate_config_p->tx_chan >= 0) {
+	  strlcat (msg, ",qAR,", sizeof(msg));
+	}
+	else {
+	  strlcat (msg, ",qAO,", sizeof(msg));		// new for version 1.4.
+	}
+
 	strlcat (msg, save_audio_config_p->achan[chan].mycall, sizeof(msg));
 	strlcat (msg, ":", sizeof(msg));
-	strlcat (msg, (char*)pinfo, sizeof(msg));
 
-	send_msg_to_server (msg);
-	stats_rx_igate_packets++;
+
+
+// It was reported that APRS packets, containing a nul byte in the information part,
+// are being truncated.  https://github.com/wb2osz/direwolf/issues/84
+//
+// One might argue that the packets are invalid and the proper behavior would be
+// to simply discard them, the same way we do if the CRC is bad.  One might argue
+// that we should simply pass along whatever we receive even if we don't like it.
+// We really shouldn't modify it and make the situation even worse.
+//
+// Chapter 5 of the APRS spec ( http://www.aprs.org/doc/APRS101.PDF ) says:
+//
+// 	"The comment may contain any printable ASCII characters (except | and ~,
+// 	which are reserved for TNC channel switching)."
+//
+// "Printable" would exclude character values less than space (00100000), e.g.
+// tab, carriage return, line feed, nul.  Sometimes we see carriage return
+// (00001010) at the end of APRS packets.   This would be in violation of the
+// specification.
+//
+// The MIC-E position format can have non printable characters (0x1c ... 0x1f, 0x7f)
+// in the information part.  An unfortunate decision, but it is not in the comment part.
+//
+// The base 91 telemetry format (http://he.fi/doc/aprs-base91-comment-telemetry.txt ),
+// which is not part of the APRS spec, uses the | character in the comment to delimit encoded
+// telemetry data.   This would be in violation of the original spec.  No one cares.
+//
+// The APRS Spec Addendum 1.2 Proposals ( http://www.aprs.org/aprs12/datum.txt)
+// adds use of UTF-8 (https://en.wikipedia.org/wiki/UTF-8 )for the free form text in
+// messages and comments. It can't be used in the fixed width fields.
+//
+// Non-ASCII characters are represented by multi-byte sequences.  All bytes in these
+// multi-byte sequences have the most significant bit set to 1.  Using UTF-8 would not
+// add any nul (00000000) bytes to the stream.
+//
+// Based on all of that, we would not expect to see a nul character in the information part.
+//
+// There are two known cases where we can have a nul character value.
+//
+// * The Kenwood TM-D710A sometimes sends packets like this:
+//
+// 	VA3AJ-9>T2QU6X,VE3WRC,WIDE1,K8UNS,WIDE2*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`nW<0x1f>oS8>/]"6M}driving fast= 
+// 	K4JH-9>S5UQ6X,WR4AGC-3*,WIDE1*:4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>`jP}l"&>/]"47}QRV from the EV =
+//
+//   Notice that the data type indicator of "4" is not valid.  If we remove
+//   4P<0x00><0x0f>4T<0x00><0x0f>4X<0x00><0x0f>4\<0x00>   we are left with a good MIC-E format.
+//   This same thing has been observed from others and is intermittent.
+//
+// * AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
+//   This is wrong, it should be using UTF-8.
+//
+// Rather than using strlcat here, we need to use memcpy and maintain our
+// own lengths, being careful to avoid buffer overflow.
+
+	int msg_len = strlen(msg);	// What we have so far before info part.
+
+	if (info_len > IGATE_MAX_MSG - msg_len - 2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Rx IGate: Too long. Truncating.\n");
+	  info_len = IGATE_MAX_MSG - msg_len - 2;
+	}
+	if (info_len > 0) {
+	  memcpy (msg + msg_len, pinfo, info_len);
+	  msg_len += info_len;
+	}
+
+	send_msg_to_server (msg, msg_len);
+	stats_uplink_packets++;
 
 /*
  * Remember what was sent to avoid duplicates in near future.
@@ -1097,58 +1211,74 @@ static void send_packet_to_server (packet_t pp, int chan)
  *
  * Name:        send_msg_to_server
  *
- * Purpose:     Send to the IGate server.
+ * Purpose:     Send something to the IGate server.
  *		This one function should be used for login, hearbeats,
  *		and packets.
  *
- * Inputs:	imsg	- Message.  We will add CR/LF.
+ * Inputs:	imsg	- Message.  We will add CR/LF here.
  *		
+ *		imsg_len - Length of imsg in bytes.
+ *			  It could contain nul characters so we can't
+ *			  use the normal C string functions.
  *
  * Description:	Send message to IGate Server if connected.
  *		Disconnect from server, and notify user, if any error.
+ *		Should use a word other than message because that has
+ *		a specific meaning for APRS.
  *
  *--------------------------------------------------------------------*/
 
 
-static void send_msg_to_server (const char *imsg)
+static void send_msg_to_server (const char *imsg, int imsg_len)
 {
 	int err;
-	char stemp[IGATE_MAX_MSG];
+	char stemp[IGATE_MAX_MSG+1];
+	int stemp_len;
 
 	if (igate_sock == -1) {
 	  return;	/* Silently discard if not connected. */
 	}
 
-	strlcpy(stemp, imsg, sizeof(stemp));
+	stemp_len = imsg_len;
+	if (stemp_len + 2 > IGATE_MAX_MSG) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Rx IGate: Too long. Truncating.\n");
+	  stemp_len = IGATE_MAX_MSG - 2;
+	}
+
+	memcpy (stemp, imsg, stemp_len);
 
 	if (s_debug >= 1) {
 	  text_color_set(DW_COLOR_XMIT);
 	  dw_printf ("[rx>ig] ");
-	  ax25_safe_print (stemp, strlen(stemp), 0);
+	  ax25_safe_print (stemp, stemp_len, 0);
 	  dw_printf ("\n");
 	}
 
-	strlcat (stemp, "\r\n", sizeof(stemp));
+	stemp[stemp_len++] = '\r';
+	stemp[stemp_len++] = '\n';
+	stemp[stemp_len] = '\0';
 
-	stats_uplink_bytes += strlen(stemp);
+	stats_uplink_bytes += stemp_len;
+
 
 #if __WIN32__	
-        err = send (igate_sock, stemp, strlen(stemp), 0);
+        err = send (igate_sock, stemp, stemp_len, 0);
 	if (err == SOCKET_ERROR)
 	{
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError %d sending message to IGate server.  Closing connection.\n\n", WSAGetLastError());
+	  dw_printf ("\nError %d sending to IGate server.  Closing connection.\n\n", WSAGetLastError());
 	  //dw_printf ("DEBUG: igate_sock=%d, line=%d\n", igate_sock, __LINE__);
 	  closesocket (igate_sock);
 	  igate_sock = -1;
 	  WSACleanup();
 	}
 #else
-        err = write (igate_sock, stemp, strlen(stemp));
+        err = write (igate_sock, stemp, stemp_len);
 	if (err <= 0)
 	{
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError sending message to IGate server.  Closing connection.\n\n");
+	  dw_printf ("\nError sending to IGate server.  Closing connection.\n\n");
 	  close (igate_sock);
 	  igate_sock = -1;    
 	}
@@ -1240,7 +1370,7 @@ static void * igate_recv_thread (void *arg)
 #endif
 {
 	unsigned char ch;
-	unsigned char message[1000];  // Spec says max 500 or so.
+	unsigned char message[1000];  // Spec says max 512.
 	int len;
 	
 			
@@ -1258,13 +1388,26 @@ static void * igate_recv_thread (void *arg)
 	    ch = get1ch();
 	    stats_downlink_bytes++;
 
-	    if (len < sizeof(message)) 
-	    {
-	      message[len] = ch;
+	    // I never expected to see a nul character but it can happen.
+	    // If found, change it to <0x00> and ax25_from_text will change it back to a single byte.
+	    // Along the way we can use the normal C string handling.
+
+	    if (ch == 0 && len < (int)(sizeof(message)) - 5) {
+	      message[len++] = '<';
+	      message[len++] = '0';
+	      message[len++] = 'x';
+	      message[len++] = '0';
+	      message[len++] = '0';
+	      message[len++] = '>';
 	    }
-	    len++;
+	    else if (len < (int)(sizeof(message)))
+	    {
+	      message[len++] = ch;
+	    }
 	    
 	  } while (ch != '\n');
+
+	  message[sizeof(message)-1] = '\0';
 
 /*
  * We have a complete message terminated by LF.
@@ -1280,10 +1423,13 @@ static void * igate_recv_thread (void *arg)
  * I've seen a case where the original RF packet had a trailing CR but
  * after someone else sent it to the server and it came back to me, that
  * CR was now a trailing space.
+ *
  * At first I was tempted to trim a trailing space as well.
  * By fixing this one case it might corrupt the data in other cases.
  * We compensate for this by ignoring trailing spaces when performing
  * the duplicate detection and removal.
+ *
+ * We need to transmit exactly as we get it.
  */
 
 /*
@@ -1329,10 +1475,33 @@ static void * igate_recv_thread (void *arg)
 	    ax25_safe_print ((char *)message, len, 0);
 	    dw_printf ("\n");
 
+	    if ((int)strlen((char*)message) != len) {
+
+	      // Invalid.  Either drop it or pass it along as-is.  Don't change.
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("'nul' character found in packet from IS.  This should never happen.\n");
+	      dw_printf("The source station is probably transmitting with defective software.\n");
+
+	      //if (strcmp((char*)pinfo, "4P") == 0) {
+	      //  dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");
+	      //}
+	    }
+
+/*
+ * Record that we heard from the source address.
+ */
+	    mheard_save_is ((char *)message);
+
+	    stats_downlink_packets++;
+
+/*
+ * Possibly transmit if so configured.
+ */
 	    int to_chan = save_igate_config_p->tx_chan;
 
 	    if (to_chan >= 0) {
-	      xmit_packet ((char*)message, to_chan);
+	      maybe_xmit_packet_from_igate ((char*)message, to_chan);
 	    }
 	  }
 
@@ -1464,10 +1633,10 @@ static void * satgate_delay_thread (void *arg)
 
 /*-------------------------------------------------------------------
  *
- * Name:        xmit_packet
+ * Name:        maybe_xmit_packet_from_igate
  *
  * Purpose:     Convert text string, from IGate server, to third party
- *		packet and send to transmit queue.
+ *		packet and send to transmit queue if appropriate.
  *
  * Inputs:	message		- As sent by the server.  
  *				  Any trailing CRLF should have been removed.
@@ -1485,18 +1654,23 @@ static void * satgate_delay_thread (void *arg)
  *				  repackaging to go over the radio.
  *
  *				  The "q construct"  ( http://www.aprs-is.net/q.aspx ) provides
- *				  a clue about the journey taken but I don't think we care here.
+ *				  a clue about the journey taken. "qAX" means that the station sending
+ *				  the packet to the server did not login properly as a ham radio
+ *				  operator so we don't want to put this on to RF.
  *
  *		to_chan		- Radio channel for transmitting.
  *
  *--------------------------------------------------------------------*/
 
-static void xmit_packet (char *message, int to_chan)
+static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 {
 	packet_t pp3;
 	char payload[AX25_MAX_PACKET_LEN];	/* what is max len? */
+	char src[AX25_MAX_ADDR_LEN];		/* Source address. */
+
 	char *pinfo = NULL;
 	int info_len;
+	int n;
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
@@ -1518,6 +1692,32 @@ static void xmit_packet (char *message, int to_chan)
 	  return;
 	}
 
+	ax25_get_addr_with_ssid (pp3, AX25_SOURCE, src);
+
+/*
+ * Drop if path contains:
+ *	NOGATE or RFONLY - means IGate should not pass them.
+ *	TCPXX or qAX - means it came from somewhere that did not identify itself correctly.
+ */
+	for (n = 0; n < ax25_get_num_repeaters(pp3); n++) {
+	  char via[AX25_MAX_ADDR_LEN];	/* includes ssid. Do we want to ignore it? */
+
+	  ax25_get_addr_with_ssid (pp3, n + AX25_REPEATER_1, via);
+
+	  if (strcmp(via, "qAX") == 0 ||
+	      strcmp(via, "TCPXX") == 0 ||
+	      strcmp(via, "RFONLY") == 0 ||
+	      strcmp(via, "NOGATE") == 0) {
+
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Tx IGate: Do not transmit with %s in path.\n", via);
+	    }
+
+	    ax25_delete (pp3);
+	    return;
+	  }
+	}
 
 /*
  * Apply our own packet filtering if configured.
@@ -1528,15 +1728,58 @@ static void xmit_packet (char *message, int to_chan)
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
-	if (save_digi_config_p->filter_str[MAX_CHANS][to_chan] != NULL) {
 
-	  if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3) != 1) {
+/*
+ * We have a rather strange special case here.
+ * If we recently transmitted a 'message' from some station,
+ * send the position of the message sender when it comes along later.
+ *
+ * If we have a position report, look up the sender and see if we should
+ * bypass the normal filtering.
+ */
 
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
+// TODO: Not quite this simple.  Should have a function to check for position.
+// $ raw gps could be a position.  @ could be weather data depending on symbol.
 
-	    ax25_delete (pp3);
-	    return;
+	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
+
+	int msp_special_case = 0;
+
+	if (info_len >= 1 && strchr("!=/@'`", *pinfo) != NULL) {
+
+	  int n = mheard_get_msp(src);
+
+	  if (n > 0) {
+
+	    msp_special_case = 1;
+
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Special case, allow position from message sender %s, %d remaining.\n", src, n - 1);
+	    }
+
+	    mheard_set_msp (src, n - 1);
+	  }
+	}
+
+	if ( ! msp_special_case) {
+
+	  if (save_digi_config_p->filter_str[MAX_CHANS][to_chan] != NULL) {
+
+	    if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3, 1) != 1) {
+
+	      // Previously there was a debug message here about the packet being dropped by filtering.
+	      // This is now handled better by the "-df" command line option for filtering details.
+
+	      //  TODO: clean up - remove these lines.
+	      //if (s_debug >= 1) {
+	      //  text_color_set(DW_COLOR_INFO);
+	      //  dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
+	      //}
+
+	      ax25_delete (pp3);
+	      return;
+	    }
 	  }
 	}
 
@@ -1549,6 +1792,34 @@ static void xmit_packet (char *message, int to_chan)
  *
  * We want to reduce it to this before wrapping it as third party traffic.
  *	K1USN-1>APWW10:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
+ */
+
+/*
+ * These are typical examples where we see TCPIP*,qAC,<server>
+ *
+ *	N3LLO-4>APRX28,TCPIP*,qAC,T2NUENGLD:T#474,21.4,0.3,114.0,4.0,0.0,00000000
+ *	N1WJO>APWW10,TCPIP*,qAC,T2MAINE:)147.120!4412.27N/07033.27WrW1OCA repeater136.5 Tone Norway Me
+ *	AB1OC-10>APWW10,TCPIP*,qAC,T2IAD2:=4242.70N/07135.41W#(Time 0:00:00)!INSERVICE!!W60!
+ *
+ * But sometimes we get a different form:
+ *
+ *	N1YG-1>T1SY9P,WIDE1-1,WIDE2-2,qAR,W2DAN-15:'c&<0x7f>l <0x1c>-/>
+ *	W1HS-8>TSSP9T,WIDE1-1,WIDE2-1,qAR,N3LLO-2:`d^Vl"W>/'"85}|*&%_'[|!wLK!|3
+ *	N1RCW-1>APU25N,MA2-2,qAR,KA1VCQ-1:=4140.41N/07030.21W-Home Station/Fill-in Digi {UIV32N}
+ *	N1IEJ>T4PY3U,W1EMA-1,WIDE1*,WIDE2-2,qAR,KD1KE:`a5"l!<0x7f>-/]"4f}Retired & Busy=
+ *
+ * Oh!  They have qAR rather than qAC.  What does that mean?
+ * From  http://www.aprs-is.net/q.aspx
+ *
+ *	qAC - Packet was received from the client directly via a verified connection (FROMCALL=login).
+ *		The callSSID following the qAC is the server's callsign-SSID.
+ *
+ *	qAR - Packet was received directly (via a verified connection) from an IGate using the ,I construct.
+ *		The callSSID following the qAR it the callSSID of the IGate.
+ *
+ * What is the ",I" construct?
+ * Do we care here?
+ * Is is something new and improved that we should be using in the other direction?
  */
 
 	while (ax25_get_num_repeaters(pp3) > 0) {
@@ -1582,6 +1853,16 @@ static void xmit_packet (char *message, int to_chan)
 /*
  * Encapsulate for sending over radio if no reason to drop it.
  */
+
+/*
+ * We don't want to suppress duplicate "messages" within a short time period.
+ * Suppose we transmitted a "message" for some station and it did not respond with an ack.
+ * 25 seconds later the sender retries.  Wouldn't we want to pass along that retry?
+ *
+ * "Messages" get preferential treatment because they are high value and very rare.
+ *	-> Bypass the duplicate suppression.
+ *	-> Raise the rate limiting value.
+ */
 	if (ig_to_tx_allow (pp3, to_chan)) {
 	  char radio [500];
 	  packet_t pradio;
@@ -1599,8 +1880,6 @@ static void xmit_packet (char *message, int to_chan)
 
 	  if (pradio != NULL) {
 
-	    stats_tx_igate_packets++;
-
 #if ITEST
 	    text_color_set(DW_COLOR_XMIT);
 	    dw_printf ("Xmit: %s\n", radio);
@@ -1609,7 +1888,21 @@ static void xmit_packet (char *message, int to_chan)
 	    /* This consumes packet so don't reference it again! */
 	    tq_append (to_chan, TQ_PRIO_1_LO, pradio);
 #endif
-	    stats_rf_xmit_packets++;
+	    stats_rf_xmit_packets++;		// Any type of packet.
+
+	    // TEMP TEST: metadata temporarily allowed during testing.
+
+	    if (*pinfo == ':' && ! is_telem_metadata(pinfo)) {
+	    // temp test // if (*pinfo == ':') {
+
+// We transmitted a "message."  Telemetry metadata is excluded.
+// Remember to pass along address of the sender later.
+
+	      stats_msg_cnt++;			// Update statistics.
+
+	      mheard_set_msp (src, save_igate_config_p->igmsp);
+	    }
+
 	    ig_to_tx_remember (pp3, save_igate_config_p->tx_chan, 0);	// correct. version before encapsulating it.
 	  }
 	  else {
@@ -1624,7 +1917,7 @@ static void xmit_packet (char *message, int to_chan)
 
 	ax25_delete (pp3);
 
-} /* end xmit_packet */
+} /* end maybe_xmit_packet_from_igate */
 
 
 
@@ -1701,6 +1994,7 @@ static void rx_to_ig_remember (packet_t pp)
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	  info_len = ax25_get_info (pp, &pinfo);
+	  (void)info_len;
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("rx_to_ig_remember [%d] = %d %d \"%s>%s:%s\"\n",
@@ -1731,6 +2025,7 @@ static int rx_to_ig_allow (packet_t pp)
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	  info_len = ax25_get_info (pp, &pinfo);
+	  (void)info_len;
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("rx_to_ig_allow? %d \"%s>%s:%s\"\n", crc, src, dest, pinfo);
@@ -1798,7 +2093,7 @@ static int rx_to_ig_allow (packet_t pp)
  *		duplicate of another sent recently.
  *
  *		This is the essentially the same as the pair of functions
- *		above with one addition restriction.  
+ *		above, for RF to IS, with one additional restriction.
  *
  *		The typical residential Internet connection is around 10,000
  *		to 50,000 times faster than the radio links we are using.  It would
@@ -1847,10 +2142,12 @@ static int rx_to_ig_allow (packet_t pp)
  *		At first I thought duplicate removal was broken but it turns out they
  *		are not exactly the same.
  *
- *		The receive IGate spec says a packet should be cut at a CR.
+ *		>>> The receive IGate spec says a packet should be cut at a CR. <<<
+ *
  *		In one case it is removed as expected   In another case, it is replaced by a trailing
  *		space character.  Maybe someone thought non printable characters should be
- *		replaced by spaces???
+ *		replaced by spaces???  (I have since been told someone thought it would be a good
+ *		idea to replace unprintable characters with spaces.  How's that working out for MIC-E position???)
  *
  *		At first I was tempted to remove any trailing spaces to make up for the other
  *		IGate adding it.  Two wrongs don't make a right.   Trailing spaces are not that
@@ -1986,6 +2283,7 @@ void ig_to_tx_remember (packet_t pp, int chan, int bydigi)
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
 	  info_len = ax25_get_info (pp, &pinfo);
+	  (void)info_len;
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("ig_to_tx_remember [%d] = ch%d d%d %d %d \"%s>%s:%s\"\n",
@@ -2012,16 +2310,20 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 	time_t now = time(NULL);
 	int j;
 	int count_1, count_5;
+	int increase_limit;
+
+	unsigned char *pinfo;
+	int info_len;
+
+	info_len = ax25_get_info (pp, &pinfo);
+	(void)info_len;
 
 	if (s_debug >= 2) {
 	  char src[AX25_MAX_ADDR_LEN];
 	  char dest[AX25_MAX_ADDR_LEN];
-	  unsigned char *pinfo;
-	  int info_len;
 
 	  ax25_get_addr_with_ssid(pp, AX25_SOURCE, src);
 	  ax25_get_addr_with_ssid(pp, AX25_DESTINATION, dest);
-	  info_len = ax25_get_info (pp, &pinfo);
 
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("ig_to_tx_allow? ch%d %d \"%s>%s:%s\"\n", chan, crc, src, dest, pinfo);
@@ -2031,14 +2333,35 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 
 	for (j=0; j<IG2TX_HISTORY_MAX; j++) {
 	  if (ig2tx_checksum[j] == crc && ig2tx_chan[j] == chan && ig2tx_time_stamp[j] >= now - IG2TX_DEDUPE_TIME) {
-	    if (s_debug >= 2) {
-	      text_color_set(DW_COLOR_DEBUG);
-	      // could be multiple entries and this might not be the most recent.
-	      dw_printf ("ig_to_tx_allow? NO. Sent %d seconds ago. bydigi=%d\n", (int)(now - ig2tx_time_stamp[j]), ig2tx_bydigi[j]);
+
+	    /* We have a duplicate within some time period. */
+
+	    if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+
+	      /* I think I want to avoid the duplicate suppression for "messages." */
+	      /* Suppose we transmit a message from station X and it doesn't get an ack back. */
+	      /* Station X then sends exactly the same thing 20 seconds later.  */
+	      /* We don't want to suppress the retry. */
+
+	      if (s_debug >= 2) {
+	        text_color_set(DW_COLOR_DEBUG);
+	        dw_printf ("ig_to_tx_allow? Yes for duplicate message sent %d seconds ago. bydigi=%d\n", (int)(now - ig2tx_time_stamp[j]), ig2tx_bydigi[j]);
+	      }
 	    }
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Tx IGate: Drop duplicate packet transmitted recently.\n");
-	    return 0;
+	    else {
+
+	      /* Normal (non-message) case. */
+
+	      if (s_debug >= 2) {
+	        text_color_set(DW_COLOR_DEBUG);
+	        // could be multiple entries and this might not be the most recent.
+	        dw_printf ("ig_to_tx_allow? NO. Duplicate sent %d seconds ago. bydigi=%d\n", (int)(now - ig2tx_time_stamp[j]), ig2tx_bydigi[j]);
+	      }
+
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Tx IGate: Drop duplicate packet transmitted recently.\n");
+	      return 0;
+	    }
 	  }
 	}
 
@@ -2053,12 +2376,25 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 	  }
 	}
 
-	if (count_1 >= save_igate_config_p->tx_limit_1) {
+	/* "Messages" (special APRS data type ":") are intentional and more */
+	/* important than all of the other mostly repetitive useless junk */
+	/* flowing thru here.  */
+	/* It would be unfortunate to discard a message because we already */
+	/* hit our limit.  I don't want to completely eliminate limiting for */
+	/* messages, in case something goes terribly wrong, but we can triple */
+	/* the normal limit for them. */
+
+	increase_limit = 1;
+	if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+	  increase_limit = 3;
+	}
+
+	if (count_1 >= save_igate_config_p->tx_limit_1 * increase_limit) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 1 minute.\n", save_igate_config_p->tx_limit_1);
 	  return 0;
 	}
-	if (count_5 >= save_igate_config_p->tx_limit_5) {
+	if (count_5 >= save_igate_config_p->tx_limit_5 * increase_limit) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Already transmitted maximum of %d packets in 5 minutes.\n", save_igate_config_p->tx_limit_5);
 	  return 0;

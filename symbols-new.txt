@@ -1,12 +1,22 @@
-APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      29 Oct 2015
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2       3 Apr 2017
 ---------------------------------------------------------------------
 
-BACKGROUND:  This file addresses new additions proposals (OVERLAYS) 
-to the APRS symbol set after 1 October 2007.  The master symbol 
-document remains on the www.aprs.org/symbols/symbolsX.txt page, but
-only has one line per symbol character.  Since each of the symbols
-can have up to 36 overlays, this gives us thousands of symbols codes.
+BACKGROUND:  Since 1 October 2007, overlay characters (36 per symbol)
+are allowed on all symbols.  Since the master symbol document, 
+http://aprs.org/symbols/symbolsX.txt page only has one line per symbol 
+character this overlay list gives us thousands of new symbol codes.
 
+03 Apr17: Added Methane Hazard symbol "MH"
+13 Feb17: Added Ez = Emergency Power (shelter), Cars: P> = Plugin
+          S> = Solar powered. Moved Ham club C- to Buildings Ch.
+          Added C- to house for combined renewables and added R% 
+          Renewable to power plants
+
+18 Oct16: Added G,Y,R for Flood gauges + N for Normal.(on H2O symbol)
+          Added DIGIPEATERS
+22 Mar16: Added A0 overlay circle for ALSTAR nodes and V0 for VOIP. 
+          Combined echolink and IRLP. P& for PSKmail node. W& for
+          Wires-X (was W0 for WiresII). Ya for Yaesu C4FM repeaters
 
 Update 29 Oct 2015:  Reorgainized list to Alphabetical Order.
   + Added many new Balloons (due to lost DoD radar Blimp yesterday)
@@ -18,27 +28,20 @@ Update 29 Oct 2015:  Reorgainized list to Alphabetical Order.
 
 UPDATES/REVISIONS/CORRECTIONS:
 
-28 Aug 14  Added numerous OpenAPRS symbols see "(new Aug 2014)"
-20 May 14  Changed Da to DSTAR (2700 of them) from Dutch Ares
-19 May 14  Added Submarine&torpedo to ships and lots of Aircraft
-           search for "(new may 2014)"
-07 Oct 13  Added new overlays to ships such as Jet Ski, Js
-           Added Ham Club symbol as a C overlay on House, C-
-19 Sep 11  Added T and 2 overlays for TX 1 and 2 hop IGates
-           Added overlays to (;) portable, to show event types
-23 Mar 11  Added Radiation Detector (RH)
-20 Apr 10  Byonics requested (BY)
-04 Jan 10  added #A to the table (correcting earlier omission)
-12 Oct 09  Added W0 for Yaesu WIRES nodes
-09 Apr 09  Changed APRStt symbol to overlayed BOX (#A)
-21 Aug 08  Added RFID R=, Babystroller B], Radio#Y, skull&Xbones XH
+2014 Added numerous OpenAPRS symbol. Changed Da to DSTAR from Dutch 
+     ARES. Added Subs to ships and lots of Aircraft overlays.
+2013 Added ship overlay Jet Ski. Ham Club as C overlay on House, C-
+2011 Added T and 2 overlays for TX 1 and 2 hop IGates
+     Added overlays to (;) Portables  Added Radiation Detector (RH)
+2010 Byonics requested (BY) and added #A to the table 
+2009 Added W0 for Yaesu WIRES and APRStt symbol to overlayed BOX (#A)
+2008 Added RFID R=, Babystroller B], Radio#Y, skull&Xbones XH
 
 
-25 Mar 08 Modified these Alternate Symbol codes for expanded Overlays.
-Prior to this, each Alternate Table basic symbol had a unique defini-
-tion, but this was every restrictive.  SO the following alternate 
-base symbols were redefined so that the basic symbol could take on
-dozens of unique overlay definitions:
+DEPRICATION AND MAJOR REVISION:  25 Mar 08 Modified several Alternate 
+Symbol codes for expanded Overlays.  The following alternate base 
+symbols were redefined so that the basic symbol could take on dozens 
+of unique overlay definitions:
 
 \= - Had been undefined
 \0 - Several overlays for the numbered Circle
@@ -54,13 +57,14 @@ dozens of unique overlay definitions:
 \[ - \[ is wall cloud, but overlays are humans. S[ is a skier.
 \h - Buildings. \h is a Ham store, "Hh" is Home Depot, etc.
 
-Previous edition was 4 Oct 2007.
+
+4 Oct 2007.   ORIGINAL EXPANSION to OVERLAYS ON ALL SYMBOLS
 
 In April 2007, a proposal to expand the use of overlay bytes for 
 the extension of the APRS symbol set was added to the draft APRS1.2 
 addendum web page.  The following document addresses that proposal:
 
-www.aprs.org/symbols/symbols-overlays.txt
+http://aprs.org/symbols/symbols-overlays.txt
 
 For details on Upgrading your symbol set, please see the background
 information on Symbols prepared by Stephen Smith, WA8LMF:
@@ -164,6 +168,7 @@ Ga = RSGB Radio Society of Great Brittan
 Ra = RACES
 Sa = SATERN Salvation Army
 Wa = WinLink
+Ya = C4FM Yaesu repeaters
 
 BALLOONS and lighter than air #O (All new Oct 2015)
 /O = Original Balloon (think Ham balloon)
@@ -191,17 +196,22 @@ etc
 BUILDINGS: #h
 /h = Hospital
 \h = Ham Store       ** <= now used for HAMFESTS
+Ch = Club (ham radio)
 Fh = HamFest (new Aug 2014)
-Hh = Home Dept etc..
+Hh = Home Depot etc..
 
 CARS: #> (Vehicles)
 /> = normal car (side view)
 \> = Top view and symbol POINTS in direction of travel
 #> = Reserve overlays 1-9 for numbered cars (new Aug 2014)
-E> = Electric 
-H> = Hybrid
+B> = Battery (was E for electric)
+E> = Ethanol (was electric)
+F> = Fuelcell or hydrogen 
+H> = Homemade
+P> = Plugin-hybrid
 S> = Solar powered
-V> = GM Volt
+T> = Tesla  (temporary)
+V> = GM Volt (temporary)
 
 CIVIL DEFENSE or TRIANGLE: #c
 /c = Incident Command Post
@@ -220,6 +230,19 @@ RD = Rail Depot  (new Aug 2014)
 BD = Bus Depot (new Aug 2014)
 LD = LIght Rail or Subway (new Aug 2014)
 SD = Seaport Depot (new Aug 2014)
+
+DIGIPEATERS
+/# - Generic digipeater
+1# - WIDE1-1 digipeater
+A# - Alternate input (i.e. 144.990MHz) digipeater
+E# - Emergency powered (assumed full normal digi)
+I# - I-gate equipped digipeater
+L# - WIDEn-N with path length trapping
+P# - PacComm
+S# - SSn-N digipeater (includes WIDEn-N)
+X# - eXperimental digipeater
+V# - Viscous https://github.com/PhirePhly/aprx/blob/master/ViscousDigipeater.README
+W# - WIDEn-N, SSn-N and Trapping
 
 EMERGENCY: #!
 /! = Police/Sheriff, etc
@@ -240,7 +263,9 @@ GATEWAYS: #&
 /& = HF Gateway  <= the original primary table definition
 I& = Igate Generic (please use more specific overlay)
 R& = Receive only IGate (do not send msgs back to RF)
+P& = PSKmail node
 T& = TX igate with path set to 1 hop only)
+W& = WIRES-X as opposed to W0 for WiresII
 2& = TX igate with path set to 2 hops (not generally good idea)
 
 GPS devices: #\
@@ -251,6 +276,7 @@ A\ = Avmap G5      * <= Recommend special symbol
 HAZARDS: #H
 /H = hotel
 \H = Haze
+MH = Methane Hazard (new Apr 2017)
 RH = Radiation detector (new mar 2011)
 WH = Hazardous Waste
 XH = Skull&Crossbones
@@ -266,16 +292,16 @@ H[ = Hiker
 HOUSE: #-
 /- = House
 \- = (was HF)
-5- = 50 Hz mains power
-6- = 60 Hz mains power
-B- = Backup Battery Power
-C- = Club, as in Ham club
-E- = Emergency power
+5- = 50 Hz if non standard
+6- = 60 Hz if non standard
+B- = Battery or off grid
+C- = Combined alternatives
+E- = Emergency power (grid down)
 G- = Geothermal
 H- = Hydro powered
 O- = Operator Present
-S- = Solar Powered
-W- = Wind powered
+S- = Solar Power
+W- = Wind power
 
 INCIDENT SITES: #'
 /' = Small Aircraft (original primary symbol)
@@ -287,9 +313,11 @@ P' = Pileup
 T' = Truck wreck
 
 NUMBERED CIRCLES: #0
+A0 = Allstar Node (A0)
 E0 = Echolink Node (E0)
 I0 = IRLP repeater (I0)
 S0 = Staging Area  (S0)
+V0 = Echolink and IRLP (VOIP)
 W0 = WIRES (Yaesu VOIP)
 
 NETWORK NODES: #8
@@ -312,6 +340,7 @@ G% = Geothermal
 H% = Hydroelectric
 N% = Nuclear
 P% = Portable (new Aug 2014)
+R% = Renewable (hydrogen etc fuels)
 S% = Solar
 T% = Turbine
 W% = Wind
@@ -343,6 +372,7 @@ SHELTERS: #z
 /z = was available
 \z = overlayed shelter
 Cz = Clinic (new Aug 2014)
+Ez = Emergency Power
 Gz = Government building  (new Aug 2014)
 Mz = Morgue (new Aug 2014)
 Tz = Triage (new Aug 2014)
@@ -379,6 +409,18 @@ Pu = Plow or SnowPlow (new Aug 2014)
 Tu = Tanker
 Cu = Chlorine Tanker
 Hu = Hazardous
+
+WATER #w
+/w = Water Station or other H2O
+\w = flooding (or Avalanche/slides)
+Aw = Avalanche
+Gw = Green Flood Gauge
+Mw = Mud slide
+Nw = Normal flood gauge (blue)
+Rw = Red flood gauge
+Sw = Snow Blockage
+Yw = Yellow flood gauge
+
 
 
 Anyone can use any overlay on any of the overlayable symbols for any

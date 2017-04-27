@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -35,13 +35,16 @@
  *
  *---------------------------------------------------------------*/
 
+#define TQ_C 1
+
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "audio.h"
@@ -119,7 +122,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_init ( %d )\n", nchan);
+	dw_printf ("tq_init (  )\n");
 #endif
 
 	save_audio_config_p = audio_config_p;
@@ -186,11 +189,14 @@ void tq_init (struct audio_s *audio_config_p)
  *
  * Name:        tq_append
  *
- * Purpose:     Add a packet to the end of the specified transmit queue.
+ * Purpose:     Add an APRS packet to the end of the specified transmit queue.
+ *
+ * 		Connected mode is a little different.  Use lm_data_request instead.
  *
  * Inputs:	chan	- Channel, 0 is first.
  *
- *		prio	- Priority, use TQ_PRIO_0_HI or TQ_PRIO_1_LO.
+ *		prio	- Priority, use TQ_PRIO_0_HI for digipeated or
+ *				TQ_PRIO_1_LO for normal.
  *
  *		pp	- Address of packet object.
  *				Caller should NOT make any references to
@@ -217,8 +223,11 @@ void tq_append (int chan, int prio, packet_t pp)
 
 
 #if DEBUG
+	unsigned char *pinfo;
+	int info_len = ax25_get_info (pp, &pinfo);
+	if (info_len > 10) info_len = 10;
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_append (chan=%d, prio=%d, pp=%p)\n", chan, prio, pp);
+	dw_printf ("tq_append (chan=%d, prio=%d, pp=%p) \"%*s\"\n", chan, prio, pp, info_len, (char*)pinfo);
 #endif
 
 
@@ -241,12 +250,14 @@ void tq_append (int chan, int prio, packet_t pp)
 	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
+	  dw_printf ("This is probably a client application error, not a problem with direwolf.\n");
+	  dw_printf ("AX.25 for Linux is known to transmit on channels 2 & 8 sometimes when it shouldn't.\n");
 	  ax25_delete(pp);
 	  return;
 	}
 
-/* 
- * Is transmit queue out of control? 
+/*
+ * Is transmit queue out of control?
  *
  * There is no technical reason to limit the transmit packet queue length, it just seemed like a good 
  * warning that something wasn't right.
@@ -284,14 +295,6 @@ void tq_append (int chan, int prio, packet_t pp)
 #endif
 
 	dw_mutex_lock (&tq_mutex);
-
-//	was_empty = 1;
-//	for (c=0; c<tq_num_channels; c++) {
-//	  for (p=0; p<TQ_NUM_PRIO; p++) {
-//	    if (queue_head[c][p] != NULL)
-//	       was_empty = 0;
-//	  }
-//	}
 
 	if (queue_head[chan][prio] == NULL) {
 	  queue_head[chan][prio] = pp;
@@ -333,7 +336,340 @@ void tq_append (int chan, int prio, packet_t pp)
 	}
 #endif
 
-}
+} /* end tq_append */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        lm_data_request
+ *
+ * Purpose:     Add an AX.25 frame to the end of the specified transmit queue.
+ *
+ *		Use tq_append instead for APRS.
+ *
+ * Inputs:	chan	- Channel, 0 is first.
+ *
+ *		prio	- Priority, use TQ_PRIO_0_HI for priority (expedited)
+ *				or TQ_PRIO_1_LO for normal.
+ *
+ *		pp	- Address of packet object.
+ *				Caller should NOT make any references to
+ *				it after this point because it could
+ *				be deleted at any time.
+ *
+ * Outputs:	A packet object is added to transmit queue.
+ *
+ * Description:	5.4.
+ *
+ *		LM-DATA Request. The Data-link State Machine uses this primitive to pass
+ *		frames of any type (SABM, RR, UI, etc.) to the Link Multiplexer State Machine.
+ *
+ *		LM-EXPEDITED-DATA Request. The data-link machine uses this primitive to
+ *		request transmission of each digipeat or expedite data frame.
+ *
+ *		C2a.1
+ *
+ *		PH-DATA Request. This primitive from the Link Multiplexer State Machine
+ *		provides an AX.25 frame of any type (UI, SABM, I, etc.) that is to be transmitted. An
+ *		unlimited number of frames may be provided. If the transmission exceeds the 10-
+ *		minute limit or the anti-hogging time limit, the half-duplex Physical State Machine
+ *		automatically relinquishes the channel for use by the other stations. The
+ *		transmission is automatically resumed at the next transmission opportunity
+ *		indicated by the CSMA/p-persistence contention algorithm.
+ *
+ *		PH-EXPEDITED-DATA Request. This primitive from the Link Multiplexer State
+ *		Machine provides the AX.25 frame that is to be transmitted immediately. The
+ *		simplex Physical State Machine gives preference to priority frames over normal
+ *		frames, and will take advantage of the PRIACK window. Priority frames can be
+ *		provided by the link multiplexer at any time; a PH-SEIZE Request and subsequent
+ *		PH Release Request are not employed for priority frames.
+ *
+ *		C3.1
+ *
+ *		LM-DATA Request. This primitive from the Data-link State Machine provides a
+ *		AX.25 frame of any type (UI, SABM, I, etc.) that is to be transmitted. An unlimited
+ *		number of frames may be provided. The Link Multiplexer State Machine
+ *		accumulates the frames in a first-in, first-out queue until it is time to transmit them.
+ *
+ *		C4.2
+ *
+ *		LM-DATA Request. This primitive is used by the Data link State Machines to pass
+ *		frames of any type (SABM, RR, UI, etc.) to the Link Multiplexer State Machine.
+ *
+ *		LM-EXPEDITED-DATA Request. This primitive is used by the Data link State
+ *		Machine to pass expedited data to the link multiplexer.
+ *
+ *
+ * Implementation: Add packet to end of linked list.
+ *		Signal the transmit thread if the queue was formerly empty.
+ *
+ *		Note that we have a transmit thread each audio channel.
+ *		Two channels can share one audio output device.
+ *
+ * IMPORTANT!	Don't make an further references to the packet object after
+ *		giving it to lm_data_request.
+ *
+ *--------------------------------------------------------------------*/
+
+
+// TODO: FIXME:  this is a copy of tq_append.  Need to fine tune and explain why.
+
+
+void lm_data_request (int chan, int prio, packet_t pp)
+{
+	packet_t plast;
+	packet_t pnext;
+
+
+#if DEBUG
+	unsigned char *pinfo;
+	int info_len = ax25_get_info (pp, &pinfo);
+	if (info_len > 10) info_len = 10;
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("lm_data_request (chan=%d, prio=%d, pp=%p) \"%*s\"\n", chan, prio, pp, info_len, (char*)pinfo);
+#endif
+
+
+	assert (prio >= 0 && prio < TQ_NUM_PRIO);
+
+	if (pp == NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("INTERNAL ERROR:  lm_data_request NULL packet pointer. Please report this!\n");
+	  return;
+	}
+
+#if AX25MEMDEBUG
+
+	if (ax25memdebug_get()) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("lm_data_request (chan=%d, prio=%d, seq=%d)\n", chan, prio, ax25memdebug_seq(pp));
+	}
+#endif
+
+	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
+	  ax25_delete(pp);
+	  return;
+	}
+
+/* 
+ * Is transmit queue out of control? 
+ */
+
+	if (tq_count(chan,prio) > 250) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Warning: Transmit packet queue for channel %d is extremely long.\n", chan);
+	  dw_printf ("Perhaps the channel is so busy there is no opportunity to send.\n");
+	}
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("lm_data_request: enter critical section\n");
+#endif
+
+	dw_mutex_lock (&tq_mutex);
+
+
+	if (queue_head[chan][prio] == NULL) {
+	  queue_head[chan][prio] = pp;
+	}
+	else {
+	  plast = queue_head[chan][prio];
+	  while ((pnext = ax25_get_nextp(plast)) != NULL) {
+	    plast = pnext;
+	  }
+	  ax25_set_nextp (plast, pp);
+	}
+
+	dw_mutex_unlock (&tq_mutex);
+
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("lm_data_request: left critical section\n");
+#endif
+
+	// Appendix C2a, from the Ax.25 protocol spec, says that a priority frame
+	// will start transmission.  If not already transmitting, normal frames
+	// will pile up until LM-SEIZE Request starts transmission.
+
+
+// Erratum: It doesn't take long for that to fail.
+// We send SABM(e) frames to the transmit queue and the transmitter doesn't get activated.
+
+
+//NO!	if (prio == TQ_PRIO_0_HI) {
+
+#if DEBUG
+	  dw_printf ("lm_data_request (): about to wake up xmit thread.\n");
+#endif
+#if __WIN32__
+	  SetEvent (wake_up_event[chan]);
+#else
+	  if (xmit_thread_is_waiting[chan]) {
+	    int err;
+
+	    dw_mutex_lock (&(wake_up_mutex[chan]));
+
+	    err = pthread_cond_signal (&(wake_up_cond[chan]));
+	    if (err != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("lm_data_request: pthread_cond_signal err=%d", err);
+	      perror ("");
+	      exit (1);
+	    }
+
+	    dw_mutex_unlock (&(wake_up_mutex[chan]));
+	  }
+#endif
+//NO!	}
+
+} /* end lm_data_request */
+
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        lm_seize_request
+ *
+ * Purpose:     Force start of transmit even if transmit queue is empty.
+ *
+ * Inputs:	chan	- Channel, 0 is first.
+ *
+ * Description:	5.4.
+ *
+ *		LM-SEIZE Request. The Data-link State Machine uses this primitive to request the
+ *		Link Multiplexer State Machine to arrange for transmission at the next available
+ *		opportunity. The Data-link State Machine uses this primitive when an
+ *		acknowledgement must be made; the exact frame in which the acknowledgement
+ *		is sent will be chosen when the actual time for transmission arrives.
+ *
+ *		C2a.1
+ *
+ *		PH-SEIZE Request. This primitive requests the simplex state machine to begin
+ *		transmitting at the next available opportunity. When that opportunity has been
+ *		identified (according to the CSMA/p-persistence algorithm included within), the
+ *		transmitter started, a parameterized window provided for the startup of a
+ *		conventional repeater (if required), and a parameterized time allowed for the
+ *		synchronization of the remote station's receiver (known as TXDELAY in most
+ *		implementations), then a PH-SEIZE Confirm primitive is returned to the link
+ *		multiplexer.
+ *
+ *		C3.1
+ *
+ *		LM-SEIZE Request. This primitive requests the Link Multiplexer State Machine to
+ *		arrange for transmission at the next available opportunity. The Data-link State
+ *		Machine uses this primitive when an acknowledgment must be made, but the exact
+ *		frame in which the acknowledgment will be sent will be chosen when the actual
+ *		time for transmission arrives. The Link Multiplexer State Machine uses the LMSEIZE
+ *		Confirm primitive to indicate that the transmission opportunity has arrived.
+ *		After the Data-link State Machine has provided the acknowledgment, the Data-link
+ *		State Machine gives permission to stop transmission with the LM Release Request
+ *		primitive.
+ *
+ *		C4.2
+ *
+ *		LM-SEIZE Request. This primitive is used by the Data link State Machine to
+ *		request the Link Multiplexer State Machine to arrange for transmission at the next
+ *		available opportunity. The Data link State Machine uses this primitive when an
+ *		acknowledgment must be made, but the exact frame in which the acknowledgment
+ *		is sent will be chosen when the actual time for transmission arrives.
+ *
+ *
+ * Implementation: Add a null frame (i.e. length of 0) to give the process a kick.
+ *		xmit.c needs to be smart enough to discard it.
+ *
+ *--------------------------------------------------------------------*/
+
+
+void lm_seize_request (int chan)
+{
+	packet_t pp;
+	int prio = TQ_PRIO_1_LO;
+
+	packet_t plast;
+	packet_t pnext;
+
+
+#if DEBUG
+	unsigned char *pinfo;
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("lm_seize_request (chan=%d)\n", chan);
+#endif
+
+	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
+	  return;
+	}
+
+	pp = ax25_new();
+
+#if AX25MEMDEBUG
+
+	if (ax25memdebug_get()) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("lm_seize_request (chan=%d, seq=%d)\n", chan, ax25memdebug_seq(pp));
+	}
+#endif
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("lm_seize_request: enter critical section\n");
+#endif
+
+	dw_mutex_lock (&tq_mutex);
+
+
+	if (queue_head[chan][prio] == NULL) {
+	  queue_head[chan][prio] = pp;
+	}
+	else {
+	  plast = queue_head[chan][prio];
+	  while ((pnext = ax25_get_nextp(plast)) != NULL) {
+	    plast = pnext;
+	  }
+	  ax25_set_nextp (plast, pp);
+	}
+
+	dw_mutex_unlock (&tq_mutex);
+
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("lm_seize_request: left critical section\n");
+#endif
+
+
+#if DEBUG
+	dw_printf ("lm_seize_request (): about to wake up xmit thread.\n");
+#endif
+#if __WIN32__
+	SetEvent (wake_up_event[chan]);
+#else
+	if (xmit_thread_is_waiting[chan]) {
+	  int err;
+
+	  dw_mutex_lock (&(wake_up_mutex[chan]));
+
+	  err = pthread_cond_signal (&(wake_up_cond[chan]));
+	  if (err != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("lm_seize_request: pthread_cond_signal err=%d", err);
+	    perror ("");
+	    exit (1);
+	  }
+
+	  dw_mutex_unlock (&(wake_up_mutex[chan]));
+	}
+#endif
+
+} /* end lm_seize_request */
+
+
 
 
 /*-------------------------------------------------------------------
@@ -483,7 +819,61 @@ packet_t tq_remove (int chan, int prio)
 	}
 #endif
 	return (result_p);
-}
+
+} /* end tq_remove */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        tq_peek
+ *
+ * Purpose:     Take a peek at the next frame in the queue but don't remove it.
+ *
+ * Inputs:	chan	- Channel, 0 is first.
+ *
+ *		prio	- Priority, use TQ_PRIO_0_HI or TQ_PRIO_1_LO.
+ *
+ * Returns:	Pointer to packet object or NULL.
+ *
+ *		Caller should NOT destroy it because it is still in the queue.
+ *
+ *--------------------------------------------------------------------*/
+
+packet_t tq_peek (int chan, int prio)
+{
+
+	packet_t result_p;
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("tq_peek(%d,%d) enter critical section\n", chan, prio);
+#endif
+
+	// I don't think we need critical region here.
+	//dw_mutex_lock (&tq_mutex);
+
+	result_p = queue_head[chan][prio];
+	// Just take a peek at the head.  Don't remove it.
+
+	//dw_mutex_unlock (&tq_mutex);
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("tq_remove(%d,%d) leave critical section, returns %p\n", chan, prio, result_p);
+#endif
+
+#if AX25MEMDEBUG
+
+	if (ax25memdebug_get() && result_p != NULL) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("tq_remove (chan=%d, prio=%d)  seq=%d\n", chan, prio, ax25memdebug_seq(result_p));
+	}
+#endif
+	return (result_p);
+
+} /* end tq_peek */
+
 
 
 /*-------------------------------------------------------------------

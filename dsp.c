@@ -26,6 +26,8 @@
  *
  *----------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -34,7 +36,6 @@
 #include <ctype.h>
 #include <assert.h>
 
-#include "direwolf.h"
 #include "audio.h"
 #include "fsk_demod_state.h"
 #include "fsk_gen_filter.h"
@@ -51,7 +52,7 @@
 // Don't remove this.  It serves as a reminder that an experiment is underway.
 
 #if defined(TUNE_MS_FILTER_SIZE) || defined(TUNE_AGC_FAST) || defined(TUNE_LPF_BAUD) || defined(TUNE_PLL_LOCKED) || defined(TUNE_PROFILE)
-#define DEBUG1 1
+#define DEBUG1 1		// Don't remove this.
 #endif
 
 

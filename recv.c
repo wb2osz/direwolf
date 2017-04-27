@@ -2,7 +2,7 @@
 // 
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015, 2016  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -68,7 +68,7 @@
  *
  *					The difference is that app_process_rec_frame
  *					is no longer called directly.  Instead
- *					the frame is appended to a queue with dlq_append.
+ *					the frame is appended to a queue with dlq_rec_frame.
  *
  *					Received frames can now be processed one at 
  *					a time and we don't need to worry about later
@@ -80,6 +80,9 @@
  *
  *---------------------------------------------------------------*/
 
+//#define DEBUG 1
+
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -95,7 +98,6 @@
 #include <errno.h>
 #endif
 
-#include "direwolf.h"
 #include "audio.h"
 #include "demod.h"
 #include "multi_modem.h"
@@ -104,6 +106,8 @@
 #include "recv.h"
 #include "dtmf.h"
 #include "aprs_tt.h"
+#include "dtime_now.h"
+#include "ax25_link.h"
 
 
 #if __WIN32__
@@ -261,7 +265,7 @@ static void * recv_adev_thread (void *arg)
 	  }
 
 		/* When a complete frame is accumulated, */
-		/* dlq_append, is called. */
+		/* dlq_rec_frame, is called. */
 
 		/* recv_process, below, drains the queue. */
 
@@ -283,40 +287,114 @@ static void * recv_adev_thread (void *arg)
 void recv_process (void) 
 {
 
-	int ok;
-	dlq_type_t type;
-	int chan;
-	int subchan;
-	int slice;
-	packet_t pp;
-	alevel_t alevel;
-	retry_t retries;
-	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];
+	struct dlq_item_s *pitem;
 
 	while (1) {
 
-	  dlq_wait_while_empty ();
+	  int timed_out;
+
+	  double timeout_value =  ax25_link_get_next_timer_expiry();
+
+	  timed_out = dlq_wait_while_empty (timeout_value);
+
+
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("recv_process: woke up\n");
+	  dw_printf ("recv_process: woke up, timed_out=%d\n", timed_out);
 #endif 
 
-	  ok = dlq_remove (&type, &chan, &subchan, &slice, &pp, &alevel, &retries, spectrum, sizeof(spectrum));
+	  if (timed_out) {
 
 #if DEBUG
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("recv_process: dlq_remove() returned ok=%d, type=%d, chan=%d, pp=%p\n", 
-				ok, (int)type, chan, pp);
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("recv_process: time waiting on dlq.  call dl_timer_expiry.\n");
 #endif
-	  if (ok) {
-		app_process_rec_packet (chan, subchan, slice, pp, alevel, retries, spectrum);
+
+	    dl_timer_expiry ();
 	  }
-#if DEBUG
 	  else {
+
+	    pitem = dlq_remove ();
+
+#if DEBUG
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("recv_process: spurious wakeup. (Temp debugging message - not a problem if only occasional.)\n");
-	  }
+	    dw_printf ("recv_process: dlq_remove() returned pitem=%p\n", pitem);
 #endif
+
+	    if (pitem != NULL) {
+	      switch (pitem->type) {
+
+	        case DLQ_REC_FRAME:
+/*
+ * This is the traditional processing.
+ * For all frames:
+ *	- Print in standard monitoring format.
+ *	- Send to KISS client applications.
+ *	- Send to AGw client applications in raw mode.
+ * For APRS frames:
+ *	- Explain what it means.
+ *	- Send to Igate.
+ *	- Digipeater.
+ */
+
+		  app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->retries, pitem->spectrum);
+
+
+/*
+ * Link processing.
+ */
+	          lm_data_indication(pitem);
+
+	          break;
+
+
+	        case DLQ_CONNECT_REQUEST:
+
+	          dl_connect_request (pitem);
+	          break;
+
+	        case DLQ_DISCONNECT_REQUEST:
+
+	          dl_disconnect_request (pitem);
+	          break;
+
+	        case DLQ_XMIT_DATA_REQUEST:
+
+	          dl_data_request (pitem);
+	          break;
+
+	        case DLQ_REGISTER_CALLSIGN:
+
+	          dl_register_callsign (pitem);
+	          break;
+
+	        case DLQ_UNREGISTER_CALLSIGN:
+
+	          dl_unregister_callsign (pitem);
+	          break;
+
+		case DLQ_CHANNEL_BUSY:
+
+	          lm_channel_busy (pitem);
+	          break;
+
+	        case DLQ_CLIENT_CLEANUP:
+
+	          dl_client_cleanup (pitem);
+	          break;
+
+	      }
+
+	      dlq_delete (pitem);
+	    }
+#if DEBUG
+	    else {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("recv_process: spurious wakeup. (Temp debugging message - not a problem if only occasional.)\n");
+	    }
+#endif
+	  }
+
 	}
 
 } /* end recv_process */

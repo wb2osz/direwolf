@@ -68,6 +68,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -75,7 +77,6 @@
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "kiss_frame.h"
@@ -86,7 +87,7 @@
 void hex_dump (unsigned char *p, int len);
 
 
-static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug);
+
 
 
 #if KISSTEST
@@ -97,6 +98,10 @@ void text_color_set (dw_color_t c)
 {
 	return;
 }
+
+#else
+
+static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug);
 
 #endif
 
@@ -561,9 +566,15 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 	  break;
 
         default:			
-          text_color_set(DW_COLOR_DEBUG);
+          text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("KISS Invalid command %d\n", cmd);
           kiss_debug_print (FROM_CLIENT, NULL, kiss_msg, kiss_len);
+
+          text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Troubleshooting tip:\n");
+	  dw_printf ("Use \"-d kn\" option on direwolf command line to observe\n");
+	  dw_printf ("all communication with the client application.\n");
+
 	  break;
 	}
 
@@ -630,7 +641,7 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 #if KISSTEST
 
 
-main ()
+int main ()
 {
 	unsigned char din[512];
 	unsigned char kissed[520];

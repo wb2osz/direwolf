@@ -25,10 +25,10 @@
 
 #if TEST
 
-#define DEBUG1 1
-#define DEBUG2 1
-#define DEBUG3 1
-#define DEBUG4 1
+#define DEBUG1 1	// Activate debug out when testing.
+#define DEBUG2 1	//
+#define DEBUG3 1	//
+#define DEBUG4 1	//
 
 #endif
 
@@ -49,6 +49,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -57,7 +59,6 @@
 #include <math.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "ax25_pad.h"			// for packet_t, AX25_MAX_ADDR_LEN
 #include "decode_aprs.h"		// for decode_aprs_t, G_UNKNOWN  
 #include "textcolor.h"
@@ -73,8 +74,8 @@
 #define T_STR_LEN 16				/* Max len for labels and units. */
 
 
-#define MAGIC1  0xa51111a5			/* For checking storage allocation problems. */
-#define MAGIC2  0xa52222a5
+#define MAGIC1  0x5a1111a5			/* For checking storage allocation problems. */
+#define MAGIC2  0x5a2222a5
 
 #define C_A 0					/* Scaling coefficient positions. */
 #define C_B 1
@@ -353,7 +354,7 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	      strlcpy (comment, next+8, commentsize);
 	      next[8] = '\0';
 	    }
-	    for (k = 0; k < strlen(next); k++) {
+	    for (k = 0; k < (int)(strlen(next)); k++) {
 	      if (next[k] == '0') {
 	        draw[k] = 0;
 	      }
@@ -818,7 +819,7 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
 	  }
 	}
 
-	for (n = 0; n < T_NUM_DIGITAL && n < strlen(msg); n++) {
+	for (n = 0; n < T_NUM_DIGITAL && n < (int)(strlen(msg)); n++) {
 
 	  if (msg[n] == '1') {
 	    pm->sense[n] = 1;
@@ -834,7 +835,16 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
 	  }
 	}
 
-/* Skip comma if first character of comment field. */
+/*
+ * Skip comma if first character of comment field.
+ *
+ * The protocol spec is inconsistent here.
+ * The definition shows the Project Title immediately after a fixed width field of 8 binary digits.
+ * The example has a comma in there.
+ *
+ * The toolkit telem-bits.pl script does insert the comma because it seems more sensible.
+ * Here we accept it either way.  i.e. Discard first character after data values if it is comma.
+ */
 
 	if (msg[n] == ',') n++;
 

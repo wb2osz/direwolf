@@ -45,15 +45,30 @@ struct igate_config_s {
  */
 	int tx_chan;			/* Radio channel for transmitting. */
 					/* 0=first, etc.  -1 for none. */
+					/* Presently IGate can transmit on only a single channel. */
+					/* A future version might generalize this.  */
+					/* Each transmit channel would have its own client side filtering. */
 
 	char tx_via[80];		/* VIA path for transmitting third party packets. */
 					/* Usual text representation.  */
 					/* Must start with "," if not empty so it can */
 					/* simply be inserted after the destination address. */
 
+	int max_digi_hops;		/* Maximum number of digipeater hops possible for via path. */
+					/* Derived from the SSID when last character of address is a digit. */
+					/* e.g.  "WIDE1-1,WIDE5-2" would be 3. */
+					/* This is useful to know so we can determine how many */
+					/* stations we might be able to reach. */
+
 	int tx_limit_1;			/* Max. packets to transmit in 1 minute. */
 
 	int tx_limit_5;			/* Max. packets to transmit in 5 minutes. */
+
+	int igmsp;			/* Number of message sender position reports to allow. */
+					/* Common practice is to default to 1.  */
+					/* We allow additional flexibility of 0 to disable feature */
+					/* or a small number to allow more. */
+
 /*
  * Special SATgate mode to delay packets heard directly.
  */
@@ -83,5 +98,19 @@ void igate_send_rec_packet (int chan, packet_t recv_pp);
 /* This when digipeater transmits.  Set bydigi to 1 . */
 
 void ig_to_tx_remember (packet_t pp, int chan, int bydigi);
+
+
+
+/* Get statistics for IGATE status beacon. */
+
+int igate_get_msg_cnt (void);
+
+int igate_get_pkt_cnt (void);
+
+int igate_get_upl_cnt (void);
+
+int igate_get_dnl_cnt (void);
+
+
 
 #endif

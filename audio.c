@@ -60,6 +60,7 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -88,7 +89,6 @@
 #endif
 
 
-#include "direwolf.h"
 #include "audio.h"
 #include "audio_stats.h"
 #include "textcolor.h"
@@ -375,8 +375,8 @@ int audio_open (struct audio_s *pa)
 	    
 	        {
 	          struct sockaddr_in si_me;
-	          int slen=sizeof(si_me);
-	          int data_size = 0;
+	          //int slen=sizeof(si_me);
+	          //int data_size = 0;
 
 	          //Create UDP Socket
 	          if ((adev[a].udp_sock=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1) {
@@ -1003,7 +1003,7 @@ int audio_get (int a)
 	  case AUDIO_IN_TYPE_SDR_UDP:
 
 	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
-	      int ch, res,i;
+	      int res;
 
               assert (adev[a].udp_sock > 0);
 	      res = recv(adev[a].udp_sock, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes, 0);
@@ -1038,7 +1038,8 @@ int audio_get (int a)
 	  case AUDIO_IN_TYPE_STDIN:
 
 	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
-	      int ch, res,i;
+	      //int ch, res,i;
+	      int res;
 
 	      res = read(STDIN_FILENO, adev[a].inbuf_ptr, (size_t)adev[a].inbuf_size_in_bytes);
 	      if (res <= 0) {

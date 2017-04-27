@@ -24,8 +24,9 @@
 # 3. Removed fsk_fast_filter.h from atest receipe, clang compiler was having
 #    a hissy fit. Not check with GCC.
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc direwolf.conf
-	@echo " "
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
+
+all :  $(APPS) direwolf.desktop direwolf.conf	@echo " "
 	@echo "Next step install with: "
 	@echo " "
 	@echo "      sudo make install"
@@ -70,7 +71,18 @@ endif
 
 #CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
 CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
-CFLAGS := -Os -pthread -Igeotranz $(EXTRA_CFLAGS)
+
+# _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
+# Explanation here:  https://github.com/wb2osz/direwolf/issues/62
+
+CFLAGS := -Os -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 $(EXTRA_CFLAGS)
+
+# That was fine for a recent Ubuntu and Raspbian Jessie.
+# However, Raspbian wheezy was then missing declaration for strsep and definition of fd_set.
+
+CFLAGS += -D_BSD_SOURCE
+
+
 # $(info $$CC is [${CC}])
 
 #
@@ -220,28 +232,33 @@ z := $(notdir ${CURDIR})
 
 # Main application.
 
-direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_pad.o beacon.o \
-		config.o decode_aprs.o dedupe.o demod_9600.o demod_afsk.o \
-		demod.o digipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
+direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_link.o ax25_pad.o  ax25_pad2.o beacon.o \
+		config.o decode_aprs.o dedupe.o demod_9600.o demod_afsk.o demod_psk.o \
+		demod.o digipeater.o cdigipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
 		encode_aprs.o encode_aprs.o fcs_calc.o fcs_calc.o gen_tone.o \
 		geotranz.a hdlc_rec.o hdlc_rec2.o hdlc_send.o igate.o kiss_frame.o \
 		kiss.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
-		nmea.o serial_port.o pfilter.o ptt.o rdq.o recv.o redecode.o rrbb.o server.o \
-		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xmit.o \
-		dwgps.o dwgpsnmea.o
+		waypoint.o serial_port.o pfilter.o ptt.o rdq.o recv.o rrbb.o server.o \
+		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xid.o xmit.o \
+		dwgps.o dwgpsnmea.o mheard.o
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LDLIBS) -lm
 
 
 # Optimization for slow processors.
 
-demod.o : fsk_fast_filter.h
+demod.o      : fsk_fast_filter.h
 
 demod_afsk.o : fsk_fast_filter.h
 
 
-fsk_fast_filter.h : demod_afsk.c
-	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c -lm
+fsk_fast_filter.h : gen_fff
 	./gen_fff > fsk_fast_filter.h
+
+gen_fff : demod_afsk.c dsp.c textcolor.c
+	echo " " > tune.h
+	$(CC) $(CFLAGS) -DGEN_FFF -o $@ $^ $(LDFLAGS)
+
+
 
 # UTM, USNG, MGRS conversions.
 
@@ -392,10 +409,6 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 
 # These would be done as ordinary user.
 
-# The Raspberry Pi has ~/Desktop but Ubuntu does not.
-
-# TODO: Handle Linux variations correctly.
-
 
 .PHONY: install-conf
 install-conf : direwolf.conf
@@ -406,7 +419,7 @@ install-conf : direwolf.conf
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o
+decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o
 	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ -lm
 
 # Convert between text and touch tone representation.
@@ -435,25 +448,33 @@ log2gpx : log2gpx.c
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c dtmf.c textcolor.c dsp.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) -lm
 
-demod.o : tune.h
+demod.o      : tune.h
+
 demod_afsk.o : tune.h
+
 demod_9600.o : tune.h
 
+demod_psk.o  : tune.h
+
+tune.h :
+	echo " " > tune.h
+
+
 testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-        fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c latlong.c symbols.c tune.h textcolor.c
+        fcs_calc.c ax25_pad.c decode_aprs.c telemetry.c dtime_now.o latlong.c symbols.c tune.h textcolor.c
 	$(CC) $(CFLAGS) -o atest $^ -lm
 	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
 
 
-# Unit test for AFSK demodulator
+# Unit test for demodulators
 
-atest : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c latlong.c symbols.c textcolor.c tt_text.c
+atest : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
+        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c dtest_now.o latlong.c symbols.c textcolor.c tt_text.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
-#atest : atest.c fsk_fast_filter.h demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
+#atest : atest.c fsk_fast_filter.h demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 #        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c latlong.c symbols.c textcolor.c tt_text.c
 #	$(CC) $(CFLAGS) -o $@ $^ -lm
 
@@ -513,7 +534,7 @@ depend : $(wildcard *.c)
 
 .PHONY: clean
 clean :
-	rm -f direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc \
+	rm -f $(APPS) gen_fff \
 		fsk_fast_filter.h *.o *.a use_this_sdk
 	echo " " > tune.h
 

@@ -1,11 +1,81 @@
 
 # Revision History #
 
+
+## Version 1.4  -- April 2017 ##
+
+
+### New Features: ###
+
+- AX.25 v2.2 connected mode.  See chapter 10 of User Guide for details.
+
+- New client side packet filter to select "messages" only to stations that have been heard nearby recently.  This is now the default if no IS to RF filter is specified.
+
+- New beacon type, IBEACON, for sending IGate statistics.
+
+- Expanded debug options so you can understand what is going on with packet filtering.
+
+- Added new document ***Successful-APRS-IGate-Operation.pdf*** with IGate background, configuration, and troubleshooting tips.
+- 2400 & 4800 bps PSK modems.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** in the doc directory for discussion.
+
+- The top speed of 9600 bps has been increased to 38400.  You will need a sound card capable of 96k or 192k samples per second for the higher rates.  Radios must also have adequate bandwidth.  See ***Going-beyond-9600-baud.pdf*** in the doc directory for more details.
+
+- Better decoder performance for 9600 and higher especially for low audio sample rate to baud ratios.
+
+- Generate waypoint sentences for use by AvMap G5 / G6 or other mapping devices or applications.   Formats include
+ - $GPWPL	- NMEA generic with only location and name.
+ - $PGRMW	- Garmin, adds altitude, symbol, and comment to previously named waypoint.
+ - $PMGNWPL	- Magellan, more complete for stationary objects.
+ - $PKWDWPL	- Kenwood with APRS style symbol but missing comment.
+
+
+- DTMF tones can be sent by putting "DTMF" in the destination address,  similar to the way that Morse Code is sent.
+
+- Take advantage of new 'gpio' group and new /sys/class/gpio ownership in Raspbian Jessie.
+
+- Handle more complicated gpio naming for CubieBoard, etc.
+
+- More flexible dw-start.sh start up script for both GUI and CLI environments.
+
+
+ 
+### Bugs Fixed: ###
+
+- The transmitter (PTT control) was being turned off too soon when sending Morse Code.
+
+- The -qd (quiet decode) command line option now suppresses errors about improperly formed Telemetry packets.
+
+- Longer tocall.txt files can now be handled.  
+
+- Sometimes kissattach would have an issue with the Dire Wolf pseudo terminal.  This showed up most often on Raspbian but sometimes occurred with other versions of Linux.
+
+	*kissattach: Error setting line discipline: TIOCSETD: Device or resource busy
+	Are you sure you have enabled MKISS support in the kernel
+	or, if you made it a module, that the module is loaded?*
+	
+
+- Sometimes writes to a pseudo terminal would block causing the received
+frame processing thread to hang.   The first thing you will notice is that
+received frames are not being printed.  After a while this message will appear:
+
+  	*Received frame queue is out of control. Length=... Reader thread is probably 
+  	frozen.  This can be caused by using a pseudo terminal (direwolf -p) where 
+  	another application is not reading the frames from the other side.*
+
+- -p command line option caused segmentation fault with glibc >= 2.24.
+
+
+- The Windows version 1.3 would crash when starting to transmit on Windows XP. There have also been some other reports of erratic behavior on Windows. The crashing problem was fixed in in the 1.3.1 patch release.   Linux version was not affected.
+
+- IGate did not retain nul characters in the information part of a packet.  This should never happen with a valid APRS packet but there are a couple cases where it has.  If we encounter these malformed packets, pass them along as-is, rather than truncating.
+
+- Don't digipeat packets when the source is my call.
+
+
+
 ----------
 
 ## Version 1.3  -- May 2016 ##
-
-This is the same as the 1.3 beta test version with a few minor documentation updates.  If you are already using 1.3 beta test, there is no need to install this.
 
 ### New Features: ###
 
@@ -63,7 +133,7 @@ such as PowerPC or MIPS.
 
 - Improved decoder performance.  
 Over 1000 error-free frames decoded from WA8LMF TNC Test CD.  
-See "A-Better-APRS-Packet-Demodulator.pdf" for details.
+See ***A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf*** for details.
 
 - Up to 3 soundcards and 6 radio channels can be handled at the same time.
 
@@ -274,8 +344,7 @@ to rebuild it from source.
 
 ### New Features: ###
 
-- Added APRStt gateway capability.  For details, see:  
-**APRStt-Implementation-Notes.pdf**
+- Added APRStt gateway capability.  For details, see  ***APRStt-Implementation-Notes.pdf***
 
 
 -----------

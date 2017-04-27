@@ -34,6 +34,9 @@
  *---------------------------------------------------------------*/
 
 
+#include "direwolf.h"
+
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -48,6 +51,7 @@
 #endif
 
 #if ENABLE_GPSD
+
 #include <gps.h>
 
 // Debian bug report:  direwolf (1.2-1) FTBFS with libgps22 as part of the gpsd transition (#803605):
@@ -57,15 +61,21 @@
 #error libgps API version might be incompatible.
 #endif
 
-#endif
+/*
+ * Information for interface to gpsd daemon.
+ */
+
+static struct gps_data_t gpsdata;
+
+#endif   /* ENABLE_GPSD */
 
 
-#include "direwolf.h"
 #include "textcolor.h"
 #include "dwgps.h"
 #include "dwgpsd.h"
 
 
+#if ENABLE_GPSD
 
 static int s_debug = 0;		/* Enable debug output. */
 				/* >= 1 show results from dwgps_read. */
@@ -73,11 +83,8 @@ static int s_debug = 0;		/* Enable debug output. */
 
 static void * read_gpsd_thread (void *arg);
 
-/*
- * Information for interface to gpsd daemon. 
- */
+#endif
 
-static struct gps_data_t gpsdata;
 
 
 /*-------------------------------------------------------------------
@@ -136,7 +143,7 @@ static struct gps_data_t gpsdata;
  *
  * Update:  January 2016.
  *
- *	I'm told that it might work in Raspian, Jessie version.
+ *	I'm told that the shared memory interface might work in Raspian, Jessie version.
  *	Haven't tried it yet.
  */
 
@@ -152,7 +159,6 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 	int err;
 	int arg = 0;
 	char sport[12];
-	dwgps_info_t info;
 
 	s_debug = debug;
 
@@ -174,7 +180,6 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 	snprintf (sport, sizeof(sport), "%d", pconfig->gpsd_port);
 	err = gps_open (pconfig->gpsd_host, sport, &gpsdata);
 	if (err != 0) {
-	  dwgps_info_t info;
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Unable to connect to GPSD stream at %s:%s.\n", pconfig->gpsd_host, sport);
@@ -330,7 +335,7 @@ static void * read_gpsd_thread (void *arg)
 
 	return(0);	// Terminate thread on serious error.
 
-} /* end read_gps_thread */
+} /* end read_gpsd_thread */
 
 #endif
 

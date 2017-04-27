@@ -34,17 +34,16 @@
  *		
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"		// should be first
+
 #include <stdio.h>
 
 #if __WIN32__
 
 #include <stdlib.h>
-#include <windows.h>
 
 #else
 
-#define __USE_XOPEN2KXSI 1
-#define __USE_XOPEN 1
 #include <stdlib.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -58,7 +57,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
+
 #include "textcolor.h"
 #include "serial_port.h"
 
@@ -183,6 +182,10 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 	//text_color_set(DW_COLOR_INFO);
 	//dw_printf("Successful serial port open on %s.\n", devicename);
 
+	// Some devices, e.g. KPC-3+, can't turn off hardware flow control and need RTS.
+
+	EscapeCommFunction(fd,SETRTS);
+	EscapeCommFunction(fd,SETDTR);
 #else
 
 /* Linux version. */
@@ -300,7 +303,7 @@ int serial_port_write (MYFDTYPE fd, char *str, int len)
 	    dw_printf ("Error writing to serial port.  Error %d.\n\n", err);
 	  }
 	}
-	else if (nwritten != len) 
+	else if ((int)nwritten != len) 
 	{
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Error writing to serial port.  Only %d of %d written.\n\n", (int)nwritten, len);

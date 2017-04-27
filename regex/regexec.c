@@ -1,3 +1,9 @@
+
+/* this is very old and has massive numbers of compiler warnings. */
+/* Maybe try upgrading to a newer version such as */
+/* https://fossies.org/dox/glibc-2.24/regexec_8c_source.html */
+
+
 /* Extended regular expression matching and search library.
    Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
@@ -17,6 +23,14 @@
    License along with the GNU C Library; if not, write to the Free
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
+
+/* Added 12/2016 to remove warning: */
+/* incompatible implicit declaration of built-in function 'alloca' */
+#if __WIN32__
+#include <malloc.h>
+#else
+#include <alloca.h>
+#endif
 
 static reg_errcode_t match_ctx_init (re_match_context_t *cache, int eflags,
 				     int n) internal_function;
@@ -228,6 +242,7 @@ regexec (preg, string, nmatch, pmatch, eflags)
   reg_errcode_t err;
   int start, length;
   re_dfa_t *dfa = (re_dfa_t *) preg->buffer;
+  (void)dfa;
 
   if (eflags & ~(REG_NOTBOL | REG_NOTEOL | REG_STARTEND))
     return REG_BADPAT;
@@ -419,6 +434,7 @@ re_search_stub (bufp, string, length, start, range, stop, regs, ret_len)
   int nregs, rval;
   int eflags = 0;
   re_dfa_t *dfa = (re_dfa_t *) bufp->buffer;
+  (void)dfa;
 
   /* Check for out-of-range.  */
   if (BE (start < 0 || start > length, 0))
@@ -2894,7 +2910,10 @@ check_arrival (re_match_context_t *mctx, state_array_t *path, int top_node,
 	      sizeof (re_dfastate_t *) * (path->alloc - old_alloc));
     }
 
-  str_idx = path->next_idx ?: top_str;
+  // Original:
+  // str_idx = path->next_idx ?: top_str;
+  // Copied following from another version when cleaning up compiler warnings.
+  str_idx = path->next_idx ? path->next_idx : top_str;
 
   /* Temporary modify MCTX.  */
   backup_state_log = mctx->state_log;
@@ -3032,7 +3051,9 @@ check_arrival_add_next_nodes (re_match_context_t *mctx, int str_idx,
   const re_dfa_t *const dfa = mctx->dfa;
   int result;
   int cur_idx;
+#ifdef RE_ENABLE_I18N
   reg_errcode_t err = REG_NOERROR;
+#endif
   re_node_set union_set;
   re_node_set_init_empty (&union_set);
   for (cur_idx = 0; cur_idx < cur_nodes->nelem; ++cur_idx)

@@ -1,3 +1,4 @@
+
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -17,10 +18,10 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#include "direwolf.h"
 
 #include <stdio.h>
 
-#include "direwolf.h"
 #include "hdlc_send.h"
 #include "audio.h"
 #include "gen_tone.h"
@@ -33,7 +34,9 @@ static void send_bit (int, int);
 
 
 
-static int number_of_bits_sent[MAX_CHANS];
+static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdlc_send_frame" or "hdlc_send_flags"
+
+
 
 
 
@@ -48,6 +51,8 @@ static int number_of_bits_sent[MAX_CHANS];
  *		fbuf	- Frame buffer address.
  *
  *		flen	- Frame length, not including the FCS.
+ *
+ *		bad_fcs	- Append an invalid FCS for testing purposes.
  *
  * Outputs:	Bits are shipped out by calling tone_gen_put_bit().
  *
@@ -70,8 +75,7 @@ static int number_of_bits_sent[MAX_CHANS];
  *
  *--------------------------------------------------------------*/
 
-
-int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
+int hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs)
 {
 	int j, fcs;
 	
@@ -81,7 +85,7 @@ int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("hdlc_send_frame ( chan = %d, fbuf = %p, flen = %d )\n", chan, fbuf, flen);
+	dw_printf ("hdlc_send_frame ( chan = %d, fbuf = %p, flen = %d, bad_fcs = %d)\n", chan, fbuf, flen, bad_fcs);
 	fflush (stdout);
 #endif
 
@@ -94,8 +98,15 @@ int hdlc_send_frame (int chan, unsigned char *fbuf, int flen)
 
 	fcs = fcs_calc (fbuf, flen);
 
-	send_data (chan, fcs & 0xff);
-	send_data (chan, (fcs >> 8) & 0xff);
+	if (bad_fcs) {
+	  /* For testing only - Simulate a frame getting corrupted along the way. */
+	  send_data (chan, (~fcs) & 0xff);
+	  send_data (chan, ((~fcs) >> 8) & 0xff);
+	}
+	else {
+	  send_data (chan, fcs & 0xff);
+	  send_data (chan, (fcs >> 8) & 0xff);
+	}
 
 	send_control (chan, 0x7e);	/* End frame */
 
@@ -162,7 +173,10 @@ int hdlc_send_flags (int chan, int nflags, int finish)
 
 
 
-static int stuff = 0;
+static int stuff[MAX_CHANS];		// Count number of "1" bits to keep track of when we
+					// need to break up a long run by "bit stuffing."
+					// Needs to be array because we could be transmitting
+					// on multiple channels at the same time.
 
 static void send_control (int chan, int x) 
 {
@@ -173,7 +187,7 @@ static void send_control (int chan, int x)
 	  x >>= 1;
 	}
 	
-	stuff = 0;
+	stuff[chan] = 0;
 }
 
 static void send_data (int chan, int x) 
@@ -183,13 +197,13 @@ static void send_data (int chan, int x)
 	for (i=0; i<8; i++) {
 	  send_bit (chan, x & 1);
 	  if (x & 1) {
-	    stuff++;
-	    if (stuff == 5) {
+	    stuff[chan]++;
+	    if (stuff[chan] == 5) {
 	      send_bit (chan, 0);
-	      stuff = 0;
+	      stuff[chan] = 0;
 	    }
 	  } else {
-	    stuff = 0;
+	    stuff[chan] = 0;
           }
 	  x >>= 1;
 	}
@@ -203,13 +217,13 @@ static void send_data (int chan, int x)
 
 static void send_bit (int chan, int b)
 {
-	static int output;
+	static int output[MAX_CHANS];
 
 	if (b == 0) {
-	  output = ! output;
+	  output[chan] = ! output[chan];
 	}
 
-	tone_gen_put_bit (chan, output);
+	tone_gen_put_bit (chan, output[chan]);
 
 	number_of_bits_sent[chan]++;
 }

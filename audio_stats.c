@@ -50,6 +50,9 @@
  *---------------------------------------------------------------*/
 
 
+#include "direwolf.h"
+
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -57,8 +60,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <time.h>
 
-#include "direwolf.h"
+
 #include "audio_stats.h"
 #include "textcolor.h"
 #include "dtime_now.h"

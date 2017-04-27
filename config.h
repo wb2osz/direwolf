@@ -15,6 +15,7 @@
 
 #include "audio.h"		/* for struct audio_s */
 #include "digipeater.h"		/* for struct digi_config_s */
+#include "cdigipeater.h"		/* for struct cdigi_config_s */
 #include "aprs_tt.h"		/* for struct tt_config_s */
 #include "igate.h"		/* for struct igate_config_s */
 
@@ -23,7 +24,7 @@
  * This wasn't thought out.  It just happened.
  */
 
-enum beacon_type_e { BEACON_IGNORE, BEACON_POSITION, BEACON_OBJECT, BEACON_TRACKER, BEACON_CUSTOM };
+enum beacon_type_e { BEACON_IGNORE, BEACON_POSITION, BEACON_OBJECT, BEACON_TRACKER, BEACON_CUSTOM, BEACON_IGATE };
 
 enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 
@@ -43,6 +44,7 @@ struct misc_config_s {
 
 	char gpsnmea_port[20];	/* Serial port name for reading NMEA sentences from GPS. */
 				/* e.g. COM22, /dev/ttyACM0 */
+				/* Currently no option for setting non-standard speed. */
 
 	char gpsd_host[20];	/* Host for gpsd server. */
 				/* e.g. localhost, 192.168.1.2 */
@@ -50,9 +52,19 @@ struct misc_config_s {
 	int gpsd_port;		/* Port number for gpsd server. */
 				/* Default is  2947. */
 
+				
+	char waypoint_port[20];	/* Serial port name for sending NMEA waypoint sentences */
+				/* to a GPS map display or other mapping application. */
 				/* e.g. COM22, /dev/ttyACM0 */
-	char nmea_port[20];	/* Serial port name for NMEA communication with GPS */
-				/* receiver and/or mapping application. Change this. */
+				/* Currently no option for setting non-standard speed. */
+
+	int waypoint_formats;	/* Which sentence formats should be generated? */
+
+#define WPT_FORMAT_NMEA_GENERIC 0x01		/* N	$GPWPT */
+#define WPT_FORMAT_GARMIN       0x02		/* G	$PGRMW */
+#define WPT_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
+#define WPT_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
+
 
 	char logdir[80];	/* Directory for saving activity logs. */
 
@@ -65,6 +77,25 @@ struct misc_config_s {
 	int sb_turn_angle;	/* degrees */
 	int sb_turn_slope;	/* degrees * MPH */
 
+// AX.25 connected mode.
+
+	int frack;		/* Number of seconds to wait for ack to transmission. */
+
+	int retry;		/* Number of times to retry before giving up. */
+
+	int paclen;		/* Max number of bytes in information part of frame. */
+
+	int maxframe_basic;	/* Max frames to send before ACK.  mod 8 "Window" size. */
+
+	int maxframe_extended;	/* Max frames to send before ACK.  mod 128 "Window" size. */
+
+	int maxv22;		/* Maximum number of unanswered SABME frames sent before */
+				/* switching to SABM.  This is to handle the case of an old */
+				/* TNC which simply ignores SABME rather than replying with FRMR. */
+
+
+
+// Beacons.
  			
 	int num_beacons;	/* Number of beacons defined. */
 
@@ -155,6 +186,7 @@ struct misc_config_s {
 
 extern void config_init (char *fname, struct audio_s *p_modem, 
 			struct digi_config_s *digi_config,
+			struct cdigi_config_s *cdigi_config,
 			struct tt_config_s *p_tt_config,
 			struct igate_config_s *p_igate_config,
 			struct misc_config_s *misc_config);

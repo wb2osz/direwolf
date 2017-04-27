@@ -65,6 +65,11 @@ extern void digipeater (int from_chan, packet_t pp);
 void digi_regen (int from_chan, packet_t pp);
 
 
+/* Make statistics available. */
+
+int digipeater_get_count (int from_chan, int to_chan);
+
+
 #endif 
 
 /* end digipeater.h */

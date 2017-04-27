@@ -34,6 +34,8 @@
  *
  *---------------------------------------------------------------*/
 
+#include "direwolf.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -42,7 +44,6 @@
 #include <time.h>
 #include <assert.h>
 
-#include "direwolf.h"
 #include "version.h"
 #include "ax25_pad.h"
 #include "textcolor.h"

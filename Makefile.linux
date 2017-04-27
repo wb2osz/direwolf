@@ -12,9 +12,32 @@ all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo " "
 
 CC := gcc
-CFLAGS := -O3 -pthread -Igeotranz
 
-LDFLAGS := -lm -lpthread -lrt
+# Just for fun, let's see how clang compares to gcc.  First install like this:
+#	sudo apt-get update
+#	apt-cache search clang
+#	sudo apt-get install clang-3.5
+#
+# CC := clang-3.5
+
+# _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
+# Explanation here:  https://github.com/wb2osz/direwolf/issues/62
+
+# There are a few source files where it had been necessary to define __USE_XOPEN2KXSI,
+# __USE_XOPEN, or _POSIX_C_SOURCE.  Doesn't seem to be needed after adding this.
+
+# The first assignment to CFLAGS and LDFLAGS uses +=, rather than :=, so
+# we will inherit options already set in build environment.
+# Explanation - https://github.com/wb2osz/direwolf/pull/38
+
+CFLAGS += -O3 -pthread -Igeotranz -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE=1 -Wall
+
+# That was fine for a recent Ubuntu and Raspbian Jessie.
+# However, Raspbian wheezy was then missing declaration for strsep and definition of fd_set.
+
+CFLAGS += -D_BSD_SOURCE
+
+LDFLAGS += -lm -lpthread -lrt
 
 
 
@@ -91,7 +114,7 @@ endif
 #         245	
 #          75	-01
 #          72 	-02
-#          71  	-03     
+#          71  	-03
 #          73  	-O3 -march=native
 #          42	-O3 -ffast-math  
 #          42  	-Ofast			(note below)   
@@ -106,7 +129,26 @@ endif
 # One article said it was added with gcc 4.2 but I haven't verified that.
 #
 
-# Add -ffastmath in only if compiler version recognizes it.
+# ---------- How does clang compare? - Ubuntu x86_64  ----------
+#
+# I keep hearing a lot about "clang."  Let's see how it compares with gcc.
+# Simply use different compiler and keep all options the same.
+#
+# 	test case:	atest 02_Track_2.wav
+#
+#	gcc 4.8.4:	988 packets decoded in 40.503 seconds.  38.3 x realtime
+#			988 packets decoded in 40.403 seconds.  38.4 x realtime
+#
+#	clang 3.8.0-2:	988 packets decoded in 77.454 seconds.  20.0 x realtime
+#			988 packets decoded in 77.232 seconds.  20.1 x realtime
+#
+# I'm not impressed.  Almost twice as long. Maybe we need to try some other compiler options.
+# -march=native did not help.
+# Makefile.macosx, which uses clang, has these:
+# -fvectorize -fslp-vectorize -fslp-vectorize-aggressive
+# Those did not help.
+#
+
 
 useffast := $(shell gcc --help -v 2>/dev/null | grep ffast-math)
 ifneq ($(useffast),)
@@ -139,7 +181,7 @@ endif
 #
 
 #
-# ---------- ARM - Raspberry Pi 2  ---------- 
+# ---------- ARM - Raspberry Pi 2  ----------
 #
 # Besides the higher clock speed, the Raspberry Pi 2 has the NEON instruction set 
 # which which should make things considerably faster.  
@@ -193,9 +235,26 @@ endif
 # cause compatibility issues for those with older computers.
 #
 
+# ---------- How does clang compare? - ARM - Raspberry Pi 2  ----------
+#
+# I keep hearing a lot about "clang."  Let's see how it compares with gcc.
+# Simply use different compiler and keep all options the same.
+#
+# 	test case:	atest 02_Track_2.wav
+#
+#	gcc 4.9.2-10:	988 packets decoded in 353.025 seconds.  4.4 x realtime
+#			988 packets decoded in 352.752 seconds.  4.4 x realtime
+#
+#	clang 3.5.0-10:	988 packets decoded in 825.879 seconds.  1.9 x realtime
+#			988 packets decoded in 831.469 seconds.  1.9 x realtime
+#
+# There might be a different set of options which produce faster code
+# but the initial test doesn't look good.  About 2.3 times as slow.
 
 # If you want to use OSS (for FreeBSD, OpenBSD) instead of
 # ALSA (for Linux), comment out (or remove) the two lines below.
+
+# TODO:  Can we automate this somehow?
 
 CFLAGS += -DUSE_ALSA
 LDFLAGS += -lasound
@@ -213,6 +272,8 @@ endif
 
 
 # Uncomment following lines to enable hamlib support.
+# TODO:  automate this too.  See if hamlib has been installed.
+
 #CFLAGS += -DUSE_HAMLIB
 #LDFLAGS += -lhamlib
 
@@ -228,14 +289,14 @@ z := $(notdir ${CURDIR})
 
 
 
-direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o \
-		hdlc_rec2.o multi_modem.o redecode.o rdq.o rrbb.o dlq.o \
-		fcs_calc.o ax25_pad.o \
+direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
+		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
+		fcs_calc.o ax25_pad.o  ax25_pad2.o xid.o \
 		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
-		gen_tone.o audio.o audio_stats.o digipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
+		gen_tone.o audio.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
-		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o nmea.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o \
+		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
+		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o ax25_link.o \
 		misc.a geotranz.a
 	$(CC) -o $@ $^ $(LDFLAGS)
 ifneq ($(enable_gpsd),)
@@ -248,14 +309,17 @@ endif
 
 # Optimization for slow processors.
 
-demod.o : fsk_fast_filter.h
+demod.o      : fsk_fast_filter.h
 
 demod_afsk.o : fsk_fast_filter.h
 
 
-fsk_fast_filter.h : demod_afsk.c
-	$(CC) $(CFLAGS) -o gen_fff -DGEN_FFF demod_afsk.c dsp.c textcolor.c $(LDFLAGS)
+fsk_fast_filter.h : gen_fff
 	./gen_fff > fsk_fast_filter.h
+
+gen_fff : demod_afsk.c dsp.c textcolor.c
+	echo " " > tune.h
+	$(CC) $(CFLAGS) -DGEN_FFF -o $@ $^ $(LDFLAGS)
 
 
 #
@@ -322,15 +386,15 @@ log2gpx : log2gpx.c textcolor.o misc.a
 
 # Test application to generate sound.
 
-gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c textcolor.c dsp.c misc.a
+gen_packets : gen_packets.c ax25_pad.c hdlc_send.c fcs_calc.c gen_tone.c morse.c dtmf.c textcolor.c dsp.c misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Unit test for AFSK demodulator
 
-atest : atest.c demod.o demod_afsk.o demod_9600.o \
+atest : atest.c demod.o demod_afsk.o demod_psk.o demod_9600.o \
 		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.o ax25_pad.o decode_aprs.o dwgpsnmea.o \
-		dwgps.o dwgpsd.o serial_port.o telemetry.o latlong.o symbols.o tt_text.o textcolor.o \
+		dwgps.o dwgpsd.o serial_port.o telemetry.o dtime_now.o latlong.o symbols.o tt_text.o textcolor.o \
 		misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -522,7 +586,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 # the home directory or other desired location.
 #
 	$(INSTALL) -D --mode=644 direwolf.conf $(INSTALLDIR)/share/doc/direwolf/examples/direwolf.conf
-	$(INSTALL) -D --mode=644 dw-start.sh $(INSTALLDIR)/share/doc/direwolf/examples/dw-start.sh
+	$(INSTALL) -D --mode=755 dw-start.sh $(INSTALLDIR)/share/doc/direwolf/examples/dw-start.sh
 	$(INSTALL) -D --mode=644 sdr.conf $(INSTALLDIR)/share/doc/direwolf/examples/sdr.conf
 	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-m0xer-3.txt $(INSTALLDIR)/share/doc/direwolf/examples/telem-m0xer-3.txt
 	$(INSTALL) -D --mode=644 telemetry-toolkit/telem-balloon.conf $(INSTALLDIR)/share/doc/direwolf/examples/telem-balloon.conf
@@ -549,19 +613,22 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	@echo " "
 
 
+# Put sample configuration files in home directory.
 # These would be done as ordinary user.
 
 # The Raspberry Pi has ~/Desktop but Ubuntu does not.
 
 # TODO: Handle Linux variations correctly.
 
+# Version 1.4 - Add "-n" option to avoid clobbering existing, probably customized, config files.
+
 
 .PHONY: install-conf
 install-conf : direwolf.conf
-	cp direwolf.conf ~
-	cp sdr.conf ~
-	cp telemetry-toolkit/telem-m0xer-3.txt ~
-	cp telemetry-toolkit/telem-*.conf ~
+	cp -n direwolf.conf ~
+	cp -n sdr.conf ~
+	cp -n telemetry-toolkit/telem-m0xer-3.txt ~
+	cp -n telemetry-toolkit/telem-*.conf ~
 ifneq ($(wildcard $(HOME)/Desktop),)
 	@echo " "
 	@echo "This will add a desktop icon on some systems:"
@@ -571,9 +638,13 @@ ifneq ($(wildcard $(HOME)/Desktop),)
 endif
 
 
+# dw-start.sh is greatly improved in version 1.4.
+# It should probably be part of install-conf because it is not just for the RPi.
+
 .PHONY: install-rpi
 install-rpi : dw-start.sh
-	cp dw-start.sh ~
+	chmod +x dw-start.sh
+	cp -n dw-start.sh ~
 	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
 
 
@@ -585,15 +656,15 @@ install-rpi : dw-start.sh
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest check-modem1200 check-modem300 check-modem9600
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
 # Can we encode and decode at popular data rates?
 
 check-modem1200 : gen_packets atest
-	./gen_packets -n 100 -o /tmp/test1.wav
-	./atest -F0 -PE -L70 -G71 /tmp/test1.wav
-	./atest -F1 -PE -L73 -G75 /tmp/test1.wav
-	#rm /tmp/test1.wav
+	./gen_packets -n 100 -o /tmp/test12.wav
+	./atest -F0 -PE -L63 -G71 /tmp/test12.wav
+	./atest -F1 -PE -L70 -G75 /tmp/test12.wav
+	rm /tmp/test12.wav
 
 check-modem300 : gen_packets atest
 	./gen_packets -B300 -n 100 -o /tmp/test3.wav
@@ -602,18 +673,35 @@ check-modem300 : gen_packets atest
 	rm /tmp/test3.wav
 
 check-modem9600 : gen_packets atest
-	./gen_packets -B9600 -n 100 -o /tmp/test9.wav
-	./atest -B9600 -F0 -L57 -G59 /tmp/test9.wav
-	./atest -B9600 -F1 -L66 -G67 /tmp/test9.wav
-	rm /tmp/test9.wav
+	./gen_packets -B9600 -n 100 -o /tmp/test96.wav
+	./atest -B9600 -F0 -L50 -G54 /tmp/test96.wav
+	./atest -B9600 -F1 -L55 -G59 /tmp/test96.wav
+	rm /tmp/test96.wav
 
+check-modem19200 : gen_packets atest
+	./gen_packets -r 96000 -B19200 -n 100 -o /tmp/test19.wav
+	./atest -B19200 -F0 -L55 -G59 /tmp/test19.wav
+	./atest -B19200 -F1 -L60 -G64 /tmp/test19.wav
+	rm /tmp/test19.wav
+
+check-modem2400 : gen_packets atest
+	./gen_packets -B2400 -n 100 -o /tmp/test24.wav
+	./atest -B2400 -F0 -L70 -G78 /tmp/test24.wav
+	./atest -B2400 -F1 -L80 -G87 /tmp/test24.wav
+	rm /tmp/test24.wav
+
+check-modem4800 : gen_packets atest
+	./gen_packets -B2400 -n 100 -o /tmp/test48.wav
+	./atest -B2400 -F0 -L70 -G79 /tmp/test48.wav
+	./atest -B2400 -F1 -L80 -G90 /tmp/test48.wav
+	rm /tmp/test48.wav
 
 
 # Unit test for inner digipeater algorithm
 
 .PHONY : dtest
-dtest : digipeater.c dedupe.c \
-		pfilter.o ax25_pad.o fcs_calc.o tq.o textcolor.o \
+dtest : digipeater.c dedupe.c pfilter.c \
+		ax25_pad.o fcs_calc.o tq.o textcolor.o \
 		decode_aprs.o dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o telemetry.o symbols.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDIGITEST -o $@ $^ $(LDFLAGS)
 	./dtest
@@ -679,6 +767,32 @@ kisstest : kiss_frame.c
 	./kisstest
 	rm kisstest
 
+# Unit test for constructing frames besides UI.
+
+.PHONY: pad2test
+pad2test : ax25_pad2.c ax25_pad.c fcs_calc.o textcolor.o misc.a
+	$(CC) $(CFLAGS) -DPAD2TEST -o $@ $^ $(LDFLAGS)
+	./pad2test
+	rm pad2test
+
+
+# Unit Test for XID frame encode/decode.
+
+.PHONY: xidtest
+xidtest : xid.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -DXIDTEST -o $@ $^  $(LDFLAGS)
+	./xidtest
+	rm xidtest
+
+
+# Unit Test for DTMF encode/decode.
+
+.PHONY: dtmftest
+dtmftest : dtmf.c textcolor.o
+	$(CC) $(CFLAGS) -DDTMF_TEST -o $@ $^  $(LDFLAGS)
+	./dtmftest
+	rm dtmftest
+
 
 
 #  -----------------------------  Manual tests and experiments  ---------------------------
@@ -694,7 +808,7 @@ itest : igate.c textcolor.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 # Unit test for UDP reception with AFSK demodulator.
 # Temporary during development.  Might not be useful anymore.
 
-udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
 		fcs_calc.o ax25_pad.o decode_aprs.o symbols.o textcolor.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	./udptest
@@ -702,16 +816,39 @@ udptest : udp_test.c demod.o dsp.o demod_afsk.o demod_9600.o hdlc_rec.o hdlc_rec
 # For demodulator tweaking experiments.
 # Dependencies of demod*.c, rather than .o, are intentional.
 
-demod.o : tune.h
+demod.o      : tune.h
+
 demod_afsk.o : tune.h
+
 demod_9600.o : tune.h
 
-testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
-		fcs_calc.o ax25_pad.o decode_aprs.o telemetry.o latlong.o symbols.o tune.h textcolor.o misc.a
+demod_psk.o  : tune.h
+
+tune.h :
+	echo " " > tune.h
+
+
+testagc : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.o hdlc_rec2.o multi_modem.o rrbb.o \
+		fcs_calc.o ax25_pad.o decode_aprs.o telemetry.o dtime_now.o latlong.o symbols.o tune.h textcolor.o misc.a
 	$(CC) $(CFLAGS) -o atest $^ $(LDFLAGS)
 	./atest 02_Track_2.wav | grep "packets decoded in" > atest.out
 
 
+testagc96 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o latlong.o \
+		symbols.o tt_text.o textcolor.o telemetry.o dtime_now.o \
+		misc.a
+	rm -f atest96
+	$(CC) $(CFLAGS) -o atest96 $^ $(LDFLAGS)
+	./atest96 -B 9600 ../walkabout9600c.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 19990303_0225_9600_8bis_22kHz.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600  19990303_0225_9600_16bit_22kHz.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 -P + z8-22k.wav| grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 test9600.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
 
 
 
@@ -757,8 +894,7 @@ dist-src : README.md CHANGES.md
 
 .PHONY: clean
 clean :
-	rm -f $(APPS) fsk_fast_filter.h *.o *.a direwolf.desktop
-	echo " " > tune.h
+	rm -f $(APPS) gen_fff tune.h fsk_fast_filter.h *.o *.a direwolf.desktop
 
 
 depend : $(wildcard *.c)

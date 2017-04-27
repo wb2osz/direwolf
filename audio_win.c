@@ -39,6 +39,10 @@
  *---------------------------------------------------------------*/
 
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
+				// Also includes windows.h.
+
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -48,7 +52,6 @@
 #include <io.h>
 #include <fcntl.h>
 
-#include <windows.h>		
 #include <mmsystem.h>
 
 #ifndef WAVE_FORMAT_96M16
@@ -57,11 +60,9 @@
 #endif
 
 #include <winsock2.h>
-#define _WIN32_WINNT 0x0501
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
 
 
-#include "direwolf.h"
 #include "audio.h"
 #include "audio_stats.h"
 #include "textcolor.h"
@@ -286,7 +287,7 @@ int audio_open (struct audio_s *pa)
 
 	    A->udp_sock = INVALID_SOCKET;
 
-	    in_dev_no[a] = WAVE_MAPPER;	/* = -1 */
+	    in_dev_no[a] = WAVE_MAPPER;	/* = ((UINT)-1) in mmsystem.h */
 	    out_dev_no[a] = WAVE_MAPPER;
 
 /*
@@ -319,16 +320,16 @@ int audio_open (struct audio_s *pa)
 
 	      /* Otherwise, does it have search string? */
 
-	      if (in_dev_no[a] == WAVE_MAPPER && strlen(pa->adev[a].adevice_in) >= 1) {
+	      if ((UINT)(in_dev_no[a]) == WAVE_MAPPER && strlen(pa->adev[a].adevice_in) >= 1) {
 	        num_devices = waveInGetNumDevs();
-	        for (n=0 ; n<num_devices && in_dev_no[a] == WAVE_MAPPER ; n++) {
+	        for (n=0 ; n<num_devices && (UINT)(in_dev_no[a]) == WAVE_MAPPER ; n++) {
 	          if ( ! waveInGetDevCaps(n, &wic, sizeof(WAVEINCAPS))) {
 	            if (strstr(wic.szPname, pa->adev[a].adevice_in) != NULL) {
 	              in_dev_no[a] = n;
 	            }
 	          }
 	        }
-	        if (in_dev_no[a] == WAVE_MAPPER) {
+	        if ((UINT)(in_dev_no[a]) == WAVE_MAPPER) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("\"%s\" doesn't match any of the input devices.\n", pa->adev[a].adevice_in);
 	        }
@@ -344,16 +345,16 @@ int audio_open (struct audio_s *pa)
 	      out_dev_no[a] = atoi(pa->adev[a].adevice_out);
 	    }
 
-	    if (out_dev_no[a] == WAVE_MAPPER && strlen(pa->adev[a].adevice_out) >= 1) {
+	    if ((UINT)(out_dev_no[a]) == WAVE_MAPPER && strlen(pa->adev[a].adevice_out) >= 1) {
 	      num_devices = waveOutGetNumDevs();
-	      for (n=0 ; n<num_devices && out_dev_no[a] == WAVE_MAPPER ; n++) {
+	      for (n=0 ; n<num_devices && (UINT)(out_dev_no[a]) == WAVE_MAPPER ; n++) {
 	        if ( ! waveOutGetDevCaps(n, &woc, sizeof(WAVEOUTCAPS))) {
 	          if (strstr(woc.szPname, pa->adev[a].adevice_out) != NULL) {
 	            out_dev_no[a] = n;
 	          }
 	        }
 	      }
-	      if (out_dev_no[a] == WAVE_MAPPER) {
+	      if ((UINT)(out_dev_no[a]) == WAVE_MAPPER) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("\"%s\" doesn't match any of the output devices.\n", pa->adev[a].adevice_out);
 	      }
@@ -798,7 +799,7 @@ int audio_get (int a)
 
 	      p = (WAVEHDR*)(A->in_headp);		/* no need to be volatile at this point */
 
-	      if (p->dwUser == -1) {
+	      if (p->dwUser == (DWORD)(-1)) {
 	        waveInUnprepareHeader(A->audio_in_handle, p, sizeof(WAVEHDR));
 	        p->dwUser = 0;	/* Index for next byte. */
 
@@ -959,11 +960,11 @@ int audio_put (int a, int c)
 	/* Should never be full at this point. */
 
 	assert (p->dwBufferLength >= 0);
-	assert (p->dwBufferLength < A->outbuf_size);
+	assert (p->dwBufferLength < (DWORD)(A->outbuf_size));
 
 	p->lpData[p->dwBufferLength++] = c;
 
-	if (p->dwBufferLength == A->outbuf_size) {
+	if (p->dwBufferLength == (DWORD)(A->outbuf_size)) {
 	  return (audio_flush(a));
 	}
 

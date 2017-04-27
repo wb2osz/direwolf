@@ -24,9 +24,15 @@ void tq_init (struct audio_s *audio_config_p);
 
 void tq_append (int chan, int prio, packet_t pp);
 
+void lm_data_request (int chan, int prio, packet_t pp);
+
+void lm_seize_request (int chan);
+
 void tq_wait_while_empty (int chan);
 
 packet_t tq_remove (int chan, int prio);
+
+packet_t tq_peek (int chan, int prio);
 
 int tq_count (int chan, int prio);
 

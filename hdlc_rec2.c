@@ -84,13 +84,15 @@
  *
  *******************************************************************************/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <assert.h>
 #include <ctype.h>
+#include <string.h>
 
 //Optimize processing by accessing directly to decoded bits
 #define RRBB_C 1
-#include "direwolf.h"
 #include "hdlc_rec2.h"
 #include "fcs_calc.h"
 #include "textcolor.h"
@@ -242,6 +244,8 @@ void hdlc_rec2_block (rrbb_t block)
 	/* Create an empty retry configuration */
 	retry_conf_t retry_cfg;
 
+	memset (&retry_cfg, 0, sizeof(retry_cfg));
+
 /* 
  * For our first attempt we don't try to alter any bits.
  * Still let it thru if passall AND no retries are desired.
@@ -327,7 +331,7 @@ void hdlc_rec2_block (rrbb_t block)
 static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int slice, alevel_t alevel)
 {
 	int ok;
-	int len, i,j;
+	int len, i;
 	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
 	//int passall = save_audio_config_p->achan[chan].passall;
 
@@ -335,6 +339,9 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int slice,
 	len = rrbb_get_len(block);
 	/* Prepare the retry configuration */
         retry_conf_t retry_cfg;
+
+	memset (&retry_cfg, 0, sizeof(retry_cfg));
+
 	/* Will modify only contiguous bits*/
 	retry_cfg.mode = RETRY_MODE_CONTIGUOUS; 
 /* 
@@ -464,14 +471,17 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int slice,
 int hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int slice, alevel_t alevel)
 {
 	int ok;
-	int len, i, j;
-	retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
+	//int len;
+	//retry_t fix_bits = save_audio_config_p->achan[chan].fix_bits;
 	int passall = save_audio_config_p->achan[chan].passall;
 #if DEBUG_LATER
 	double tstart, tend;
 #endif
 	retry_conf_t retry_cfg;
-	len = rrbb_get_len(block);
+
+	memset (&retry_cfg, 0, sizeof(retry_cfg));
+
+	//len = rrbb_get_len(block);
 
 
 /*
@@ -575,7 +585,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	struct hdlc_state_s H;	
 	int blen;			/* Block length in bits. */
 	int i;
-	unsigned int raw;			/* From demodulator. */
+	int raw;			/* From demodulator.  Should be 0 or 1. */
 #if DEBUGx
 	int crc_failed = 1;
 #endif

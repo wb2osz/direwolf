@@ -1,5 +1,6 @@
 /* UTM to Latitude / Longitude conversion */
 
+#include "direwolf.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +8,6 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "direwolf.h"
 #include "utm.h"
 #include "mgrs.h"
 #include "usng.h"

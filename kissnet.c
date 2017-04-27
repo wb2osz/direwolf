@@ -95,10 +95,12 @@
  */
 
 
+#include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
+
+
 #if __WIN32__
 #include <winsock2.h>
-#define _WIN32_WINNT 0x0501
-#include <ws2tcpip.h>
+#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
 #else 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -115,11 +117,9 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <assert.h>
-
 #include <string.h>
 
 
-#include "direwolf.h"
 #include "tq.h"
 #include "ax25_pad.h"
 #include "textcolor.h"
@@ -127,6 +127,8 @@
 #include "kissnet.h"
 #include "kiss_frame.h"
 #include "xmit.h"
+
+void hex_dump (unsigned char *p, int len);	// This should be in a .h file.
 
 
 static kiss_frame_t kf;		/* Accumulated KISS frame and state of decoder. */
@@ -139,8 +141,15 @@ static int client_sock;		/* File descriptor for socket for */
 				/* (Don't use SOCKET type because it is unsigned.) */
 
 
-static void * connect_listen_thread (void *arg);
-static void * kissnet_listen_thread (void *arg);
+// TODO:  define in one place, use everywhere.
+#if __WIN32__
+#define THREAD_F unsigned __stdcall
+#else
+#define THREAD_F void *
+#endif
+
+static THREAD_F connect_listen_thread (void *arg);
+static THREAD_F kissnet_listen_thread (void *arg);
 
 
 
@@ -184,8 +193,8 @@ void kissnet_init (struct misc_config_s *mc)
 #else
 	pthread_t connect_listen_tid;
 	pthread_t cmd_listen_tid;
-#endif
 	int e;
+#endif
 	int kiss_port = mc->kiss_port;
 
 
@@ -208,7 +217,7 @@ void kissnet_init (struct misc_config_s *mc)
  * This waits for a client to connect and sets client_sock.
  */
 #if __WIN32__
-	connect_listen_th = _beginthreadex (NULL, 0, connect_listen_thread, (void *)kiss_port, 0, NULL);
+	connect_listen_th = (HANDLE)_beginthreadex (NULL, 0, connect_listen_thread, (void *)kiss_port, 0, NULL);
 	if (connect_listen_th == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not create KISS socket connect listening thread\n");
@@ -227,7 +236,7 @@ void kissnet_init (struct misc_config_s *mc)
  * This reads messages from client when client_sock is valid.
  */
 #if __WIN32__
-	cmd_listen_th = _beginthreadex (NULL, 0, kissnet_listen_thread, NULL, 0, NULL);
+	cmd_listen_th = (HANDLE)_beginthreadex (NULL, 0, kissnet_listen_thread, NULL, 0, NULL);
 	if (cmd_listen_th == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not create KISS socket command listening thread\n");
@@ -263,7 +272,7 @@ void kissnet_init (struct misc_config_s *mc)
  *
  *--------------------------------------------------------------------*/
 
-static void * connect_listen_thread (void *arg)
+static THREAD_F connect_listen_thread (void *arg)
 {
 #if __WIN32__
 
@@ -284,7 +293,7 @@ static void * connect_listen_thread (void *arg)
 	if (err != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("WSAStartup failed: %d\n", err);
-	    return (NULL);
+	    return (0);
 	}
 
 	if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
@@ -292,7 +301,7 @@ static void * connect_listen_thread (void *arg)
           dw_printf("Could not find a usable version of Winsock.dll\n");
           WSACleanup();
 	  //sleep (1);
-          return (NULL);
+          return (0);
 	}
 
 	memset (&hints, 0, sizeof(hints));
@@ -307,14 +316,14 @@ static void * connect_listen_thread (void *arg)
 	    dw_printf("getaddrinfo failed: %d\n", err);
 	    //sleep (1);
 	    WSACleanup();
-	    return (NULL);
+	    return (0);
 	}
 
 	listen_sock= socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 	if (listen_sock == INVALID_SOCKET) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("connect_listen_thread: Socket creation failed, err=%d", WSAGetLastError());
-	  return (NULL);
+	  return (0);
 	}
 
 #if DEBUG
@@ -331,7 +340,7 @@ static void * connect_listen_thread (void *arg)
           freeaddrinfo(ai);
           closesocket(listen_sock);
           WSACleanup();
-          return (NULL);
+          return (0);
         }
 
 	freeaddrinfo(ai);
@@ -353,7 +362,7 @@ static void * connect_listen_thread (void *arg)
 	  {
 	    text_color_set(DW_COLOR_ERROR);
             dw_printf("Listen failed with error: %d\n", WSAGetLastError());
-	    return (NULL);
+	    return (0);
 	  }
 	
 	  text_color_set(DW_COLOR_INFO);
@@ -366,7 +375,7 @@ static void * connect_listen_thread (void *arg)
             dw_printf("Accept failed with error: %d\n", WSAGetLastError());
             closesocket(listen_sock);
             WSACleanup();
-            return (NULL);
+            return (0);
           }
 
 	  text_color_set(DW_COLOR_INFO);
@@ -481,7 +490,6 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
 	int kiss_len;
-	int j;
 	int err;
 
 
@@ -501,7 +509,7 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen)
 
 	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
 	 
-	  assert (flen < sizeof(stemp));
+	  assert (flen < (int)(sizeof(stemp)));
 
 	  stemp[0] = (chan << 4) + 0;
 	  memcpy (stemp+1, fbuf, flen);
@@ -580,6 +588,7 @@ static int read_from_socket (int fd, char *ptr, int len)
 #if __WIN32__
 
 //TODO: any flags for send/recv?
+//TODO: Would be useful to have more detailed explanation from the error code.
 
 	  n = recv (fd, ptr + got_bytes, len - got_bytes, 0);
 #else
@@ -659,7 +668,7 @@ static int kiss_get (void)
 	  }
 
           text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError reading KISS byte from clent application.  Closing connection.\n\n");
+	  dw_printf ("\nError reading KISS byte from client application.  Closing connection.\n\n");
 #if __WIN32__
 	  closesocket (client_sock);
 #else
@@ -671,7 +680,7 @@ static int kiss_get (void)
 
 
 
-static void * kissnet_listen_thread (void *arg)
+static THREAD_F kissnet_listen_thread (void *arg)
 {
 	unsigned char ch;
 			
@@ -685,7 +694,11 @@ static void * kissnet_listen_thread (void *arg)
 	  kiss_rec_byte (&kf, ch, kiss_debug, kissnet_send_rec_packet);
 	}  
 
-	return (NULL);	/* to suppress compiler warning. */
+#if __WIN32__
+	return(0);
+#else
+	return (THREAD_F) 0;	/* Unreachable but avoids compiler warning. */
+#endif
 
 } /* end kissnet_listen_thread */
 

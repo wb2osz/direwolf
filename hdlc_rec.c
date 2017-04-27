@@ -27,11 +27,12 @@
  *
  *******************************************************************************/
 
+#include "direwolf.h"
+
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
 
-#include "direwolf.h"
 #include "demod.h"
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
@@ -45,6 +46,7 @@
 
 
 //#define TEST 1				/* Define for unit testing. */
+
 
 //#define DEBUG3 1				/* monitor the data detect signal. */
 
@@ -258,8 +260,15 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
  * with the special "flag" characters.
  *
  * Idle time of all zero bits (alternating tones at maximum rate)
- * has also been observed rarely. 
- * Recognize zero(s) followed by a flag even though it vilolates the spec.
+ * has also been observed rarely. It is easy to understand the reasoning.
+ * The tones alternate at the maximum rate, making it symmetrical and providing
+ * the most opportunity for the PLL to lock on to the edges.
+ * It also violates the published protocol spec.
+ *
+ * Recognize zero(s) followed by a single flag even though it violates the spec.
+ *
+ * It has been reported that the TinyTrak4 does this.
+ * https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/1207
  */
 
 /*
@@ -277,6 +286,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
  * clear channel to transmit.  Even a two byte match causes a lot of flickering
  * when listening to live signals.  Let's try 3 and see how that works out.
  */
+
 
 	//if (H->flag4_det == 0x7e7e7e7e) {
 	if ((H->flag4_det & 0xffffff00) == 0x7e7e7e00) {	
@@ -301,6 +311,15 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 /* 
  * Loss of signal should result in lack of transitions.
  * (all '1' bits) for at least a little while.
+ *
+ * When this was written, I was only concerned about 1200 baud.
+ * For 9600, added later, there is a (de)scrambling function.
+ * So if there is no change in the signal, we would get pseudo random bits here.
+ * Maybe we need to put in another check earlier so DCD is not held on too long
+ * after loss of signal for 9600.
+ * No, that would not be a good idea.  part of a valid frame, when scrambled,
+ * could have seven or more "1" bits in a row.
+ * Needs more study.
  */
 
   
