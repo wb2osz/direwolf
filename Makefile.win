@@ -98,7 +98,7 @@ demod_psk.o  : fsk_demod_state.h
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o ax25_pad2.o xid.o \
-		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
+		decode_aprs.o symbols.o server.o kiss.o kissserial.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
@@ -191,6 +191,12 @@ log2gpx : log2gpx.c textcolor.o misc.a
 
 gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o morse.o dtmf.o textcolor.o dsp.o misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^
+
+
+# Connected mode packet application server.
+
+appserver : appserver.o textcolor.o ax25_pad.o fcs_calc.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
 
@@ -600,20 +606,25 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 	rm -f ../$z-win.zip
 	egrep '^C|^W' generic.conf | cut -c2-999 > direwolf.conf
 	unix2dos direwolf.conf
+	cp doc/README.md README-doc.md
 	zip --junk-paths ../$z-win.zip \
 		README.md \
 		CHANGES.md \
-		doc/User-Guide.pdf \
-		doc/Raspberry-Pi-APRS.pdf \
+		README-doc.md \
+		doc/2400-4800-PSK-for-APRS-Packet-Radio.pdf \
 		doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
 		doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		doc/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf \
 		doc/APRS-Telemetry-Toolkit.pdf \
 		doc/APRStt-Implementation-Notes.pdf \
 		doc/APRStt-interface-for-SARTrack.pdf \
 		doc/APRStt-Listening-Example.pdf \
+		doc/Bluetooth-KISS-TNC.pdf \
+		doc/Going-beyond-9600-baud.pdf \
 		doc/Raspberry-Pi-APRS.pdf \
 		doc/Raspberry-Pi-APRS-Tracker.pdf \
 		doc/Raspberry-Pi-SDR-IGate.pdf \
+		doc/Successful-APRS-IGate-Operation.pdf \
 		doc/User-Guide.pdf \
 		doc/WA8LMF-TNC-Test-CD-Results.pdf \
 		LICENSE* \
@@ -630,6 +641,7 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		ttcalc.exe \
 		dwespeak.bat \
 		telemetry-toolkit/*
+	rm README-doc.md
 
 
 # Reminders if pdf files are not up to date.
@@ -667,4 +679,5 @@ backup :
 # The following is updated by "make depend"
 #
 # DO NOT DELETE
+
 

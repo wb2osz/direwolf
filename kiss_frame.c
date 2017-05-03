@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -43,28 +43,28 @@
  *	
  *		Commands from application recognized:
  *
- *			0	Data Frame	AX.25 frame in raw format.
+ *			_0	Data Frame	AX.25 frame in raw format.
  *
- *			1	TXDELAY		See explanation in xmit.c.
+ *			_1	TXDELAY		See explanation in xmit.c.
  *
- *			2	Persistence	"	"
+ *			_2	Persistence	"	"
  *
- *			3 	SlotTime	"	"
+ *			_3 	SlotTime	"	"
  *
- *			4	TXtail		"	"
+ *			_4	TXtail		"	"
  *						Spec says it is obsolete but Xastir
  *						sends it and we respect it.
  *
- *			5	FullDuplex	Ignored.  Always full duplex.
+ *			_5	FullDuplex	Ignored.
  *		
- *			6	SetHardware	TNC specific.  Ignored.
+ *			_6	SetHardware	TNC specific.
  *			
  *			FF	Return		Exit KISS mode.  Ignored.
  *
  *
  *		Messages sent to client application:
  *
- *			0	Data Frame	Received AX.25 frame in raw format.
+ *			_0	Data Frame	Received AX.25 frame in raw format.
  *
  *---------------------------------------------------------------*/
 
@@ -291,6 +291,8 @@ static int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
  * Inputs:	kf	- Current state of building a frame.
  *		ch	- A byte from the input stream.
  *		debug	- Activates debug output.
+ *		client	- Client app number for TCP KISS.
+ *		          Ignored for pseudo termal and serial port.
  *		sendfun	- Function to send something to the client application.
  *
  * Outputs:	kf	- Current state is updated.
@@ -326,7 +328,7 @@ static int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
 
 
 
-void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, void (*sendfun)(int,unsigned char*,int)) 
+void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, void (*sendfun)(int,unsigned char*,int,int)) 
 {
 
 	//dw_printf ("kiss_frame ( %c %02x ) \n", ch, ch);
@@ -367,10 +369,10 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, void (*sendfu
 	      /* Try to appease client app by sending something back. */
 	      if (strcasecmp("restart\r", (char*)(kf->noise)) == 0 ||
 		    strcasecmp("reset\r", (char*)(kf->noise)) == 0) {
-	   	  (*sendfun) (0, (unsigned char *)"\xc0\xc0", -1);
+	        (*sendfun) (0, (unsigned char *)"\xc0\xc0", -1, client);
 	      }
 	      else {
-	   	  (*sendfun) (0, (unsigned char *)"\r\ncmd:", -1);
+	        (*sendfun) (0, (unsigned char *)"\r\ncmd:", -1, client);
 	      }
 	      kf->noise_len = 0;
 	    }
@@ -550,19 +552,22 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
         case 5:				/* FullDuplex */
 
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set FullDuplex = %d, port %d\n", kiss_msg[1], port);
+	  dw_printf ("KISS protocol set FullDuplex = %d, port %d - Ignored\n", kiss_msg[1], port);
 	  break;
 
         case 6:				/* TNC specific */
 
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set hardware - ignored.\n");
+	  dw_printf ("KISS protocol set hardware - Ignored.\n");
+
+// TODO: kiss_set_hardware (...)
+
 	  break;
 
         case 15:				/* End KISS mode, port should be 15. */
 						/* Ignore it. */
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol end KISS mode\n");
+	  dw_printf ("KISS protocol end KISS mode - Ignored.\n");
 	  break;
 
         default:			
@@ -579,6 +584,57 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 	}
 
 } /* end kiss_process_msg */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        kiss_set_hardware
+ *
+ * Purpose:     Process the "set hardware" command.
+ *
+ * Inputs:
+ *
+ *
+ * Description:	This is new in version 1.5.  "Set hardware" was previously ignored.
+ *
+ *		There are times when the client app might want to send configuration
+ *		commands, such as modem speed, to the KISS TNC or inquire about its
+ *		current state.
+ *
+ *		The immediate motivation for adding this is that one application wants
+ *		to know how many frames are currently in the transmit queue.  This can
+ *		be used for throttling of large transmissions and performing some action
+ *		after the last frame has been sent.
+ *
+ *		The original KISS protocol spec offers no guidance on what this might look
+ *		like.  I'm aware of only two, drastically different, implementations:
+ *
+ *		fldigi - http://www.w1hkj.com/FldigiHelp-3.22/kiss_command_page.html
+ *
+ *			Everything is in human readable text in the form of:
+ *			COMMAND : [ parameter [ , parameter ... ] ]
+ *
+ *		    Used by applications, http://www.w1hkj.com/FldigiHelp/kiss_host_prgs_page.html
+ *			- BPQ32
+ *			- UIChar
+ *			- YAAC
+ *
+ *		mobilinkd - https://raw.githubusercontent.com/mobilinkd/tnc1/tnc2/bertos/net/kiss.c
+ *
+ *			Single byte with the command / response code, followed by
+ *			zero or more value bytes.
+ *
+ *		    Used by applications:
+ *			- APRSdroid
+ *
+ *		It would be beneficial to adopt one of them rather than doing something
+ *		completely different.  It might even be possible to recognize both.
+ *		This might allow leveraging of other existing applications.
+ *
+ *--------------------------------------------------------------------*/
+
+// static void kiss_set_hardware (...)
+
 
 
 /*-------------------------------------------------------------------

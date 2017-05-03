@@ -34,13 +34,24 @@ enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 struct misc_config_s {
 
 	int agwpe_port;		/* Port number for the "AGW TCPIP Socket Interface" */
-	int kiss_port;		/* Port number for the "KISS" protocol. */
+	int kiss_port;		/* Port number for the "TCP KISS" protocol. */
 	int enable_kiss_pt;	/* Enable pseudo terminal for KISS. */
 				/* Want this to be off by default because it hangs */
 				/* after a while if nothing is reading from other end. */
 
-	char nullmodem[20];	/* Serial port name for our end of the */
+	char kiss_serial_port[20];
+				/* Serial port name for our end of the */
 				/* virtual null modem for native Windows apps. */
+				/* Version 1.5 add same capability for Linux. */
+
+	int kiss_serial_speed;	/* Speed, in bps, for the KISS serial port. */
+				/* If 0, just leave what was already there. */
+
+	int kiss_serial_poll;	/* When using Bluetooth KISS, the /dev/rfcomm0 device */
+				/* will appear and disappear as the remote application */
+				/* opens and closes the virtual COM port. */
+				/* When this is non-zero, we will check periodically to */
+				/* see if the device has appeared and we will open it. */
 
 	char gpsnmea_port[20];	/* Serial port name for reading NMEA sentences from GPS. */
 				/* e.g. COM22, /dev/ttyACM0 */

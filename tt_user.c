@@ -58,6 +58,7 @@
 
 #include "server.h"
 #include "kiss.h"
+#include "kissserial.h"
 #include "kissnet.h"
 
 
@@ -895,8 +896,9 @@ static void xmit_object_report (int i, int first_time)
 	  flen = ax25_pack(pp, fbuf);
 
 	  server_send_rec_packet (save_tt_config_p->obj_recv_chan, pp, fbuf, flen);
-	  kissnet_send_rec_packet (save_tt_config_p->obj_recv_chan, fbuf, flen);
-	  kiss_send_rec_packet (save_tt_config_p->obj_recv_chan, fbuf, flen);
+	  kissnet_send_rec_packet (save_tt_config_p->obj_recv_chan, fbuf, flen, -1);
+	  kissserial_send_rec_packet (save_tt_config_p->obj_recv_chan, fbuf, flen, -1);
+	  kisspt_send_rec_packet (save_tt_config_p->obj_recv_chan, fbuf, flen, -1);
 	}
 
 	if (first_time && save_tt_config_p->obj_send_to_ig)  {

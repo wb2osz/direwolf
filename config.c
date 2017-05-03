@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -870,8 +870,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	/* Ideally we'd like to figure out if com0com is installed */
 	/* and automatically enable this.  */
 	
-	//strlcpy (p_misc_config->nullmodem, DEFAULT_NULLMODEM, sizeof(p_misc_config->nullmodem));
-	strlcpy (p_misc_config->nullmodem, "", sizeof(p_misc_config->nullmodem));
+	strlcpy (p_misc_config->kiss_serial_port, "", sizeof(p_misc_config->kiss_serial_port));
+	p_misc_config->kiss_serial_speed = 0;
+	p_misc_config->kiss_serial_poll = 0;
 
 	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
 	strlcpy (p_misc_config->waypoint_port, "", sizeof(p_misc_config->waypoint_port));
@@ -4102,17 +4103,58 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * NULLMODEM		- Device name for our end of the virtual "null modem"
+ * NULLMODEM name [ speed ]	- Device name for serial port or our end of the virtual "null modem"
+ * SERIALKISS name  [ speed ]
+ *
+ * Version 1.5:  Added SERIALKISS which is equivalent to NULLMODEM.
+ * The original name sort of made sense when it was used only for one end of a virtual
+ * null modem cable on Windows only.  Now it is also available for Linux.
+ * TODO1.5: In retrospect, this doesn't seem like such a good name.
  */
-	  else if (strcasecmp(t, "nullmodem") == 0) {
+
+	  else if (strcasecmp(t, "NULLMODEM") == 0 || strcasecmp(t, "SERIALKISS") == 0) {
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file: Missing device name for my end of the 'null modem' on line %d.\n", line);
+	      dw_printf ("Config file: Missing serial port name on line %d.\n", line);
 	      continue;
 	    }
 	    else {
-	      strlcpy (p_misc_config->nullmodem, t, sizeof(p_misc_config->nullmodem));
+	      if (strlen(p_misc_config->kiss_serial_port) > 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Warning serial port name on line %d replaces earlier value.\n", line);
+	      }
+	      strlcpy (p_misc_config->kiss_serial_port, t, sizeof(p_misc_config->kiss_serial_port));
+	      p_misc_config->kiss_serial_speed = 0;
+	      p_misc_config->kiss_serial_poll = 0;
+	    }
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      p_misc_config->kiss_serial_speed = atoi(t);
+	    }
+	  }
+
+/*
+ * SERIALKISSPOLL name		- Poll for serial port name that might come and go.
+ *			  	  e.g. /dev/rfcomm0 for bluetooth.
+ */
+
+	  else if (strcasecmp(t, "SERIALKISSPOLL") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing serial port name on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      if (strlen(p_misc_config->kiss_serial_port) > 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Warning serial port name on line %d replaces earlier value.\n", line);
+	      }
+	      strlcpy (p_misc_config->kiss_serial_port, t, sizeof(p_misc_config->kiss_serial_port));
+	      p_misc_config->kiss_serial_speed = 0;
+	      p_misc_config->kiss_serial_poll = 1;	// set polling.
 	    }
 	  }
 

@@ -15,7 +15,8 @@
 
 
 enum kiss_state_e {
-	KS_SEARCHING,		/* Looking for FEND to start KISS frame. */
+	KS_SEARCHING = 0,	/* Looking for FEND to start KISS frame. */
+				/* Must be 0 so we can simply zero whole structure to initialize. */
 	KS_COLLECTING};		/* In process of collecting KISS frame. */
 
 
@@ -44,7 +45,7 @@ void kiss_frame_init (struct audio_s *pa);
 
 int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out);
 
-void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, void (*sendfun)(int,unsigned char*,int)); 
+void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, void (*sendfun)(int,unsigned char*,int,int)); 
  
 
 typedef enum fromto_e { FROM_CLIENT=0, TO_CLIENT=1 } fromto_t;

@@ -292,7 +292,7 @@ z := $(notdir ${CURDIR})
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o  ax25_pad2.o xid.o \
-		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
+		decode_aprs.o symbols.o server.o kiss.o kissserial.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o audio.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
@@ -570,15 +570,22 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 # doc/README.md contains an overview of the PDF file contents and is more useful here.
 #
 	$(INSTALL) -D --mode=644 doc/README.md $(INSTALLDIR)/share/doc/direwolf/README.md
-	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	$(INSTALL) -D --mode=644 doc/2400-4800-PSK-for-APRS-Packet-Radio.pdf $(INSTALLDIR)/share/doc/direwolf/2400-4800-PSK-for-APRS-Packet-Radio.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf $(INSTALLDIR)/share/doc/direwolf/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf
+	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Listening-Example.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Listening-Example.pdf
+	$(INSTALL) -D --mode=644 doc/Bluetooth-KISS-TNC.pdf $(INSTALLDIR)/share/doc/direwolf/Bluetooth-KISS-TNC.pdf
+	$(INSTALL) -D --mode=644 doc/Going-beyond-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/Going-beyond-9600-baud.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-SDR-IGate.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
-	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -D --mode=644 doc/Successful-APRS-IGate-Operation.pdf $(INSTALLDIR)/share/doc/direwolf/Successful-APRS-IGate-Operation.pdf
+	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	$(INSTALL) -D --mode=644 doc/WA8LMF-TNC-Test-CD-Results.pdf $(INSTALLDIR)/share/doc/direwolf/WA8LMF-TNC-Test-CD-Results.pdf
 #
 # Various sample config and other files go into examples under the doc directory.
 # When building from source, these can be put in home directory with "make install-conf".

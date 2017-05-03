@@ -637,8 +637,7 @@ static THREAD_F connect_listen_thread (void *arg)
             }
 
 	    text_color_set(DW_COLOR_INFO);
-// TODO: "attached" or some other term would be better because "connected" has a different meaning for AX.25.
-	    dw_printf("\nConnected to AGW client application %d ...\n\n", client);
+	    dw_printf("\nAttached to AGW client application %d ...\n\n", client);
 
 /*
  * The command to change this is actually a toggle, not explicit on or off.
@@ -729,7 +728,7 @@ static THREAD_F connect_listen_thread (void *arg)
             client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
 	    text_color_set(DW_COLOR_INFO);
-	    dw_printf("\nConnected to AGW client application %d...\n\n", client);
+	    dw_printf("\nAttached to AGW client application %d...\n\n", client);
 
 /*
  * The command to change this is actually a toggle, not explicit on or off.

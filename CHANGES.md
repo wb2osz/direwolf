@@ -2,6 +2,24 @@
 # Revision History #
 
 
+## Version 1.5 -- Development snapshot A -- May 2017 ##
+
+This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
+
+### New Features: ###
+
+- TCP KISS can now handle multiple concurrent applications.
+
+- Linux can use serial port for KISS in addition to a pseudo terminal.
+
+- New document ***Bluetooth-KISS-TNC.pdf*** explaining how to use KISS over Bluetooth.
+
+### Bugs Fixed: ###
+
+- Little spelling errors in messages ????
+
+----------
+
 ## Version 1.4  -- April 2017 ##
 
 

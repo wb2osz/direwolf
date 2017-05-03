@@ -237,7 +237,7 @@ direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_link.o ax25
 		demod.o digipeater.o cdigipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
 		encode_aprs.o encode_aprs.o fcs_calc.o fcs_calc.o gen_tone.o \
 		geotranz.a hdlc_rec.o hdlc_rec2.o hdlc_send.o igate.o kiss_frame.o \
-		kiss.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
+		kiss.o kissserial.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
 		waypoint.o serial_port.o pfilter.o ptt.o rdq.o recv.o rrbb.o server.o \
 		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xid.o xmit.o \
 		dwgps.o dwgpsnmea.o mheard.o
@@ -359,15 +359,26 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
 	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
 #
-	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+# ./README.md is an overview for the project main page.
+# doc/README.md contains an overview of the PDF file contents and is more useful here.
+#
+	$(INSTALL) -D --mode=644 doc/README.md $(INSTALLDIR)/share/doc/direwolf/README.md
+	$(INSTALL) -D --mode=644 doc/2400-4800-PSK-for-APRS-Packet-Radio.pdf $(INSTALLDIR)/share/doc/direwolf/2400-4800-PSK-for-APRS-Packet-Radio.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf $(INSTALLDIR)/share/doc/direwolf/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf
+	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Listening-Example.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Listening-Example.pdf
+	$(INSTALL) -D --mode=644 doc/Bluetooth-KISS-TNC.pdf $(INSTALLDIR)/share/doc/direwolf/Bluetooth-KISS-TNC.pdf
+	$(INSTALL) -D --mode=644 doc/Going-beyond-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/Going-beyond-9600-baud.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-SDR-IGate.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
-	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -D --mode=644 doc/Successful-APRS-IGate-Operation.pdf $(INSTALLDIR)/share/doc/direwolf/Successful-APRS-IGate-Operation.pdf
+	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	$(INSTALL) -D --mode=644 doc/WA8LMF-TNC-Test-CD-Results.pdf $(INSTALLDIR)/share/doc/direwolf/WA8LMF-TNC-Test-CD-Results.pdf
 #
 # Sample config files also go into the doc directory.
 # When building from source, these can be put in home directory with "make install-conf".

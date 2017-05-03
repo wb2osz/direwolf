@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -94,6 +94,7 @@
 #include "server.h"
 #include "kiss.h"
 #include "kissnet.h"
+#include "kissserial.h"
 #include "kiss_frame.h"
 #include "waypoint.h"
 #include "gen_tone.h"
@@ -260,8 +261,8 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "H", __DATE__);
-	dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
 	dw_printf ("Includes optional support for: ");
@@ -466,7 +467,7 @@ int main (int argc, char *argv[])
 	
 	      case 'a':  server_set_debug(1); break;
 
-	      case 'k':  d_k_opt++; kiss_serial_set_debug (d_k_opt); break;
+	      case 'k':  d_k_opt++; kissserial_set_debug (d_k_opt); kisspt_set_debug (d_k_opt); break;
 	      case 'n':  d_n_opt++; kiss_net_set_debug (d_n_opt); break;
 
 	      case 'u':  d_u_opt = 1; break;
@@ -766,7 +767,8 @@ int main (int argc, char *argv[])
 /*
  * Create a pseudo terminal and KISS TNC emulator.
  */
-	kiss_init (&misc_config);
+	kisspt_init (&misc_config);
+	kissserial_init (&misc_config);
 	kiss_frame_init (&audio_config);
 
 /*
@@ -1084,9 +1086,10 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	flen = ax25_pack(pp, fbuf);
 
-	server_send_rec_packet (chan, pp, fbuf, flen);
-	kissnet_send_rec_packet (chan, fbuf, flen);
-	kiss_send_rec_packet (chan, fbuf, flen);
+	server_send_rec_packet (chan, pp, fbuf, flen);		// AGW net protocol
+	kissnet_send_rec_packet (chan, fbuf, flen, -1);		// KISS TCP
+	kissserial_send_rec_packet (chan, fbuf, flen, -1);	// KISS serial port
+	kisspt_send_rec_packet (chan, fbuf, flen, -1);		// KISS pseudo terminal
 
 /* 
  * If it came from DTMF decoder, send it to APRStt gateway.
@@ -1204,7 +1207,7 @@ static void usage (char **argv)
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");
-	dw_printf ("       k             k = KISS serial port client.\n");
+	dw_printf ("       k             k = KISS serial port or pseudo terminal client.\n");
 	dw_printf ("       n             n = KISS network client.\n");
 	dw_printf ("       u             u = Display non-ASCII text in hexadecimal.\n");
 	dw_printf ("       p             p = dump Packets in hexadecimal.\n");
