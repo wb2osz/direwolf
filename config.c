@@ -4831,6 +4831,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "INFOCMD") == 0) {
 	    b->custom_infocmd = strdup(value);
 	  }
+	  else if (strcasecmp(keyword, "IGNOREEMPTY") == 0) {
+	    b->ignore_empty_cmd_stdout = atoi(value);
+	  }
 	  else if (strcasecmp(keyword, "OBJNAME") == 0) {
 	    strlcpy(b->objname, value, sizeof(b->objname));
 	  }

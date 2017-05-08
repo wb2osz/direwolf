@@ -761,11 +761,13 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	          strlcat (super_comment, var_comment, sizeof(super_comment));
 	        }
 	        else {
-		  text_color_set(DW_COLOR_ERROR);
-	    	  dw_printf ("xBEACON, config file line %d, COMMENTCMD failure.\n", g_misc_config_p->beacon[j].lineno);
-	        }
+                if (k < 0 || !g_misc_config_p->beacon[j].ignore_empty_cmd_stdout) {
+                    text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("xBEACON, config file line %d, COMMENTCMD failure.\n", g_misc_config_p->beacon[j].lineno);
+                }
+                strlcpy (super_comment, "", sizeof(super_comment)); /* abort */
+            }
 	      }
-
 
 /* 
  * Add the info part depending on beacon type. 
@@ -882,9 +884,11 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	              strlcat (beacon_text, info_part, sizeof(beacon_text));
 	            }
 	            else {
-		      text_color_set(DW_COLOR_ERROR);
-	    	      dw_printf ("CBEACON, config file line %d, INFOCMD failure.\n", g_misc_config_p->beacon[j].lineno);
-		      strlcpy (beacon_text, "", sizeof(beacon_text));  // abort!
+                    if(k < 0 || !g_misc_config_p->beacon[j].ignore_empty_cmd_stdout) {
+                        text_color_set(DW_COLOR_ERROR);
+                        dw_printf ("CBEACON, config file line %d, INFOCMD failure.\n", g_misc_config_p->beacon[j].lineno);
+                    }
+		            strlcpy (beacon_text, "", sizeof(beacon_text));  // abort!
 	            }
 		  }
 		  else {

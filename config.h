@@ -176,7 +176,8 @@ struct misc_config_s {
 	  char *comment;	/* Comment or NULL. */
 	  char *commentcmd;	/* Command to append more to Comment or NULL. */
 
-
+      int ignore_empty_cmd_stdout; /* Do not print an error when infocmd exits
+                                      with status 0, and no output is generated. */
 	} beacon[MAX_BEACONS];
 
 };
