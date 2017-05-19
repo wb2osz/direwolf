@@ -25,11 +25,14 @@ These dive into more detail for specialized topics or typical usage scenarios.
 
     This explains how it all works, proper configuration, and troubleshooting.
 
+- [**Bluetooth KISS TNC**](Bluetooth-KISS-TNC.pdf)  [ [*download*](../../../raw/dev/doc/Bluetooth-KISS-TNC.pdf) ]
+
+	Eliminate the cable between your TNC and application.  Use Bluetooth instead.  
+
 - [**APRStt Implementation Notes**](APRStt-Implementation-Notes.pdf)  [ [*download*](../../../raw/dev/doc/APRStt-Implementation-Notes.pdf) ]
 
 	Very few hams have portable equipment for APRS but nearly everyone has a handheld radio that can send DTMF tones.  APRStt allows a user, equipped with only DTMF (commonly known as Touch Tone) generation capability, to enter information into the global APRS data network.
 	This document explains how the APRStt concept was implemented in the Dire Wolf application.  
-
 - [**APRStt Interface for SARTrack**](APRStt-interface-for-SARTrack.pdf) [ [*download*](../../../raw/dev/doc/APRStt-interface-for-SARTrack.pdf) ]
 
 	This example illustrates how APRStt can be integrated with other applications such as SARTrack, APRSISCE/32, YAAC, or Xastir.  
