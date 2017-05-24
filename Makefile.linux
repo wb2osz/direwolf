@@ -2,6 +2,9 @@
 # Makefile for Linux version of Dire Wolf.
 #
 
+
+
+
 APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
 
 all :  $(APPS) direwolf.desktop direwolf.conf
@@ -259,6 +262,16 @@ endif
 CFLAGS += -DUSE_ALSA
 LDFLAGS += -lasound
 
+ifeq ($(wildcard /usr/include/pthread.h),)
+$(error /usr/include/pthread.h does not exist.  Install it with "sudo apt-get install libc6-dev" or "sudo yum install libc6-dev" )
+endif
+
+ifneq ($(USE_ALSA),)
+ifeq ($(wildcard /usr/include/alsa/asoundlib.h),)
+$(error /usr/include/alsa/asoundlib.h does not exist.  Install it with "sudo apt-get install libasound2-dev" or "sudo yum install libasound2-dev" )
+endif
+endif
+
 
 # Enable GPS if header file is present.
 # Finding libgps.so* is more difficult because it
@@ -355,7 +368,9 @@ tocalls-symbols :
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
+# First two use .c rather than .o because they depend on DECAMAIN definition.
+
+decode_aprs : decode_aprs.c kiss_frame.c  dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ $(LDFLAGS)
 
 
@@ -638,7 +653,8 @@ install-conf : direwolf.conf
 	cp -n telemetry-toolkit/telem-*.conf ~
 ifneq ($(wildcard $(HOME)/Desktop),)
 	@echo " "
-	@echo "This will add a desktop icon on some systems:"
+	@echo "This will add a desktop icon on some systems."
+	@echo "This is known to work on Raspberry Pi but might not be compatible with other desktops."
 	@echo " "
 	@echo "        make install-rpi"
 	@echo " "

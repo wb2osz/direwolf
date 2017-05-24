@@ -45,6 +45,8 @@ void kiss_frame_init (struct audio_s *pa);
 
 int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out);
 
+int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out);
+
 void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, void (*sendfun)(int,unsigned char*,int,int)); 
  
 

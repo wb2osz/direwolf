@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -4583,6 +4583,14 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  *
  *		WB2OSZ-1>APN383,qAR,N1EDU-2:!4237.14NS07120.83W#PHG7130Chelmsford, MA
  *
+ *		New for 1.5:
+ *
+ *		Also allow hexadecimal bytes for raw AX.25 or KISS.  e.g.
+ *
+ *		00 82 a0 ae ae 62 60 e0 82 96 68 84 40 40 60 9c 68 b0 ae 86 40 e0 40 ae 92 88 8a 64 63 03 f0 3e 45 4d 36 34 6e 65 2f 23 20 45 63 68 6f 6c 69 6e 6b 20 31 34 35 2e 33 31 30 2f 31 30 30 68 7a 20 54 6f 6e 65
+ *
+ *		If it begins with 00 or C0 (which would be impossible for AX.25 address) process as KISS.
+ *		Also print these formats.
  *
  * Outputs:	stdout
  *
@@ -4614,10 +4622,15 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * TODO:	To make it more useful,
  *			- Remove any leading timestamp.
  *			- Remove any "qA*" and following from the path.
+ *			- Handle non-APRS frames properly.
  *
  *------------------------------------------------------------------*/
 
 #if DECAMAIN
+
+#include "kiss_frame.h"
+
+
 
 /* Stub for stand-alone decoder. */
 
@@ -4627,11 +4640,48 @@ void nmea_send_waypoint (char *wname_in, double dlat, double dlong, char symtab,
 	return;
 }
 
+// TODO:  hex_dump is currently in server.c and we don't want to drag that in.
+// Someday put it in a more reasonable place, with other general utilities, and remove the private copy here.
 
+
+static void hex_dump (unsigned char *p, int len)
+{
+	int n, i, offset;
+
+	offset = 0;
+	while (len > 0) {
+	  n = len < 16 ? len : 16;
+	  dw_printf ("  %03x: ", offset);
+	  for (i=0; i<n; i++) {
+	    dw_printf (" %02x", p[i]);
+	  }
+	  for (i=n; i<16; i++) {
+	    dw_printf ("   ");
+	  }
+	  dw_printf ("  ");
+	  for (i=0; i<n; i++) {
+	    dw_printf ("%c", isprint(p[i]) ? p[i] : '.');
+	  }
+	  dw_printf ("\n");
+	  p += 16;
+	  offset += 16;
+	  len -= 16;
+	}
+}
+
+
+// Do we have two hexadecimal digits followed by whitespace or end of line?
+
+#define ISHEX2(x)  (isxdigit(x[0]) && isxdigit(x[1]) && (x[2] == '\0' || isspace(x[2])))
+
+#define MAXLINE 9000
+#define MAXBYTES 3000
 
 int main (int argc, char *argv[]) 
 {
-	char stuff[300];
+	char stuff[MAXLINE];
+	unsigned char bytes[MAXBYTES];
+	int num_bytes;
 	char *p;	
 	packet_t pp;
 
@@ -4686,38 +4736,150 @@ int main (int argc, char *argv[])
 
 	    text_color_set(DW_COLOR_REC);
 	    dw_printf("\n%s\n", stuff);	    
-	 
-	    pp = ax25_from_text(stuff, 1);
-	    if (pp != NULL) 
-            {
-	      decode_aprs_t A;
 
-	      // log directory option someday?
-	      decode_aprs (&A, pp, 0);
+// Do we have monitor format, KISS, or AX.25 frame?
 
-	      //Print it all out in human readable format.
+	    p = stuff;
+	    while (isspace(*p)) p++;
 
-	      decode_aprs_print (&A);
+	    if (ISHEX2(p)) {
 
-	      /*
-	       * Perform validity check on each address.
-	       * This should print an error message if any issues.
-	       */
-	      (void)ax25_check_addresses(pp);
+// Collect a bunch of hexadecimal numbers.
 
-	      // Send to log file?
+	      num_bytes = 0;
 
-	      // if (logdir != NULL && *logdir != '\0') {
-	      //   log_write (&A, pp, logdir);
-	      // }
+	      while (ISHEX2(p) && num_bytes < MAXBYTES) {
 
-	      ax25_delete (pp);
+	        bytes[num_bytes++] = strtoul(p, NULL, 16);
+	        p += 2;
+	        while (isspace(*p)) p++;
+	      }
+
+	      if (num_bytes == 0 || *p != '\0') {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Parse error around column %d.\n", (int)(long)(p - stuff) + 1);
+	        dw_printf("Was expecting only space separated 2 digit hexadecimal numbers.\n\n");
+	        continue;	// next line
+	      }
+
+// If we have 0xC0 at start, remove it and expect same at end.
+
+	      if (bytes[0] == FEND) {
+
+		if (bytes[1] != 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Was expecting to find 00 after the initial C0.\n");
+	          continue;
+	        }
+
+		if (bytes[num_bytes-1] == FEND) {
+	          text_color_set(DW_COLOR_INFO);
+	          dw_printf("Removing KISS FEND characters at beginning and end.\n");
+		  int n;
+	          for (n = 0; n < num_bytes-1; n++) {
+	            bytes[n] = bytes[n+1];
+	          }
+	          num_bytes -= 2;
+	        }
+	        else {
+	          text_color_set(DW_COLOR_INFO);
+	          dw_printf("Removing KISS FEND character at beginning.  Was expecting another at end.\n");
+		  int n;
+	          for (n = 0; n < num_bytes-1; n++) {
+	            bytes[n] = bytes[n+1];
+	          }
+	          num_bytes -= 1;
+		}
+	      }
+
+
+	      if (bytes[0] == 0) {
+
+// Treat as KISS.  Undo any KISS encoding.
+
+	        unsigned char kiss_frame[MAXBYTES];
+	        int kiss_len = num_bytes;
+
+	        memcpy (kiss_frame, bytes, num_bytes);
+
+	        text_color_set(DW_COLOR_DEBUG);
+	        dw_printf ("--- KISS frame ---\n");
+	        hex_dump (kiss_frame, kiss_len);
+
+	        // Put FEND at end to keep kiss_unwrap happy.
+	        // Having one at the begining is optional.
+
+	        kiss_frame[kiss_len++] = FEND;
+
+		// In the more general case, we would need to include
+	        // the command byte because it could be escaped.
+	        // Here we know it is 0, so we take a short cut and
+	        // remove it before, rather than after, the conversion.
+
+	        num_bytes = kiss_unwrap (kiss_frame + 1, kiss_len - 1, bytes);
+	      }
+
+// Treat as AX.25.
+
+	      alevel_t alevel;
+	      memset (&alevel, 0, sizeof(alevel));
+
+	      pp = ax25_from_frame(bytes, num_bytes, alevel);
+	      if (pp != NULL) {
+	        char addrs[120];
+	        unsigned char *pinfo;
+	        int info_len;
+	        decode_aprs_t A;
+
+	        text_color_set(DW_COLOR_DEBUG);
+	        dw_printf ("--- AX.25 frame ---\n");
+	        ax25_hex_dump (pp);
+	        dw_printf ("-------------------\n");
+
+	        ax25_format_addrs (pp, addrs);
+	        text_color_set(DW_COLOR_DECODED);
+	        dw_printf ("%s:", addrs);
+
+	        info_len = ax25_get_info (pp, &pinfo);
+	        ax25_safe_print ((char *)pinfo, info_len, 1);	// Display non-ASCII to hexadecimal.
+	        dw_printf ("\n");
+
+	        decode_aprs (&A, pp, 0);			// Extract information into structure.
+
+	        decode_aprs_print (&A);			// Now print it in human readable format.
+
+	        (void)ax25_check_addresses(pp);		// Errors for invalid addresses.
+
+	        ax25_delete (pp);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Could not construct AX.25 frame from bytes supplied!\n\n");
+	      }
 	    }
-	    else 
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("\n%s\n", "ERROR - Could not parse input!\n");
-    	    }
+	    else {
+
+// Normal monitoring format.
+
+	      pp = ax25_from_text(stuff, 1);
+	      if (pp != NULL) {
+	        decode_aprs_t A;
+
+	        decode_aprs (&A, pp, 0);	// Extract information into structure.
+
+	        decode_aprs_print (&A);		// Now print it in human readable format.
+
+	        (void)ax25_check_addresses(pp);	// Errors for invalid addresses.
+
+	        // Future?  Add -d option to include hex dump and maybe KISS?
+
+	        ax25_delete (pp);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("ERROR - Could not parse monitoring format input!\n\n");
+	      }
+	    }
 	  }
 	}
 	return (0);

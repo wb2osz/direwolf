@@ -159,7 +159,9 @@ tocalls-symbols :
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.c regex.a misc.a geotranz.a
+# First two use .c rather than .o because they depend on DECAMAIN definition.
+
+decode_aprs : decode_aprs.c kiss_frame.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -DDECAMAIN -o decode_aprs $^
 
 

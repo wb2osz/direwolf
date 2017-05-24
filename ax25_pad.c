@@ -760,12 +760,18 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
 	i = 0;
-	for (p = in_addr; isalnum(*p); p++) {
+	for (p = in_addr; *p != '\0' && *p != '-'; p++) {
 	  if (i >= maxlen) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("%sAddress is too long. \"%s\" has more than %d characters.\n", position_name[position], in_addr, maxlen);
 	    return 0;
 	  }
+	  if ( ! isalnum(*p)) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("%sAddress, \"%s\" contains character other than letter or digit in character position %d.\n", position_name[position], in_addr, (int)(long)(p-in_addr)+1);
+	    return 0;
+	  }
+
 	  out_addr[i++] = *p;
 	  out_addr[i] = '\0';
 	  if (strict && islower(*p)) {
@@ -1257,13 +1263,22 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	  return;
 	}
 
-	memset (station, 0, 7);
-	for (i=0; i<6; i++) {
-	  unsigned char ch;
+	// At one time this would stop at the first space, on the assumption we would have only trailing spaces.
+	// Then there was a forum discussion where someone encountered the address " WIDE2" with a leading space.
+	// In that case, we would have returned a zero length string here.
+	// Now we return exactly what is in the address field and trim trailing spaces.
+	// This will provide better information for troubleshooting.
 
-	  ch = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
-	  if (ch <= ' ') break;
-	  station[i] = ch;
+	for (i=0; i<6; i++) {
+	  station[i] = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
+	}
+	station[6] = '\0';
+
+	for (i=5; i>=0; i--) {
+	  if (station[i] == ' ')
+	    station[i] = '\0';
+	  else
+	    break;
 	}
 
 	ssid = ax25_get_ssid (this_p, n);
@@ -1322,13 +1337,22 @@ void ax25_get_addr_no_ssid (packet_t this_p, int n, char *station)
 	  return;
 	}
 
-	memset (station, 0, 7);
-	for (i=0; i<6; i++) {
-	  unsigned char ch;
+	// At one time this would stop at the first space, on the assumption we would have only trailing spaces.
+	// Then there was a forum discussion where someone encountered the address " WIDE2" with a leading space.
+	// In that case, we would have returned a zero length string here.
+	// Now we return exactly what is in the address field and trim trailing spaces.
+	// This will provide better information for troubleshooting.
 
-	  ch = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
-	  if (ch <= ' ') break;
-	  station[i] = ch;
+	for (i=0; i<6; i++) {
+	  station[i] = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
+	}
+	station[6] = '\0';
+
+	for (i=5; i>=0; i--) {
+	  if (station[i] == ' ')
+	    station[i] = '\0';
+	  else
+	    break;
 	}
 
 } /* end ax25_get_addr_no_ssid */

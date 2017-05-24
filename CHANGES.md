@@ -14,6 +14,8 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 - New document ***Bluetooth-KISS-TNC.pdf*** explaining how to use KISS over Bluetooth.
 
+- decode_aprs utility can now accept KISS frames and AX.25 frames as series of two digit hexadecimal numbers.
+
 ### Bugs Fixed: ###
 
 - Little spelling errors in messages ????

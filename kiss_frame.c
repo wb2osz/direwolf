@@ -101,7 +101,9 @@ void text_color_set (dw_color_t c)
 
 #else
 
+#ifndef DECAMAIN
 static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug);
+#endif
 
 #endif
 
@@ -212,7 +214,7 @@ int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out)
  *
  *-----------------------------------------------------------------*/
 
-static int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
+int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
 {
 	int olen;
 	int j;
@@ -277,6 +279,8 @@ static int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
 
 }  /* end kiss_unwrap */
 
+
+#ifndef DECAMAIN
 
 #ifndef KISSTEST
 
@@ -687,6 +691,7 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 
 #endif
 
+#endif /* DECAMAIN */
 
 /* Quick unit test for encapsulate & unwrap */
 
@@ -730,7 +735,7 @@ int main ()
 	exit (EXIT_SUCCESS);
 }
 
-#endif
+#endif  /* KISSTEST */
 
 #endif /* WALK96 */
 
