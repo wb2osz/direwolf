@@ -4838,7 +4838,7 @@ int main (int argc, char *argv[])
 
 	        ax25_format_addrs (pp, addrs);
 	        text_color_set(DW_COLOR_DECODED);
-	        dw_printf ("%s:", addrs);
+	        dw_printf ("%s", addrs);
 
 	        info_len = ax25_get_info (pp, &pinfo);
 	        ax25_safe_print ((char *)pinfo, info_len, 1);	// Display non-ASCII to hexadecimal.

@@ -724,6 +724,7 @@ packet_t ax25_dup (packet_t copy_from)
  *		out_heard	- True if "*" found.
  *
  * Returns:	True (1) if OK, false (0) if any error.
+ *		When 0, out_addr, out_ssid, and out_heard are unpredictable.
  *
  *
  *------------------------------------------------------------------------------*/
@@ -760,7 +761,7 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
 	i = 0;
-	for (p = in_addr; *p != '\0' && *p != '-'; p++) {
+	for (p = in_addr; *p != '\0' && *p != '-' && *p != '*'; p++) {
 	  if (i >= maxlen) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("%sAddress is too long. \"%s\" has more than %d characters.\n", position_name[position], in_addr, maxlen);
