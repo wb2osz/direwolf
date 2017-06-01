@@ -3183,7 +3183,7 @@ double get_latitude_8 (char *p, int quiet)
 	else {
 	  if ( ! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Error: '%c' found for latitude hemisphere.  Specification requires upper case N or s.\n", plat->ns);	 
+	    dw_printf("Error: '%c' found for latitude hemisphere.  Specification requires upper case N or S.\n", plat->ns);	 
 	  } 
 	  return (G_UNKNOWN);	
 	}	

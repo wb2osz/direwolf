@@ -16,6 +16,9 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 - decode_aprs utility can now accept KISS frames and AX.25 frames as series of two digit hexadecimal numbers.
 
+- New configuration option, V20, for listing stations known to not understand AX.25 v2.2.
+
+
 ### Bugs Fixed: ###
 
 - Little spelling errors in messages ????

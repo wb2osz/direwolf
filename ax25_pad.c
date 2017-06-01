@@ -707,7 +707,7 @@ packet_t ax25_dup (packet_t copy_from)
  *
  *		in_addr		- Input such as "WB2OSZ-15*"
  *
- * 		strict		- TRUE for strict checking (6 characters, no lower case,
+ * 		strict		- 1 (true) for strict checking (6 characters, no lower case,
  *				  SSID must be in range of 0 to 15).
  *				  Strict is appropriate for packets sent
  *				  over the radio.  Communication with IGate
@@ -715,6 +715,8 @@ packet_t ax25_dup (packet_t copy_from)
  *				  alphanumeric characters for the SSID.
  *				  We also get messages like this from a server.
  *					KB1POR>APU25N,TCPIP*,qAC,T2NUENGLD:...
+ *
+ *				  2 (extra true) will complain if * is found at end.
  *
  * Outputs:	out_addr	- Address without any SSID.
  *				  Must be at least AX25_MAX_ADDR_LEN bytes.
@@ -745,6 +747,11 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	*out_ssid = 0;
 	*out_heard = 0;
 
+	if (position < -1) position = -1;
+	if (position > AX25_REPEATER_8) position = AX25_REPEATER_8;
+	position++;	/* Adjust for position_name above. */
+
+
 	if (strict && strlen(in_addr) >= 2 && strncmp(in_addr, "qA", 2) == 0) {
 
 	  text_color_set(DW_COLOR_ERROR);
@@ -754,9 +761,6 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 
 	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
 
-	if (position < -1) position = -1;
-	if (position > AX25_REPEATER_8) position = AX25_REPEATER_8;
-	position++;	/* Adjust for position_name above. */
 
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
@@ -811,11 +815,16 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	if (*p == '*') {
 	  *out_heard = 1;
 	  p++;
+	  if (strict == 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("\"*\" is not allowed at end of address \"%s\" here.\n", in_addr);
+	    return 0;
+	  }
 	}
 
 	if (*p != '\0') {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Invalid character \"%c\" found in %saddress \"%s\".\n", *p, position_name[position], in_addr);
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid character \"%c\" found in %saddress \"%s\".\n", *p, position_name[position], in_addr);
 	  return 0;
 	}
 

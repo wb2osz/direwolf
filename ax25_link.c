@@ -885,6 +885,8 @@ void dl_connect_request (dlq_item_t *E)
 {
 	ax25_dlsm_t *S;
 	int ok_to_create = 1;
+	int old_version;
+	int n;
 
 	if (s_debug_client_app) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -902,7 +904,16 @@ void dl_connect_request (dlq_item_t *E)
 
 	    INIT_T1V_SRT;
 
-	    if (g_misc_config_p->maxv22 == 0) {		// Don't attempt v2.2.
+// See if destination station is in list for v2.0 only.
+
+	    old_version = 0;
+	    for (n = 0; n < g_misc_config_p->v20_count && ! old_version; n++) {
+	      if (strcmp(E->addrs[AX25_DESTINATION],g_misc_config_p->v20_addrs[n]) == 0) {
+	        old_version = 1;
+	      }
+	    }
+
+	    if (old_version || g_misc_config_p->maxv22 == 0) {		// Don't attempt v2.2.
 
 	      set_version_2_0 (S);
 

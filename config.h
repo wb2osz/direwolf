@@ -104,6 +104,10 @@ struct misc_config_s {
 				/* switching to SABM.  This is to handle the case of an old */
 				/* TNC which simply ignores SABME rather than replying with FRMR. */
 
+	char **v20_addrs;	/* Stations known to understand only AX.25 v2.0 so we don't */
+				/* waste time trying v2.2 first. */
+
+	int v20_count;		/* Number of station addresses in array above. */
 
 
 // Beacons.

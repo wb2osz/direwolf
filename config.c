@@ -515,7 +515,7 @@ static int check_via_path (char *via_path)
 
 	r = stemp;
 	while (( a = strsep(&r,",")) != NULL) {
-	  int strict = 1;
+	  int strict = 2;
 	  int ok;
 	  char addr[AX25_MAX_ADDR_LEN];
 	  int ssid;
@@ -892,6 +892,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->maxframe_extended = AX25_K_MAXFRAME_EXTENDED_DEFAULT;	/* Max frames to send before ACK.  mod 128 "Window" size. */
 
 	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 2;	/* Max SABME before falling back to SABM. */
+	p_misc_config->v20_addrs = NULL;			/* Go directly to v2.0 for stations listed. */
+	p_misc_config->v20_count = 0;
 
 /* 
  * Try to extract options from a file.
@@ -1193,6 +1195,24 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    else {
 
+	      char *p;
+	      int const strict = 2;
+	      char call_no_ssid[AX25_MAX_ADDR_LEN];
+	      int ssid, heard;
+
+	      for (p = t; *p != '\0'; p++) {
+	        if (islower(*p)) {
+		  *p = toupper(*p);	/* Silently force upper case. */
+					/* Might change to warning someday. */
+	        }
+	      }
+
+	      if ( ! ax25_parse_addr (-1, t, strict, call_no_ssid, &ssid, &heard)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Invalid value for MYCALL command on line %d.\n", line);
+	        continue;
+	      }
+
 	      // Definitely set for current channel.
 	      // Set for other channels which have not been set yet.
 
@@ -1205,17 +1225,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 			strcasecmp(p_audio_config->achan[c].mycall, "NOCALL") == 0 ||
 			strcasecmp(p_audio_config->achan[c].mycall, "N0CALL") == 0) {
 
-	          char *p;
-
 	          strlcpy (p_audio_config->achan[c].mycall, t, sizeof(p_audio_config->achan[c].mycall));
-
-	          for (p = p_audio_config->achan[c].mycall; *p != '\0'; p++) {
-	            if (islower(*p)) {
-		      *p = toupper(*p);	/* silently force upper case. */
-	            }
-	          }
-	          // TODO: additional checks if valid.
-		  //  Should have a function to check for valid callsign[-ssid]
 	        }
 	      }
 	    }
@@ -3920,6 +3930,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * IGFILTER 		- IGate Server side filters.
+ *			  Is this name too confusing.  Too similar to FILTER IG 0 ...
+ *			  Maybe SSFILTER suggesting Server Side.
+ *			  SUBSCRIBE might be better because it's not a filter that limits.
  *
  * IGFILTER  filter-spec ... 
  */
@@ -3927,6 +3940,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "IGFILTER") == 0) {
 
 	    t = split(NULL,1);		/* Take rest of line as one string. */
+
+	    if (p_igate_config->t2_filter != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Warning - Earlier IGFILTER value will be replaced by this one.\n", line);
+	      continue;
+	    }
 
 	    if (t != NULL && strlen(t) > 0) {
 	      p_igate_config->t2_filter = strdup (t);
@@ -4558,6 +4577,41 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid MAXV22 number. Will use half of RETRY.\n", line);
+	    }
+	  }
+
+
+/*
+ * V20  address [ address ... ] 	- Stations known to support only AX.25 v2.0.
+ *					  When connecting to these, skip SABME and go right to SABM.
+ *					  Possible to have multiple and they are cummulative.
+ */
+
+	  else if (strcasecmp(t, "V20") == 0) {
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing address(es) for V20.\n", line);
+	      continue;
+	    }
+
+	    while (t != NULL) {
+	      int const strict = 2;
+	      char call_no_ssid[AX25_MAX_ADDR_LEN];
+	      int ssid, heard;
+
+	      if (ax25_parse_addr (AX25_DESTINATION, t, strict, call_no_ssid, &ssid, &heard)) {
+	        p_misc_config->v20_addrs = (char**)realloc (p_misc_config->v20_addrs, sizeof(char*) * (p_misc_config->v20_count + 1));
+	        p_misc_config->v20_addrs[p_misc_config->v20_count++] = strdup(t);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Invalid station address for V20 command.\n", line);
+
+	        // continue processing any others following.
+	      }
+	      t = split(NULL,0);
 	    }
 	  }
 
