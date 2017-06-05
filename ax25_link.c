@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -1011,6 +1011,13 @@ void dl_disconnect_request (dlq_item_t *E)
 	    
 	  case 	state_2_awaiting_release:
 	    {
+	      // We have previously started the disconnect sequence and are waiting
+	      // for a UA from the other guy.  Meanwhile, the application got
+	      // impatient and sent us another disconnect request.  What should
+	      // we do?  Ignore it and let the disconnect sequence run its
+	      // course?  Or should we complete the sequence without waiting
+	      // for the other guy to ack?
+
 	      // Erratum.  Flow chart simply says "DM (expedited)."
 	      // This is the only place we have expedited.  Is this correct?
 
@@ -1020,6 +1027,13 @@ void dl_disconnect_request (dlq_item_t *E)
 
 	      packet_t pp = ax25_u_frame (S->addrs, S->num_addr, cr, frame_type_U_DM, p, nopid, NULL, 0);
 	      lm_data_request (S->chan, TQ_PRIO_0_HI, pp);	// HI means expedited.
+
+	      // Erratum: Shouldn't we inform the user when going to disconnected state?
+	      // Notifying the application, here, is my own enhancement.
+
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Stream %d: Disconnected from %s.\n", S->stream_id, S->addrs[PEERCALL]);
+	      server_link_terminated (S->chan, S->client, S->addrs[PEERCALL], S->addrs[OWNCALL], 0);
 
 	      STOP_T1;
 	      enter_new_state (S, state_0_disconnected, __func__, __LINE__);
@@ -2209,7 +2223,14 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 	    // Look carefully.  The original had two tiny differences between the two states.
 	    // In the 2006 version, these differences no longer exist.
 
-	    if (info_len >= 0 && info_len <= S->n1_paclen) {
+	    // Erratum: SDL asks: Is information field length <= N1 (paclen).
+	    // (github issue 102 - Thanks to KK6WHJ for pointing this out.)
+	    // Just because we are limiting the size of our transmitted data, it doesn't mean
+	    // that the other end will be doing the same.  With v2.2, the XID frame can be
+	    // used to negotiate a maximum info length but with v2.0, there is no way for the
+	    // other end to know our paclen value.
+
+	    if (info_len >= 0 && info_len <= AX25_MAX_INFO_LEN) {
 
 	      if (is_good_nr(S,nr)) {
 
@@ -2286,7 +2307,7 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 				// Wouldn't even get to CRC check if not octet aligned.
 
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Stream %d: AX.25 Protocol Error O: Information part length, %d, not in range of 0 thru %d.\n", S->stream_id, info_len, S->n1_paclen);
+	      dw_printf ("Stream %d: AX.25 Protocol Error O: Information part length, %d, not in range of 0 thru %d.\n", S->stream_id, info_len, AX25_MAX_INFO_LEN);
 
 	      establish_data_link (S);
 	      S->layer_3_initiated = 0;
