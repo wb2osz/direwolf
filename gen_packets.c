@@ -619,7 +619,7 @@ int main(int argc, char **argv)
  */
 	  for (i = 1; i <= packet_count; i++) {
 
-	    char stemp[80];
+	    char stemp[88];
 	
 	    if (modem.achan[0].baud < 600) {
 	      /* e.g. 300 bps AFSK - About 2/3 should be decoded properly. */
