@@ -4772,6 +4772,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->sendto_type = SENDTO_XMIT;
 	b->sendto_chan = 0;
 	b->delay = 60;
+	b->slot = G_UNKNOWN;
 	b->every = 600;
 	//b->delay = 6;		// temp test.
 	//b->every = 3600;
@@ -4805,6 +4806,15 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  if (strcasecmp(keyword, "DELAY") == 0) {
 	    b->delay = parse_interval(value,line);
 	  }
+	  else if (strcasecmp(keyword, "SLOT") == 0) {
+	    int n = parse_interval(value,line);
+	    if ( n < 1 || n > 3600) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Beacon time slot, %d, must be in range of 1 to 3600 seconds.\n", line, n);
+	      continue;
+	    }
+	    b->slot = n;
+	  }
 	  else if (strcasecmp(keyword, "EVERY") == 0) {
 	    b->every = parse_interval(value,line);
 	  }
@@ -4817,7 +4827,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	       int n = atoi(value+1);
 	       if ( n < 0 || n >= MAX_CHANS || ! p_audio_config->achan[n].valid) {
 	         text_color_set(DW_COLOR_ERROR);
-	         dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
+	         dw_printf ("Config file, line %d: Simulated receive on channel %d is not valid.\n", line, n);
 	         continue;
 	       }
 	       b->sendto_type = SENDTO_RECV;

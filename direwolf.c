@@ -196,6 +196,7 @@ int main (int argc, char *argv[])
 	char P_opt[16];
 	char l_opt[80];
 	char input_file[80];
+	// char timestamp[16];
 	
 	int t_opt = 1;		/* Text color option. */				
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
@@ -261,8 +262,17 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+
+// FIXME: temp test
+
+//	timestamp_now (timestamp, sizeof(timestamp), 1);
+//	dw_printf ("%s\n", timestamp);
+
+
+
+
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
 	dw_printf ("Includes optional support for: ");
@@ -881,6 +891,14 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	  ax25_alevel_to_text (alevel, alevel_text);
 
+// Experiment: try displaying the DC bias.
+// Should be 0 for soundcard but could show mistuning with SDR.
+
+#if 0
+	  char bias[16];
+	  snprintf (bias, sizeof(bias), " DC%+d", multi_modem_get_dc_average (chan));
+	  strlcat (alevel_text, bias, sizeof(alevel_text));
+#endif
 
 	  /* As suggested by KJ4ERJ, if we are receiving from */
 	  /* WIDEn-0, it is quite likely (but not guaranteed), that */

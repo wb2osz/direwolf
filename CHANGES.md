@@ -1,6 +1,21 @@
 
 # Revision History #
 
+## Version 1.5 -- Development snapshot B -- June 2017 ##
+
+This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
+
+### New Features: ###
+
+- Time slots for beaconing.
+
+- V20 configuration item for listing stations known not to understaand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
+
+- Documentation updates describing cheap SDR frequency inaccuracy and how to compensate for it.
+
+### Bugs Fixed: ###
+
+- PACLEN configuration item no longer restricts length of received frames.
 
 ## Version 1.5 -- Development snapshot A -- May 2017 ##
 

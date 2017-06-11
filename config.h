@@ -135,6 +135,9 @@ struct misc_config_s {
 
 	  int delay;		/* Seconds to delay before first transmission. */
 
+	  int slot;		/* Seconds after hour for slotted time beacons. */
+				/* If specified, it overrides any 'delay' value. */
+
 	  int every;		/* Time between transmissions, seconds. */
 				/* Remains fixed for PBEACON and OBEACON. */
 				/* Dynamically adjusted for TBEACON. */
