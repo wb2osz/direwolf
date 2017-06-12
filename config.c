@@ -5004,7 +5004,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Config file, line %d: When any of ZONE, EASTING, NORTHING specifed, they must all be specified.\n", line);
+	    dw_printf ("Config file, line %d: When any of ZONE, EASTING, NORTHING specified, they must all be specified.\n", line);
 	  }
 	}
 
