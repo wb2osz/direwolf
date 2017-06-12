@@ -446,7 +446,7 @@ int main(int argc, char **argv)
 
         if (strlen(output_file) == 0) {
           text_color_set(DW_COLOR_ERROR); 
-          dw_printf ("ERROR: The -o ouput file option must be specified.\n");
+          dw_printf ("ERROR: The -o output file option must be specified.\n");
           usage (argv);
           exit (1);
         }
