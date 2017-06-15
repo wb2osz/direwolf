@@ -839,7 +839,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 		case BEACON_POSITION:
 
 		  encode_position (bp->messaging, bp->compress,
-			bp->lat, bp->lon, 0,
+			bp->lat, bp->lon, bp->ambiguity,
 			(int)roundf(DW_METERS_TO_FEET(bp->alt_m)),
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
@@ -852,7 +852,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		case BEACON_OBJECT:
 
-		  encode_object (bp->objname, bp->compress, 0, bp->lat, bp->lon, 0,
+		  encode_object (bp->objname, bp->compress, 0, bp->lat, bp->lon, bp->ambiguity,
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */
@@ -883,7 +883,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	            }
 
 		    encode_position (bp->messaging, bp->compress,
-			gpsinfo->dlat, gpsinfo->dlon, 0, my_alt_ft,
+			gpsinfo->dlat, gpsinfo->dlon, bp->ambiguity, my_alt_ft,
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
 			coarse, (int)roundf(gpsinfo->speed_knots),

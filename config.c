@@ -4778,6 +4778,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	//b->every = 3600;
 	b->lat = G_UNKNOWN;
 	b->lon = G_UNKNOWN;
+	b->ambiguity = 0;
 	b->alt_m = G_UNKNOWN;
 	b->symtab = '/';
 	b->symbol = '-';	/* house */
@@ -4904,6 +4905,16 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "LONG") == 0 || strcasecmp(keyword, "LON") == 0) {
 	    b->lon = parse_ll (value, LON, line);
 	  }
+	  else if (strcasecmp(keyword, "AMBIGUITY") == 0 || strcasecmp(keyword, "AMBIG") == 0) {
+	    int n = atoi(value);
+	    if (n >= 0 && n <= 4) {
+	      b->ambiguity = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Location ambiguity, on line %d, must be in range of 0 to 4.\n", line);
+	    }
+	  }
 	  else if (strcasecmp(keyword, "ALT") == 0 || strcasecmp(keyword, "ALTITUDE") == 0) {
 	    b->alt_m = atof(value);
 	  }
@@ -4971,7 +4982,13 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 
 	if (b->custom_info != NULL && b->custom_infocmd != NULL) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Config file, line %d: Can't use both INFO and INFOCMD at the same time..\n", line);
+	  dw_printf ("Config file, line %d: Can't use both INFO and INFOCMD at the same time.\n", line);
+	}
+
+	if (b->compress && b->ambiguity != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Config file, line %d: Position ambiguity can't be used with compressed location format.\n", line);
+	  b->ambiguity = 0;
 	}
 
 /*

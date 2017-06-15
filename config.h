@@ -164,6 +164,7 @@ struct misc_config_s {
 
 	  double lat;		/* Latitude and longitude. */
 	  double lon;
+	  int ambiguity;	/* Number of lower digits to trim from location. 0 (default), 1, 2, 3, 4. */
 	  float alt_m;		/* Altitude in meters. */
 
 	  char symtab;		/* Symbol table: / or \ or overlay character. */
