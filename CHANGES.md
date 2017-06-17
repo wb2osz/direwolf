@@ -9,9 +9,10 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 - Time slots for beaconing.
 
-- V20 configuration item for listing stations known not to understaand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
-
 - Documentation updates describing cheap SDR frequency inaccuracy and how to compensate for it.
+
+- Allow single log file with fixed name rather than starting a new one each day.
+
 
 ### Bugs Fixed: ###
 
@@ -31,7 +32,7 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 - decode_aprs utility can now accept KISS frames and AX.25 frames as series of two digit hexadecimal numbers.
 
-- New configuration option, V20, for listing stations known to not understand AX.25 v2.2.
+- New configuration option, V20, for listing stations known to not understand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
 
 
 ### Bugs Fixed: ###

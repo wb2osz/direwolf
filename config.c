@@ -877,7 +877,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
 	strlcpy (p_misc_config->waypoint_port, "", sizeof(p_misc_config->waypoint_port));
 
-	strlcpy (p_misc_config->logdir, "", sizeof(p_misc_config->logdir));
+	p_misc_config->log_daily_names = 0;
+	strlcpy (p_misc_config->log_path, "", sizeof(p_misc_config->log_path));
 
 	/* connected mode. */
 
@@ -4283,7 +4284,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * LOGDIR	- Directory name for storing log files.  Use "." for current working directory.
+ * LOGDIR	- Directory name for automatically named daily log files.  Use "." for current working directory.
  */
 	  else if (strcasecmp(t, "logdir") == 0) {
 	    t = split(NULL,0);
@@ -4293,12 +4294,42 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    else {
-	      strlcpy (p_misc_config->logdir, t, sizeof(p_misc_config->logdir));
+	      if (strlen(p_misc_config->log_path) > 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: LOGDIR on line %d is replacing an earlier LOGDIR or LOGFILE.\n", line);
+	      }
+	      p_misc_config->log_daily_names = 1;
+	      strlcpy (p_misc_config->log_path, t, sizeof(p_misc_config->log_path));
 	    }
 	    t = split(NULL,0);
 	    if (t != NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: LOGDIR on line %d should have directory path and nothing more.\n", line);
+	    }
+	  }
+
+/*
+ * LOGFILE	- Log file name, including any directory part.
+ */
+	  else if (strcasecmp(t, "logfile") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing file name for LOGFILE on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      if (strlen(p_misc_config->log_path) > 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: LOGFILE on line %d is replacing an earlier LOGDIR or LOGFILE.\n", line);
+	      }
+	      p_misc_config->log_daily_names = 0;
+	      strlcpy (p_misc_config->log_path, t, sizeof(p_misc_config->log_path));
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: LOGFILE on line %d should have file name and nothing more.\n", line);
 	    }
 	  }
 

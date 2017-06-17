@@ -194,7 +194,8 @@ int main (int argc, char *argv[])
 	struct igate_config_s igate_config;
 	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0;	/* Command line options. */
 	char P_opt[16];
-	char l_opt[80];
+	char l_opt_logdir[80];
+	char L_opt_logfile[80];
 	char input_file[80];
 	// char timestamp[16];
 	
@@ -215,7 +216,8 @@ int main (int argc, char *argv[])
 	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering trasmit frames. */
 	int E_rx_opt = 0;		/* "-E Rn" Error rate % for clobbering receive frames. */
 
-	strlcpy(l_opt, "", sizeof(l_opt));
+	strlcpy(l_opt_logdir, "", sizeof(l_opt_logdir));
+	strlcpy(L_opt_logfile, "", sizeof(L_opt_logfile));
 	strlcpy(P_opt, "", sizeof(P_opt));
 
 #if __WIN32__
@@ -356,7 +358,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:Sa:E:",
+          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:L:Sa:E:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -532,10 +534,16 @@ int main (int argc, char *argv[])
 	    exit (0);
 	    break;
 
-          case 'l':				/* -l for log file directory name */
+          case 'l':				/* -l for log directory with daily files */
 
-	    strlcpy (l_opt, optarg, sizeof(l_opt));
+	    strlcpy (l_opt_logdir, optarg, sizeof(l_opt_logdir));
             break;
+
+          case 'L':				/* -L for log file name with full path */
+
+	    strlcpy (L_opt_logfile, optarg, sizeof(L_opt_logfile));
+            break;
+
 
 	  case 'S':				/* Print symbol tables and exit. */
 
@@ -674,8 +682,19 @@ int main (int argc, char *argv[])
 	audio_config.recv_error_rate = E_rx_opt;
 
 
-	if (strlen(l_opt) > 0) {
-	  strlcpy (misc_config.logdir, l_opt, sizeof(misc_config.logdir));
+	if (strlen(l_opt_logdir) > 0 && strlen(L_opt_logfile) > 0) {
+          text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Logging options -l and -L can't be used together.  Pick one or the other.\n");
+	  exit(1);
+	}
+
+	if (strlen(L_opt_logfile) > 0) {
+	  misc_config.log_daily_names = 0;
+	  strlcpy (misc_config.log_path, L_opt_logfile, sizeof(misc_config.log_path));
+	}
+	else if (strlen(l_opt_logdir) > 0) {
+	  misc_config.log_daily_names = 1;
+	  strlcpy (misc_config.log_path, l_opt_logdir, sizeof(misc_config.log_path));
 	}
 
 	misc_config.enable_kiss_pt = enable_pseudo_terminal;
@@ -794,7 +813,7 @@ int main (int argc, char *argv[])
  * log the tracker beacon transmissions with fake channel 999.
  */
 
-	log_init(misc_config.logdir);
+	log_init(misc_config.log_daily_names, misc_config.log_path);
 	mheard_init (d_m_opt);
 	beacon_init (&audio_config, &misc_config, &igate_config);
 

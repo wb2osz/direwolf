@@ -77,7 +77,9 @@ struct misc_config_s {
 #define WPT_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
 
 
-	char logdir[80];	/* Directory for saving activity logs. */
+	int log_daily_names;	/* True to generate new log file each day. */
+
+	char log_path[80];	/* Either directory or full file name depending on above. */
 
 	int sb_configured;	/* TRUE if SmartBeaconing is configured. */
 	int sb_fast_speed;	/* MPH */
