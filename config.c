@@ -1740,6 +1740,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 #else
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: %s with RIG is only available when hamlib support is enabled.\n", line, otname);
+#if __WIN32__
+	      dw_printf ("Hamlib is not currently supported on Windows.\n");
+#else
+	      dw_printf ("You must rebuild direwolf with hamlib support.\n");
+	      dw_printf ("See User Guide for details.\n");
+#endif
+
 #endif
 	    }
 	    else  {
