@@ -284,11 +284,15 @@ LDFLAGS += -lgps
 endif
 
 
-# Uncomment following lines to enable hamlib support.
-# TODO:  automate this too.  See if hamlib has been installed.
+# Enable hamlib support if header file is present.
 
-#CFLAGS += -DUSE_HAMLIB
-#LDFLAGS += -lhamlib
+enable_hamlib := $(wildcard /usr/include/hamlib/rig.h /usr/local/include/hamlib/rig.h)
+ifneq ($(enable_hamlib),)
+CFLAGS += -DUSE_HAMLIB
+LDFLAGS += -lhamlib
+endif
+
+
 
 
 # Name of current directory.
@@ -312,13 +316,18 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o dem
 		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o ax25_link.o \
 		misc.a geotranz.a
 	$(CC) -o $@ $^ $(LDFLAGS)
+	@echo " "
 ifneq ($(enable_gpsd),)
-	@echo " "
-	@echo "This includes support for gpsd."
+	@echo "\t>\tThis includes support for gpsd."
 else
-	@echo " "
-	@echo "This does NOT include support for gpsd."
+	@echo "\t>\tThis does NOT include support for gpsd."
 endif
+ifneq ($(enable_hamlib),)
+	@echo "\t>\tThis includes support for hamlib."
+else
+	@echo "\t>\tThis does NOT include support for hamlib."
+endif
+	@echo " "
 
 # Optimization for slow processors.
 
