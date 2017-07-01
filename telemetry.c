@@ -252,7 +252,10 @@ static int t_ndp (char *str)
  *			KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000
  *
  *		Not integers.  Not fixed width fields.
- *		We will accept these but issue a warning that others might not.
+ *
+ *		Originally I printed a warning if values were not in range of 000 to 255
+ *		but later took it out because no one pays attention to that original
+ *		restriction anymore.
  *		
  *--------------------------------------------------------------------*/
 
@@ -297,13 +300,13 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	if (strncmp(info, "T#", 2) != 0) {
 	  if ( ! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Error: Information part of telemetry packet must begin with \"#\"\n");
+	    dw_printf("Error: Information part of telemetry packet must begin with \"T#\"\n");
 	  }
 	  return;	
 	}
 
 /*
- * Make a copy of the input string because this will alter it.
+ * Make a copy of the input string (excluding T#) because this will alter it.
  * Remove any trailing CR/LF.
  */
 
@@ -315,6 +318,15 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 
 	next = stemp;
 	p = strsep(&next,",");
+
+	if (p == NULL) {
+	  if ( ! quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Nothing after \"T#\" for telemetry data.\n");
+	  }
+	  return;
+	}
+
 	seq = atoi(p);
 	n = 0;
 	while ((p = strsep(&next,",")) != NULL) {
