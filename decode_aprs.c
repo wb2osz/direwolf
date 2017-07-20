@@ -973,6 +973,8 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  * References:	Mic-E TYPE CODES -- http://www.aprs.org/aprs12/mic-e-types.txt
  *
+ *			This is up to date with the 24 Aug 16 version mentioning the TH-D74.
+ *
  *		Mic-E TEST EXAMPLES -- http://www.aprs.org/aprs12/mic-e-examples.txt 
  *		
  * Examples:	`b9Z!4y>/>"4N}Paul's_TH-D7
@@ -4435,6 +4437,26 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * The original character range '!' to '{' is first converted
  * to an integer in range of 0 to 90.  It is multiplied by 1.1
  * to stretch the numeric range to be 0 to 99.
+ */
+
+/*
+ * Here is an interesting case.
+ *
+ *	W8SAT-1>T2UV0P:`qC<0x1f>l!Xu\'"69}WMNI EDS Response Unit #1|+/%0'n|!w:X!|3
+ *
+ * Let's break that down into pieces.
+ *
+ *	W8SAT-1>T2UV0P:`qC<0x1f>l!Xu\'"69}		MIC-E format
+ *							N 42 56.0000, W 085 39.0300,
+ *							0 MPH, course 160, alt 709 ft
+ *	WMNI EDS Response Unit #1			comment
+ *	|+/%0'n|					base 91 telemetry
+ *	!w:X!						DAO
+ *	|3						Tiny Track 3
+ *
+ * Comment earlier points out that MIC-E format has resolution of 0.01 minute,
+ * same as non-compressed format, so the DAO does work out, after thinking
+ * about it for a while.
  */
 
 /* 
