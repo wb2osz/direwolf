@@ -143,9 +143,10 @@ static struct t_metadata_s * t_get_metadata (char *station)
 	for (p = md_list_head; p != NULL; p = p->pnext) {
 	  if (strcmp(station, p->station) == 0) {
 
-	    assert (p->magic1 == MAGIC1);
-	    assert (p->magic2 == MAGIC2);
-
+	    if (p->magic1 != MAGIC1 || p->magic2 != MAGIC2) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	    }
 	    return (p);
 	  }
 	}
@@ -285,8 +286,10 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 
 	pm = t_get_metadata(station);
 
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	seq = 0;
 	for (n = 0; n < T_NUM_ANALOG; n++) {
@@ -482,8 +485,10 @@ void telemetry_data_base91 (char *station, char *cdata, char *output, size_t out
 
 	pm = t_get_metadata(station);
 
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	seq = 0;
 	for (n = 0; n < T_NUM_ANALOG; n++) {
@@ -588,8 +593,11 @@ void telemetry_name_message (char *station, char *msg)
 	} 
 
 	pm = t_get_metadata(station);
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	next = stemp;
 
@@ -664,8 +672,11 @@ void telemetry_unit_label_message (char *station, char *msg)
 	} 
 
 	pm = t_get_metadata(station);
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	next = stemp;
 
@@ -741,8 +752,11 @@ void telemetry_coefficents_message (char *station, char *msg, int quiet)
 	} 
 
 	pm = t_get_metadata(station);
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	next = stemp;
 
@@ -821,8 +835,11 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
 #endif
 
 	pm = t_get_metadata(station);
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	if (strlen(msg) < 8) {
 	  if ( ! quiet) {
@@ -931,8 +948,11 @@ static void t_data_process (struct t_metadata_s *pm, int seq, float araw[T_NUM_A
 
 
 	assert (pm != NULL);
-	assert (pm->magic1 == MAGIC1);
-	assert (pm->magic2 == MAGIC2);
+
+	if (pm->magic1 != MAGIC1 || pm->magic2 != MAGIC2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("Internal error: REPORT THIS! Bad magic values %s %d\n", __func__, __LINE__);
+	}
 
 	strlcpy (output, "", outputsize);
 
