@@ -4891,7 +4891,9 @@ int main (int argc, char *argv[])
 
 	        decode_aprs_print (&A);		// Now print it in human readable format.
 
-	        (void)ax25_check_addresses(pp);	// Errors for invalid addresses.
+	        // This seems to be redundant because we used strict option
+	        // when parsing the monitoring format text.
+	        //(void)ax25_check_addresses(pp);	// Errors for invalid addresses.
 
 	        // Future?  Add -d option to include hex dump and maybe KISS?
 

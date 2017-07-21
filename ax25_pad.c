@@ -755,8 +755,8 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	if (strict && strlen(in_addr) >= 2 && strncmp(in_addr, "qA", 2) == 0) {
 
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("%sAddress \"%s\" is a \"q-construct\" used for communicating\n", position_name[position], in_addr);
-	  dw_printf ("with APRS Internet Servers.  It was not expected here.\n");
+	  dw_printf ("%sAddress \"%s\" is a \"q-construct\" used for communicating with\n", position_name[position], in_addr);
+	  dw_printf ("APRS Internet Servers.  It should never appear when going over the radio.\n");
 	}
 
 	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
@@ -779,11 +779,21 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 
 	  out_addr[i++] = *p;
 	  out_addr[i] = '\0';
+
+#if DECAMAIN	// Hack when running in decode_aprs utility.
+		// Exempt the "qA..." case because it was already mentioned.
+
+	  if (strict && islower(*p) && strncmp(in_addr, "qA", 2) != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("%sAddress has lower case letters. \"%s\" must be all upper case.\n", position_name[position], in_addr);
+	  }
+#else
 	  if (strict && islower(*p)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("%sAddress has lower case letters. \"%s\" must be all upper case.\n", position_name[position], in_addr);
 	    return 0;
 	  }
+#endif
 	}
 	
 	j = 0;
