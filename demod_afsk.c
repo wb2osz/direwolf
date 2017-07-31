@@ -1122,7 +1122,9 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, 
  */
 
 	D->slicer[slice].prev_d_c_pll = D->slicer[slice].data_clock_pll;
-	D->slicer[slice].data_clock_pll += D->pll_step_per_sample;
+
+	// Perform the add as unsigned to avoid signed overflow error.
+	D->slicer[slice].data_clock_pll = (signed)((unsigned)(D->slicer[slice].data_clock_pll) + (unsigned)(D->pll_step_per_sample));
 
 	  //text_color_set(DW_COLOR_DEBUG);
 	  // dw_printf ("prev = %lx, new data clock pll = %lx\n" D->prev_d_c_pll, D->data_clock_pll);

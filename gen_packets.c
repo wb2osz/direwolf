@@ -84,7 +84,8 @@
 static int seed = 1;
 
 static int my_rand (void) {
-	seed = ((seed * 1103515245) + 12345) & MY_RAND_MAX;
+	// Perform the calculation as unsigned to avoid signed overflow error.
+	seed = (int)(((unsigned)seed * 1103515245) + 12345) & MY_RAND_MAX;
 	return (seed);
 }
 
