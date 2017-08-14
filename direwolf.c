@@ -50,6 +50,7 @@
 #include <string.h>
 #include <signal.h>
 #include <ctype.h>
+#include <time.h>
 
 #if __ARM__
 //#include <asm/hwcap.h>
@@ -175,7 +176,7 @@ static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
-
+static char timestamp_format[100];       /* "-T format" for timestamping activity ouput. */
 
 
 static struct misc_config_s misc_config;
@@ -219,6 +220,7 @@ int main (int argc, char *argv[])
 	strlcpy(l_opt_logdir, "", sizeof(l_opt_logdir));
 	strlcpy(L_opt_logfile, "", sizeof(L_opt_logfile));
 	strlcpy(P_opt, "", sizeof(P_opt));
+	strlcpy(timestamp_format, "", sizeof(timestamp_format));
 
 #if __WIN32__
 
@@ -357,8 +359,8 @@ int main (int argc, char *argv[])
           };
 
 	  /* ':' following option character means arg is required. */
-
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:L:Sa:E:",
+          /* Add the -T option for timestamping activity display. */
+          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:T:Ul:L:Sa:E:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -523,6 +525,15 @@ int main (int argc, char *argv[])
 	  case 't':				/* Was handled earlier. */
 	    break;
 
+          /* Proposed addition for 1.5 to enable timestamping activity display. */
+
+          case 'T':				/* -T for timestamp activity display */
+
+            if (strlen(optarg) == 0)
+                strlcpy (timestamp_format, (char *)"%Y-%m-%d %H:%M:%S %Z", sizeof(timestamp_format));
+            else
+                strlcpy (timestamp_format, optarg, sizeof(timestamp_format));
+            break;
 
 	  case 'U':				/* Print UTF-8 test and exit. */
 
@@ -896,6 +907,20 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  h = ax25_get_heard(pp);
           ax25_get_addr_with_ssid(pp, h, heard);
 	}
+
+        /* If timestamp is enabled then output it here. */
+
+        if (strlen(timestamp_format) != 0) {
+            char time_str[200];
+	    time_t now;
+	    struct tm tm;
+
+	    now = time(NULL);
+            (void)localtime_r(&now, &tm);
+	    strftime (time_str, sizeof(time_str), (char *)timestamp_format, &tm);
+            text_color_set(DW_COLOR_INFO);
+            dw_printf ("\n%s", time_str);
+        }
 
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n");
