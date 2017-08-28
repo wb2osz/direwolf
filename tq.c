@@ -281,7 +281,7 @@ void tq_append (int chan, int prio, packet_t pp)
  * Implementing the 6PACK protocol is probably the proper solution.
  */
 
-	if (ax25_is_aprs(pp) && tq_count(chan,prio) > 100) {
+	if (ax25_is_aprs(pp) && tq_count(chan,prio,"","") > 100) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Transmit packet queue for channel %d is too long.  Discarding packet.\n", chan);
 	  dw_printf ("Perhaps the channel is so busy there is no opportunity to send.\n");
@@ -458,7 +458,7 @@ void lm_data_request (int chan, int prio, packet_t pp)
  * Is transmit queue out of control? 
  */
 
-	if (tq_count(chan,prio) > 250) {
+	if (tq_count(chan,prio,"","") > 250) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Warning: Transmit packet queue for channel %d is extremely long.\n", chan);
 	  dw_printf ("Perhaps the channel is so busy there is no opportunity to send.\n");
@@ -913,35 +913,67 @@ static int tq_is_empty (int chan)
  * Name:        tq_count
  *
  * Purpose:     Return count of the number of packets in the specified transmit queue.
+ *		This is used only for queries from KISS or AWG client applications.
  *
  * Inputs:	chan	- Channel, 0 is first.
  *
  *		prio	- Priority, use TQ_PRIO_0_HI or TQ_PRIO_1_LO.
+ *			  Specify -1 for total of both.
+ *
+ *		source - If specified, count only those with this source address.
+ *
+ *		dest	- If specified, count only those with this destination address.
  *
  * Returns:	Number of items in specified queue.	
  *
  *--------------------------------------------------------------------*/
 
-int tq_count (int chan, int prio)
+int tq_count (int chan, int prio, char *source, char *dest)
 {
 
 	packet_t p;
 	int n;
 
+	if (prio == -1) {
+	  return (tq_count(chan, TQ_PRIO_0_HI, source, dest)
+		+ tq_count(chan, TQ_PRIO_1_LO, source, dest));
+	}
 
-/* Don't bother with critical section. */
-/* Only used for debugging a problem. */
+
+	// Array bounds check.  FIXME: TODO:  should have internal error instead of dying.
+
+	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (prio >= 0 && prio < TQ_NUM_PRIO);
+
+	// Don't want lists being rearranged while we are traversing them.
+
+	dw_mutex_lock (&tq_mutex);
 
 	n = 0;
 	p = queue_head[chan][prio];
 	while (p != NULL) {
-	  n++;
+	  int count_it = 1;
+
+	  if (source != NULL && *source != '\0') {
+	    char frame_source[AX25_MAX_ADDR_LEN];
+	    ax25_get_addr_with_ssid (p, AX25_SOURCE, frame_source);
+	    if (strcmp(source,frame_source) != 0) count_it = 0;
+	  }
+	  if (count_it && dest != NULL && *dest != '\0') {
+	    char frame_dest[AX25_MAX_ADDR_LEN];
+	    ax25_get_addr_with_ssid (p, AX25_DESTINATION, frame_dest);
+	    if (strcmp(dest,frame_dest) != 0) count_it = 0;
+	  }
+
+	  if (count_it) n++;
 	  p = ax25_get_nextp(p);
 	}
 
+	dw_mutex_unlock (&tq_mutex);
+
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("tq_count(%d,%d) returns %d\n", chan, prio, n);
+	dw_printf ("tq_count(%d, %d, \"%s\", \"%s\") returns %d\n", chan, prio, source, dest, n);
 #endif
 
 	return (n);

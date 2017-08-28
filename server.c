@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -59,6 +59,8 @@
  *		
  *			'y'	Ask Outstanding frames waiting on a Port   (new in 1.2)
  *
+ *			'Y'	How many frames waiting for transmit for a particular station (new in 1.5)
+ *
  *			'C'	Connect, Start an AX.25 Connection			(new in 1.4)
  *
  *			'v'	Connect VIA, Start an AX.25 circuit thru digipeaters	(new in 1.4)
@@ -91,6 +93,8 @@
  *				(Enabled with 'm' command.)
  *
  *			'y'	Outstanding frames waiting on a Port   (new in 1.2)
+ *
+ *			'Y'	How many frames waiting for transmit for a particular station (new in 1.5)
  *
  *			'C'	AX.25 Connection Received		(new in 1.4)
  *
@@ -1259,16 +1263,20 @@ static THREAD_F cmd_listen_thread (void *arg)
 	  }
 
 /*
- * Take some precautions to guard against bad data
- * which could cause problems later.
+ * Take some precautions to guard against bad data which could cause problems later.
  */
+	if (cmd.hdr.portx < 0 || cmd.hdr.portx >= MAX_CHANS) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\nInvalid port number, %d, in command '%c', from AGW client application %d.\n",
+			cmd.hdr.portx, cmd.hdr.datakind, client);
+	  cmd.hdr.portx = 0;	// avoid subscript out of bounds, try to keep going.
+	}
 
 /*
- * Call to/from must not exceeed 9 characters.
+ * Call to/from fields are 10 bytes but contents must not exceeed 9 characters.
  * It's not guaranteed that unused bytes will contain 0 so we
  * don't issue error message in this case. 
  */
-
 	  cmd.hdr.call_from[sizeof(cmd.hdr.call_from)-1] = '\0';
 	  cmd.hdr.call_to[sizeof(cmd.hdr.call_to)-1] = '\0';
 
@@ -1455,6 +1463,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		// YAAC asks for this.
 		// Fake it to keep application happy.
+	        // TODO:  Supply real values instead of just faking it.
 
 	        reply.on_air_baud_rate = 0;
 		reply.traffic_level = 1;
@@ -1842,6 +1851,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'y':				/* Ask Outstanding frames waiting on a Port  */
 
+	      /* Number of frames sitting in transmit queue for specified channel. */
 	      {
 		struct {
 		  struct agwpe_s hdr;
@@ -1856,7 +1866,40 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int n = 0;
 	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
-		  n = tq_count (cmd.hdr.portx, TQ_PRIO_0_HI) + tq_count (cmd.hdr.portx, TQ_PRIO_1_LO);
+		  n = tq_count (cmd.hdr.portx, -1, "", "");
+		}
+		reply.data_NETLE = host2netle(n);
+
+	        send_to_client (client, &reply);
+	      }
+	      break;
+
+	    case 'Y':				/* How Many Outstanding frames wait for tx for a particular station  */
+
+	      /* Number of frames sitting in transmit queue for given channel, */
+	      /* source (optional) and destination addresses. */
+	      {
+	        char source[AX25_MAX_ADDR_LEN];
+	        char dest[AX25_MAX_ADDR_LEN];
+
+		struct {
+		  struct agwpe_s hdr;
+		  int data_NETLE;			// Little endian order.
+		} reply;
+
+	        strlcpy (source, cmd.hdr.call_from, sizeof(source));
+	        strlcpy (dest, cmd.hdr.call_to, sizeof(dest));
+
+	        memset (&reply, 0, sizeof(reply));
+		reply.hdr.portx = cmd.hdr.portx;	/* Reply with same port number, addresses. */
+	        reply.hdr.datakind = 'Y';
+	        strlcpy (reply.hdr.call_from, source, sizeof(reply.hdr.call_from));
+	        strlcpy (reply.hdr.call_to, dest, sizeof(reply.hdr.call_to));
+	        reply.hdr.data_len_NETLE = host2netle(4);
+
+	        int n = 0;
+	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
+		  n = tq_count (cmd.hdr.portx, -1, source, dest);
 		}
 		reply.data_NETLE = host2netle(n);
 
