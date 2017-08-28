@@ -26,7 +26,8 @@
 
 APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
 
-all :  $(APPS) direwolf.desktop direwolf.conf	@echo " "
+all :  $(APPS) direwolf.conf
+	@echo " "
 	@echo "Next step install with: "
 	@echo " "
 	@echo "      sudo make install"
@@ -315,7 +316,7 @@ INSTALLDIR := /usr/local
 INSTALL=ginstall
 
 .PHONY: install
-install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png
 #
 # Applications, not installed with package manager, normally go in /usr/local/bin.
 # /usr/bin is used instead when installing from .DEB or .RPM package.
@@ -350,7 +351,6 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
 	$(INSTALL) -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
 	$(INSTALL) -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
-	$(INSTALL) -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
 #
 # Documentation.  Various plain text files and PDF.
 #
@@ -485,7 +485,7 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o
 # Unit test for demodulators
 
 atest : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c dtest_now.o latlong.c symbols.c textcolor.c tt_text.c
+        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c dtime_now.o latlong.c symbols.c textcolor.c tt_text.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 #atest : atest.c fsk_fast_filter.h demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 #        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c latlong.c symbols.c textcolor.c tt_text.c

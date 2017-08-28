@@ -32,6 +32,17 @@
 #endif
 
 
+#ifdef __APPLE__
+
+// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2072
+
+// I think we should put it here, so it will apply to all files,
+// rather than only in ptt.c.
+
+#define __DARWIN_C_LEVEL  __DARWIN_C_FULL
+
+#endif
+
 
 /*
  * Previously, we could handle only a single audio device.
