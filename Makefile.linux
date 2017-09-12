@@ -4,8 +4,7 @@
 
 
 
-
-APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc kissutil
 
 all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo " "
@@ -255,18 +254,18 @@ endif
 # but the initial test doesn't look good.  About 2.3 times as slow.
 
 # If you want to use OSS (for FreeBSD, OpenBSD) instead of
-# ALSA (for Linux), comment out (or remove) the two lines below.
-
+# ALSA (for Linux), comment out (or remove) the line below.
 # TODO:  Can we automate this somehow?
 
-CFLAGS += -DUSE_ALSA
-LDFLAGS += -lasound
+alsa = 1
 
 ifeq ($(wildcard /usr/include/pthread.h),)
 $(error /usr/include/pthread.h does not exist.  Install it with "sudo apt-get install libc6-dev" or "sudo yum install libc6-dev" )
 endif
 
-ifneq ($(USE_ALSA),)
+ifneq ($(alsa),)
+CFLAGS += -DUSE_ALSA
+LDFLAGS += -lasound
 ifeq ($(wildcard /usr/include/alsa/asoundlib.h),)
 $(error /usr/include/alsa/asoundlib.h does not exist.  Install it with "sudo apt-get install libasound2-dev" or "sudo yum install libasound2-dev" )
 endif
@@ -377,9 +376,9 @@ tocalls-symbols :
 
 # Separate application to decode raw data.
 
-# First two use .c rather than .o because they depend on DECAMAIN definition.
+# First three use .c rather than .o because they depend on DECAMAIN definition.
 
-decode_aprs : decode_aprs.c kiss_frame.c  dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
+decode_aprs : decode_aprs.c kiss_frame.c ax25_pad.c dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o misc.a
 	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ $(LDFLAGS)
 
 
@@ -427,6 +426,13 @@ atest : atest.c demod.o demod_afsk.o demod_psk.o demod_9600.o \
 
 aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 	$(CC) $(CFLAGS) -g -o $@ $^ 
+
+
+# Talk to a KISS TNC.
+# Note:  kiss_frame.c has conditional compilation on KISSUTIL.
+
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o misc.a
+	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^
 
 
 # Touch Tone to Speech sample application.
@@ -562,6 +568,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) gen_packets $(INSTALLDIR)/bin
 	$(INSTALL) atest $(INSTALLDIR)/bin
 	$(INSTALL) ttcalc $(INSTALLDIR)/bin
+	$(INSTALL) kissutil $(INSTALLDIR)/bin
 	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
 #
 # Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.

@@ -27,6 +27,9 @@
  *		
  * Description: The KISS TNS protocol is described in http://www.ka9q.net/papers/kiss.html
  *
+ *		( An extended form, to handle multiple TNCs on a single serial port.
+ *		  Not applicable for our situation.  http://he.fi/pub/oh7lzb/bpq/multi-kiss.pdf )
+ *
  * 		Briefly, a frame is composed of 
  *
  *			* FEND (0xC0)
@@ -58,6 +61,9 @@
  *			_5	FullDuplex	Ignored.
  *		
  *			_6	SetHardware	TNC specific.
+ *
+ *			_C	XKISS extension - not supported.
+ *			_E	XKISS extention - not supported.
  *			
  *			FF	Return		Exit KISS mode.  Ignored.
  *
@@ -86,9 +92,32 @@
 /* In server.c.  Should probably move to some misc. function file. */
 void hex_dump (unsigned char *p, int len);
 
+#ifdef KISSUTIL
+void hex_dump (unsigned char *p, int len)
+{
+	int n, i, offset;
 
-
-
+	offset = 0;
+	while (len > 0) {
+	  n = len < 16 ? len : 16;
+	  printf ("  %03x: ", offset);
+	  for (i=0; i<n; i++) {
+	    printf (" %02x", p[i]);
+	  }
+	  for (i=n; i<16; i++) {
+	    printf ("   ");
+	  }
+	  printf ("  ");
+	  for (i=0; i<n; i++) {
+	    printf ("%c", isprint(p[i]) ? p[i] : '.');
+	  }
+	  printf ("\n");
+	  p += 16;
+	  offset += 16;
+	  len -= 16;
+	}
+}
+#endif
 
 #if KISSTEST
 
@@ -102,11 +131,17 @@ void text_color_set (dw_color_t c)
 #else
 
 #ifndef DECAMAIN
-static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug);
+#ifndef KISSUTIL
+static void kiss_set_hardware (int chan, char *command, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int));
+#endif
 #endif
 
 #endif
 
+#if KISSUTIL
+#define text_color_set(x)   ;
+#define dw_printf printf
+#endif
 
 
 /*-------------------------------------------------------------------
@@ -332,7 +367,7 @@ int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
 
 
 
-void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, void (*sendfun)(int,unsigned char*,int,int)) 
+void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
 {
 
 	//dw_printf ("kiss_frame ( %c %02x ) \n", ch, ch);
@@ -370,14 +405,17 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, v
 	   	kf->noise[kf->noise_len] = '\0';
 	      }
 
+#ifndef KISSUTIL
 	      /* Try to appease client app by sending something back. */
 	      if (strcasecmp("restart\r", (char*)(kf->noise)) == 0 ||
 		    strcasecmp("reset\r", (char*)(kf->noise)) == 0) {
-	        (*sendfun) (0, (unsigned char *)"\xc0\xc0", -1, client);
+		// first 2 parameters don't matter when length is -1 indicating text.
+	        (*sendfun) (0, 0, (unsigned char *)"\xc0\xc0", -1, client);
 	      }
 	      else {
-	        (*sendfun) (0, (unsigned char *)"\r\ncmd:", -1, client);
+	        (*sendfun) (0, 0, (unsigned char *)"\r\ncmd:", -1, client);
 	      }
+#endif
 	      kf->noise_len = 0;
 	    }
 	    return;
@@ -421,7 +459,7 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, v
 	        hex_dump (unwrapped+1, ulen-1);
 	      }
 
-	      kiss_process_msg (unwrapped, ulen, debug);
+	      kiss_process_msg (unwrapped, ulen, debug, client, sendfun);
 
 	      kf->state = KS_SEARCHING;
 	      return;
@@ -456,11 +494,22 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, v
  *
  *		kiss_len	- Number of bytes including the command.
  *
- *		debug	- Debug option is selected.
+ *		debug		- Debug option is selected.
+ *
+ *		client		- Client app number for TCP KISS.
+ *				  Ignored for pseudo termal and serial port.
+ *
+ *		sendfun		- Function to send something to the client application.
+ *				  "Set Hardware" can send a response.
  *
  *-----------------------------------------------------------------*/
 
-static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
+#ifndef KISSUTIL	// All these ifdefs in here are a sign that this should be refactored.
+			// Should split this into multiple files.
+			// Some functions are only for the TNC end.
+			// Other functions are suitble for both TNC and client app.
+
+void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
 {
 	int port;
 	int cmd;
@@ -472,9 +521,18 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 
 	switch (cmd) 
 	{
-	  case 0:				/* Data Frame */
+	  case KISS_CMD_DATA_FRAME:				/* 0 = Data Frame */
 
 	    /* Special hack - Discard apparently bad data from Linux AX25. */
+
+	    /* Note July 2017: There is a variant of of KISS, called SMACK, that assumes */
+	    /* a TNC can never have more than 8 ports.  http://symek.de/g/smack.html */
+	    /* It uses the MSB to indicate that a checksum is added.  I wonder if this */
+	    /* is why we sometimes hear about a request to transmit on channel 8.  */
+	    /* Should we have a message that asks the user if SMACK is being used, */
+	    /* and if so, turn it off in the application configuration? */
+	    /* Our current default is a maximum of 6 channels but it is easily */
+	    /* increased by changing one number and recompiling. */
 
 	    if ((port == 2 || port == 8) && 
 		 kiss_msg[1] == 'Q' << 1 &&
@@ -525,50 +583,69 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 	    }
 	    break;
 
-        case 1:				/* TXDELAY */
+        case KISS_CMD_TXDELAY:				/* 1 = TXDELAY */
 
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set TXDELAY = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
+	  if (kiss_msg[1] < 4 || kiss_msg[1] > 100) {
+            text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Are you sure you want such an extreme value for TXDELAY?\n");
+	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+	  }
 	  xmit_set_txdelay (port, kiss_msg[1]);
 	  break;
 
-        case 2:				/* Persistence */
+        case KISS_CMD_PERSISTENCE:			/* 2 = Persistence */
 
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set Persistence = %d, port %d\n", kiss_msg[1], port);
+	  if (kiss_msg[1] < 5 || kiss_msg[1] > 250) {
+            text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Are you sure you want such an extreme value for PERSIST?\n");
+	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+	  }
 	  xmit_set_persist (port, kiss_msg[1]);
 	  break;
 
-        case 3:				/* SlotTime */
+        case KISS_CMD_SLOTTIME:				/* 3 = SlotTime */
 
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set SlotTime = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
+	  if (kiss_msg[1] < 2 || kiss_msg[1] > 50) {
+            text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Are you sure you want such an extreme value for SLOTTIME?\n");
+	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+	  }
 	  xmit_set_slottime (port, kiss_msg[1]);
 	  break;
 
-        case 4:				/* TXtail */
+        case KISS_CMD_TXTAIL:				/* 4 = TXtail */
 
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set TXtail = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
+	  if (kiss_msg[1] < 2) {
+            text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Setting TXTAIL so low is asking for trouble.  You probably don't want to do this.\n");
+	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+	  }
 	  xmit_set_txtail (port, kiss_msg[1]);
 	  break;
 
-        case 5:				/* FullDuplex */
+        case KISS_CMD_FULLDUPLEX:			/* 5 = FullDuplex */
 
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set FullDuplex = %d, port %d - Ignored\n", kiss_msg[1], port);
 	  break;
 
-        case 6:				/* TNC specific */
+        case KISS_CMD_SET_HARDWARE:			/* 6 = TNC specific */
 
+	  kiss_msg[kiss_len] = '\0';
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set hardware - Ignored.\n");
-
-// TODO: kiss_set_hardware (...)
-
+	  dw_printf ("KISS protocol set hardware \"%s\", port %d\n", (char*)(kiss_msg+1), port);
+	  kiss_set_hardware (port, (char*)(kiss_msg+1), debug, client, sendfun);
 	  break;
 
-        case 15:				/* End KISS mode, port should be 15. */
+        case KISS_CMD_END_KISS:			/* 15 = End KISS mode, port should be 15. */
 						/* Ignore it. */
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol end KISS mode - Ignored.\n");
@@ -584,10 +661,18 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 	  dw_printf ("Use \"-d kn\" option on direwolf command line to observe\n");
 	  dw_printf ("all communication with the client application.\n");
 
+	  if (cmd == XKISS_CMD_DATA || cmd == XKISS_CMD_POLL) {
+	    dw_printf ("\n");
+	    dw_printf ("It looks like you are trying to use the \"XKISS\" protocol which is not supported.\n");
+	    dw_printf ("Change your application settings to use standard \"KISS\" rather than some other variant.\n");
+	    dw_printf ("\n");
+	  }
 	  break;
 	}
 
 } /* end kiss_process_msg */
+
+#endif  // ifndef KISSUTIL
 
 
 /*-------------------------------------------------------------------
@@ -596,7 +681,25 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
  *
  * Purpose:     Process the "set hardware" command.
  *
- * Inputs:
+ * Inputs:	chan		- channel, 0 - 15.
+ *
+ *		command		- All but the first byte.  e.g.  "TXBUF:99"
+ *				  Case sensitive.
+ *				  Will be modified so be sure caller doesn't care.
+ *
+ *		debug		- debug level.
+ *
+ *		client		- Client app number for TCP KISS.
+ *				  Ignored for pseudo terminal and serial port.
+ *
+ *		sendfun		- Function to send something to the client application.
+ *
+ *				  This is the tricky part.  We can have any combination of
+ *				  serial port, pseudo terminal, and multiple TCP clients.
+ *				  We need to send the response to same place where query came
+ *				  from.  The function is different for each class of device
+ *				  and we need a client number for the TCP case because we
+ *				  can have multiple TCP KISS clients at the same time.
  *
  *
  * Description:	This is new in version 1.5.  "Set hardware" was previously ignored.
@@ -635,10 +738,61 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
  *		completely different.  It might even be possible to recognize both.
  *		This might allow leveraging of other existing applications.
  *
+ *		Let's start with the easy to understand human readable format.
+ *
  *--------------------------------------------------------------------*/
 
-// static void kiss_set_hardware (...)
+#ifndef KISSUTIL
 
+static void kiss_set_hardware (int chan, char *command, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
+{
+	char *param;
+	char response[100];
+
+	param = strchr (command, ':');
+	if (param != NULL) {
+	  *param = '\0';
+	  param++;
+
+	  if (strcmp(command, "TXBUF") == 0) {			/* Number of frames in transmit queue. */
+
+	    if (strlen(param) > 0) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("KISS Set Hardware TXBUF: did not expect a parameter.\n");
+	    }
+
+	    // See what we have in the transmit queue for specified channel.
+	    // fldigi uses bytes but frames seems to make more sense in this situation.
+	    // Do we add one if PTT is on?  That information doesn't seem to be easily available.
+
+// TODO: FIXME:  not implemented yet.
+
+	    // n = tq_count (chan, TQ_PRIO_0_HI) + tq_count (chan, TQ_PRIO_1_LO);
+
+	    snprintf (response, sizeof(response), "TXBUF:whatever");
+
+	    (*sendfun) (chan, KISS_CMD_SET_HARDWARE, (unsigned char *)response, strlen(response), client);
+	  }
+	  else if (strcmp(command, "TNC") == 0) {		/* Identify software version. */
+	    ;	// TODO...
+	  }
+	  else if (strcmp(command, "TRXS") == 0) {
+	    ;	// TODO...  BUSY
+	  }
+	  else {
+            text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS Set Hardware invalid command.\n");
+	  }
+	}
+	else {
+          text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("KISS Set Hardware expected the form COMMAND:[parameter[,parameter...]]\n");
+	}
+	return;
+
+} /* end kiss_set_hardware */
+
+#endif 	// ifndef KISSUTIL
 
 
 /*-------------------------------------------------------------------
@@ -657,6 +811,7 @@ static void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug)
 
 void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int msg_len)
 {
+#ifndef KISSUTIL
 	const char *direction [2] = { "from", "to" };
 	const char *prefix [2] = { "<<<", ">>>" };
 	const char *function[16] = { 
@@ -664,11 +819,14 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 		"TXtail",	"FullDuplex",	"SetHardware",	"Invalid 7",
 		"Invalid 8", 	"Invalid 9",	"Invalid 10",	"Invalid 11",
 		"Invalid 12", 	"Invalid 13",	"Invalid 14",	"Return" };
-
+#endif
 
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("\n");
 
+#ifdef KISSUTIL
+	dw_printf ("From KISS TNC:\n");
+#else
+	dw_printf ("\n");
 	if (special == NULL) {
 	  unsigned char *p;	/* to skip over FEND if present. */
 
@@ -684,6 +842,7 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 			prefix[(int)fromto], special, direction[(int)fromto], 
 			msg_len);
 	}
+#endif
 	hex_dump (pmsg, msg_len);
 
 } /* end kiss_debug_print */

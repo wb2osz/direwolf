@@ -16,7 +16,7 @@
 #
 
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest kissutil
 
 
 # People say we need -mthreads option for threads to work properly.
@@ -30,6 +30,8 @@ CFLAGS := -Ofast -march=pentium3 -msse -Iregex -Iutm -Igeotranz -mthreads -DUSE_
 AR := ar
 
 CFLAGS += -g
+# TEMP EXPERIMENT - DO NOT RELEASE
+#CFLAGS += -fsanitize=undefined
 
 # For version 1.4, we upgrade from gcc 4.6.2 to 4.9.3.
 
@@ -159,9 +161,9 @@ tocalls-symbols :
 
 # Separate application to decode raw data.
 
-# First two use .c rather than .o because they depend on DECAMAIN definition.
+# First three use .c rather than .o because they depend on DECAMAIN definition.
 
-decode_aprs : decode_aprs.c kiss_frame.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
+decode_aprs : decode_aprs.c kiss_frame.c ax25_pad.c dwgpsnmea.o dwgps.o serial_port.o symbols.o  textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -DDECAMAIN -o decode_aprs $^
 
 
@@ -556,6 +558,14 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
+# Talk to a KISS TNC.
+
+# Note:  kiss_frame.c has conditional compilation on KISSUTIL.
+
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o sock.o dtime_now.o misc.a regex.a
+	$(CC) $(CFLAGS) -DKISSUTIL -o $@ $^ -lwinmm -lws2_32
+
+
 # Touch Tone to Speech sample application.
 
 ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a regex.a
@@ -641,6 +651,7 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		gen_packets.exe \
 		atest.exe \
 		ttcalc.exe \
+		kissutil.exe \
 		dwespeak.bat \
 		telemetry-toolkit/*
 	rm README-doc.md
