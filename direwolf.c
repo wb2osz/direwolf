@@ -1117,16 +1117,17 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 /* Send to another application if connected. */
 // TODO:  Put a wrapper around this so we only call one function to send by all methods.
+// We see the same sequence in tt_user.c.
 
 	int flen;
 	unsigned char fbuf[AX25_MAX_PACKET_LEN];
 
 	flen = ax25_pack(pp, fbuf);
 
-	server_send_rec_packet (chan, pp, fbuf, flen);		// AGW net protocol
-	kissnet_send_rec_packet (chan, fbuf, flen, -1);		// KISS TCP
-	kissserial_send_rec_packet (chan, fbuf, flen, -1);	// KISS serial port
-	kisspt_send_rec_packet (chan, fbuf, flen, -1);		// KISS pseudo terminal
+	server_send_rec_packet (chan, pp, fbuf, flen);				// AGW net protocol
+	kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS TCP
+	kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS serial port
+	kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS pseudo terminal
 
 /* 
  * If it came from DTMF decoder, send it to APRStt gateway.
