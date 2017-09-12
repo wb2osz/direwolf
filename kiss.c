@@ -94,7 +94,7 @@ void kisspt_set_debug (int n)
 	return;
 }
 
-void kisspt_send_rec_packet (int chan, unsigned char *fbuf,  int flen, int client)
+void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client)
 {
 	return;
 }
@@ -367,6 +367,9 @@ static int kisspt_open_pt (void)
  * Inputs:	chan		- Channel number where packet was received.
  *				  0 = first, 1 = second if any.
  *
+ *		kiss_cmd	- Usually KISS_CMD_DATA_FRAME but we can also have
+ *				  KISS_CMD_SET_HARDWARE when responding to a query.
+ *
  *		pp		- Identifier for packet object.
  *
  *		fbuf		- Address of raw received frame buffer
@@ -386,7 +389,7 @@ static int kisspt_open_pt (void)
  *--------------------------------------------------------------------*/
 
 
-void kisspt_send_rec_packet (int chan, unsigned char *fbuf,  int flen, int client)
+void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int kiss_len;
@@ -415,7 +418,7 @@ void kisspt_send_rec_packet (int chan, unsigned char *fbuf,  int flen, int clien
 	    flen = (int)(sizeof(stemp)) - 1;
 	  }
 
-	  stemp[0] = (chan << 4) + 0;
+	  stemp[0] = (chan << 4) | kiss_cmd;
 	  memcpy (stemp+1, fbuf, flen);
 
 	  if (kisspt_debug >= 2) {

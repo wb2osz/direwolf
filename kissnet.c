@@ -520,8 +520,13 @@ static THREAD_F connect_listen_thread (void *arg)
  * Inputs:	chan		- Channel number where packet was received.
  *				  0 = first, 1 = second if any.
  *
+// TODO: add kiss_cmd
+ *
  *		fbuf		- Address of raw received frame buffer
  *				  or a text string.
+ *
+ *		kiss_cmd	- Usually KISS_CMD_DATA_FRAME but we can also have
+ *				  KISS_CMD_SET_HARDWARE when responding to a query.
  *
  *		flen		- Number of bytes for AX.25 frame.
  *				  When called from kiss_rec_byte, flen will be -1
@@ -544,7 +549,7 @@ static THREAD_F connect_listen_thread (void *arg)
  *--------------------------------------------------------------------*/
 
 
-void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen, int tcpclient)
+void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int flen, int tcpclient)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
 	int kiss_len;
@@ -597,7 +602,7 @@ void kissnet_send_rec_packet (int chan, unsigned char *fbuf, int flen, int tcpcl
 
 	      assert (flen < (int)(sizeof(stemp)));
 
-	      stemp[0] = (chan << 4) + 0;
+	      stemp[0] = (chan << 4) | kiss_cmd;
 	      memcpy (stemp+1, fbuf, flen);
 
 	      if (kiss_debug >= 2) {
