@@ -798,9 +798,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_audio_config->achan[0].valid = 1;
 
 
-	memset (p_digi_config, 0, sizeof(struct digi_config_s));
+	memset (p_digi_config, 0, sizeof(struct digi_config_s));	// APRS digipeater
 	p_digi_config->dedupe_time = DEFAULT_DEDUPE;
-	memset (p_cdigi_config, 0, sizeof(struct cdigi_config_s));
+	memset (p_cdigi_config, 0, sizeof(struct cdigi_config_s));	// Connected mode digipeater
 
 	memset (p_tt_config, 0, sizeof(struct tt_config_s));	
 	p_tt_config->gateway_enabled = 0;
@@ -2276,7 +2276,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t != NULL) {
 	      e = regcomp (&(p_cdigi_config->alias[from_chan][to_chan]), t, REG_EXTENDED|REG_NOSUB);
-	      if (e != 0) {
+	      if (e == 0) {
+	        p_cdigi_config->has_alias[from_chan][to_chan] = 1;
+	      }
+	      else {
 	        regerror (e, &(p_cdigi_config->alias[from_chan][to_chan]), message, sizeof(message));
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file: Invalid alias matching pattern on line %d:\n%s\n",
@@ -2303,6 +2306,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * FILTER  from-chan  to-chan  filter_specification_expression
  * FILTER  from-chan  IG       filter_specification_expression
  * FILTER  IG         to-chan  filter_specification_expression
+ *
+ *
+ * Note that we have three different config file filter commands:
+ *
+ *	FILTER		- Originally for APRS digipeating but later enhanced
+ *			  to include IGate client side.  Maybe it should be
+ *			  renamed AFILTER to make it clearer after adding CFILTER.
+ *
+ *	CFILTER		- Similar for connected moded digipeater.
+ *
+ *	IGFILTER	- APRS-IS (IGate) server side - completely diffeent.
+ *			  I'm not happy with this name because IG sounds like IGate
+ *			  which is really the client side.  More comments later.
  */
 
 	  else if (strcasecmp(t, "FILTER") == 0) {
@@ -2442,7 +2458,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      t = " ";				/* Empty means permit nothing. */
 	    }
 
-	    p_cdigi_config->filter_str[from_chan][to_chan] = strdup(t);
+	    p_cdigi_config->cfilter_str[from_chan][to_chan] = strdup(t);
 
 //TODO1.2:  Do a test run to see errors now instead of waiting.
 

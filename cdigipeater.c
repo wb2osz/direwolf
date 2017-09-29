@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@
 
 
 static packet_t cdigipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *alias, int to_chan, char *filter_str);
+				int has_alias, regex_t *alias, int to_chan, char *cfilter_str);
 
 
 /*
@@ -149,9 +149,10 @@ void cdigipeater (int from_chan, packet_t pp)
 	      packet_t result;
 
 	      result = cdigipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
-					   save_audio_config_p->achan[to_chan].mycall, 
-			&save_cdigi_config_p->alias[from_chan][to_chan], to_chan,
-				save_cdigi_config_p->filter_str[from_chan][to_chan]);
+					   save_audio_config_p->achan[to_chan].mycall,
+			save_cdigi_config_p->has_alias[from_chan][to_chan],
+			&(save_cdigi_config_p->alias[from_chan][to_chan]), to_chan,
+				save_cdigi_config_p->cfilter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 	        tq_append (to_chan, TQ_PRIO_0_HI, result);
 	        cdigi_count[from_chan][to_chan]++;
@@ -171,9 +172,10 @@ void cdigipeater (int from_chan, packet_t pp)
 	      packet_t result;
 
 	      result = cdigipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
-					   save_audio_config_p->achan[to_chan].mycall, 
-			&save_cdigi_config_p->alias[from_chan][to_chan], to_chan,
-				save_cdigi_config_p->filter_str[from_chan][to_chan]);
+					   save_audio_config_p->achan[to_chan].mycall,
+	                save_cdigi_config_p->has_alias[from_chan][to_chan],
+			&(save_cdigi_config_p->alias[from_chan][to_chan]), to_chan,
+				save_cdigi_config_p->cfilter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 	        tq_append (to_chan, TQ_PRIO_0_HI, result);
 	        cdigi_count[from_chan][to_chan]++;
@@ -203,12 +205,15 @@ void cdigipeater (int from_chan, packet_t pp)
  *				  packet is to be transmitted.  Could be the same as
  *				  mycall_rec or different.
  *
- *		alias		- Compiled pattern for my station aliases.
- *				  Could be NULL if no aliases.
+ *		has_alias	- True if we have an alias.
+ *
+ *		alias		- Optional compiled pattern for my station aliases.
+ *				  Do NOT attempt to use this if 'has_alias' is false.
  *
  *		to_chan		- Channel number that we are transmitting to.
  *
- *		filter_str	- Filter expression string or NULL.
+ *		cfilter_str	- Filter expression string for the from/to channel pair or NULL.
+ *				  Note that only a subset of the APRS filters are applicable here.
  *		
  * Returns:	Packet object for transmission or NULL.
  *		The original packet is not modified.  The caller is responsible for freeing it.
@@ -227,20 +232,38 @@ void cdigipeater (int from_chan, packet_t pp)
 
 
 static packet_t cdigipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *alias, int to_chan, char *filter_str)
+				int has_alias, regex_t *alias, int to_chan, char *cfilter_str)
 {
 	int r;
 	char repeater[AX25_MAX_ADDR_LEN];
 	int err;
 	char err_msg[100];
 
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("cdigipeat_match (from_chan=%d, pp=%p, mycall_rec=%s, mycall_xmit=%s, has_alias=%d, alias=%p, to_chan=%d, cfilter_str=%s\n",
+			from_chan, pp, mycall_rec, mycall_xmit, has_alias, alias, to_chan, cfilter_str);
+#endif
+
 /*
  * First check if filtering has been configured.
+ * Note that we have three different config file filter commands:
+ *
+ *	FILTER		- APRS digipeating and IGate client side.
+ *				Originally this was the only one.
+ *				Should we change it to AFILTER to make it clearer?
+ *	CFILTER		- Similar for connected moded digipeater.
+ *	IGFILTER	- APRS-IS (IGate) server side - completely diffeent.
+ *				Confusing with similar name but much different idea.
+ *				Maybe this should be renamed to SUBSCRIBE or something like that.
+ *
+ * Logically this should come later, after an address/alias match.
+ * But here we only have to do it once.
  */
 
-	if (filter_str != NULL) {
+	if (cfilter_str != NULL) {
 
-	  if (pfilter(from_chan, to_chan, filter_str, pp, 0) != 1) {
+	  if (pfilter(from_chan, to_chan, cfilter_str, pp, 0) != 1) {
 	    return(NULL);
 	  }
 	}
@@ -286,7 +309,11 @@ static packet_t cdigipeat_match (int from_chan, packet_t pp, char *mycall_rec, c
 /*
  * If we have an alias match, substitute MYCALL.
  */
-	if (alias != NULL) {
+	if (has_alias) {
+#if DEBUG
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("Checking %s for alias match.\n", repeater);
+#endif
 	  err = regexec(alias,repeater,0,NULL,0);
 	  if (err == 0) {
 	    packet_t result;
@@ -303,6 +330,12 @@ static packet_t cdigipeat_match (int from_chan, packet_t pp, char *mycall_rec, c
 	    text_color_set (DW_COLOR_ERROR);
 	    dw_printf ("%s\n", err_msg);
 	  }
+	}
+	else {
+#if DEBUG
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("No alias was specified.\n");
+#endif
 	}
 
 /*

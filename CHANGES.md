@@ -1,6 +1,21 @@
 
 # Revision History #
 
+## Version 1.5 -- Development snapshot C -- September 2017 ##
+
+This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
+
+### New Features: ###
+
+- "kissutil" for troubleshooting a KISS TNC or interfacing to an application via files.
+
+
+### Bugs Fixed: ###
+
+- Possible crash when CDIGIPEAT did not include the optional alias.
+
+
+
 ## Version 1.5 -- Development snapshot B -- June 2017 ##
 
 This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
@@ -37,7 +52,7 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 ### Bugs Fixed: ###
 
-- Little spelling errors in messages ????
+- Little typographical / spelling errors in messages.
 
 ----------
 
