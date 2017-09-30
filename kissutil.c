@@ -35,8 +35,6 @@
  *		See the "usage" functions at the bottom for details.
  *
  * FIXME:	This is a rough prototype that needs more work.
- * TODO:	Prepare the "man" page.
- * TODO:	Add to User Guide.
  *		
  *---------------------------------------------------------------*/
 
@@ -137,15 +135,19 @@ static int serial_speed = 9600;			/* -s option. */
 static int verbose = 0;				/* -v option. */
 						/* Display the KISS protocol in hexadecimal for troubleshooting. */
 
-static char transmit_queue[120] = "";		/* -t option */
+static char transmit_from[120] = "";		/* -f option */
 						/* When specified, files are read from this directory */
 						/* rather than using stdin.  Each file is one or more */
 						/* lines in the standard monitoring format. */
 
-static char receive_queue[120] = "";		/* -r option */
+static char receive_output[120] = "";		/* -o option */
 						/* When specified, each received frame is stored as a file */
 						/* with a unique name here.  */
 						/* Directory must already exist; we won't create it. */
+
+static char timestamp_format[60] = "";		/* -T option */
+						/* Precede received frames with timestamp. */
+						/* Command line option uses "strftime" format string. */
 
 
 #if __WIN32__
@@ -213,7 +215,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "h:p:s:vt:r:",
+          c = getopt_long(argc, argv, "h:p:s:vf:o:T:",
 			long_options, &option_index);
           if (c == -1)
             break;
@@ -236,12 +238,16 @@ int main (int argc, char *argv[])
 	      verbose++;
 	      break;
 
-            case 't':				/* -t for transmit queue directory. */  
-	      strlcpy (transmit_queue, optarg, sizeof(transmit_queue));
+            case 'f':				/* -f for transmit files directory. */  
+	      strlcpy (transmit_from, optarg, sizeof(transmit_from));
               break;
 
-            case 'r':				/* -t for receive queue directory. */  
-	      strlcpy (receive_queue, optarg, sizeof(receive_queue));
+            case 'o':				/* -o for receive output directory. */  
+	      strlcpy (receive_output, optarg, sizeof(receive_output));
+              break;
+
+            case 'T':				/* -T for receive timestamp. */  
+	      strlcpy (timestamp_format, optarg, sizeof(timestamp_format));
               break;
 
             case '?':
@@ -265,9 +271,9 @@ int main (int argc, char *argv[])
 /*
  * If receive queue directory was specified, make sure that it exists.
  */
-	if (strlen(receive_queue) > 0) {
+	if (strlen(receive_output) > 0) {
 
-
+// TODO
 	}
 
 /* If port begins with digit, consider it to be TCP. */
@@ -304,7 +310,7 @@ int main (int argc, char *argv[])
  */
 	char stuff[1000];
 
-	if (strlen(transmit_queue) > 0) {
+	if (strlen(transmit_from) > 0) {
 /*
  * Process and delete all files in specified directory.
  * When done, sleep for a second and try again.
@@ -318,7 +324,7 @@ int main (int argc, char *argv[])
 	    //text_color_set(DW_COLOR_DEBUG);
             //dw_printf("Get directory listing...\n");
 
-	    dp = opendir (transmit_queue);
+	    dp = opendir (transmit_from);
 	    if (dp != NULL) {
 	      while ((ep = readdir(dp)) != NULL) {
 	        char path [300];
@@ -328,7 +334,7 @@ int main (int argc, char *argv[])
 
 	        text_color_set(DW_COLOR_DEBUG);
 	        dw_printf ("Processing %s for transmit...\n", ep->d_name);
-		strlcpy (path, transmit_queue, sizeof(path));
+		strlcpy (path, transmit_from, sizeof(path));
 	        strlcat (path, DIR_CHAR, sizeof(path));
 	        strlcat (path, ep->d_name, sizeof(path));
 	        fp = fopen (path, "r");
@@ -352,7 +358,7 @@ int main (int argc, char *argv[])
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf("Can't access transmit queue directory %s.  Quitting.\n", transmit_queue);
+              dw_printf("Can't access transmit queue directory %s.  Quitting.\n", transmit_from);
 	      exit (EXIT_FAILURE);
 	    }
 	    SLEEP_SEC (1);
@@ -366,6 +372,8 @@ int main (int argc, char *argv[])
 	    process_input (stuff);
 	  }
 	}
+
+	return (EXIT_SUCCESS);
 
 } /* end main */
 
@@ -572,6 +580,9 @@ static THREAD_F tnc_listen_net (void *arg)
 /*
  * Connect to network KISS TNC.
  */
+	// For the IGate we would loop around and try to reconnect if the TNC
+	// goes away.  We should probably do the same here.
+
 	server_sock = sock_connect (hostname, port, "TCP KISS TNC", allow_ipv6, debug, ipaddr_str);
 
 	if (server_sock == -1) {
@@ -608,9 +619,6 @@ static THREAD_F tnc_listen_net (void *arg)
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("Read error from TCP KISS TNC.  Terminating.\n");
  	exit (EXIT_FAILURE);
-
-	// For the IGate we would loop around and try to reconnect but
-	// it doesn't seem appropriate here.  Just quit.
 
 } /* end tnc_listen_net */
 
@@ -711,9 +719,21 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	       printf ("ERROR - Invalid KISS data frame from TNC.\n");
 	    }
 	    else {
-	      char addrs[500];
+	      char prefix[100];		// Channel and optional timestamp.
+					// Like [0] or [2 12:34:56]
+
+	      char addrs[AX25_MAX_ADDRS*AX25_MAX_ADDR_LEN];	// Like source>dest,digi,...,digi:
 	      unsigned char *pinfo;
 	      int info_len;
+
+	      if (strlen(timestamp_format) > 0) {
+	        char ts[100];
+		timestamp_user_format (ts, sizeof(ts), timestamp_format);
+	        snprintf (prefix, sizeof(prefix), "[%d %s]", chan, ts);
+	      }
+	      else {
+	        snprintf (prefix, sizeof(prefix), "[%d]", chan);
+	      }
 
 	      ax25_format_addrs (pp, addrs);
 
@@ -721,11 +741,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
 	      text_color_set(DW_COLOR_REC);
 
-	      if (chan != 0) {
-	        dw_printf ("[%d] ", chan);
-	      }
-
-	      dw_printf ("%s", addrs);			/* stations followed by : */
+	      dw_printf ("%s %s", prefix, addrs);		// [channel] Addresses followed by :
 
 	      // Safe print will replace any unprintable characters with
 	      // hexadecimal representation.
@@ -735,24 +751,27 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
 /*
  * Add to receive queue directory if specified.
- * File name will be based on time to 0.01 sec resolution.  ??? TBD
+ * File name will be based on current local time.
+ * If you want UTC, just set an environment variable like this:
+ *
+ *	TZ=UTC kissutil ...
  */
-	      if (strlen(receive_queue) > 0) {
+	      if (strlen(receive_output) > 0) {
 		char fname [30];
 	        char path [300];
 	        FILE *fp;
 
-	        snprintf (fname, sizeof(fname), "%.0f", dtime_now() * 100.);
+	        timestamp_filename (fname, (int)sizeof(fname));
 
-		strlcpy (path, receive_queue, sizeof(path));
+		strlcpy (path, receive_output, sizeof(path));
 	        strlcat (path, DIR_CHAR, sizeof(path));
 	        strlcat (path, fname, sizeof(path));
 
 	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("save received frame to %s\n", path);
+	        dw_printf ("Save received frame to %s\n", path);
 	        fp = fopen (path, "w");
 	        if (fp != NULL) {
-	          fprintf (fp, "%s%s\n", addrs, pinfo);
+	          fprintf (fp, "%s %s%s\n", prefix, addrs, pinfo);
 	          fclose (fp);
 	        }
 	        else {
@@ -769,10 +788,14 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
 	    kiss_msg[kiss_len] = '\0';
 	    text_color_set(DW_COLOR_REC);
-	    // TODO: Just precede by "h " for in/out symmetry?
-	    printf ("KISS protocol set hardware \"%s\", channel %d\n", (char*)(kiss_msg+1), chan);
+	    // Display as "h ..." for in/out symmetry.
+	    // Use safe print here?
+	    dw_printf ("[%d] h %s\n", chan, (char*)(kiss_msg+1));
 	    break;
 
+/*
+ * The rest should only go TO the TNC and not come FROM it.
+ */
           case KISS_CMD_TXDELAY:			/* 1 = TXDELAY */
           case KISS_CMD_PERSISTENCE:			/* 2 = Persistence */
           case KISS_CMD_SLOTTIME:			/* 3 = SlotTime */
@@ -833,8 +856,9 @@ static void usage(void)
  	dw_printf ("		a serial port.  e.g.  /dev/ttyAMA0 or COM3.\n");
  	dw_printf ("	-s	Serial port speed, default 9600.\n");
 	dw_printf ("	-v	Verbose.  Show the KISS frame contents.\n");
-	dw_printf ("	-t	Transmit queue directory.  Processs and delete files here.\n");
-	dw_printf ("	-r	Receive queue directory.  Store received frames here.\n");
+	dw_printf ("	-f	Transmit files directory.  Processs and delete files here.\n");
+	dw_printf ("	-o	Receive output queue directory.  Store received frames here.\n");
+	dw_printf ("	-T	Precede received frames with 'strftime' format time stamp.\n");
 	usage2();
 	exit (EXIT_SUCCESS);
 }

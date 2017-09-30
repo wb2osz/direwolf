@@ -432,7 +432,7 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 # Note:  kiss_frame.c has conditional compilation on KISSUTIL.
 
 kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o misc.a
-	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^
+	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^ $(LDFLAGS)
 
 
 # Touch Tone to Speech sample application.
@@ -637,6 +637,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
 	$(INSTALL) -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
 	$(INSTALL) -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
+	$(INSTALL) -D --mode=644 man1/kissutil.1 $(INSTALLDIR)/man/man1/kissutil.1
 	$(INSTALL) -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
 	$(INSTALL) -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
 	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1

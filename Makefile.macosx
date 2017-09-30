@@ -430,9 +430,9 @@ install-conf : direwolf.conf
 
 # Separate application to decode raw data.
 
-# First two use .c rather than .o because they depend on DECAMAIN definition.
+# First three use .c rather than .o because they depend on DECAMAIN definition.
 
-decode_aprs : decode_aprs.c kiss_frame.c  dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o
+decode_aprs : decode_aprs.c kiss_frame.c ax25_pad.c  dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o
 	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ -lm
 
 # Convert between text and touch tone representation.

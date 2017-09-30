@@ -1,0 +1,60 @@
+.TH KISSUTIL 1
+
+.SH NAME
+kissutil \- KISS TNC troubleshooting and Application Interface.
+
+
+.SH SYNOPSIS
+.B kissutil 
+[ \fIoptions\fR ]
+
+
+
+.SH DESCRIPTION
+\fBkissutil\fR  can be used interactively for troubleshooting a KISS TNC.
+It is usable with direwolf and other generic KISS TNCs connected to a serial port.
+It can also be used as an application interface where each side places files in a
+directory for the other to process.
+See User Guide for more details.
+
+
+.SH OPTIONS
+.TP
+.BI "-h " "host"
+Hostname or IP address for a TCP KISS TNC.  Default is localhost.
+
+.TP
+.BI "-p " "port"
+A number may be specified for a TCP port other than the default 8001.
+If not a number, it is considered to be a serial port name such as /dev/ttyS0 or COM3.
+
+.TP
+.BI "-s " "speed"
+Speed for serial port. e.g. 9600.
+
+.TP
+.BI "-o " "rec-directory"
+For each received frame, a new file is created here.
+It is expected that some other application will process files in this directory then delete them.
+
+.TP
+.BI "-T " "format"
+Each received frame will be preceded by a timestamp in the specified format.
+See strftime documentation for a description of the format string.
+Example:  %H:%M:%S  for current time in hours, minutes, seconds.
+
+.TP
+.BI "-f " "xmit-directory"
+Files in this directory are transmited and deleted.
+Another application places a file here when it wants something to be transmitted.
+
+.TP
+.BI "-v " 
+Verbose - Display the KISS frames going to and from the TNC.
+
+
+.SH SEE ALSO
+More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
+
+Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, kissutil, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+
