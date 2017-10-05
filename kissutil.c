@@ -68,6 +68,7 @@
 #include "kiss_frame.h"
 #include "sock.h"
 #include "dtime_now.h"
+#include "audio.h"		// for DEFAULT_TXDELAY, etc.
 
 
 // TODO:  define in one place, use everywhere.
@@ -394,6 +395,27 @@ int main (int argc, char *argv[])
  *
  *--------------------------------------------------------------------*/
 
+static int parse_number (char *str, int de_fault)
+{
+	int n;
+
+	while (isspace(*str)) {
+	  str++;
+	}
+	if (strlen(str) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Missing number for KISS command.  Using default %d.\n", de_fault);
+	  return (de_fault);
+	}
+	n = atoi(str);
+	if (n < 0 || n > 255) {		// must fit in a byte.
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Number for KISS command is out of range 0-255.  Using default %d.\n", de_fault);
+	  return (de_fault);
+	}
+	return (n);
+}
+
 static void process_input (char *stuff)
 {
 	  char *p;
@@ -435,24 +457,23 @@ static void process_input (char *stuff)
 
 	      switch (*p) {
 	        case 'd':			// txDelay, 10ms units
-		  // TODO: should check for range 0 - 255.
-	          value = atoi(p+1);
+	          value = parse_number(p+1, DEFAULT_TXDELAY);
 	          send_to_kiss_tnc (chan, KISS_CMD_TXDELAY, &value, 1);
 	          break;
 	        case 'p':			// Persistence
-	          value = atoi(p+1);
+	          value = parse_number(p+1, DEFAULT_PERSIST);
 	          send_to_kiss_tnc (chan, KISS_CMD_PERSISTENCE, &value, 1);
 	          break;
 	        case 's':			// Slot time, 10ms units
-	          value = atoi(p+1);
+	          value = parse_number(p+1,  DEFAULT_SLOTTIME);
 	          send_to_kiss_tnc (chan, KISS_CMD_SLOTTIME, &value, 1);
 	          break;
-	        case 't':			// txTelay, 10ms units
-	          value = atoi(p+1);
+	        case 't':			// txTail, 10ms units
+	          value = parse_number(p+1, DEFAULT_TXTAIL);
 	          send_to_kiss_tnc (chan, KISS_CMD_TXTAIL, &value, 1);
 	          break;
 	        case 'f':			// Full duplex
-	          value = atoi(p+1);
+	          value = parse_number(p+1, 0);
 	          send_to_kiss_tnc (chan, KISS_CMD_FULLDUPLEX, &value, 1);
 	          break;
 	        case 'h':			// set Hardware
@@ -512,7 +533,7 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 	}
 	if (dlen < 0 || dlen > (int)(sizeof(temp)-1)) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR - Invalid data length %d - must be in range 0 to %d.\n", dlen, sizeof(temp)-1);
+	  dw_printf ("ERROR - Invalid data length %d - must be in range 0 to %d.\n", dlen, (int)(sizeof(temp)-1));
 	  dlen = sizeof(temp)-1;
 	}
 
@@ -531,7 +552,8 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 	// Might need to delay when not using interactive input.
 
 	if (using_tcp) {
-	  SOCK_SEND(server_sock, (char*)kissed, klen);
+	  int rc = SOCK_SEND(server_sock, (char*)kissed, klen);
+	  (void)rc;
 	}
 	else {
 	  serial_port_write (serial_fd, (char*)kissed, klen);
