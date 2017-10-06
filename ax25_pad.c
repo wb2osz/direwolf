@@ -2000,7 +2000,7 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
-	assert (this_p->frame_len > 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
+	assert (this_p->frame_len >= 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
 
 	memcpy (result, this_p->frame_data, this_p->frame_len);
 
@@ -2501,6 +2501,33 @@ int ax25_get_pid (packet_t this_p)
 	}
 	return (-1);
 }
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_get_frame_len
+ *
+ * Purpose:	Get length of frame.
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *		
+ * Returns:	Number of octets in the frame buffer.  
+ *		Does NOT include the extra 2 for FCS.
+ *
+ *------------------------------------------------------------------*/
+
+int ax25_get_frame_len (packet_t this_p) 
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	assert (this_p->frame_len >= 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
+
+	return (this_p->frame_len);
+
+} /* end ax25_get_frame_len */
+
 
 
 /*------------------------------------------------------------------------------

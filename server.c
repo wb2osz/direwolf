@@ -1705,7 +1705,17 @@ static THREAD_F cmd_listen_thread (void *arg)
 	        struct via_info {
 	          unsigned char num_digi;	/* Expect to be in range 1 to 7.  Why not up to 8? */
 		  char dcall[7][10];
-	        } *v = (struct via_info *)cmd.data;
+	        } 
+#if 1
+		// October 2017.  gcc ??? complained:
+		//     warning: dereferencing pointer 'v' does break strict-aliasing rules
+		// Try adding this attribute to get rid of the warning.
+	        // If this upsets your compiler, take it out.
+	        // Let me know.  Maybe we could put in a compiler version check here.
+
+	           __attribute__((__may_alias__))
+#endif
+	                              *v = (struct via_info *)cmd.data;
 
 	        char callsigns[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
 	        int num_calls = 2;	/* 2 plus any digipeaters. */
@@ -1866,7 +1876,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int n = 0;
 	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
-		  n = tq_count (cmd.hdr.portx, -1, "", "");
+		  n = tq_count (cmd.hdr.portx, -1, "", "", 0);
 		}
 		reply.data_NETLE = host2netle(n);
 
@@ -1899,7 +1909,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int n = 0;
 	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
-		  n = tq_count (cmd.hdr.portx, -1, source, dest);
+		  n = tq_count (cmd.hdr.portx, -1, source, dest, 0);
 		}
 		reply.data_NETLE = host2netle(n);
 

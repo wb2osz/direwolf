@@ -25,7 +25,7 @@
  *
  * Purpose:   	Common code used by Serial port and network versions of KISS protocol.
  *		
- * Description: The KISS TNS protocol is described in http://www.ka9q.net/papers/kiss.html
+ * Description: The KISS TNC protocol is described in http://www.ka9q.net/papers/kiss.html
  *
  *		( An extended form, to handle multiple TNCs on a single serial port.
  *		  Not applicable for our situation.  http://he.fi/pub/oh7lzb/bpq/multi-kiss.pdf )
@@ -40,11 +40,11 @@
  *
  *		The first byte of the frame contains:
  *	
- *			* port number in upper nybble.
+ *			* port number (radio channel) in upper nybble.
  *			* command in lower nybble.
  *
  *	
- *		Commands from application recognized:
+ *		Commands from application tp TNC:
  *
  *			_0	Data Frame	AX.25 frame in raw format.
  *
@@ -72,6 +72,9 @@
  *
  *			_0	Data Frame	Received AX.25 frame in raw format.
  *
+ *			_6	SetHardware	TNC specific.
+ *						Usually a response to a query.
+ *
  *---------------------------------------------------------------*/
 
 #include "direwolf.h"
@@ -88,6 +91,8 @@
 #include "kiss_frame.h"
 #include "tq.h"
 #include "xmit.h"
+#include "version.h"
+
 
 /* In server.c.  Should probably move to some misc. function file. */
 void hex_dump (unsigned char *p, int len);
@@ -138,10 +143,10 @@ static void kiss_set_hardware (int chan, char *command, int debug, int client, v
 
 #endif
 
-#if KISSUTIL
-#define text_color_set(x)   ;
-#define dw_printf printf
-#endif
+//#if KISSUTIL
+//#define text_color_set(x)   ;
+//#define dw_printf printf
+//#endif
 
 
 /*-------------------------------------------------------------------
@@ -171,6 +176,7 @@ void kiss_frame_init (struct audio_s *pa)
  * Inputs:	in	- Address of input block.
  *			  First byte is the "type indicator" with type and 
  *			  channel but we don't care about that here.
+ *			  If it happens to be FEND or FESC, it is escaped, like any other byte.
  *
  *			  This seems cumbersome and confusing to have this
  *			  one byte offset when encapsulating an AX.25 frame.
@@ -190,7 +196,7 @@ void kiss_frame_init (struct audio_s *pa)
  *				FEND		- Magic frame separator.
  *
  * Returns:	Number of bytes in the output.
- *		Absolute max length will be twice input plus 2.
+ *		Absolute max length (extremely unlikely) will be twice input plus 2.
  *
  *-----------------------------------------------------------------*/
 
@@ -242,6 +248,8 @@ int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out)
  *			  the escapes or FEND.
  *			  First byte is the "type indicator" with type and 
  *			  channel but we don't care about that here.
+ *			  We treat it like any other byte with special handling
+ *			  if it happens to be FESC.
  *			  Note that this is "binary" data and can contain
  *			  nul (0x00) values.   Don't treat it like a text string!
  *
@@ -509,6 +517,8 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, v
 			// Some functions are only for the TNC end.
 			// Other functions are suitble for both TNC and client app.
 
+// This is used only by the TNC sided.
+
 void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
 {
 	int port;
@@ -690,6 +700,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
  *		debug		- debug level.
  *
  *		client		- Client app number for TCP KISS.
+ *				  Needed so we can send any response to the right client app.
  *				  Ignored for pseudo terminal and serial port.
  *
  *		sendfun		- Function to send something to the client application.
@@ -713,13 +724,17 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
  *		be used for throttling of large transmissions and performing some action
  *		after the last frame has been sent.
  *
- *		The original KISS protocol spec offers no guidance on what this might look
+ *		The original KISS protocol spec offers no guidance on what "Set Hardware" might look
  *		like.  I'm aware of only two, drastically different, implementations:
  *
  *		fldigi - http://www.w1hkj.com/FldigiHelp-3.22/kiss_command_page.html
  *
- *			Everything is in human readable text in the form of:
- *			COMMAND : [ parameter [ , parameter ... ] ]
+ *			Everything is in human readable in both directions:
+ *
+ *			COMMAND: [ parameter [ , parameter ... ] ]
+ *
+ *			Lack of a parameter, in the client to TNC direction, is a query
+ *			which should generate a response in the same format.
  *
  *		    Used by applications, http://www.w1hkj.com/FldigiHelp/kiss_host_prgs_page.html
  *			- BPQ32
@@ -740,6 +755,19 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
  *
  *		Let's start with the easy to understand human readable format.
  *
+ * Commands:	(Client to TNC, with parameter(s) to set something.)
+ *
+ *			none yet
+ *
+ * Queries:	(Client to TNC, no parameters, generate a response.)
+ *
+ *			Query		Response		Comment
+ *			-----		--------		-------
+ *
+ *			TNC:		TNC:DIREWOLF 9.9	9.9 represents current version.
+ *
+ *			TXBUF:		TXBUF:999		Number of bytes (not frames) in transmit queue.
+ *
  *--------------------------------------------------------------------*/
 
 #ifndef KISSUTIL
@@ -754,39 +782,37 @@ static void kiss_set_hardware (int chan, char *command, int debug, int client, v
 	  *param = '\0';
 	  param++;
 
-	  if (strcmp(command, "TXBUF") == 0) {			/* Number of frames in transmit queue. */
+	  if (strcmp(command, "TNC") == 0) {		/* TNC - Identify software version. */
 
 	    if (strlen(param) > 0) {
               text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("KISS Set Hardware TXBUF: did not expect a parameter.\n");
+	      dw_printf ("KISS Set Hardware TNC: Did not expect a parameter.\n");
 	    }
 
-	    // See what we have in the transmit queue for specified channel.
-	    // fldigi uses bytes but frames seems to make more sense in this situation.
-	    // Do we add one if PTT is on?  That information doesn't seem to be easily available.
-
-// TODO: FIXME:  not implemented yet.
-
-	    // n = tq_count (chan, TQ_PRIO_0_HI) + tq_count (chan, TQ_PRIO_1_LO);
-
-	    snprintf (response, sizeof(response), "TXBUF:whatever");
-
+	    snprintf (response, sizeof(response), "DIREWOLF %d.%d", MAJOR_VERSION, MINOR_VERSION);
 	    (*sendfun) (chan, KISS_CMD_SET_HARDWARE, (unsigned char *)response, strlen(response), client);
 	  }
-	  else if (strcmp(command, "TNC") == 0) {		/* Identify software version. */
-	    ;	// TODO...
+
+	  else if (strcmp(command, "TXBUF") == 0) {	/* TXBUF - Number of bytes in transmit queue. */
+
+	    if (strlen(param) > 0) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("KISS Set Hardware TXBUF: Did not expect a parameter.\n");
+	    }
+
+	    int n = tq_count (chan, -1, "", "", 1);
+	    snprintf (response, sizeof(response), "TXBUF:%d", n);
+	    (*sendfun) (chan, KISS_CMD_SET_HARDWARE, (unsigned char *)response, strlen(response), client);
 	  }
-	  else if (strcmp(command, "TRXS") == 0) {
-	    ;	// TODO...  BUSY
-	  }
+
 	  else {
             text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("KISS Set Hardware invalid command.\n");
+	    dw_printf ("KISS Set Hardware unrecognized command: %s.\n", command);
 	  }
 	}
 	else {
           text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("KISS Set Hardware expected the form COMMAND:[parameter[,parameter...]]\n");
+	  dw_printf ("KISS Set Hardware \"%s\" expected the form COMMAND:[parameter[,parameter...]]\n", command);
 	}
 	return;
 
