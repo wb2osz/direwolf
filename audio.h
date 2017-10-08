@@ -193,8 +193,11 @@ struct audio_s {
 
 	        ptt_method_t ptt_method; /* none, serial port, GPIO, LPT, HAMLIB. */
 
-	        char ptt_device[20];	/* Serial device name for PTT.  e.g. COM1 or /dev/ttyS0 */
+	        char ptt_device[100];	/* Serial device name for PTT.  e.g. COM1 or /dev/ttyS0 */
 					/* Also used for HAMLIB.  Could be host:port when model is 1. */
+					/* For years, 20 characters was plenty and then along comes this crazy name: */
+					/* /dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0 */
+					/* Issue 104, changed to 100 bytes in version 1.5. */
 			
 	        ptt_line_t ptt_line;	/* Control line when using serial port. PTT_LINE_RTS, PTT_LINE_DTR. */
 	        ptt_line_t ptt_line2;	/* Optional second one:  PTT_LINE_NONE when not used. */
