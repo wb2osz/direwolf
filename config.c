@@ -63,6 +63,10 @@
 #include "tt_text.h"
 #include "ax25_link.h"
 
+#ifdef USE_CM108		// Linux only
+#include "cm108.h"
+#endif
+
 // geotranz
 
 #include "utm.h"
@@ -1613,6 +1617,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * xxx  LPT  [-]bit-num
  * PTT  RIG  model  port
  * PTT  RIG  AUTO  port
+ * PTT  CM108 [ [-]bit-num ] [ hid-device ]
  *
  * 		When model is 2, port would host:port like 127.0.0.1:4532
  *		Otherwise, port would be a serial port like /dev/ttyS0
@@ -1738,15 +1743,96 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_HAMLIB;
 
 #else
+#if __WIN32__
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: Windows version of direwolf does not support HAMLIB.\n", line);
+	      exit (EXIT_FAILURE);
+#else
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: %s with RIG is only available when hamlib support is enabled.\n", line, otname);
-#if __WIN32__
-	      dw_printf ("Hamlib is not currently supported on Windows.\n");
-#else
 	      dw_printf ("You must rebuild direwolf with hamlib support.\n");
 	      dw_printf ("See User Guide for details.\n");
 #endif
 
+#endif
+	    }
+	    if (strcasecmp(t, "CM108") == 0) {
+
+/* CM108 - GPIO of USB sound card. case, Linux only. */
+
+#ifdef USE_CM108
+
+	      if (ot != OCTYPE_PTT) {
+		// Future project:  Allow DCD and CON via the same device.
+	        // This gets more complicated because we can't selectively change a single GPIO bit.
+	        // We would need to keep track of what is currently there, change one bit, in our local
+	        // copy of the status and then write out the byte for all of the pins.
+	        // Let's keep it simple with just PTT for the first stab at this.
+
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: PTT CM108 option is only valid for PTT, not %s.\n", line, otname);
+	        continue;
+	      }
+
+	      p_audio_config->achan[channel].octrl[ot].out_gpio_num = 3;	// All known designs use GPIO 3.
+										// User can override for special cases.
+	      p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;		// High for transmit.
+	      strcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "");
+ 
+	      // Try to find PTT device for audio output device.
+	      // Simplifiying assumption is that we have one radio per USB Audio Adapter.
+	      // Failure at this point is not an error.
+	      // See if config file sets it explicitly before complaining.
+
+ 	      cm108_find_ptt (p_audio_config->adev[ACHAN2ADEV(channel)].adevice_out,
+				p_audio_config->achan[channel].octrl[ot].ptt_device,
+				(int)sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
+
+	      while ((t = split(NULL,0)) != NULL) {
+	        if (*t == '-') {
+	          p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t+1);
+		  p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
+	        }
+	        else if (isdigit(*t)) {
+	          p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t);
+		  p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
+	        }
+	        else if (*t == '/') {
+	          strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
+		}
+		else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: Found \"%s\" when expecting GPIO number or device name like /dev/hidraw1.\n", line, t);
+	          continue;
+	        }
+	      }
+	      if (p_audio_config->achan[channel].octrl[ot].out_gpio_num < 1 || p_audio_config->achan[channel].octrl[ot].out_gpio_num > 8) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: CM108 GPIO number %d is not in range of 1 thru 8.\n", line,
+					p_audio_config->achan[channel].octrl[ot].out_gpio_num);
+	          continue;
+	      }
+	      if (strlen(p_audio_config->achan[channel].octrl[ot].ptt_device) == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: Could not determine USB Audio GPIO PTT device for audio output %s.\n", line,
+					p_audio_config->adev[ACHAN2ADEV(channel)].adevice_out);
+	        dw_printf ("You must explicitly mention a device name such as /dev/hidraw1.\n");
+	        dw_printf ("See User Guide for details.\n");
+	        continue;
+	      }
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_CM108;
+
+#else
+#if __WIN32__
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: CM108 USB Audio GPIO PTT is not available for Windows.\n", line);
+#else
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: %s with CM108 is only available when USB Audio GPIO support is enabled.\n", line, otname);
+	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
+	      dw_printf ("See User Guide for details.\n");
+#endif
+	      exit (EXIT_FAILURE);
 #endif
 	    }
 	    else  {

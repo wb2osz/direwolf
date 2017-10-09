@@ -4,7 +4,7 @@
 
 
 
-APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc kissutil
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc kissutil cm108
 
 all :  $(APPS) direwolf.desktop direwolf.conf
 	@echo " "
@@ -292,6 +292,21 @@ LDFLAGS += -lhamlib
 endif
 
 
+# If, for some reason, can obtain the libudev-dev package, or
+# don't want to install it, comment out the next 3 lines.
+
+ifeq ($(wildcard /usr/include/libudev.h),)
+$(error /usr/include/libudev.h does not exist.  Install it with "sudo apt-get install libudev-dev" or "sudo yum install libudev-dev" )
+endif
+
+
+# Enable cm108 PTT support if libudev header file is present.
+
+enable_cm108 := $(wildcard /usr/include/libudev.h)
+ifneq ($(enable_cm108),)
+CFLAGS += -DUSE_CM108
+LDFLAGS += -ludev
+endif
 
 
 # Name of current directory.
@@ -312,7 +327,7 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o dem
 		gen_tone.o audio.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o morse.o \
 		ptt.o beacon.o encode_aprs.o latlong.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o ax25_link.o \
+		dwgps.o dwgpsnmea.o dwgpsd.o dtime_now.o mheard.o ax25_link.o cm108.o \
 		misc.a geotranz.a
 	$(CC) -o $@ $^ $(LDFLAGS)
 	@echo " "
@@ -325,6 +340,11 @@ ifneq ($(enable_hamlib),)
 	@echo "\t>\tThis includes support for hamlib."
 else
 	@echo "\t>\tThis does NOT include support for hamlib."
+endif
+ifneq ($(enable_cm108),)
+	@echo "\t>\tThis includes support for CM108/CM119 PTT."
+else
+	@echo "\t>\tThis does NOT include support for CM108/CM119 PTT."
 endif
 	@echo " "
 
@@ -433,6 +453,12 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.o misc.a
 
 kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o misc.a
 	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^ $(LDFLAGS)
+
+
+# List USB audio adapters than can use GPIO for PTT.
+
+cm108 : cm108.c textcolor.o misc.a
+	$(CC) $(CFLAGS) -g -DCM108_MAIN -o $@ $^ $(LDFLAGS)
 
 
 # Touch Tone to Speech sample application.
@@ -569,6 +595,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) atest $(INSTALLDIR)/bin
 	$(INSTALL) ttcalc $(INSTALLDIR)/bin
 	$(INSTALL) kissutil $(INSTALLDIR)/bin
+	$(INSTALL) cm108 $(INSTALLDIR)/bin
 	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
 #
 # Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.
@@ -643,6 +670,11 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
 	$(INSTALL) -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
 	$(INSTALL) -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+#
+# Set group and mode of HID devices corresponding to C-Media USB Audio adapters.
+# This will allow us to use the CM108/CM119 GPIO pins for PTT.
+#
+	$(INSTALL) -D --mode=644 99-direwolf-cmedia.rules /etc/udev/rules.d/99-direwolf-cmedia.rules
 #
 	@echo " "
 	@echo "If this is your first install, not an upgrade, type this to put a copy"

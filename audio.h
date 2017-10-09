@@ -29,8 +29,9 @@ enum ptt_method_e {
 	PTT_METHOD_NONE,	/* VOX or no transmit. */
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
 	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
-	PTT_METHOD_LPT,	    /* Parallel printer port, Linux only. */
-    PTT_METHOD_HAMLIB }; /* HAMLib, Linux only. */
+	PTT_METHOD_LPT,	    	/* Parallel printer port, Linux only. */
+	PTT_METHOD_HAMLIB, 	/* HAMLib, Linux only. */
+	PTT_METHOD_CM108 };	/* GPIO pin of CM108/CM119/etc.  Linux only. */
 
 typedef enum ptt_method_e ptt_method_t;
 
@@ -191,13 +192,17 @@ struct audio_s {
 	
 	    struct {  		
 
-	        ptt_method_t ptt_method; /* none, serial port, GPIO, LPT, HAMLIB. */
+	        ptt_method_t ptt_method; /* none, serial port, GPIO, LPT, HAMLIB, CM108. */
 
 	        char ptt_device[100];	/* Serial device name for PTT.  e.g. COM1 or /dev/ttyS0 */
 					/* Also used for HAMLIB.  Could be host:port when model is 1. */
-					/* For years, 20 characters was plenty and then along comes this crazy name: */
+					/* For years, 20 characters was plenty then we start getting extreme names like this: */
+					/* /dev/serial/by-id/usb-FTDI_Navigator__CAT___2nd_PTT__00000000-if00-port0 */
 					/* /dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0 */
 					/* Issue 104, changed to 100 bytes in version 1.5. */
+
+					/* This same field is also used for CM108 GPIO PTT which will */
+					/* have a name like /dev/hidraw1. */
 			
 	        ptt_line_t ptt_line;	/* Control line when using serial port. PTT_LINE_RTS, PTT_LINE_DTR. */
 	        ptt_line_t ptt_line2;	/* Optional second one:  PTT_LINE_NONE when not used. */
@@ -205,8 +210,9 @@ struct audio_s {
 	        int out_gpio_num;	/* GPIO number.  Originally this was only for PTT. */
 					/* It is now more general. */
 					/* octrl array is indexed by PTT, DCD, or CONnected indicator. */
+					/* For CM108, this should be in range of 1-8. */
 
-#define MAX_GPIO_NAME_LEN 16	// 12 would cover any case I've seen so this should be safe
+#define MAX_GPIO_NAME_LEN 20	// 12 would cover any case I've seen so this should be safe
 
 		char out_gpio_name[MAX_GPIO_NAME_LEN];
 					/* orginally, gpio number NN was assumed to simply */
@@ -214,6 +220,8 @@ struct audio_s {
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
 					/* recalculate it each time we access it. */
+
+					/* This could probably be collapsed into ptt_device instead of being separate. */
 
 	        int ptt_lpt_bit;	/* Bit number for parallel printer port.  */
 					/* Bit 0 = pin 2, ..., bit 7 = pin 9. */

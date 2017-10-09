@@ -52,6 +52,9 @@
  *
  *		Handle more complicated gpio node names for CubieBoard, etc.
  *
+ * Version 1.5:	Ability to use GPIO pins of CM108/CM119 for PTT signal.
+ *
+ *
  * References:	http://www.robbayer.com/files/serial-win.pdf
  *
  *		https://www.kernel.org/doc/Documentation/gpio.txt
@@ -59,16 +62,20 @@
  *---------------------------------------------------------------*/
 
 /*
-	Idea for future enhancement:
+	A growing number of people have been asking about support for the DMK URI
+	or the similar RB-USB RIM.
 
-	A growing number of people have been asking about support for the DMK URI.
-	This uses a C-Media CM108/CM119 with one interesting addition, a GPIO
+	These use a C-Media CM108/CM119 with an interesting addition, a GPIO
 	pin is used to drive PTT.  Here is some related information.
 
 	DMK URI:
 
 		http://www.dmkeng.com/URI_Order_Page.htm
 		http://dmkeng.com/images/URI%20Schematic.pdf
+
+	RB-USB RIM:
+
+		http://www.repeater-builder.com/products/usb-rim-lite.html
 		http://www.repeater-builder.com/voip/pdf/cm119-datasheet.pdf
 
 	Homebrew versions of the same idea:
@@ -83,6 +90,7 @@
 		http://docs.allstarlink.org/drupal/
 		http://soundmodem.sourcearchive.com/documentation/0.16-1/ptt_8c_source.html
 		https://github.com/N0NB/hamlib/blob/master/src/cm108.c#L190
+		http://permalink.gmane.org/gmane.linux.hams.hamlib.devel/3420
 
 	Information about the "hidraw" device:
 
@@ -92,12 +100,31 @@
 		https://github.com/signal11/hidapi/blob/master/libusb/hid.c
 		http://stackoverflow.com/questions/899008/howto-write-to-the-gpio-pin-of-the-cm108-chip-in-linux
 		https://www.kernel.org/doc/Documentation/hid/hidraw.txt
+		https://github.com/torvalds/linux/blob/master/samples/hidraw/hid-example.c
 
-	In version 1.3, we add HAMLIB support which should be able to do this.
- 	(Linux only & haven't verified that it actually works yet!)
+	Similar chips: SSS1621, SSS1623
+
+		https://irongarment.wordpress.com/2011/03/29/cm108-compatible-chips-with-gpio/
+
+	Here is an attempt to add direct CM108 support.
+	Seems to be hardcoded for only a single USB audio adapter.
+
+		https://github.com/donothingloop/direwolf_cm108
+
+	In version 1.3, we add HAMLIB support which should be able to do this in a roundabout way.
+	(Linux only at this point.)
+
+	This is documented in the User Guide, section called,
+		"Hamlib PTT Example 2: Use GPIO of USB audio adapter.  (e.g. DMK URI)"
+
+	It's rather involved and the explantion doesn't cover the case of multiple
+	USB-Audio adapters.  It would be nice to have a little script which lists all
+	of the USB-Audio adapters and the corresponding /dev/hidraw device.
+	( We now have it.  The included "cm108" application. )
 	
-	Might want to have CM108 GPIO support built in, someday, for simpler building & configuration.
-	Maybe even for Windows.  ;-)
+	In version 1.5 we have a flexible, easy to use implementation for Linux.
+	Windows would be a lot of extra work because USB devices are nothing like Linux.
+	We'd be starting from scratch to figure out how to do it.
 */
 
 
@@ -124,6 +151,10 @@
 
 #ifdef USE_HAMLIB
 #include <hamlib/rig.h>
+#endif
+
+#ifdef USE_CM108
+#include "cm108.h"
 #endif
 
 /* So we can have more common code for fd. */
@@ -156,10 +187,6 @@ typedef int HANDLE;
 
 #endif
 
-
-#if TEST
-#define dw_printf printf
-#endif
 
 
 static struct audio_s *save_audio_config_p;	/* Save config information for later use. */
@@ -603,10 +630,12 @@ void export_gpio(int ch, int ot, int invert, int direction)
  *					PTT_METHOD_GPIO - general purpose I/O. 
  *					PTT_METHOD_LPT - Parallel printer port. 
  *                  			PTT_METHOD_HAMLIB - HAMLib rig control.
+ *					PTT_METHOD_CM108 - GPIO pins of CM108 etc. USB Audio.
  *			
  *			ptt_device	Name of serial port device.  
  *					 e.g. COM1 or /dev/ttyS0. 
  *					 HAMLIB can also use hostaddr:port.
+ *					 Like /dev/hidraw1 for CM108.
  *			
  *			ptt_line	RTS or DTR when using serial port. 
  *			
@@ -992,6 +1021,32 @@ void ptt_init (struct audio_s *audio_config_p)
 
 #endif
 
+/*
+ * Confirm what is going on with CM108 GPIO output.
+ * Could use some error checking for overlap.
+ */
+
+#if USE_CM108
+
+	for (ch = 0; ch < MAX_CHANS; ch++) {
+
+	  if (audio_config_p->achan[ch].valid) {
+	    int ot;
+	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_CM108) {
+	        text_color_set(DW_COLOR_INFO);
+	        dw_printf ("Using %s GPIO %d for channel %d %s control.\n",
+			audio_config_p->achan[ch].octrl[ot].ptt_device,
+			audio_config_p->achan[ch].octrl[ot].out_gpio_num,
+			ch,
+			otnames[ot]);
+	      }
+	    }
+	  }
+	}
+
+#endif
+
 
 /* Why doesn't it transmit?  Probably forgot to specify PTT option. */
 
@@ -1059,7 +1114,9 @@ void ptt_set (int ot, int chan, int ptt_signal)
  * This is a very convenient place to get that information.
  */
 
+#ifndef TEST
 	dlq_channel_busy (chan, ot, ptt_signal);
+#endif
 
 /* 
  * Inverted output? 
@@ -1221,6 +1278,21 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	}
 #endif
 
+/*
+ * Using CM108 USB Audio adapter GPIO?
+ */
+
+#ifdef USE_CM108
+
+	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_CM108) {
+
+	  if (cm108_set_gpio_pin (save_audio_config_p->achan[chan].octrl[ot].ptt_device,
+				save_audio_config_p->achan[chan].octrl[ot].out_gpio_num, ptt) != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR:  %s for channel %d has failed.  See User Guide for troubleshooting tips.\n", otnames[ot], chan);
+	  }
+	}
+#endif
 
 } /* end ptt_set */
 
@@ -1354,18 +1426,15 @@ void ptt_term (void)
 /*
  * Quick stand-alone test for above.
  *
- *    gcc -DTEST -o ptest ptt.c ; ./ptest
+ *     gcc -DTEST -o ptest ptt.c textcolor.o misc.a ; ./ptest
  *
+ * TODO:  Retest this, add CM108 GPIO to test.
  */
 
 
 #if TEST
 
-void text_color_set (dw_color_t c)  {  }
-
-#define dw_printf printf
-
-main ()
+int main ()
 {
 	struct audio_s my_audio_config;
 	int n;
@@ -1375,17 +1444,18 @@ main ()
 
 	my_audio_config.adev[0].num_channels = 2;
 
-	my_audio_config.valid[0] = 1;
-	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_SERIAL;
-	//strlcpy (my_audio_config.ptt_device, "COM1", sizeof(my_audio_config.ptt_device));
-	strlcpy (my_audio_config.ptt_device, "/dev/ttyUSB0", sizeof(my_audio_config.ptt_device));
-	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_line = PTT_LINE_RTS;
+	my_audio_config.achan[0].valid = 1;
+	my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_SERIAL;
+// TODO: device should be command line argument.
+	strlcpy (my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_device, "COM3", sizeof(my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_device));
+	//strlcpy (my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_device, "/dev/ttyUSB0", sizeof(my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_device));
+	my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_line = PTT_LINE_RTS;
 
-	my_audio_config.valid[1] = 1;
-	my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_SERIAL;
-	//strlcpy (my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device, "COM1", sizeof(my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device));
-	strlcpy (my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device, "/dev/ttyUSB0", sizeof(my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_device));
-	my_audio_config.adev[1].octrl[OCTYPE_PTT].ptt_line = PTT_LINE_DTR;
+	my_audio_config.achan[1].valid = 1;
+	my_audio_config.achan[1].octrl[OCTYPE_PTT].ptt_method = PTT_METHOD_SERIAL;
+	strlcpy (my_audio_config.achan[1].octrl[OCTYPE_PTT].ptt_device, "COM3", sizeof(my_audio_config.achan[1].octrl[OCTYPE_PTT].ptt_device));
+	//strlcpy (my_audio_config.achan[1].octrl[OCTYPE_PTT].ptt_device, "/dev/ttyUSB0", sizeof(my_audio_config.achan[1].octrl[OCTYPE_PTT].ptt_device));
+	my_audio_config.achan[1].octrl[OCTYPE_PTT].ptt_line = PTT_LINE_DTR;
 
 
 /* initialize - both off */
@@ -1420,7 +1490,7 @@ main ()
 
 /* Same thing again but invert RTS. */
 
-	my_audio_config.adev[0].octrl[OCTYPE_PTT].ptt_invert = 1;
+	my_audio_config.achan[0].octrl[OCTYPE_PTT].ptt_invert = 1;
 
 	ptt_init (&my_audio_config);
 
@@ -1476,6 +1546,14 @@ main ()
 #endif
 
 
+
+/* Parallel printer port. */
+
+#if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
+
+	// TODO
+
+#if 0
 	memset (&my_audio_config, 0, sizeof(my_audio_config));
 	my_audio_config.num_channels = 2;
 	my_audio_config.valid[0] = 1;
@@ -1496,16 +1574,11 @@ main ()
 	}
 
 	ptt_term ();	
-
-/* Parallel printer port. */
-
-#if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
-
-	// TODO
+#endif
 
 #endif
 
-
+	return(0);
 }
 
 #endif  /* TEST */

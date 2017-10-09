@@ -11,6 +11,8 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 - KISS "Set Hardware" command to report transmit queue length.
 
+- PTT using GPIO pin of CM108/CM119 (e.g. DMK URI, RB-USB RIM)
+
 
 ### Bugs Fixed: ###
 
