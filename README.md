@@ -10,46 +10,61 @@ Dire Wolf is a software "soundcard" modem/TNC and [APRS](http://www.aprs.org/) e
  
 ## Features & Benefits ##
 
-- Lower cost, higher performance alternative to hardware TNC.
-Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf.net/TNCtest/).  
+![](direwolf-block-diagram.png)
 
-- Ideal for building a Raspberry Pi digipeater & IGate.
+### Dire Wolf includes: ###
 
-- Data rates: 300 AFSK, 1200 AFSK, 2400 QPSK, 4800 8PSK, and 9600/19200/38400 bps K9NG/G3RUH.
 
-- Interface with applications by
-      - [AGW](http://uz7.ho.ua/includes/agwpeapi.htm) network protocol
-      - [KISS](http://www.ax25.net/kiss.aspx) serial port
-      - [KISS](http://www.ax25.net/kiss.aspx) TCP network protocol
-      
-- Decoding of received information for troubleshooting.
 
-- Conversion from APRS to waypoint sentences in popular formats:  $GPWPL, $PGRMW, $PMGNWPL, $PKWDWPL.
+- **Beaconing, Tracker, Telemetry Toolkit.**
 
-- Logging and conversion to GPX file format.
+     Send periodic beacons to provide information to others.  For tracking the location is provided by a GPS receiver.
+     Build your own telemetry applications with the toolkit.
 
-- Beaconing for yourself or other nearby entities.
+- **APRStt Gateway.**
 
-- Very flexible Digipeating with routing and filtering between up to 6 ports.
+     Very few hams have portable equipment for APRS but nearly everyone has a handheld radio that can send DTMF tones.  APRStt allows a user, equipped with only DTMF (commonly known as Touch Tone) generation capability, to enter information into the global APRS data network.  Responses can be sent by Morse Code or synthesized speech.
 
-- APRStt gateway - converts touch tone sequences to APRS objects and voice responses.
+- **Digipeaters for APRS and traditional Packet Radio.**
 
-- APRS Internet Gateway (IGate) with IPv6 support and special SATGate mode.
+    Extend the range of other stations by re-transmitting their signals. Unmatched flexibility for cross band repeating and filtering to limit what is retransmitted.
 
-- APRS Telemetry Toolkit.
+- **Internet Gateway (IGate).**
 
-- Compatible with software defined radios (SDR) such as [gqrx](http://gqrx.dk/),  [rtl_fm](http://sdr.osmocom.org/trac/wiki/rtl-sdr), and SDR#.
+    IGate stations allow communication between disjoint radio networks by allowing some content to flow between them over the Internet.
 
-- Includes separate raw packet decoder, decode_aprs.
 
-- AX.25 v2.2 connected mode.  (New in version 1.4.)
+- **AX.25 v2.2 Link Layer.**
 
-- Open source so you can see how it works and make your own modifications.
+    Traditional connected mode packet radio where the TNC automatically retries transmissions and delivers data in the right order.
 
-- Runs in 3 different environments:
-      - Microsoft Windows XP or later
-      - Linux, regular PC/laptop or single board computer such as Raspberry Pi, BeagleBone Black, cubieboard 2, or C.H.I.P.
-      - Mac OS X
+- **KISS Interface (TCP/IP, serial port, Bluetooth) & AGW network Interface (TCP/IP).**
+
+    Dire Wolf can be used as a virtual TNC for applications such as   APRSIS32,           UI-View32, Xastir, APRS-TW,YAAC, UISS, Linux  AX25, SARTrack, RMS Express, Outpost PM, and many others.  
+
+### Radio Interfaces:   ###
+
+- **Uses computer’s “soundcard” and digital signal processing.**
+
+    Lower cost and better performance than specialized hardware.  Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf.net/TNCtest/).
+
+- **Standard 300, 1200 & 9600 bps modems and more.**
+
+- **DTMF (“Touch Tone”) Decoding and Encoding.**
+ 
+- **Speech Synthesizer & Morse code generator.**
+
+    Transmit human understandable messages.
+
+- **Compatible with Software Defined Radios such as gqrx, rtl_fm, and SDR#.**
+
+- **Concurrent operation with up to 3 soundcards and 6 radios.**
+
+### Portable & Open Source:   ###
+
+- **Runs on Windows, Linux (PC/laptop, Raspberry Pi, etc.), Mac OSX.**
+
+
 
 ## Documentation ##
 
