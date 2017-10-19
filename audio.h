@@ -281,7 +281,10 @@ struct audio_s {
 					/* are done sending the data.  This is to avoid */
 					/* dropping PTT too soon and chopping off the end */
 					/* of the frame.  Again 10 mS units. */
-					/* At this point, I'm thinking of 10 as the default. */
+					/* At this point, I'm thinking of 10 (= 100 mS) as the default */
+					/* because we're not quite sure when the soundcard audio stops. */
+
+	    int fulldup;		/* Full Duplex. */
 
 	} achan[MAX_CHANS];
 
@@ -368,7 +371,7 @@ struct audio_s {
 #define DEFAULT_PERSIST		63
 #define DEFAULT_TXDELAY		30
 #define DEFAULT_TXTAIL		10	
-
+#define DEFAULT_FULLDUP		0
 
 /* 
  * Note that we have two versions of these in audio.c and audio_win.c.

@@ -13,6 +13,8 @@ This is a snapshot of ongoing development towards version of 1.5.  Some features
 
 - PTT using GPIO pin of CM108/CM119 (e.g. DMK URI, RB-USB RIM)
 
+- Full Duplex operation.  (Put "FULLDUP ON" in channel section of configuration file.)
+
 
 ### Bugs Fixed: ###
 

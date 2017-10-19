@@ -16,6 +16,8 @@ extern void xmit_set_slottime (int channel, int value);
 
 extern void xmit_set_txtail (int channel, int value);
 
+extern void xmit_set_fulldup (int channel, int value);
+
 
 extern int xmit_speak_it (char *script, int c, char *msg);
 

@@ -58,7 +58,8 @@
  *						Spec says it is obsolete but Xastir
  *						sends it and we respect it.
  *
- *			_5	FullDuplex	Ignored.
+ *			_5	FullDuplex	Full Duplex.  Transmit immediately without
+ *						waiting for channel to be clear.
  *		
  *			_6	SetHardware	TNC specific.
  *
@@ -644,7 +645,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
         case KISS_CMD_FULLDUPLEX:			/* 5 = FullDuplex */
 
           text_color_set(DW_COLOR_INFO);
-	  dw_printf ("KISS protocol set FullDuplex = %d, port %d - Ignored\n", kiss_msg[1], port);
+	  dw_printf ("KISS protocol set FullDuplex = %d, port %d\n", kiss_msg[1], port);
+	  xmit_set_fulldup (port, kiss_msg[1]);
 	  break;
 
         case KISS_CMD_SET_HARDWARE:			/* 6 = TNC specific */

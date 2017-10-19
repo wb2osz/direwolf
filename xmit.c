@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -101,6 +101,8 @@ static int xmit_txtail[MAX_CHANS];	/* Amount of time to keep transmitting after 
 					/* dropping PTT too soon and chopping off the end */
 					/* of the frame.  Again 10 mS units. */
 
+static int xmit_fulldup[MAX_CHANS];	/* Full duplex if non-zero. */
+
 static int xmit_bits_per_sec[MAX_CHANS];	/* Data transmission rate. */
 					/* Often called baud rate which is equivalent in */
 					/* this case but could be different with other */
@@ -137,7 +139,7 @@ static dw_mutex_t audio_out_dev_mutex[MAX_ADEVS];
 
 
 
-static int wait_for_clear_channel (int channel, int slotttime, int persist);
+static int wait_for_clear_channel (int channel, int slotttime, int persist, int fulldup);
 static void xmit_ax25_frames (int c, int p, packet_t pp, int max_bundle);
 static int send_one_frame (int c, int p, packet_t pp);
 static void xmit_speech (int c, packet_t pp);
@@ -218,6 +220,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 	  xmit_persist[j] = p_modem->achan[j].persist;
 	  xmit_txdelay[j] = p_modem->achan[j].txdelay;
 	  xmit_txtail[j] = p_modem->achan[j].txtail;
+	  xmit_fulldup[j] = p_modem->achan[j].fulldup;
 	}
 
 #if DEBUG
@@ -306,6 +309,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
  *		xmit_set_persist
  *		xmit_set_slottime
  *		xmit_set_txtail
+ *		xmit_set_fulldup
  *				
  *
  * Purpose:     The KISS protocol, and maybe others, can specify
@@ -352,6 +356,13 @@ void xmit_set_txtail (int channel, int value)
 {
 	if (channel >= 0 && channel < MAX_CHANS) {
 	  xmit_txtail[channel] = value;
+	}
+}
+
+void xmit_set_fulldup (int channel, int value)
+{
+	if (channel >= 0 && channel < MAX_CHANS) {
+	  xmit_fulldup[channel] = value;
 	}
 }
 
@@ -490,7 +501,7 @@ static void * xmit_thread (void *arg)
  * If there is something in the high priority queue, begin transmitting immediately.
  * Otherwise, wait a random amount of time, in hopes of minimizing collisions.
  */
-	    ok = wait_for_clear_channel (chan, xmit_slottime[chan], xmit_persist[chan]);
+	    ok = wait_for_clear_channel (chan, xmit_slottime[chan], xmit_persist[chan], xmit_fulldup[chan]);
 
 	    prio = TQ_PRIO_1_LO;
 	    pp = tq_remove (chan, TQ_PRIO_0_HI);
@@ -669,6 +680,8 @@ static void * xmit_thread (void *arg)
  *		Different priorities can share a single transmission.
  *		Once we have control of the channel, we might as well keep going.
  *		[High] Priority frames will always go to head of the line,
+ *
+ * Version 1.5:	Add full duplex option.
  *
  *--------------------------------------------------------------------*/
 
@@ -1231,11 +1244,18 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
  *		slottime - 	Amount of time to wait for each iteration
  *				of the waiting algorithm.  10 mSec units.
  *
- *		persist -	Probability of transmitting 
+ *		persist -	Probability of transmitting.
+ *
+ *		fulldup -	Full duplex.  Just start sending immediately.
  *
  * Returns:	1 for OK.  0 for timeout.
  *
  * Description:	New in version 1.2: also obtain a lock on audio out device.
+ *
+ *		New in version 1.5: full duplex.
+ *		Just start transmitting rather than waiting for clear channel.
+ *		This would only be appropriate when transmit and receive are
+ *		using different radio freqencies.  e.g.  VHF up, UHF down satellite.
  *
  * Transmit delay algorithm:
  *
@@ -1271,9 +1291,16 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
 #define WAIT_TIMEOUT_MS (60 * 1000)	
 #define WAIT_CHECK_EVERY_MS 10
 
-static int wait_for_clear_channel (int chan, int slottime, int persist)
+static int wait_for_clear_channel (int chan, int slottime, int persist, int fulldup)
 {
 	int n = 0;
+
+/*
+ * For dull duplex we skip the channel busy check and random wait.
+ * We still need to wait if operating in stereo and the other audio
+ * half is busy.
+ */
+	if ( ! fulldup) {
 
 start_over_again:
 
@@ -1317,6 +1344,7 @@ start_over_again:
 	  if (r <= persist) {
 	    break;
  	  }	
+	}
 	}
 
 /*

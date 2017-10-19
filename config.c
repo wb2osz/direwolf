@@ -794,6 +794,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_audio_config->achan[channel].persist = DEFAULT_PERSIST;				
 	  p_audio_config->achan[channel].txdelay = DEFAULT_TXDELAY;				
 	  p_audio_config->achan[channel].txtail = DEFAULT_TXTAIL;				
+	  p_audio_config->achan[channel].fulldup = DEFAULT_FULLDUP;
 	}
 
 	/* First channel should always be valid. */
@@ -1778,13 +1779,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 										// User can override for special cases.
 	      p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;		// High for transmit.
 	      strcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "");
- 
+
 	      // Try to find PTT device for audio output device.
 	      // Simplifiying assumption is that we have one radio per USB Audio Adapter.
 	      // Failure at this point is not an error.
 	      // See if config file sets it explicitly before complaining.
 
- 	      cm108_find_ptt (p_audio_config->adev[ACHAN2ADEV(channel)].adevice_out,
+	      cm108_find_ptt (p_audio_config->adev[ACHAN2ADEV(channel)].adevice_out,
 				p_audio_config->achan[channel].octrl[ot].ptt_device,
 				(int)sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 
@@ -1923,7 +1924,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  * TXINH - TX holdoff input
  *
- * xxx GPIO [-]gpio-num (only type supported yet)
+ * TXINH GPIO [-]gpio-num (only type supported so far)
  */
 
 	  else if (strcasecmp(t, "TXINH") == 0) {
@@ -1966,7 +1967,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * DWAIT 		- Extra delay for receiver squelch.
+ * DWAIT n		- Extra delay for receiver squelch. n = 10 mS units.
  */
 
 	  else if (strcasecmp(t, "DWAIT") == 0) {
@@ -1990,7 +1991,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * SLOTTIME 		- For non-digipeat transmit delay timing.
+ * SLOTTIME n		- For non-digipeat transmit delay timing. n = 10 mS units.
  */
 
 	  else if (strcasecmp(t, "SLOTTIME") == 0) {
@@ -2038,7 +2039,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * TXDELAY 		- For transmit delay timing.
+ * TXDELAY n		- For transmit delay timing. n = 10 mS units.
  */
 
 	  else if (strcasecmp(t, "TXDELAY") == 0) {
@@ -2062,7 +2063,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * TXTAIL 		- For transmit timing.
+ * TXTAIL n		- For transmit timing. n = 10 mS units.
  */
 
 	  else if (strcasecmp(t, "TXTAIL") == 0) {
@@ -2083,6 +2084,30 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               dw_printf ("Line %d: Invalid time for transmit timing. Using %d.\n", 
 			line, p_audio_config->achan[channel].txtail);
    	    }
+	  }
+
+/*
+ * FULLDUP  {on|off} 		- Full Duplex
+ */
+	  else if (strcasecmp(t, "FULLDUP") == 0) {
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing parameter for FULLDUP command.  Expecting ON or OFF.\n", line);
+	      continue;
+	    }
+	    if (strcasecmp(t, "ON") == 0) {
+	      p_audio_config->achan[channel].fulldup = 1;
+	    }
+	    else if (strcasecmp(t, "OFF") == 0) {
+	      p_audio_config->achan[channel].fulldup = 0;
+	    }
+	    else {
+	      p_audio_config->achan[channel].fulldup = 0;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Expected ON or OFF for FULLDUP.\n", line);
+	    }
 	  }
 
 /*
