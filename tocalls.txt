@@ -1,6 +1,10 @@
-APRS TO-CALL VERSION NUMBERS                            21 Jun 2017
+APRS TO-CALL VERSION NUMBERS                            18 Oct 2017
 -------------------------------------------------------------------
                                                              WB4APR
+18 Oct 17 Added APBMxx BrandMeister DMR Server for R3ABM 
+25 Sep 17 added APP6xx for APRSlib
+05 Sep 17 Chged APTAxx to APTBxx for TinyAPRS by BG5HHP
+17 Aug 17 Added APOCSG for POCSAG - N0AGI's APRS to Pagers
 21 Jun 17 Added APCSMS for Cosmos (used for sending commands @USNA
 08 Jun 17 Added APPMxx for DL1MX's RTL-SDR pytohon Igate
 01 Jun 17 added APOFF  digi off on PSAT,PSAT2
@@ -8,7 +12,7 @@ APRS TO-CALL VERSION NUMBERS                            21 Jun 2017
           and   APRSON digi ON for PSAT
           and   APDIGI digi ON for PSAT2 and QIKCOM-2
           and   APSAT  digi ON for QIKCOM-1
-20 Mar 17 added APTAxx for TinyAPRS by BG5HHP
+20 Mar 17 added APTBxx for TinyAPRS by BG5HHP
 06 Feb 17 added APIExx for W7KMV's PiAPRS system
 25 Jan 17 added APSFxx F5OPV embedded devices - was APZ40
 16 Dec 16 added APYSxx for W2GMD's Python APRS
@@ -51,7 +55,8 @@ a TOCALL number series:
       APB2MF  DL2MF - MF2APRS Radiosonde for balloons
       APBLxx  BigRedBee BeeLine  
       APBLO   MOdel Rocketry K7RKT
-      APBPQx  John G8BPQ Digipeater/IGate 
+      APBPQx  John G8BPQ Digipeater/IGate
+      APBMxx  BrandMeister DMR Server for R3ABM 
  APC  APCxxx  Cellular applications
       APCBBx  VE7UDP Blackberry Applications
       APCDS0  Leon Lessing ZS6LMG's cell tracker
@@ -131,11 +136,13 @@ a TOCALL number series:
       APOFF   Used by PSAT and PSAT2 to indicate the digi is OFF
       APOLUx  for OSCAR satellites for AMSAT-LU by LU9DO
       APOAxx  OpenAPRS - Greg Carter
+      APOCSG  For N0AGI's APRS to POCSAG project
       APOTxx  Open Track
       APOD1w  Open Track with 1 wire WX
       APOU2k  Open Track for Ultimeter
       APOZxx  www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO
- APP  APPMxx  DL1MX's RTL-SDR pytohon Igate
+ APP  APP6xx  for APRSlib
+      APPMxx  DL1MX's RTL-SDR pytohon Igate
       APPTxx  KetaiTracker by  JF6LZE, Takeki (msg capable)
  APQ  APQxxx  Earthquake data
  APR  APR8xx  APRSdos versions 800+
@@ -166,7 +173,7 @@ a TOCALL number series:
  APT  APT2xx  Tiny Track II
       APT3xx  Tiny Track III
       APTAxx  K4ATM's tiny track
-      APTAxx  TinyAPRS by BG5HHP
+      APTBxx  TinyAPRS by BG5HHP Was APTAxx till Sep 2017
       APTIGR  TigerTrack
       APTKPT  TrackPoint N0LP
       APTTxx  Tiny Track
