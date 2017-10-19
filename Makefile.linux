@@ -260,14 +260,14 @@ endif
 alsa = 1
 
 ifeq ($(wildcard /usr/include/pthread.h),)
-$(error /usr/include/pthread.h does not exist.  Install it with "sudo apt-get install libc6-dev" or "sudo yum install libc6-dev" )
+$(error /usr/include/pthread.h does not exist.  Install it with "sudo apt-get install libc6-dev" or "sudo yum install glibc-headers" )
 endif
 
 ifneq ($(alsa),)
 CFLAGS += -DUSE_ALSA
 LDFLAGS += -lasound
 ifeq ($(wildcard /usr/include/alsa/asoundlib.h),)
-$(error /usr/include/alsa/asoundlib.h does not exist.  Install it with "sudo apt-get install libasound2-dev" or "sudo yum install libasound2-dev" )
+$(error /usr/include/alsa/asoundlib.h does not exist.  Install it with "sudo apt-get install libasound2-dev" or "sudo yum install alsa-lib-devel" )
 endif
 endif
 
@@ -296,7 +296,7 @@ endif
 # don't want to install it, comment out the next 3 lines.
 
 ifeq ($(wildcard /usr/include/libudev.h),)
-$(error /usr/include/libudev.h does not exist.  Install it with "sudo apt-get install libudev-dev" or "sudo yum install libudev-dev" )
+$(error /usr/include/libudev.h does not exist.  Install it with "sudo apt-get install libudev-dev" or "sudo yum install libudev-devel" )
 endif
 
 
