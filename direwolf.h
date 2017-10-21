@@ -32,18 +32,6 @@
 #endif
 
 
-#ifdef __APPLE__
-
-// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2072
-
-// I think we should put it here, so it will apply to all files,
-// rather than only in ptt.c.
-
-#define __DARWIN_C_LEVEL  __DARWIN_C_FULL
-
-#endif
-
-
 /*
  * Previously, we could handle only a single audio device.
  * This meant we could have only two radio channels.
@@ -128,6 +116,27 @@
           (_result) )
 #else
 #include <pthread.h>
+#endif
+
+
+#ifdef __APPLE__
+
+// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2072
+
+// The original suggestion was to add this to only ptt.c.
+// I thought it would make sense to put it here, so it will apply to all files,
+// consistently, rather than only one file ptt.c.
+
+// The placement of this is critical.  Putting it earlier was a problem.
+// https://github.com/wb2osz/direwolf/issues/113
+
+// It needs to be after the include pthread.h because
+// pthread.h pulls in <sys/cdefs.h>, which redefines __DARWIN_C_LEVEL back to ansi,
+// which breaks things.
+// Maybe it should just go in ptt.c as originally suggested.
+
+#define __DARWIN_C_LEVEL  __DARWIN_C_FULL
+
 #endif
 
 
