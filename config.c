@@ -869,6 +869,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_igate_config->tx_limit_1 = IGATE_TX_LIMIT_1_DEFAULT;
 	p_igate_config->tx_limit_5 = IGATE_TX_LIMIT_5_DEFAULT;
 	p_igate_config->igmsp = 1;
+	p_igate_config->rx2ig_dedupe_time = IGATE_RX2IG_DEDUPE_TIME;
 
 
 	/* People find this confusing. */
@@ -2234,10 +2235,18 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        t = split(NULL,0);
 	      }
 	      else if (strcasecmp(t, "DROP") == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Preemptive digipeating DROP option is discouraged.\n", line);
+	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
+	        dw_printf ("TRACE is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_DROP;
 	        t = split(NULL,0);
 	      }
 	      else if (strcasecmp(t, "MARK") == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Preemptive digipeating MARK option is discouraged.\n", line);
+	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
+	        dw_printf ("TRACE is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_MARK;
 	        t = split(NULL,0);
 	      }
@@ -4160,13 +4169,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        p_igate_config->igmsp = n;
 	      }
 	      else {
-	        p_igate_config->satgate_delay = 1;
+	        p_igate_config->igmsp = 1;
 	        text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Line %d: Unreasonable number of times for message sender position.  Using default 1.\n", line);
 	      }
 	    }
 	    else {
-	      p_igate_config->satgate_delay = 1;
+	      p_igate_config->igmsp = 1;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Missing number of times for message sender position.  Using default 1.\n", line);
 	    }
@@ -4181,6 +4190,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "SATGATE") == 0) {
+
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("Line %d: SATGATE is pretty useless and will be removed in a future version.\n", line);
 
 	    t = split(NULL,0);
 	    if (t != NULL) {
