@@ -313,8 +313,13 @@ int audio_open (struct audio_s *pa)
 
 	      /* Does config file have a number?  */
 	      /* If so, it is an index into list of devices. */
+	      /* Originally only a single digit was recognized.  */
+	      /* v 1.5 also recognizes two digits.  (Issue 116) */
 
 	      if (strlen(pa->adev[a].adevice_in) == 1 && isdigit(pa->adev[a].adevice_in[0])) {
+	        in_dev_no[a] = atoi(pa->adev[a].adevice_in);
+	      }
+	      else if (strlen(pa->adev[a].adevice_in) == 2 && isdigit(pa->adev[a].adevice_in[0]) && isdigit(pa->adev[a].adevice_in[1])) {
 	        in_dev_no[a] = atoi(pa->adev[a].adevice_in);
 	      }
 
@@ -342,6 +347,9 @@ int audio_open (struct audio_s *pa)
  * Purhaps we'd like to add UDP for an SDR transmitter.
  */
 	    if (strlen(pa->adev[a].adevice_out) == 1 && isdigit(pa->adev[a].adevice_out[0])) {
+	      out_dev_no[a] = atoi(pa->adev[a].adevice_out);
+	    }
+	    else if (strlen(pa->adev[a].adevice_out) == 2 && isdigit(pa->adev[a].adevice_out[0]) && isdigit(pa->adev[a].adevice_out[1])) {
 	      out_dev_no[a] = atoi(pa->adev[a].adevice_out);
 	    }
 
