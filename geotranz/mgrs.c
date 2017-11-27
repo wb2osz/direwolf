@@ -868,7 +868,7 @@ long Convert_MGRS_To_Geodetic (char* MGRS,
  */
 { /* Convert_MGRS_To_Geodetic */
   long zone;
-  char hemisphere;
+  char hemisphere = '?';
   double easting;
   double northing;
   long zone_exists;
@@ -1260,9 +1260,9 @@ long Convert_MGRS_To_UPS ( char   *MGRS,
   double false_northing;      /* False northing for 3rd letter              */
   double grid_easting;        /* easting for 100,000 meter grid square      */
   double grid_northing;       /* northing for 100,000 meter grid square     */
-  long zone;
+  long zone = 0;
   long letters[MGRS_LETTERS];
-  long in_precision;
+  long in_precision = 0;
   int index = 0;
   long error_code = MGRS_NO_ERROR;
 
