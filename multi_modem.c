@@ -292,6 +292,14 @@ unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) {
  *
  *------------------------------------------------------------------------------*/
 
+static float dc_average[MAX_CHANS];
+
+int multi_modem_get_dc_average (int chan)
+{
+	// Scale to +- 200 so it will like the deviation measurement.
+
+	return ( (int) ((float)(dc_average[chan]) * (200.0f / 32767.0f) ) );
+}
 
 __attribute__((hot))
 void multi_modem_process_sample (int chan, int audio_sample) 
@@ -299,6 +307,12 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	int d;
 	int subchan;
 	static int i = 0;	/* for interleaving among multiple demodulators. */
+
+// Accumulate an average DC bias level.
+// Shouldn't happen with a soundcard but could with mistuned SDR.
+
+	dc_average[chan] = dc_average[chan] * 0.999f + (float)audio_sample * 0.001f;
+
 
 // TODO: temp debug, remove this.
 
