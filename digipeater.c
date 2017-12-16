@@ -484,6 +484,16 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	          break;
 	      }
 
+// Idea: Here is an interesting idea for a new option.  REORDER?
+// The preemptive digipeater could move its call after the (formerly) last used digi field
+// and preserve all the unused fields after that.  The list of used addresses would
+// accurately record the journey taken by the packet.
+
+// https://groups.yahoo.com/neo/groups/aprsisce/conversations/topics/31935
+
+// >  I was wishing for a non-marking preemptive digipeat so that the original packet would be left intact
+// >  or maybe something like WIDE1-1,WIDE2-1,KJ4OVQ-9 becoming KJ4OVQ-9*,WIDE1-1,WIDE2-1.
+
 	      return (result);
 	    }
  	  }
