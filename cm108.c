@@ -144,8 +144,6 @@ static int cm108_write (char *name, int iomask, int iodata);
 #define CMEDIA_PID1_MIN 0x0008		// range for CM108, CM109, CM119 (no following letters)
 #define CMEDIA_PID1_MAX 0x000f
 
-#define CMEDIA_PID2 0x013a		// CM119A
-
 #define CMEDIA_PID_CM108AH	0x0139		// CM108AH
 #define CMEDIA_PID_CM108B	0x0012		// CM108B
 #define CMEDIA_PID_CM119A	0x013a		// CM119A
@@ -192,7 +190,12 @@ static int cm108_write (char *name, int iomask, int iodata);
 
 // Test for supported devices.
 
-#define GOOD_DEVICE(v,p) 	( (v == CMEDIA_VID && ((p >= CMEDIA_PID1_MIN && p <= CMEDIA_PID1_MAX) || p == CMEDIA_PID2)) || \
+#define GOOD_DEVICE(v,p) 	( (v == CMEDIA_VID && ((p >= CMEDIA_PID1_MIN && p <= CMEDIA_PID1_MAX) \
+							|| p == CMEDIA_PID_CM108AH \
+							|| p == CMEDIA_PID_CM108B \
+							|| p == CMEDIA_PID_CM119A \
+							|| p == CMEDIA_PID_CM119B )) \
+				 || \
 				  (v == SSS_VID && (p == SSS_PID1 || p == SSS_PID2 || p == SSS_PID3))  )
 
 // Look out for null source pointer, and avoid buffer overflow on destination.
