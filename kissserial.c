@@ -105,15 +105,6 @@
 #include "xmit.h"
 
 
-#if __WIN32__
-typedef HANDLE MYFDTYPE;
-#define MYFDERROR INVALID_HANDLE_VALUE
-#else
-typedef int MYFDTYPE;
-#define MYFDERROR (-1)
-#endif
-
-
 /*
  * Save Configuration for later use.
  */
@@ -129,6 +120,7 @@ static kiss_frame_t kf;
 
 /*
  * The serial port device handle.
+ * MYFD... are defined in kissserial.h
  */
 
 static MYFDTYPE serialport_fd = MYFDERROR;

@@ -24,7 +24,7 @@
 # 3. Removed fsk_fast_filter.h from atest receipe, clang compiler was having
 #    a hissy fit. Not check with GCC.
 
-APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc kissutil
 
 all :  $(APPS) direwolf.conf
 	@echo " "
@@ -86,86 +86,14 @@ CFLAGS += -D_BSD_SOURCE
 
 # $(info $$CC is [${CC}])
 
-#
-# The DSP filters spend a lot of time spinning around in little
-# loops multiplying and adding arrays of numbers.  The Intel "SSE"
-# instructions, introduced in 1999 with the Pentium III series,
-# can speed this up considerably.
-#
-# SSE2 instructions, added in 2000, don't seem to offer any advantage.
-#
-#
-# Let's take a look at the effect of the compile options.
-#
-#
-# Times are elapsed time to process Track 2 of the TNC test CD.
-#
-# i.e.   "./atest 02_Track_2.wav"
-# Default demodulator type is new "E" added for version 1.2.
-#
 
-#
-# ---------- x86 (32 bit) ----------
-#
-
-#
-# gcc 4.6.3 running on Ubuntu 12.04.05.
-# Intel(R) Celeron(R) CPU 2.53GHz.  Appears to have only 32 bit instructions.
-# Probably from around 2004 or 2005.
-#
-# When gcc is generating code for a 32 bit x86 target, it assumes the ancient
-# i386 processor.  This is good for portability but bad for performance.
-#
-# The code can run considerably faster by taking advantage of the SSE instructions
-# available in the Pentium 3 or later.
-#
-#       seconds options		comments
-#       ------  -------		--------
-#         524
-#         183	-O2
-#         182	-O3
-#         183	-O3 -ffast-math  	(should be same as -Ofast)
-#         184	-Ofast
-#         189	-O3 -ffast-math -march=pentium
-#         122	-O3 -ffast-math -msse
-#         122	-O3 -ffast-math -march=pentium -msse
-#         121	-O3 -ffast-math -march=pentium3   (this implies -msse)
-#         120	-O3 -ffast-math -march=native
-#
-# Note that "-march=native" is essentially the same as "-march=pentium3."
-#
-
-# If the compiler is generating code for the i386 target, we can
-# get much better results by telling it we have at least a Pentium 3.
+# If the compiler is generating code for a 32 bit target (-m32), we can
+# get much better results by telling it we have at least a Pentium 3
+# which hass the SSE instructions.
 
 CFLAGS += -march=core2 -msse4.1 -std=gnu99
 #CFLAGS += -march=pentium3 -sse
 
-#
-# gcc 4.8.2 running on Ubuntu 14.04.1.
-# Intel Core 2 Duo from around 2007 or 2008.
-#
-# 64 bit target implies that we have SSE and probably even better vector instructions.
-#
-#       seconds options		comments
-#       ------  -------		--------
-#         245
-#          75	-01
-#          72 	-02
-#          71  	-03
-#          73  	-O3 -march=native
-#          42	-O3 -ffast-math
-#          42  	-Ofast			(note below)
-#          40	-O3 -ffast-math -march=native
-#
-#
-# Note that "-Ofast" is a newer option roughly equivalent to "-O3 -ffast-math".
-# I use the longer form because it is compatible with older compilers.
-#
-# Why don't I don't have "-march=native?"
-# Older compilers don't recognize "native" as one of the valid options.
-# One article said it was added with gcc 4.2 but I haven't verified that.
-#
 
 # Add -ffastmath in only if compiler version recognizes it.
 
@@ -173,22 +101,6 @@ useffast := $(shell gcc --help -v 2>/dev/null | grep ffast-math)
 ifneq ($(useffast),)
 CFLAGS += -ffast-math
 endif
-
-#
-# You would expect "-march=native" to produce the fastest code.
-# Why don't I use it here?
-#
-#	1. In my benchmarks, above, it has a negligible impact if any at all.
-#	2. Some older versions of gcc don't recognize "native" as a valid choice.
-#	3. Results are less portable.  Not a consideration if you are
-#		building only for your own use but very important for anyone
-#		redistributing a "binary" version.
-#
-# If you are planning to distribute the binary version to other
-# people (in some ham radio software collection, RPM, or DEB package),
-# avoid # fine tuning it for your particular computer.  It could
-# cause compatibility issues for those with older computers.
-#
 
 #CFLAGS += -D_FORTIFY_SOURCE
 
@@ -296,20 +208,15 @@ direwolf.conf : generic.conf
 
 
 # Where should we install it?
-
-# My understanding, of the convention, is that something you compile
-# from source, that is not a standard part of the operating system,
-# should go in /usr/local/bin.
-
-# This is a step in the right direction but not sufficient to use /usr instead.
+# Macports typically installs in /opt/local so maybe you want to use that instead.
 
 INSTALLDIR := /usr/local
+#INSTALLDIR := /opt/local
 
 # TODO:  Test this better.
 
-# Optional installation into /usr/local/...
+# Optional installation into INSTALLDIR.
 # Needs to be run as root or with sudo.
-# TODO: Review file locations.
 
 # Command to "install" to system directories.  "install" for Linux.  "ginstall" for Mac.
 
@@ -318,8 +225,7 @@ INSTALL=ginstall
 .PHONY: install
 install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png
 #
-# Applications, not installed with package manager, normally go in /usr/local/bin.
-# /usr/bin is used instead when installing from .DEB or .RPM package.
+# Applications.
 #
 	$(INSTALL) direwolf $(INSTALLDIR)/bin
 	$(INSTALL) decode_aprs $(INSTALLDIR)/bin
@@ -332,6 +238,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) gen_packets $(INSTALLDIR)/bin
 	$(INSTALL) atest $(INSTALLDIR)/bin
 	$(INSTALL) ttcalc $(INSTALLDIR)/bin
+	$(INSTALL) kissutil $(INSTALLDIR)/bin
 	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
 #
 # Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.
@@ -347,10 +254,11 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 #
 # Misc. data such as "tocall" to system mapping.
 #
-	$(INSTALL) -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
-	$(INSTALL) -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
-	$(INSTALL) -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
-	$(INSTALL) -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
+	$(INSTALL) -D --mode=644 tocalls.txt $(INSTALLDIR)/share/direwolf/tocalls.txt
+	$(INSTALL) -D --mode=644 symbols-new.txt $(INSTALLDIR)/share/direwolf/symbols-new.txt
+	$(INSTALL) -D --mode=644 symbolsX.txt $(INSTALLDIR)/share/direwolf/symbolsX.txt
+	$(INSTALL) -D --mode=644 dw-icon.png $(INSTALLDIR)/share/direwolf/dw-icon.png
+
 #
 # Documentation.  Various plain text files and PDF.
 #
@@ -535,6 +443,14 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
 	$(CC) $(CFLAGS) -g -o $@ $^
 
 
+# Talk to a KISS TNC.
+# Note:  kiss_frame.c has conditional compilation on KISSUTIL.
+
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o misc.a
+	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^ $(LDFLAGS)
+
+
+
 # Touch Tone to Speech sample application.
 
 ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o
@@ -568,6 +484,7 @@ dist-mac: direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	$(INSTALLDIR)/bin/gen_packets \
 	$(INSTALLDIR)/bin/atest \
 	$(INSTALLDIR)/bin/ttcalc \
+	$(INSTALLDIR)/bin/kissutil \
 	$(INSTALLDIR)/bin/dwespeak.sh \
 	$(INSTALLDIR)/share/direwolf/tocalls.txt \
 	$(INSTALLDIR)/share/direwolf/config/direwolf.conf \
@@ -588,6 +505,7 @@ dist-mac: direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	$(INSTALLDIR)/man/man1/decode_aprs.1 \
 	$(INSTALLDIR)/man/man1/direwolf.1 \
 	$(INSTALLDIR)/man/man1/gen_packets.1 \
+	$(INSTALLDIR)/man/man1/kissutil.1 \
 	$(INSTALLDIR)/man/man1/ll2utm.1 \
 	$(INSTALLDIR)/man/man1/log2gpx.1 \
 	$(INSTALLDIR)/man/man1/text2tt.1 \

@@ -135,6 +135,22 @@
 // which breaks things.
 // Maybe it should just go in ptt.c as originally suggested.
 
+// #define __DARWIN_C_LEVEL  __DARWIN_C_FULL
+
+// There is a more involved patch here:
+//  https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2458
+
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
+
+// Defining _DARWIN_C_SOURCE ensures that the definition for the cfmakeraw function (or similar)
+// are pulled in through the include file <sys/termios.h>.
+
+#ifdef __DARWIN_C_LEVEL
+#undef __DARWIN_C_LEVEL
+#endif
+
 #define __DARWIN_C_LEVEL  __DARWIN_C_FULL
 
 #endif

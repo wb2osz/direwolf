@@ -20,6 +20,8 @@
 #include <sys/time.h>
 #endif
 
+#include <string.h>		// needed for Mac.
+
 
 /*------------------------------------------------------------------
  *

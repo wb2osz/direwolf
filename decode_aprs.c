@@ -3706,8 +3706,12 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
  *
  *		Windows version:  File must be in current working directory.
  *
- *		Linux version: Search order is current working directory
- *			then /usr/share/direwolf directory.
+ *		Linux version: Search order is current working directory then
+ *			/usr/local/share/direwolf
+ *			/usr/share/direwolf/tocalls.txt
+ *
+ *		Mac: Like Linux and then
+ *			/opt/local/share/direwolf
  *
  *------------------------------------------------------------------*/
 
@@ -3730,11 +3734,20 @@ static struct tocalls_s {
 static int num_tocalls = 0;
 
 // Make sure the array is null terminated.
+// If search order is changed, do the same in symbols.c
+
 static const char *search_locations[] = {
 	(const char *) "tocalls.txt",
 #ifndef __WIN32__
-	(const char *) "/usr/share/direwolf/tocalls.txt",
 	(const char *) "/usr/local/share/direwolf/tocalls.txt",
+	(const char *) "/usr/share/direwolf/tocalls.txt",
+#endif
+#if __APPLE__
+	// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2458
+	// Adding the /opt/local tree since macports typically installs there.  Users might want their
+	// INSTALLDIR (see Makefile.macosx) to mirror that.  If so, then we need to search the /opt/local
+	// path as well.
+	(const char *) "/opt/local/share/direwolf/tocalls.txt",
 #endif
 	(const char *) NULL
 };

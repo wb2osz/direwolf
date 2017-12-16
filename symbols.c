@@ -261,11 +261,20 @@ static const struct {
 
 
 // Make sure the array is null terminated.
+// If search order is changed, do the same in decode_aprs.c
+
 static const char *search_locations[] = {
 	(const char *) "symbols-new.txt",
 #ifndef __WIN32__
-	(const char *) "/usr/share/direwolf/symbols-new.txt",
 	(const char *) "/usr/local/share/direwolf/symbols-new.txt",
+	(const char *) "/usr/share/direwolf/symbols-new.txt",
+#endif
+#if __APPLE__
+	// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2458
+	// Adding the /opt/local tree since macports typically installs there.  Users might want their
+	// INSTALLDIR (see Makefile.macosx) to mirror that.  If so, then we need to search the /opt/local
+	// path as well.
+	(const char *) "/opt/local/share/direwolf/symbols-new.txt",
 #endif
 	(const char *) NULL
 };
