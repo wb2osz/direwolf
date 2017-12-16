@@ -639,9 +639,13 @@ int demod_init (struct audio_s *pa)
 		/* Not sure if it should be on for ARM too. */
 		/* Need to take a look at CPU usage and performance difference. */
 
-#ifndef __arm__
+		/* Version 1.5:  Remove special case for ARM. */
+		/* We want higher performance to be the default. */
+		/* "MODEM 9600 -" can be used on very slow CPU if necessary. */
+
+//#ifndef __arm__
 	        strlcpy (save_audio_config_p->achan[chan].profiles, "+", sizeof(save_audio_config_p->achan[chan].profiles));
-#endif
+//#endif
 	      }
 
 #ifdef TUNE_UPSAMPLE
