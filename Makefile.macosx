@@ -446,8 +446,8 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
 # Talk to a KISS TNC.
 # Note:  kiss_frame.c has conditional compilation on KISSUTIL.
 
-kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o misc.a
-	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^ $(LDFLAGS)
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o
+	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^
 
 
 
