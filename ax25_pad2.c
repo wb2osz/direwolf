@@ -355,15 +355,19 @@ packet_t ax25_u_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
  *
  *		pf		- Poll/Final flag.
  *
+ *		pinfo		- Pointer to data for Info field.  Allowed only for SREJ.
+ *
+ *		info_len	- Length for Info field.
+ *
  *
  * Returns:	Pointer to new packet object.
  *
  *------------------------------------------------------------------------------*/
 
 #if AX25MEMDEBUG
-packet_t ax25_s_frame_debug (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr, ax25_frame_type_t ftype, int modulo, int nr, int pf, char *src_file, int src_line)
+packet_t ax25_s_frame_debug (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr, ax25_frame_type_t ftype, int modulo, int nr, int pf, unsigned char *pinfo, int info_len, char *src_file, int src_line)
 #else
-packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr, ax25_frame_type_t ftype, int modulo, int nr, int pf)
+packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr, ax25_frame_type_t ftype, int modulo, int nr, int pf, unsigned char *pinfo, int info_len)
 #endif
 {
 	packet_t this_p;
@@ -383,7 +387,7 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 
 	if ( ! set_addrs (this_p, addrs, num_addr, cr)) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Internal error in %s: Could not set addresses for U frame.\n", __func__);
+	  dw_printf ("Internal error in %s: Could not set addresses for S frame.\n", __func__);
 	  ax25_delete (this_p);
 	  return (NULL);
 	}  
@@ -399,6 +403,14 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Internal error in %s: Invalid N(R) %d for S frame.\n", __func__, nr);
 	  nr &= (modulo - 1);
+	}
+
+	// Erratum: The AX.25 spec is not clear about whether SREJ should be command, response, or both.
+	// The underlying X.25 spec clearly says it is reponse only.  Let's go with that.
+
+	if (ftype == frame_type_S_SREJ && cr != cr_res) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error in %s: SREJ must be response.\n", __func__);
 	}
 
 	switch (ftype) {
@@ -434,6 +446,24 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	  this_p->frame_len++;
 	}
 
+	if (ftype == frame_type_S_SREJ) {
+	  if (pinfo != NULL && info_len > 0) {
+	    if (info_len > AX25_MAX_INFO_LEN) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Internal error in %s: SREJ frame, Invalid information field length %d.\n", __func__, info_len);
+	      info_len = AX25_MAX_INFO_LEN;
+	    }
+	    memcpy (p, pinfo, info_len);
+	    p += info_len;
+	    this_p->frame_len += info_len;
+	  }
+	}
+	else {
+	  if (pinfo != NULL || info_len != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Internal error in %s: Info part not allowed for RR, RNR, REJ frame.\n", __func__);
+	  }
+	}
 	*p = '\0';
 
 	assert (p == this_p->frame_data + this_p->frame_len);
@@ -813,7 +843,7 @@ int main ()
 	      text_color_set(DW_COLOR_INFO);
 	      dw_printf ("\nConstruct S frame, cmd=%d, ftype=%d, pid=0x%02x\n", cr, ftype, pid);
 
-	      pp = ax25_s_frame (addrs, num_addr, cr, ftype, modulo, nr, pf);
+	      pp = ax25_s_frame (addrs, num_addr, cr, ftype, modulo, nr, pf, NULL, 0);
 
 	      ax25_hex_dump (pp);
 	      ax25_delete (pp);
@@ -827,12 +857,32 @@ int main ()
 	      text_color_set(DW_COLOR_INFO);
 	      dw_printf ("\nConstruct S frame, cmd=%d, ftype=%d, pid=0x%02x\n", cr, ftype, pid);
 
-	      pp = ax25_s_frame (addrs, num_addr, cr, ftype, modulo, nr, pf);
+	      pp = ax25_s_frame (addrs, num_addr, cr, ftype, modulo, nr, pf, NULL, 0);
 
 	      ax25_hex_dump (pp);
 	      ax25_delete (pp);
 	    }
 	  }
+	}
+
+/* SREJ is only S frame which can have information part. */
+
+	static char srej_info[] = { 1<<1, 2<<1, 3<<1, 4<<1 };
+
+	ftype = frame_type_S_SREJ;
+	for (pf = 0; pf <= 1; pf++) {
+
+	  modulo = 128;
+	  nr = 127;
+	  cr = cr_res;
+
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("\nConstruct Multi-SREJ S frame, cmd=%d, ftype=%d, pid=0x%02x\n", cr, ftype, pid);
+
+	  pp = ax25_s_frame (addrs, num_addr, cr, ftype, modulo, nr, pf, srej_info, (int)(sizeof(srej_info)));
+
+	  ax25_hex_dump (pp);
+	  ax25_delete (pp);
 	}
 
 	dw_printf ("\n----------\n\n");
