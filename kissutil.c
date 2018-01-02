@@ -34,8 +34,6 @@
  *		Default is to connect to localhost:8001.
  *		See the "usage" functions at the bottom for details.
  *
- * FIXME:	This is a rough prototype that needs more work.
- *		
  *---------------------------------------------------------------*/
 
 #include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
@@ -49,6 +47,8 @@
 
 #include <stdlib.h>
 #include <sys/errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #endif
 
@@ -58,17 +58,17 @@
 #include <ctype.h>
 #include <string.h>
 #include <getopt.h>
-#include <sys/types.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
-//#include "ax25_pad.h"
-
+#include "ax25_pad.h"
 #include "textcolor.h"
 #include "serial_port.h"
 #include "kiss_frame.h"
 #include "sock.h"
 #include "dtime_now.h"
 #include "audio.h"		// for DEFAULT_TXDELAY, etc.
+#include "dtime_now.h"
 
 
 // TODO:  define in one place, use everywhere.
@@ -90,16 +90,11 @@ static THREAD_F tnc_listen_serial (void *arg);
 static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen);
 static void hex_dump (unsigned char *p, int len);
 
-
-// Why didn't I use send/recv for Linux?
-
-#if __WIN32__
+// Formerly used write/read on Linux, for some forgotten reason,
+// but making them the same seems to make more sense.
 #define SOCK_SEND(s,data,size) send(s,data,size,0)
 #define SOCK_RECV(s,data,size) recv(s,data,size,0)
-#else
-#define SOCK_SEND(s,data,size) write(s,data,size)
-#define SOCK_RECV(s,data,size) read(s,data,size)
-#endif
+
 
 static void usage(void);
 static void usage2(void);
@@ -273,8 +268,20 @@ int main (int argc, char *argv[])
  * If receive queue directory was specified, make sure that it exists.
  */
 	if (strlen(receive_output) > 0) {
+	  struct stat s;
 
-// TODO
+	  if (stat(receive_output, &s) == 0) {
+	    if ( ! S_ISDIR(s.st_mode)) {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Receive queue location, %s, is not a directory.\n", receive_output);
+	      exit (EXIT_FAILURE);
+	    }
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+            dw_printf ("Receive queue location, %s, does not exist.\n", receive_output);
+	    exit (EXIT_FAILURE);
+	  }
 	}
 
 /* If port begins with digit, consider it to be TCP. */
@@ -418,79 +425,104 @@ static int parse_number (char *str, int de_fault)
 
 static void process_input (char *stuff)
 {
-	  char *p;
-	  int chan = 0;
+	char *p;
+	int chan = 0;
 
 /*
  * Remove any end of line character(s).
  */
-	    trim (stuff);
+	trim (stuff);
 
 /*
- * Optional prefix, like "[9]" to specify channel.   TODO FIXME
+ * Optional prefix, like "[9]" or "[99]" to specify channel.
  */
-	    p = stuff;
+	p = stuff;
+	while (isspace(*p)) p++;
+	if (*p == '[') {
+	  p++;
+	  if (p[1] == ']') {
+	    chan = atoi(p);
+	    p += 2;
+	  }
+	  else if (p[2] == ']') {
+	    chan = atoi(p);
+	    p += 3;
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR! One or two digit channel number and ] was expected after [ at beginning of line.\n");
+	    usage2();
+	    return;
+	  }
+	  if (chan < 0 || chan > 15) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR! KISS channel number must be in range of 0 thru 15.\n");
+	    usage2();
+	    return;
+	  }
+	  while (isspace(*p)) p++;
+	}
 
 /*
  * If it starts with upper case letter or digit, assume it is an AX.25 frame in monitor format.
  * Lower case is a command (e.g.  Persistence or set Hardware).
  * Anything else, print explanation of what is expected.
  */
-	    if (isupper(*p) || isdigit(*p)) {
+	if (isupper(*p) || isdigit(*p)) {
 
-	      // Parse the "TNC2 monitor format" and convert to AX.25 frame.
+	  // Parse the "TNC2 monitor format" and convert to AX.25 frame.
 
-	      unsigned char frame_data[AX25_MAX_PACKET_LEN];
-	      packet_t pp = ax25_from_text (p, 1);
-	      if (pp != NULL) {
-	        int frame_len = ax25_pack (pp, frame_data);
-	        send_to_kiss_tnc (chan, KISS_CMD_DATA_FRAME, (char*)frame_data, frame_len);
-	        ax25_delete (pp);
-	      }
-	      else {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("ERROR! Could not convert to AX.25 frame: %s\n", p);
-	      }
-	    }
-	    else if (islower(*p)) {
-	      char value;
+	  unsigned char frame_data[AX25_MAX_PACKET_LEN];
+	  packet_t pp = ax25_from_text (p, 1);
+	  if (pp != NULL) {
+	    int frame_len = ax25_pack (pp, frame_data);
+	    send_to_kiss_tnc (chan, KISS_CMD_DATA_FRAME, (char*)frame_data, frame_len);
+	    ax25_delete (pp);
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR! Could not convert to AX.25 frame: %s\n", p);
+	  }
+	}
+	else if (islower(*p)) {
+	  char value;
 
-	      switch (*p) {
-	        case 'd':			// txDelay, 10ms units
-	          value = parse_number(p+1, DEFAULT_TXDELAY);
-	          send_to_kiss_tnc (chan, KISS_CMD_TXDELAY, &value, 1);
-	          break;
-	        case 'p':			// Persistence
-	          value = parse_number(p+1, DEFAULT_PERSIST);
-	          send_to_kiss_tnc (chan, KISS_CMD_PERSISTENCE, &value, 1);
-	          break;
-	        case 's':			// Slot time, 10ms units
-	          value = parse_number(p+1,  DEFAULT_SLOTTIME);
-	          send_to_kiss_tnc (chan, KISS_CMD_SLOTTIME, &value, 1);
-	          break;
-	        case 't':			// txTail, 10ms units
-	          value = parse_number(p+1, DEFAULT_TXTAIL);
-	          send_to_kiss_tnc (chan, KISS_CMD_TXTAIL, &value, 1);
-	          break;
-	        case 'f':			// Full duplex
-	          value = parse_number(p+1, 0);
-	          send_to_kiss_tnc (chan, KISS_CMD_FULLDUPLEX, &value, 1);
-	          break;
-	        case 'h':			// set Hardware
-		  p++;
-	          while (*p != '\0' && isspace(*p)) { p++; }
-	          send_to_kiss_tnc (chan, KISS_CMD_SET_HARDWARE, p, strlen(p));
-	          break;
-	        default:
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Invalid command. Must be one of d p s t f h.\n");
-	          usage2 ();
-	          break;
-	      }
-	    }
-	    else {
+	  switch (*p) {
+	    case 'd':			// txDelay, 10ms units
+	      value = parse_number(p+1, DEFAULT_TXDELAY);
+	      send_to_kiss_tnc (chan, KISS_CMD_TXDELAY, &value, 1);
+	      break;
+	    case 'p':			// Persistence
+	      value = parse_number(p+1, DEFAULT_PERSIST);
+	      send_to_kiss_tnc (chan, KISS_CMD_PERSISTENCE, &value, 1);
+	      break;
+	    case 's':			// Slot time, 10ms units
+	      value = parse_number(p+1,  DEFAULT_SLOTTIME);
+	      send_to_kiss_tnc (chan, KISS_CMD_SLOTTIME, &value, 1);
+	      break;
+	    case 't':			// txTail, 10ms units
+	      value = parse_number(p+1, DEFAULT_TXTAIL);
+	      send_to_kiss_tnc (chan, KISS_CMD_TXTAIL, &value, 1);
+	      break;
+	    case 'f':			// Full duplex
+	      value = parse_number(p+1, 0);
+	      send_to_kiss_tnc (chan, KISS_CMD_FULLDUPLEX, &value, 1);
+	      break;
+	    case 'h':			// set Hardware
+	      p++;
+	      while (*p != '\0' && isspace(*p)) { p++; }
+	      send_to_kiss_tnc (chan, KISS_CMD_SET_HARDWARE, p, strlen(p));
+	      break;
+	    default:
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Invalid command. Must be one of d p s t f h.\n");
 	      usage2 ();
-	    }
+	      break;
+	  }
+	}
+	else {
+	  usage2 ();
+	}
 
 } /* end process_input */
 
@@ -548,15 +580,19 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 	  hex_dump (kissed, klen);
 	}
 
-	// FIXME:  Should check for non -1 server_sock or serial_fd.
-	// Might need to delay when not using interactive input.
-
 	if (using_tcp) {
 	  int rc = SOCK_SEND(server_sock, (char*)kissed, klen);
-	  (void)rc;
+	  if (rc != klen) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR writing KISS frame to socket.\n");
+	  }
 	}
 	else {
-	  serial_port_write (serial_fd, (char*)kissed, klen);
+	  int rc = serial_port_write (serial_fd, (char*)kissed, klen);
+	  if (rc != klen) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR writing KISS frame to serial port.\n");
+	  }
 	}
 
 } /* end send_to_kiss_tnc */
@@ -577,8 +613,6 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
  * Global Out:	server_sock	- Needed to send to the TNC.
  *
  *--------------------------------------------------------------------*/
-
-//#define MAX_HOSTS 30
 
 static THREAD_F tnc_listen_net (void *arg)
 {
@@ -673,6 +707,11 @@ static THREAD_F tnc_listen_serial (void *arg)
 	if (serial_fd == MYFDERROR) {
 	  text_color_set(DW_COLOR_ERROR);
  	  dw_printf("Unable to connect to KISS TNC serial port %s.\n", port);
+#if __WIN32__
+#else
+	  // More detail such as "permission denied" or "no such device"
+	  dw_printf("%s\n", strerror(errno));
+#endif
 	  exit (EXIT_FAILURE);
 	}
 
@@ -902,7 +941,7 @@ static void usage2 (void)
 	dw_printf ("	s	Slot time, 10ms units	s 10\n");
 	dw_printf ("	t	txTail, 10ms units	t 5\n");
 	dw_printf ("	f	Full duplex		f 0\n");
-	dw_printf ("	h	set Hardware 		h T.B.D.\n");
+	dw_printf ("	h	set Hardware 		h TNC:\n");
 	dw_printf ("\n");
 	dw_printf ("	Lines may be preceded by the form \"[9]\" to indicate a\n");
 	dw_printf ("	channel other than the default 0.\n");
