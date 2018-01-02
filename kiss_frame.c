@@ -545,7 +545,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	    /* Our current default is a maximum of 6 channels but it is easily */
 	    /* increased by changing one number and recompiling. */
 
-	    if ((port == 2 || port == 8) && 
+	    if (kiss_len > 16 &&
+	        (port == 2 || port == 8) &&
 		 kiss_msg[1] == 'Q' << 1 &&
 		 kiss_msg[2] == 'S' << 1 &&
 		 kiss_msg[3] == 'T' << 1 &&
@@ -596,6 +597,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
         case KISS_CMD_TXDELAY:				/* 1 = TXDELAY */
 
+	  if (kiss_len < 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS ERROR: Missing value for TXDELAY command.\n");
+	    return;
+	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set TXDELAY = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
 	  if (kiss_msg[1] < 4 || kiss_msg[1] > 100) {
@@ -608,6 +614,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
         case KISS_CMD_PERSISTENCE:			/* 2 = Persistence */
 
+	  if (kiss_len < 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS ERROR: Missing value for PERSISTENCE command.\n");
+	    return;
+	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set Persistence = %d, port %d\n", kiss_msg[1], port);
 	  if (kiss_msg[1] < 5 || kiss_msg[1] > 250) {
@@ -620,6 +631,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
         case KISS_CMD_SLOTTIME:				/* 3 = SlotTime */
 
+	  if (kiss_len < 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS ERROR: Missing value for SLOTTIME command.\n");
+	    return;
+	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set SlotTime = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
 	  if (kiss_msg[1] < 2 || kiss_msg[1] > 50) {
@@ -632,6 +648,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
         case KISS_CMD_TXTAIL:				/* 4 = TXtail */
 
+	  if (kiss_len < 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS ERROR: Missing value for TXTAIL command.\n");
+	    return;
+	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set TXtail = %d (*10mS units = %d mS), port %d\n", kiss_msg[1], kiss_msg[1] * 10, port);
 	  if (kiss_msg[1] < 2) {
@@ -644,6 +665,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
         case KISS_CMD_FULLDUPLEX:			/* 5 = FullDuplex */
 
+	  if (kiss_len < 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS ERROR: Missing value for FULLDUPLEX command.\n");
+	    return;
+	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set FullDuplex = %d, port %d\n", kiss_msg[1], port);
 	  xmit_set_fulldup (port, kiss_msg[1]);
@@ -651,6 +677,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
         case KISS_CMD_SET_HARDWARE:			/* 6 = TNC specific */
 
+	  if (kiss_len < 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("KISS ERROR: Missing value for SET HARDWARE command.\n");
+	    return;
+	  }
 	  kiss_msg[kiss_len] = '\0';
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set hardware \"%s\", port %d\n", (char*)(kiss_msg+1), port);

@@ -594,7 +594,10 @@ static char *split (char *string, int rest_of_line)
 {
 	static char cmd[MAXCMDLEN];
 	static char token[MAXCMDLEN];
-	static char *c;		// current position in cmd.
+	static char shutup[] = " ";	// Shut up static analysis which gets upset
+					// over the case where this could be called with
+					// string NULL and c was not yet initialized.
+	static char *c = shutup;	// Current position in command line.
 	char *s, *t;
 	int in_quotes;
 

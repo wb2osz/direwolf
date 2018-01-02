@@ -4801,7 +4801,7 @@ int main (int argc, char *argv[])
 
 	      if (bytes[0] == FEND) {
 
-		if (bytes[1] != 0) {
+		if (num_bytes < 2 || bytes[1] != 0) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf("Was expecting to find 00 after the initial C0.\n");
 	          continue;
