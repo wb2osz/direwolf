@@ -1,64 +1,54 @@
 
 # Revision History #
 
-## Version 1.5 -- Development snapshot C -- October 2017 ##
+## Version 1.5 -- Beta Test -- January 2018 ##
 
-This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
 
 ### New Features: ###
 
-- "kissutil" for troubleshooting a KISS TNC or interfacing to an application via files.
+- PTT using GPIO pin of CM108/CM119 (e.g. DMK URI, RB-USB RIM), Linux only.
+
+
+- More efficient error recovery for AX.25 connected mode.  Better generation and processing of REJ and SREJ to reduce unnecessary duplicate I frames.
+
+- New configuration option, V20, for listing stations known to not understand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
+
+
+- New application "**kissutil**" for troubleshooting a KISS TNC or interfacing to an application via files.
 
 - KISS "Set Hardware" command to report transmit queue length.
 
-- PTT using GPIO pin of CM108/CM119 (e.g. DMK URI, RB-USB RIM)
+- TCP KISS can now handle multiple concurrent applications.
+
+- Linux can use serial port for KISS in addition to a pseudo terminal.
+
+- decode_aprs utility can now accept KISS frames and AX.25 frames as series of two digit hexadecimal numbers.
 
 - Full Duplex operation.  (Put "FULLDUP ON" in channel section of configuration file.)
+
+- Time slots for beaconing.
+
+- Allow single log file with fixed name rather than starting a new one each day.
+
 
 
 ### Bugs Fixed: ###
 
 - Possible crash when CDIGIPEAT did not include the optional alias.
 
-
-
-## Version 1.5 -- Development snapshot B -- June 2017 ##
-
-This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
-
-### New Features: ###
-
-- Time slots for beaconing.
-
-- Documentation updates describing cheap SDR frequency inaccuracy and how to compensate for it.
-
-- Allow single log file with fixed name rather than starting a new one each day.
-
-
-### Bugs Fixed: ###
-
 - PACLEN configuration item no longer restricts length of received frames.
 
-## Version 1.5 -- Development snapshot A -- May 2017 ##
+- Little typographical / spelling errors in messages.
 
-This is a snapshot of ongoing development towards version of 1.5.  Some features might be incomplete or broken or not documented properly.
 
-### New Features: ###
+### Documentation: ###
 
-- TCP KISS can now handle multiple concurrent applications.
-
-- Linux can use serial port for KISS in addition to a pseudo terminal.
 
 - New document ***Bluetooth-KISS-TNC.pdf*** explaining how to use KISS over Bluetooth.
 
-- decode_aprs utility can now accept KISS frames and AX.25 frames as series of two digit hexadecimal numbers.
-
-- New configuration option, V20, for listing stations known to not understand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
+- Updates describing cheap SDR frequency inaccuracy and how to compensate for it.
 
 
-### Bugs Fixed: ###
-
-- Little typographical / spelling errors in messages.
 
 ----------
 
