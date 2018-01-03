@@ -1,6 +1,9 @@
-APRS TO-CALL VERSION NUMBERS                            18 Oct 2017
+APRS TO-CALL VERSION NUMBERS                            12 Dec 2017
 -------------------------------------------------------------------
                                                              WB4APR
+12 Dec 17 Added APHWxx for use in "HamWAN
+11 Dec 17 Added APDVxx for OE6PLD's SSTV with APRS status exchange
+20 Nov 17 added APPICO DB1NTO' PicoAPRS 
 18 Oct 17 Added APBMxx BrandMeister DMR Server for R3ABM 
 25 Sep 17 added APP6xx for APRSlib
 05 Sep 17 Chged APTAxx to APTBxx for TinyAPRS by BG5HHP
@@ -83,6 +86,7 @@ a TOCALL number series:
       APDTxx  APRStouch Tone (DTMF)
       APDTMF  digi off mode on QIKCOM2 and DTMF ON
       APDUxx  U2APRS by JA7UDE
+      APDVxx  OE6PLD's SSTV with APRS status exchange
       APDWxx  DireWolf, WB2OSZ
  APE  APExxx  Telemetry devices
       APECAN  Pecan Pico APRS Balloon Tracker
@@ -96,6 +100,7 @@ a TOCALL number series:
  APH  APHKxx  for LA1BR tracker/digipeater
       APHAXn  SM2APRS by PY2UEP
       APHTxx  HMTracker by IU0AAC 
+      APHWxx  for use in "HamWAN
  API  APICQx  for ICQ
       APICxx  HA9MCQ's Pic IGate
       APIExx  W7KMV's PiAPRS system
@@ -142,6 +147,7 @@ a TOCALL number series:
       APOU2k  Open Track for Ultimeter
       APOZxx  www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO
  APP  APP6xx  for APRSlib
+      APPICx  DB1NTO' PicoAPRS 
       APPMxx  DL1MX's RTL-SDR pytohon Igate
       APPTxx  KetaiTracker by  JF6LZE, Takeki (msg capable)
  APQ  APQxxx  Earthquake data
