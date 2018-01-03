@@ -210,7 +210,7 @@ endif
 # If you compile with the RPi 2 specific options above and try to run it on the RPi 
 # model B (pre version 2), it will die with "illegal instruction."
 #
-# Dire Wolf is known to work on the BeagleBone, CubieBoard2, etc.
+# Dire Wolf is known to work on the BeagleBone, CubieBoard2, CHIP, etc.
 # The best compiler options will depend on the specific type of processor
 # and the compiler target defaults.
 #
@@ -292,12 +292,14 @@ LDFLAGS += -lhamlib
 endif
 
 
+# Should enabling of this feature be strongly encouraged or
+# is it quite specialized and of interest to a small audience?
 # If, for some reason, can obtain the libudev-dev package, or
 # don't want to install it, comment out the next 3 lines.
 
-ifeq ($(wildcard /usr/include/libudev.h),)
-$(error /usr/include/libudev.h does not exist.  Install it with "sudo apt-get install libudev-dev" or "sudo yum install libudev-devel" )
-endif
+#ifeq ($(wildcard /usr/include/libudev.h),)
+#$(error /usr/include/libudev.h does not exist.  Install it with "sudo apt-get install libudev-dev" or "sudo yum install libudev-devel" )
+#endif
 
 
 # Enable cm108 PTT support if libudev header file is present.
@@ -541,6 +543,7 @@ direwolf.conf : generic.conf
 # Eventually I'd like to have targets here to build the .DEB and .RPM packages.
 
 INSTALLDIR := /usr/local
+#INSTALLDIR := /usr
 
 # Command to "install" to system directories.  Use "ginstall" for Mac.
 
@@ -566,14 +569,14 @@ else
 endif
 	@echo 'Name=Dire Wolf' >> $@
 	@echo 'Comment=APRS Soundcard TNC' >> $@
-	@echo 'Icon=/usr/share/direwolf/dw-icon.png' >> $@
+	@echo 'Icon=$(INSTALLDIR)/share/direwolf/dw-icon.png' >> $@
 	@echo "Path=$(HOME)" >> $@
 	@echo '#Terminal=true' >> $@
 	@echo 'Categories=HamRadio' >> $@
 	@echo 'Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25' >> $@
 
 
-# Installation into /usr/local/...
+# Installation into $(INSTALLDIR), usually /usr/local/... or /usr/...
 # Needs to be run as root or with sudo.
 
 
@@ -583,40 +586,40 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 # Applications, not installed with package manager, normally go in /usr/local/bin.
 # /usr/bin is used instead when installing from .DEB or .RPM package.
 #
-	$(INSTALL) direwolf $(INSTALLDIR)/bin
-	$(INSTALL) decode_aprs $(INSTALLDIR)/bin
-	$(INSTALL) text2tt $(INSTALLDIR)/bin
-	$(INSTALL) tt2text $(INSTALLDIR)/bin
-	$(INSTALL) ll2utm $(INSTALLDIR)/bin
-	$(INSTALL) utm2ll $(INSTALLDIR)/bin
-	$(INSTALL) aclients $(INSTALLDIR)/bin
-	$(INSTALL) log2gpx $(INSTALLDIR)/bin
-	$(INSTALL) gen_packets $(INSTALLDIR)/bin
-	$(INSTALL) atest $(INSTALLDIR)/bin
-	$(INSTALL) ttcalc $(INSTALLDIR)/bin
-	$(INSTALL) kissutil $(INSTALLDIR)/bin
-	$(INSTALL) cm108 $(INSTALLDIR)/bin
-	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
+	$(INSTALL) -D --mode=755 direwolf $(INSTALLDIR)/bin/direwolf
+	$(INSTALL) -D --mode=755 decode_aprs $(INSTALLDIR)/bin/decode_aprs
+	$(INSTALL) -D --mode=755 text2tt $(INSTALLDIR)/bin/text2tt
+	$(INSTALL) -D --mode=755 tt2text $(INSTALLDIR)/bin/tt2text
+	$(INSTALL) -D --mode=755 ll2utm $(INSTALLDIR)/bin/ll2utm
+	$(INSTALL) -D --mode=755 utm2ll $(INSTALLDIR)/bin/utm2ll
+	$(INSTALL) -D --mode=755 aclients $(INSTALLDIR)/bin/aclients
+	$(INSTALL) -D --mode=755 log2gpx $(INSTALLDIR)/bin/log2gpx
+	$(INSTALL) -D --mode=755 gen_packets $(INSTALLDIR)/bin/gen_packets
+	$(INSTALL) -D --mode=755 atest $(INSTALLDIR)/bin/atest
+	$(INSTALL) -D --mode=755 ttcalc $(INSTALLDIR)/bin/ttcalc
+	$(INSTALL) -D --mode=755 kissutil $(INSTALLDIR)/bin/kissutil
+	$(INSTALL) -D --mode=755 cm108 $(INSTALLDIR)/bin/cm108
+	$(INSTALL) -D --mode=755 dwespeak.sh $(INSTALLDIR)/bin/dwspeak.sh
 #
 # Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.
 #
-	$(INSTALL) telemetry-toolkit/telem-balloon.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-bits.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-data.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-data91.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-eqns.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-parm.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-seq.sh $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-unit.pl $(INSTALLDIR)/bin
-	$(INSTALL) telemetry-toolkit/telem-volts.py $(INSTALLDIR)/bin
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-balloon.pl $(INSTALLDIR)/bin/telem-balloon.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-bits.pl $(INSTALLDIR)/bin/telem-bits.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-data.pl $(INSTALLDIR)/bin/telem-data.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-data91.pl $(INSTALLDIR)/bin/telem-data91.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-eqns.pl $(INSTALLDIR)/bin/telem-eqns.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-parm.pl $(INSTALLDIR)/bin/telem-parm.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-seq.sh $(INSTALLDIR)/bin/telem-seq.sh
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-unit.pl $(INSTALLDIR)/bin/telem-unit.pl
+	$(INSTALL) -D --mode=755 telemetry-toolkit/telem-volts.py $(INSTALLDIR)/bin/telem-volts.py
 #
 # Misc. data such as "tocall" to system mapping.
 #
-	$(INSTALL) -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
-	$(INSTALL) -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
-	$(INSTALL) -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
-	$(INSTALL) -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
-	$(INSTALL) -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
+	$(INSTALL) -D --mode=644 tocalls.txt $(INSTALLDIR)/share/direwolf/tocalls.txt
+	$(INSTALL) -D --mode=644 symbols-new.txt $(INSTALLDIR)/share/direwolf/symbols-new.txt
+	$(INSTALL) -D --mode=644 symbolsX.txt $(INSTALLDIR)/share/direwolf/symbolsX.txt
+	$(INSTALL) -D --mode=644 dw-icon.png $(INSTALLDIR)/share/direwolf/dw-icon.png
+	$(INSTALL) -D --mode=644 direwolf.desktop $(INSTALLDIR)/share/applications/direwolf.desktop
 #
 # Documentation.  Various plain text files and PDF.
 #
@@ -625,6 +628,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
 #
 # ./README.md is an overview for the project main page.
+# Maybe we could stick it in some other place.
 # doc/README.md contains an overview of the PDF file contents and is more useful here.
 #
 	$(INSTALL) -D --mode=644 doc/README.md $(INSTALLDIR)/share/doc/direwolf/README.md
@@ -659,17 +663,17 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 #
 # "man" pages
 #
-	$(INSTALL) -D --mode=644 man1/aclients.1 $(INSTALLDIR)/man/man1/aclients.1
-	$(INSTALL) -D --mode=644 man1/atest.1 $(INSTALLDIR)/man/man1/atest.1
-	$(INSTALL) -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/man/man1/decode_aprs.1
-	$(INSTALL) -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/man/man1/direwolf.1
-	$(INSTALL) -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/man/man1/gen_packets.1
-	$(INSTALL) -D --mode=644 man1/kissutil.1 $(INSTALLDIR)/man/man1/kissutil.1
-	$(INSTALL) -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/man/man1/ll2utm.1
-	$(INSTALL) -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/man/man1/log2gpx.1
-	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/man/man1/text2tt.1
-	$(INSTALL) -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/man/man1/tt2text.1
-	$(INSTALL) -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/man/man1/utm2ll.1
+	$(INSTALL) -D --mode=644 man1/aclients.1 $(INSTALLDIR)/share/man/man1/aclients.1
+	$(INSTALL) -D --mode=644 man1/atest.1 $(INSTALLDIR)/share/man/man1/atest.1
+	$(INSTALL) -D --mode=644 man1/decode_aprs.1 $(INSTALLDIR)/share/man/man1/decode_aprs.1
+	$(INSTALL) -D --mode=644 man1/direwolf.1 $(INSTALLDIR)/share/man/man1/direwolf.1
+	$(INSTALL) -D --mode=644 man1/gen_packets.1 $(INSTALLDIR)/share/man/man1/gen_packets.1
+	$(INSTALL) -D --mode=644 man1/kissutil.1 $(INSTALLDIR)/share/man/man1/kissutil.1
+	$(INSTALL) -D --mode=644 man1/ll2utm.1 $(INSTALLDIR)/share/man/man1/ll2utm.1
+	$(INSTALL) -D --mode=644 man1/log2gpx.1 $(INSTALLDIR)/share/man/man1/log2gpx.1
+	$(INSTALL) -D --mode=644 man1/text2tt.1 $(INSTALLDIR)/share/man/man1/text2tt.1
+	$(INSTALL) -D --mode=644 man1/tt2text.1 $(INSTALLDIR)/share/man/man1/tt2text.1
+	$(INSTALL) -D --mode=644 man1/utm2ll.1 $(INSTALLDIR)/share/man/man1/utm2ll.1
 #
 # Set group and mode of HID devices corresponding to C-Media USB Audio adapters.
 # This will allow us to use the CM108/CM119 GPIO pins for PTT.
@@ -684,8 +688,10 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	@echo " "
 
 
-# Put sample configuration files in home directory.
-# These would be done as ordinary user.
+# Put sample configuration & startup files in home directory.
+# This step would be done as ordinary user.
+# Some people like to put the direwolf config file in /etc/ax25.
+# Note that all of these are also in $(INSTALLDIR)/share/doc/direwolf/examples/.
 
 # The Raspberry Pi has ~/Desktop but Ubuntu does not.
 
@@ -693,6 +699,8 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 
 # Version 1.4 - Add "-n" option to avoid clobbering existing, probably customized, config files.
 
+# dw-start.sh is greatly improved in version 1.4.
+# It was moved from isntall-rpi to install-conf because it is not just for the RPi.
 
 .PHONY: install-conf
 install-conf : direwolf.conf
@@ -700,6 +708,8 @@ install-conf : direwolf.conf
 	cp -n sdr.conf ~
 	cp -n telemetry-toolkit/telem-m0xer-3.txt ~
 	cp -n telemetry-toolkit/telem-*.conf ~
+	chmod +x dw-start.sh
+	cp -n dw-start.sh ~
 ifneq ($(wildcard $(HOME)/Desktop),)
 	@echo " "
 	@echo "This will add a desktop icon on some systems."
@@ -710,14 +720,9 @@ ifneq ($(wildcard $(HOME)/Desktop),)
 endif
 
 
-# dw-start.sh is greatly improved in version 1.4.
-# It should probably be part of install-conf because it is not just for the RPi.
-
 .PHONY: install-rpi
-install-rpi : dw-start.sh
-	chmod +x dw-start.sh
-	cp -n dw-start.sh ~
-	ln -f -s /usr/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
+install-rpi : 
+	ln -f -s $(INSTALLDIR)/share/applications/direwolf.desktop ~/Desktop/direwolf.desktop
 
 
 
