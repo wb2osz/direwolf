@@ -569,7 +569,7 @@ else
 endif
 	@echo 'Name=Dire Wolf' >> $@
 	@echo 'Comment=APRS Soundcard TNC' >> $@
-	@echo 'Icon=$(INSTALLDIR)/share/direwolf/dw-icon.png' >> $@
+	@echo 'Icon=$(INSTALLDIR)/share/direwolf/pixmaps/dw-icon.png' >> $@
 	@echo "Path=$(HOME)" >> $@
 	@echo '#Terminal=true' >> $@
 	@echo 'Categories=HamRadio' >> $@
@@ -618,7 +618,10 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 tocalls.txt $(INSTALLDIR)/share/direwolf/tocalls.txt
 	$(INSTALL) -D --mode=644 symbols-new.txt $(INSTALLDIR)/share/direwolf/symbols-new.txt
 	$(INSTALL) -D --mode=644 symbolsX.txt $(INSTALLDIR)/share/direwolf/symbolsX.txt
-	$(INSTALL) -D --mode=644 dw-icon.png $(INSTALLDIR)/share/direwolf/dw-icon.png
+#
+# For desktop icon.
+#
+	$(INSTALL) -D --mode=644 dw-icon.png $(INSTALLDIR)/share/direwolf/pixmaps/dw-icon.png
 	$(INSTALL) -D --mode=644 direwolf.desktop $(INSTALLDIR)/share/applications/direwolf.desktop
 #
 # Documentation.  Various plain text files and PDF.
