@@ -117,6 +117,7 @@
 #include "morse.h"
 #include "mheard.h"
 #include "ax25_link.h"
+#include "dtime_now.h"
 
 
 //static int idx_decoded = 0;
@@ -163,8 +164,8 @@ static void __cpuid(int cpuinfo[4], int infotype){
 
 static struct audio_s audio_config;
 static struct tt_config_s tt_config;
-//struct digi_config_s digi_config;
-//struct cdigi_config_s cdigi_config;
+static struct misc_config_s misc_config;
+
 
 static const int audio_amplitude = 100;	/* % of audio sample range. */
 					/* This translates to +-32k for 16 bit samples. */
@@ -176,9 +177,6 @@ static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
 
-
-
-static struct misc_config_s misc_config;
 
 
 int main (int argc, char *argv[])
@@ -197,7 +195,7 @@ int main (int argc, char *argv[])
 	char l_opt_logdir[80];
 	char L_opt_logfile[80];
 	char input_file[80];
-	// char timestamp[16];
+	char T_opt_timestamp[40];
 	
 	int t_opt = 1;		/* Text color option. */				
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
@@ -219,6 +217,7 @@ int main (int argc, char *argv[])
 	strlcpy(l_opt_logdir, "", sizeof(l_opt_logdir));
 	strlcpy(L_opt_logfile, "", sizeof(L_opt_logfile));
 	strlcpy(P_opt, "", sizeof(P_opt));
+	strlcpy(T_opt_timestamp, "", sizeof(T_opt_timestamp));
 
 #if __WIN32__
 
@@ -263,26 +262,21 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
+	dw_printf ("Dire Wolf version %d.%d (%s) Beta Test\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
-// FIXME: temp test
 
-//	timestamp_now (timestamp, sizeof(timestamp), 1);
-//	dw_printf ("%s\n", timestamp);
-
-
-
-
-
-#if defined(ENABLE_GPSD) || defined(USE_HAMLIB)
+#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108)
 	dw_printf ("Includes optional support for: ");
 #if defined(ENABLE_GPSD)
 	dw_printf (" gpsd");
 #endif
 #if defined(USE_HAMLIB)
 	dw_printf (" hamlib");
+#endif
+#if defined(USE_CM108)
+	dw_printf (" cm108-ptt");
 #endif
 	dw_printf ("\n");
 #endif
@@ -358,7 +352,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:L:Sa:E:",
+          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:L:Sa:E:T:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -573,6 +567,10 @@ int main (int argc, char *argv[])
 	    }
             break;
 
+          case 'T':				/* -T for receive timestamp. */
+	    strlcpy (T_opt_timestamp, optarg, sizeof(T_opt_timestamp));
+            break;
+
           default:
 
             /* Should not be here. */
@@ -675,6 +673,8 @@ int main (int argc, char *argv[])
 	    // Reduce audio sampling rate to reduce CPU requirements.
 	    audio_config.achan[0].decimate = D_opt;
 	}
+
+	strlcpy(audio_config.timestamp_format, T_opt_timestamp, sizeof(audio_config.timestamp_format));
 
 	// temp - only xmit errors.
 
@@ -965,9 +965,21 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 // -1 for APRStt DTMF decoder.
 
+	char ts[100];		// optional time stamp
+
+	if (strlen(audio_config.timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), audio_config.timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
+
 	if (subchan == -1) {
 	  text_color_set(DW_COLOR_REC);
-	  dw_printf ("[%d.dtmf] ", chan);
+	  dw_printf ("[%d.dtmf%s] ", chan, ts);
 	}
 	else {
 	  if (ax25_is_aprs(pp)) {
@@ -978,16 +990,16 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  }
 
 	  if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers == 1) {
-	    dw_printf ("[%d.%d] ", chan, subchan);
+	    dw_printf ("[%d.%d%s] ", chan, subchan, ts);
 	  }
 	  else if (audio_config.achan[chan].num_subchan == 1 && audio_config.achan[chan].num_slicers > 1) {
-	    dw_printf ("[%d.%d] ", chan, slice);
+	    dw_printf ("[%d.%d%s] ", chan, slice, ts);
 	  }
 	  else if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers > 1) {
-	    dw_printf ("[%d.%d.%d] ", chan, subchan, slice);
+	    dw_printf ("[%d.%d.%d%s] ", chan, subchan, slice, ts);
 	  }
 	  else {
-	    dw_printf ("[%d] ", chan);
+	    dw_printf ("[%d%s] ", chan, ts);
 	  }
 	}
 
@@ -1011,7 +1023,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("(%s)", desc);
 	  if (ftype == frame_type_U_XID) {
 	    struct xid_param_s param;
-	    char info2text[100];
+	    char info2text[150];
 
 	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
 	    dw_printf (" %s\n", info2text);
@@ -1271,6 +1283,7 @@ static void usage (char **argv)
 	dw_printf ("    -x             Send Xmit level calibration tones.\n");
 	dw_printf ("    -U             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
+	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
 	dw_printf ("\n");
 
 	dw_printf ("After any options, there can be a single command line argument for the source of\n");

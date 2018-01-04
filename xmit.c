@@ -916,10 +916,22 @@ static int send_one_frame (int c, int p, packet_t pp)
 	  return(0);
 	}
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
+
 	ax25_format_addrs (pp, stemp);
 	info_len = ax25_get_info (pp, &pinfo);
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d%c] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L');
+	dw_printf ("[%d%c%s] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L', ts);
 	dw_printf ("%s", stemp);			/* stations followed by : */
 
 /* Demystify non-APRS.  Use same format for received frames in direwolf.c. */
@@ -938,7 +950,7 @@ static int send_one_frame (int c, int p, packet_t pp)
 
 	  if (ftype == frame_type_U_XID) {
 	    struct xid_param_s param;
-	    char info2text[100];
+	    char info2text[150];
 
 	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
 	    dw_printf (" %s\n", info2text);
@@ -1021,11 +1033,23 @@ static void xmit_speech (int c, packet_t pp)
  * Print spoken packet.  Prefix by channel.
  */
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
+
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.speech] \"%s\"\n", c, pinfo);
+	dw_printf ("[%d.speech%s] \"%s\"\n", c, pinfo, ts);
 
 
 	if (strlen(save_audio_config_p->tts_script) == 0) {
@@ -1136,11 +1160,22 @@ static void xmit_morse (int c, packet_t pp, int wpm)
 	int length_ms, wait_ms;
 	double start_ptt, wait_until, now;
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
 
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.morse] \"%s\"\n", c, pinfo);
+	dw_printf ("[%d.morse%s] \"%s\"\n", c, pinfo, ts);
 
 	ptt_set (OCTYPE_PTT, c, 1);
 	start_ptt = dtime_now();
@@ -1197,11 +1232,22 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
 	int length_ms, wait_ms;
 	double start_ptt, wait_until, now;
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
 
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.dtmf] \"%s\"\n", c, pinfo);
+	dw_printf ("[%d.dtmf%s] \"%s\"\n", c, pinfo, ts);
 
 	ptt_set (OCTYPE_PTT, c, 1);
 	start_ptt = dtime_now();

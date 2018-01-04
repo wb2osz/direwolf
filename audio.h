@@ -97,6 +97,10 @@ struct audio_s {
 
 	int recv_error_rate;		/* Similar but the % probablity of dropping a received frame. */
 
+	char timestamp_format[40];	/* -T option */
+					/* Precede received & transmitted frames with timestamp. */
+					/* Command line option uses "strftime" format string. */
+
 
 	/* Properties for each audio channel, common to receive and transmit. */
 	/* Can be different for each radio channel. */
