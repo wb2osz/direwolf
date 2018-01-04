@@ -1651,7 +1651,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: Missing serial port name for %s command.\n", 
+	      dw_printf ("Config file line %d: Missing output control device for %s command.\n",
 			line, otname);
 	      continue;
 	    }
@@ -1761,7 +1761,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 #endif
 	    }
-	    if (strcasecmp(t, "CM108") == 0) {
+	    else if (strcasecmp(t, "CM108") == 0) {
 
 /* CM108 - GPIO of USB sound card. case, Linux only. */
 
