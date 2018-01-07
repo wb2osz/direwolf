@@ -104,7 +104,7 @@ direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o dem
 		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dtime_now.o mheard.o ax25_link.o \
+		dwgps.o dwgpsnmea.o dtime_now.o mheard.o ax25_link.o cm108.c \
 		dw-icon.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
@@ -276,7 +276,6 @@ strlcat.o : misc/strlcat.c
 
 
 # Combine some unit tests into a single regression sanity check.
-
 
 check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
@@ -609,7 +608,7 @@ z := $(notdir ${CURDIR})
 
 .PHONY: dist-win
 dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe \
-			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe \
+			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe kissutil.exe \
 		 	generic.conf dwespeak.bat \
 			README.md CHANGES.md \
 			doc/User-Guide.pdf \
