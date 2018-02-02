@@ -1049,7 +1049,7 @@ static void xmit_speech (int c, packet_t pp)
 	(void)info_len;
 
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.speech%s] \"%s\"\n", c, pinfo, ts);
+	dw_printf ("[%d.speech%s] \"%s\"\n", c, ts, pinfo);
 
 
 	if (strlen(save_audio_config_p->tts_script) == 0) {
@@ -1175,7 +1175,7 @@ static void xmit_morse (int c, packet_t pp, int wpm)
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.morse%s] \"%s\"\n", c, pinfo, ts);
+	dw_printf ("[%d.morse%s] \"%s\"\n", c, ts, pinfo);
 
 	ptt_set (OCTYPE_PTT, c, 1);
 	start_ptt = dtime_now();
@@ -1247,7 +1247,7 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.dtmf%s] \"%s\"\n", c, pinfo, ts);
+	dw_printf ("[%d.dtmf%s] \"%s\"\n", c, ts, pinfo);
 
 	ptt_set (OCTYPE_PTT, c, 1);
 	start_ptt = dtime_now();
