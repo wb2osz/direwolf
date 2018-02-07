@@ -921,11 +921,22 @@ int audio_get (int a)
 	        /* Error */
 	        // TODO: Needs more study and testing. 
 
-		// TODO: print n.  should snd_strerror use n or errno?
-		// Audio input device error: Unknown error
+		// Only expected error conditions:
+		//    -EBADFD	PCM is not in the right state (SND_PCM_STATE_PREPARED or SND_PCM_STATE_RUNNING)
+		//    -EPIPE	an overrun occurred
+		//    -ESTRPIPE	a suspend event occurred (stream is suspended and waiting for an application recovery)
+
+		// Data overrun is displayed as "broken pipe" which seems a little misleading.
+		// Add our own message which says something about CPU being too slow.
 
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Audio input device %d error: %s\n", a, snd_strerror(n));
+	        dw_printf ("Audio input device %d error code %d: %s\n", a, n, snd_strerror(n));
+
+	        if (n == (-EPIPE)) {
+	          dw_printf ("This is most likely caused by the CPU being too slow to keep up with the audio stream.\n");
+	          dw_printf ("Use the \"top\" command, in another command window, to look at CPU usage.\n");
+	          dw_printf ("This might be a temporary condition so we will attempt to recover a few times before giving up.\n");
+	        }
 
 	        audio_stats (a, 
 			save_audio_config_p->adev[a].num_channels, 

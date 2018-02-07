@@ -708,6 +708,9 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	    dw_printf ("\n");
 	    dw_printf ("It looks like you are trying to use the \"XKISS\" protocol which is not supported.\n");
 	    dw_printf ("Change your application settings to use standard \"KISS\" rather than some other variant.\n");
+	    dw_printf ("If you are using Winlink Express, configure like this:\n");
+	    dw_printf ("    Packet TNC Type:  KISS\n");
+	    dw_printf ("    Packet TNC Model:  NORMAL      -- Using ACKMODE will cause this error.\n");
 	    dw_printf ("\n");
 	  }
 	  break;
