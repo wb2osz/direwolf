@@ -5,7 +5,7 @@
 
 In the early days of Amateur Packet Radio, it was necessary to use an expensive “Terminal Node Controller” (TNC) with specialized hardware.  Those days are gone.  You can now get better results at lower cost by connecting your radio to the “soundcard” interface of a computer and using software to decode the signals.
 
-Why settle for mediocre receive performance from a 1980's technology  TNC using an old modem chip?   Dire Wolf decodes over 1000 error-free frames from the WA8LMF TNC Test CD, leaving all the hardware TNCs, and first generation "soundcard" modems, behind in the dust.
+Why settle for mediocre receive performance from a 1980's technology  TNC using an old modem chip?   Dire Wolf decodes over 1000 error-free frames from Track 2 of the [WA8LMF TNC Test CD](https://github.com/wb2osz/direwolf/tree/dev/doc/WA8LMF-TNC-Test-CD-Results.pdf), leaving all the hardware TNCs, and first generation "soundcard" modems, behind in the dust.
 
 ![](tnc-test-cd-results.png)
 
@@ -55,13 +55,17 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 - **KISS Interface (TCP/IP, serial port, Bluetooth) & AGW network Interface (TCP/IP).**
 
-    Dire Wolf can be used as a virtual TNC for applications such as   APRSIS32,           UI-View32, Xastir, APRS-TW,YAAC, UISS, Linux  AX25, SARTrack, RMS Express, Outpost PM, and many others.  
+    Dire Wolf can be used as a virtual TNC for applications such as   APRSIS32,           UI-View32, Xastir, APRS-TW,YAAC, UISS, Linux  AX25, SARTrack, Winlink / RMS Express, Outpost PM, and many others.  
 
 ### Radio Interfaces:   ###
 
 - **Uses computer’s “soundcard” and digital signal processing.**
 
-    Lower cost and better performance than specialized hardware.  Decodes more than 1000 error-free frames from [WA8LMF TNC Test CD](http://wa8lmf.net/TNCtest/).
+    Lower cost and better performance than specialized hardware. 
+
+    Compatible interfaces include [UDRC](https://nw-digital-radio.groups.io/g/udrc/wiki/UDRC%E2%84%A2-and-Direwolf-Packet-Modem), [SignaLink USB](http://www.tigertronics.com/slusbmain.htm), [DMK URI](http://www.dmkeng.com/URI_Order_Page.htm), [RB-USB RIM](http://www.repeater-builder.com/products/usb-rim-lite.html), [RA-35](http://www.masterscommunications.com/products/radio-adapter/ra35.html), and many others.
+
+
 
 - **Standard 300, 1200 & 9600 bps modems and more.**
 
@@ -147,9 +151,9 @@ Here are some good places to ask questions and share your experience:
 
 - [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) 
 
-- [Raspberry Pi 4 Ham Radio](https://groups.yahoo.com/neo/groups/Raspberry_Pi_4-Ham_RADIO/info)
+- [Raspberry Pi 4 Ham Radio](https://groups.io/g/RaspberryPi-4-HamRadio)
 
-- [linuxham](https://groups.yahoo.com/neo/groups/linuxham/info)
+- [linuxham](https://groups.io/g/linuxham)
 
 - [TAPR aprssig](http://www.tapr.org/pipermail/aprssig/)
  
