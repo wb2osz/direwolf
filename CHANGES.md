@@ -1,6 +1,13 @@
 
 # Revision History #
 
+## Version 1.5 -- Beta Test 2 -- February 2018 ##
+
+### Bugs Fixed: ###
+
+- Strange failures when trying to use multiple KISS client applications over TCP.  Only Linux was affected.  
+
+
 ## Version 1.5 -- Beta Test -- January 2018 ##
 
 
