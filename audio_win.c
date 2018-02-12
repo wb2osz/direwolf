@@ -850,7 +850,7 @@ int audio_get (int a)
 
               assert (A->udp_sock > 0);
 
-	      res = recv (A->udp_sock, A->stream_data, SDR_UDP_BUF_MAXLEN, 0);
+	      res = SOCK_RECV (A->udp_sock, A->stream_data, SDR_UDP_BUF_MAXLEN);
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Can't read from udp socket, errno %d", WSAGetLastError());

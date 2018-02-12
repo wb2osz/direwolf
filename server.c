@@ -491,14 +491,16 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, cmd_listen_thread, (void*)client, 0, NULL);
 	  if (cmd_listen_th[client] == NULL) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Could not create AGW command listening thread\n");
+	    dw_printf ("Could not create AGW command listening thread for client %d\n", client);
 	    return;
 	  }
 #else
 	  e = pthread_create (&cmd_listen_tid[client], NULL, cmd_listen_thread, (void *)(long)client);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    perror("Could not create AGW command listening thread");
+	    dw_printf ("Could not create AGW command listening thread for client %d\n", client);
+	    // Replace add perror with better message handling.
+	    perror("");
 	    return;
 	  }
 #endif
@@ -816,7 +818,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    }
 
 #if __WIN32__	
-            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE), 0);
+            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -827,7 +829,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      dlq_client_cleanup (client);
 	    }
 #else
-            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
+            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -920,8 +922,8 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
-#if __WIN32__	
-            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE), 0);
+#if __WIN32__
+            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -932,7 +934,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      dlq_client_cleanup (client);
 	    }
 #else
-            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
+            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -1145,14 +1147,7 @@ static int read_from_socket (int fd, char *ptr, int len)
 	while (got_bytes < len) {
 	  int n;
 
-#if __WIN32__
-
-//TODO: any flags for send/recv?
-
-	  n = recv (fd, ptr + got_bytes, len - got_bytes, 0);
-#else
-	  n = read (fd, ptr + got_bytes, len - got_bytes);
-#endif
+	  n = SOCK_RECV (fd, ptr + got_bytes, len - got_bytes);
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
@@ -1195,10 +1190,7 @@ static void send_to_client (int client, void *reply_p)
 {
 	struct agwpe_s *ph;
 	int len;
-#if __WIN32__
-#else
 	int err;
-#endif
 
 	ph = (struct agwpe_s *) reply_p;	// Replies are often hdr + other stuff.
 
@@ -1216,12 +1208,8 @@ static void send_to_client (int client, void *reply_p)
 	  debug_print (TO_CLIENT, client, ph, len);
 	}
 
-#if __WIN32__     
-	send (client_sock[client], (char*)(ph), len, 0);
-#else
-	err = write (client_sock[client], ph, len);
+	err = SOCK_SEND (client_sock[client], (char*)(ph), len);
 	(void)err;
-#endif
 }
 
 

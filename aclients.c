@@ -549,12 +549,7 @@ static void * client_thread_net (void *arg)
 
 	mon_cmd.kind_lo = 'k';
 
-#if __WIN32__	      
-	send (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd), 0);
-#else
-	err = write (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
-#endif
-
+	SOCK_SEND (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
 
 /*
  * Print all of the monitored packets.
@@ -563,14 +558,10 @@ static void * client_thread_net (void *arg)
 	while (1) {
 	  int n;
 
-#if __WIN32__
-	  n = recv (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd), 0);
-#else
-	  n = read (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
-#endif
+	  n = SOCK_RECV (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
 
 	  if (n != sizeof(mon_cmd)) {
-	    printf ("Read error, client %d received %d command bytes.\n", my_index, n);
+	    printf ("Read error, client %d received %d command bytes.  Terminating.\n", my_index, n);
 	    exit (1);
 	  }
 
@@ -581,11 +572,7 @@ static void * client_thread_net (void *arg)
 	  assert (mon_cmd.data_len >= 0 && mon_cmd.data_len < (int)(sizeof(data)));
 
 	  if (mon_cmd.data_len > 0) {
-#if __WIN32__
-	    n = recv (server_sock, data, mon_cmd.data_len, 0);
-#else
-	    n = read (server_sock, data, mon_cmd.data_len);
-#endif
+	    n = SOCK_RECV (server_sock, data, mon_cmd.data_len);
 
 	    if (n != mon_cmd.data_len) {
 	      printf ("Read error, client %d received %d data bytes.\n", my_index, n);

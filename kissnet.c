@@ -208,7 +208,7 @@ void kissnet_init (struct misc_config_s *mc)
 	pthread_t cmd_listen_tid[MAX_NET_CLIENTS];
 	int e;
 #endif
-	int kiss_port = mc->kiss_port;
+	int kiss_port = mc->kiss_port;		/* default 8001 but easily changed. */
 
 
 #if DEBUG
@@ -258,14 +258,16 @@ void kissnet_init (struct misc_config_s *mc)
 	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, kissnet_listen_thread, (void*)client, 0, NULL);
 	  if (cmd_listen_th[client] == NULL) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Could not create KISS socket command listening thread\n");
+	    dw_printf ("Could not create KISS command listening thread for client %d\n", client);
 	    return;
 	  }
 #else
-	  e = pthread_create (&(cmd_listen_tid[client]), NULL, kissnet_listen_thread, NULL);
+	  e = pthread_create (&(cmd_listen_tid[client]), NULL, kissnet_listen_thread, (void *)(long)client);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    perror("Could not create KISS socket command listening thread");
+	    dw_printf ("Could not create KISS command listening thread for client %d\n", client);
+	    // Replace add perror with better message handling.
+	    perror("");
 	    return;
 	  }
 #endif
@@ -589,6 +591,10 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("KISS TCP: Something unexpected from client application.\n");
 	      dw_printf ("Is client app treating this like an old TNC with command mode?\n");
+	      dw_printf ("This can be caused by the application sending commands to put a\n");
+	      dw_printf ("traditional TNC into KISS mode.  It is usually a harmless warning.\n");
+	      dw_printf ("For best results, configure for a KISS-only TNC to avoid this.\n");
+	      dw_printf ("In the case of APRSISCE/32, use \"Simply(KISS)\" rather than \"KISS.\"\n");
 
 	      flen = strlen((char*)fbuf);
 	      if (kiss_debug) {
@@ -623,21 +629,21 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 	    }
 
 #if __WIN32__	
-            err = send (client_sock[client], (char*)kiss_buff, kiss_len, 0);
+            err = SOCK_SEND(client_sock[client], (char*)kiss_buff, kiss_len);
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to KISS client application.  Closing connection.\n\n", WSAGetLastError());
+	      dw_printf ("\nError %d sending message to KISS client %d application.  Closing connection.\n\n", WSAGetLastError(), client);
 	      closesocket (client_sock[client]);
 	      client_sock[client] = -1;
 	      WSACleanup();
 	    }
 #else
-            err = write (client_sock[client], kiss_buff, kiss_len);
+            err = SOCK_SEND (client_sock[client], kiss_buff, kiss_len);
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to KISS client application.  Closing connection.\n\n");
+	      dw_printf ("\nError sending message to KISS client %d application.  Closing connection.\n\n", client);
 	      close (client_sock[client]);
 	      client_sock[client] = -1;
 	    }
@@ -647,63 +653,6 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 	
 } /* end kissnet_send_rec_packet */
 
-
-
-/*-------------------------------------------------------------------
- *
- * Name:        read_from_socket
- *
- * Purpose:     Read from socket until we have desired number of bytes.
- *
- * Inputs:	fd		- file descriptor.
- *		ptr		- address where data should be placed.
- *		len		- desired number of bytes.
- *
- * Description:	Just a wrapper for the "read" system call but it should
- *		never return fewer than the desired number of bytes.
- *
- * 		Not really needed for KISS because we are dealing with
- *		a stream of bytes rather than message blocks.
- *
- *--------------------------------------------------------------------*/
-
-static int read_from_socket (int fd, char *ptr, int len)
-{
-	int got_bytes = 0;
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("read_from_socket (%d, %p, %d)\n", fd, ptr, len);
-#endif
-	while (got_bytes < len) {
-	  int n;
-
-#if __WIN32__
-	  n = recv (fd, ptr + got_bytes, len - got_bytes, 0);
-#else
-	  n = read (fd, ptr + got_bytes, len - got_bytes);
-#endif
-
-//Would be useful to have more detailed explanation from the error code.
-
-#if DEBUG
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("read_from_socket: n = %d\n", n);
-#endif
-	  if (n <= 0) {
-	    return (n);
-	  }
-
-	  got_bytes += n;
-	}
-	assert (got_bytes >= 0 && got_bytes <= len);
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("read_from_socket: return %d\n", got_bytes);
-#endif
-	return (got_bytes);
-}
 
 
 /*-------------------------------------------------------------------
@@ -739,7 +688,7 @@ static int kiss_get (int client)
 
 	  /* Just get one byte at a time. */
 
-	  n = read_from_socket (client_sock[client], (char *)(&ch), 1);
+	  n = SOCK_RECV (client_sock[client], (char *)(&ch), 1);
 
 	  if (n == 1) {
 #if DEBUG9
@@ -759,7 +708,7 @@ static int kiss_get (int client)
 	  }
 
           text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError reading KISS byte from client application %d.  Closing connection.\n\n", client);
+	  dw_printf ("\nKISS client application %d has gone away.\n\n", client);
 #if __WIN32__
 	  closesocket (client_sock[client]);
 #else
@@ -775,12 +724,13 @@ static THREAD_F kissnet_listen_thread (void *arg)
 {
 	unsigned char ch;
 			
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("kissnet_listen_thread ( socket = %d )\n", client_sock);
-#endif
 
 	int client = (int)(long)arg;
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("kissnet_listen_thread ( client = %d, socket fd = %d )\n", client, client_sock[client]);
+#endif
 
 	assert (client >= 0 && client < MAX_NET_CLIENTS);
 

@@ -220,8 +220,8 @@ void kisspt_init (struct misc_config_s *mc)
 	  }
 	}
 	else {
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("Use -p command line option to enable KISS pseudo terminal.\n");
+	  //text_color_set(DW_COLOR_INFO);
+	  //dw_printf ("Use -p command line option to enable KISS pseudo terminal.\n");
 	}
 
 

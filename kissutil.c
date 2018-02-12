@@ -90,12 +90,6 @@ static THREAD_F tnc_listen_serial (void *arg);
 static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen);
 static void hex_dump (unsigned char *p, int len);
 
-// Formerly used write/read on Linux, for some forgotten reason,
-// but making them the same seems to make more sense.
-#define SOCK_SEND(s,data,size) send(s,data,size,0)
-#define SOCK_RECV(s,data,size) recv(s,data,size,0)
-
-
 static void usage(void);
 static void usage2(void);
 
@@ -809,6 +803,9 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
 	      ax25_safe_print ((char *)pinfo, info_len, 0);
 	      dw_printf ("\n");
+#if __WIN32__
+	      fflush (stdout);
+#endif
 
 /*
  * Add to receive queue directory if specified.

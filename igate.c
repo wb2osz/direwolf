@@ -1266,7 +1266,7 @@ static void send_msg_to_server (const char *imsg, int imsg_len)
 
 
 #if __WIN32__	
-        err = send (igate_sock, stemp, stemp_len, 0);
+        err = SOCK_SEND (igate_sock, stemp, stemp_len);
 	if (err == SOCKET_ERROR)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -1277,7 +1277,7 @@ static void send_msg_to_server (const char *imsg, int imsg_len)
 	  WSACleanup();
 	}
 #else
-        err = write (igate_sock, stemp, stemp_len);
+        err = SOCK_SEND (igate_sock, stemp, stemp_len);
 	if (err <= 0)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -1319,11 +1319,7 @@ static int get1ch (void)
 	  // TODO: might read complete packets and unpack from own buffer
 	  // rather than using a system call for each byte.
 
-#if __WIN32__
-	  n = recv (igate_sock, (char*)(&ch), 1, 0);
-#else
-	  n = read (igate_sock, &ch, 1);
-#endif
+	  n = SOCK_RECV (igate_sock, (char*)(&ch), 1);
 
 	  if (n == 1) {
 #if DEBUG9

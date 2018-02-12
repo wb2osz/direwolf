@@ -249,6 +249,18 @@ typedef pthread_mutex_t dw_mutex_t;
 
 
 
+// Formerly used write/read on Linux, for some forgotten reason,
+// but always using send/recv makes more sense.
+// Need option to prevent a SIGPIPE signal on Linux.  (added for 1.5 beta 2)
+
+#if __WIN32__
+#define SOCK_SEND(s,data,size) send(s,data,size,0)
+#else
+#define SOCK_SEND(s,data,size) send(s,data,size, MSG_NOSIGNAL)
+#endif
+#define SOCK_RECV(s,data,size) recv(s,data,size,0)
+
+
 /* Platform differences for string functions. */
 
 
