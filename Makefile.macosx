@@ -36,27 +36,6 @@ all :  $(APPS) direwolf.conf
 
 SYS_LIBS :=
 SYS_MIN :=
-#SDK := $(shell find /Developer -maxdepth 1 -type d -name "SDKs")
-#$(info $$SDK = ${SDK})
-#ifeq (${SDK},/Developer/SDKs)
-#	SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.8.sdk")
-#	ifeq (${SDK},/Developer/SDKs/MacOSX10.8.sdk)
-#		SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.8.sdk
-#		SYS_MIN := -mmacosx-version-min=10.8
-#	else
-#		SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.9.sdk")
-#		ifeq (${SDK},/Developer/SDKs/MacOSX10.9.sdk)
-#			SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.9.sdk
-#			SYS_MIN := -mmacosx-version-min=10.9
-#		else
-#			SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.10.sdk")
-#			ifeq (${SDK},/Developer/SDKs/MacOSX10.10.sdk)
-#				SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.10.sdk
-#				SYS_MIN := -mmacosx-version-min=10.10
-#			endif
-#		endif
-#	endif
-#endif
 
 SYS_LIBS := $(shell ./search_sdks.sh)
 EXTRA_CFLAGS :=
@@ -70,8 +49,12 @@ endif
 
 # Change as required in support of the available libraries
 
-#CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+UNAME_M := $(shell uname -m)
+ifeq (${UNAME_M},x86_64)
+CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+else
 CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
+endif
 
 # _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
 # Explanation here:  https://github.com/wb2osz/direwolf/issues/62
