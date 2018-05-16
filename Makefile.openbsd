@@ -113,7 +113,7 @@ endif
 # ---------- ARM - pcDuino ----------
 #
 # clang 5.0.1 running on OpenBSD-6.3/armv7.
-# Cortex-A8 (ARMv7A) + VFPv3 + NEON
+# Cortex-A8 (ARMv7A) + VFPv3 + NEON @ 1008MHz
 #
 #
 #       seconds		options
@@ -127,23 +127,23 @@ endif
 #
 
 #
-# ---------- ARM - Banana Pi ----------
+# ---------- ARM - Orange Pi PC ----------
 #
 # clang 5.0.1 running on OpenBSD-6.3/armv7.
-# Cortex-A7 (ARMv7A) + VFPv4 + NEON
+# Cortex-A7 (ARMv7A) + VFPv4 + NEON @ 1008MHz
 #
 #
 #       seconds		options
 #       ---------	-------
-#       10037.693	-O3 -ffast-math -mfpu=neon
-#         437.039	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfp
-#         436.613	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv3
-#         436.318	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv3-d16
-#         358.505	-O3 -ffast-math -mfloat-abi=softfp -mfpu=neon
-#         357.988	-O3 -ffast-math -mfloat-abi=hard -mfpu=neon
-#         436.393	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv4
-#         436.413	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv4-d16
-#         359.145	-O3 -ffast-math -mfloat-abi=softfp -mfpu=neon-vfpv4
+#        8961.491	-O3 -ffast-math
+#         399.880	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfp
+#         400.615	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv3
+#         399.659	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv3-d16
+#         329.392	-O3 -ffast-math -mfloat-abi=softfp -mfpu=neon
+#         329.060	-O3 -ffast-math -mfloat-abi=hard -mfpu=neon
+#         398.590	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv4
+#         399.478	-O3 -ffast-math -mfloat-abi=softfp -mfpu=vfpv4-d16
+#         328.698	-O3 -ffast-math -mfloat-abi=softfp -mfpu=neon-vfpv4
 #
 
 #
