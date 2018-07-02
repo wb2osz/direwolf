@@ -255,7 +255,7 @@ int main(int argc, char **argv)
               modem.achan[0].baud = atoi(optarg);
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
-              if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
+              if (modem.achan[0].baud != 100 && (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD)) {
                 text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
                 exit (EXIT_FAILURE);
@@ -264,7 +264,12 @@ int main(int argc, char **argv)
 	      /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
 	      /* that need to be kept in sync.  Maybe it could be a common function someday. */
 
-	      if (modem.achan[0].baud < 600) {
+	      if (modem.achan[0].baud == 100) {
+                  modem.achan[0].modem_type = MODEM_AFSK;
+                  modem.achan[0].mark_freq = 1615;
+                  modem.achan[0].space_freq = 1785;
+	      }
+	      else if (modem.achan[0].baud < 600) {
                   modem.achan[0].modem_type = MODEM_AFSK;
                   modem.achan[0].mark_freq = 1600;		// Typical for HF SSB
                   modem.achan[0].space_freq = 1800;
