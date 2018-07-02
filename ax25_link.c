@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017, 2018  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -286,7 +286,7 @@ typedef struct ax25_dlsm_s {
 	int k_maxframe;				// Window size. Defaults to 4 (mod 8) or 32 (mod 128).
 						// Maximum number of unacknowledged information
 						// frames that can be outstanding.
-						// "MAXFRAME" parameter in configuration file.
+						// "MAXFRAME" or "EMAXFRAME" parameter in configuration file.
 
 	int rc;					// Retry count.  Give up after n2.
 
@@ -418,7 +418,7 @@ typedef struct ax25_dlsm_s {
 // Counting outgoing could probably be done in lm_data_request so
 // it would not have to be scattered all over the place.  TBD
 
-	int count_recv_frame_type[frame_not_AX25+1];	
+	int count_recv_frame_type[frame_not_AX25+1];
 
 	int peak_rc_value;			// Peak value of retry count (rc).
 
@@ -427,6 +427,9 @@ typedef struct ax25_dlsm_s {
 
 	cdata_t *i_frame_queue;		// Connected data from client which has not been transmitted yet.
 						// Linked list.
+						// The name is misleading because these are just blocks of
+						// data, not "I frames" at this point.  The name comes from
+						// the protocol specification.
 
 	cdata_t *txdata_by_ns[128];		// Data which has already been transmitted.
 						// Indexed by N(S) in case it gets lost and needs to be sent again.
@@ -560,6 +563,13 @@ static int AX25MODULO(int n, int m, const char *file, const char *func, int line
 	// Use masking, rather than % operator, so negative numbers are handled properly.
 	return (n & (m-1));
 }
+
+
+// Test whether we can send more or if we need to wait
+// because we have reached 'maxframe' outstanding frames.
+// Argument must be 'S'.
+
+#define WITHIN_WINDOW_SIZE(x) (x->vs != AX25MODULO(x->va + x->k_maxframe, x->modulo, __FILE__, __func__, __LINE__))
 
 
 // Timer macros to provide debug output with location from where they are called.
@@ -1396,8 +1406,7 @@ static void data_request_good_size (ax25_dlsm_t *S, cdata_t *txdata)
 	  case 	state_4_timer_recovery:
 
 	    if ( ( ! S->peer_receiver_busy ) &&
-	            S->vs != AX25MODULO(S->va + S->k_maxframe, S->modulo, __FILE__, __func__, __LINE__) ) {
-
+	            WITHIN_WINDOW_SIZE(S) ) {
 	      S->acknowledge_pending = 1;
 	      lm_seize_request (S->chan);
 	    }
@@ -2201,6 +2210,21 @@ void lm_data_indication (dlq_item_t *E)
 
 	  case frame_not_AX25:         // Could not get control byte from frame.
 	    break;
+	}
+
+// An incoming frame might have ack'ed frames we sent or indicated peer is no longer busy.
+// Rather than putting this test in many places, where those conditions, may have changed,
+// we will try to catch them all on this single path.
+// Start transmission if we now have some outgoing data ready to go.
+// (Added in 1.5 beta 3 for issue 132.)
+
+	if ( S->i_frame_queue != NULL &&
+		(S->state == state_3_connected || S->state == state_4_timer_recovery) &&
+		( ! S->peer_receiver_busy ) &&
+		WITHIN_WINDOW_SIZE(S) ) {
+
+	  //S->acknowledge_pending = 1;
+	  lm_seize_request (S->chan);
 	}
 
 } /* end lm_data_indication */
@@ -6201,7 +6225,7 @@ static void i_frame_pop_off_queue (ax25_dlsm_t *S)
     
 	    while ( ( ! S->peer_receiver_busy ) &&
 	            S->i_frame_queue != NULL &&
-	            S->vs != AX25MODULO(S->va + S->k_maxframe, S->modulo, __FILE__, __func__, __LINE__) ) {
+	            WITHIN_WINDOW_SIZE(S) ) {
 
 	      cdata_t *txdata;
 

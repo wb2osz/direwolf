@@ -1,6 +1,22 @@
 
 # Revision History #
 
+## Version 1.5 -- Beta Test 3 -- July 2018 ##
+
+### New Features: ###
+
+- "**NOXID**" configuration file option to avoid sending XID command to listed station(s).  If other end is a partial v2.2 implementation, which recognizes SABME, but not XID, we would waste a lot of time resending XID many times before giving up.   This is less drastic than the "**V20**" option which doesn't even attempt to use v2.2 with listed station(s).
+
+### Bugs Fixed: ###
+
+- Issue 132 - Under certain conditions, outgoing connected mode data would get stuck in a queue and not be transmitted.  This could happen if client application sends a burst of data larger than the "window" size (MAXFRAME or EMAXFRAME option).
+
+### Notes: ###
+
+Windows binary distribution now uses gcc (MinGW) version 6.3.0.
+
+
+
 ## Version 1.5 -- Beta Test 2 -- February 2018 ##
 
 ### Bugs Fixed: ###
