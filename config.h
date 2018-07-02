@@ -111,6 +111,13 @@ struct misc_config_s {
 
 	int v20_count;		/* Number of station addresses in array above. */
 
+	char **noxid_addrs;	/* Stations known not to understand XID command so don't */
+				/* waste time sending it and eventually giving up. */
+				/* AX.25 for Linux is the one known case, so far, where */
+				/* SABME is implemented but XID is not. */
+
+	int noxid_count;	/* Number of station addresses in array above. */
+
 
 // Beacons.
  			

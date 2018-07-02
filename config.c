@@ -904,6 +904,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 2;	/* Max SABME before falling back to SABM. */
 	p_misc_config->v20_addrs = NULL;			/* Go directly to v2.0 for stations listed. */
 	p_misc_config->v20_count = 0;
+	p_misc_config->noxid_addrs = NULL;			/* Don't send XID to these stations. */
+	p_misc_config->noxid_count = 0;
 
 /* 
  * Try to extract options from a file.
@@ -4788,6 +4790,42 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Line %d: Invalid station address for V20 command.\n", line);
+
+	        // continue processing any others following.
+	      }
+	      t = split(NULL,0);
+	    }
+	  }
+
+
+/*
+ * NOXID  address [ address ... ] 	- Stations known not to understand XID.
+ *					  After connecting to these (with v2.2 obviously), don't try using XID commmand.
+ *					  AX.25 for Linux is the one known case so far.
+ *					  Possible to have multiple and they are cummulative.
+ */
+
+	  else if (strcasecmp(t, "NOXID") == 0) {
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing address(es) for NOXID.\n", line);
+	      continue;
+	    }
+
+	    while (t != NULL) {
+	      int const strict = 2;
+	      char call_no_ssid[AX25_MAX_ADDR_LEN];
+	      int ssid, heard;
+
+	      if (ax25_parse_addr (AX25_DESTINATION, t, strict, call_no_ssid, &ssid, &heard)) {
+	        p_misc_config->noxid_addrs = (char**)realloc (p_misc_config->noxid_addrs, sizeof(char*) * (p_misc_config->noxid_count + 1));
+	        p_misc_config->noxid_addrs[p_misc_config->noxid_count++] = strdup(t);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Invalid station address for NOXID command.\n", line);
 
 	        // continue processing any others following.
 	      }

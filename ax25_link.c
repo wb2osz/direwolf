@@ -6357,7 +6357,18 @@ static void mdl_negotiate_request (ax25_dlsm_t *S)
 	int p = 1;
 	int nopid = 0;
 	packet_t pp;
+	int n;
 
+// At least one known [partial] v2.2 implementation understands SABME but not XID.
+// Rather than wasting time, sending XID repeatedly until giving up, we have a workaround.
+// The configuration file can contain a list of stations known not to respond to XID.
+// Obviously this applies only to v2.2 because XID was not part of v2.0.
+
+	for (n = 0; n < g_misc_config_p->noxid_count; n++) {
+	  if (strcmp(S->addrs[PEERCALL],g_misc_config_p->noxid_addrs[n]) == 0) {
+	    return;
+	  }
+	}
 
 	switch (S->mdl_state) {
 
