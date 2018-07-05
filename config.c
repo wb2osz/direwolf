@@ -993,9 +993,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  if (strncasecmp(t, "ADEVICE", 7) == 0) {
 	    adevice = 0;
-	    if (isdigit(t[7])) {
-	      adevice = t[7] - '0';
-	    }
+            char adevicestr[2];
+            int t_len;
+
+            adevicestr[0] = adevicestr[1] = 0;
+
+            t_len = strnlen(t,9);
+            if (t_len == 8)
+                adevicestr[0] = t[7];
+            else if (t_len == 9) {
+                adevicestr[0] = t[7];
+                adevicestr[1] = t[8];
+            }
+            adevice = atoi(adevicestr);
 
 	    if (adevice < 0 || adevice >= MAX_ADEVS) {
 	      text_color_set(DW_COLOR_ERROR);
