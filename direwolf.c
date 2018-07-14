@@ -176,6 +176,7 @@ static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
+static int q_i_opt = 0;			/* "-q i" Quiet, suppress the printing of APRS-IS packets. */
 
 
 
@@ -509,6 +510,7 @@ int main (int argc, char *argv[])
 	     switch (*p) {
 	      case 'h':  q_h_opt = 1; break;
 	      case 'd':  q_d_opt = 1; break;
+	      case 'i':  q_i_opt = 1; break;
 	      default: break;
 	     }
 	    }
@@ -782,7 +784,7 @@ int main (int argc, char *argv[])
  * Initialize the digipeater and IGate functions.
  */
 	digipeater_init (&audio_config, &digi_config);
-	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
+	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt, q_i_opt);
 	cdigipeater_init (&audio_config, &cdigi_config);
 	pfilter_init (&igate_config, d_f_opt);
 	ax25_link_init (&misc_config);
@@ -1274,6 +1276,7 @@ static void usage (char **argv)
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
+	dw_printf ("       i             i = Display of APRS-IS packets.\n");
 	dw_printf ("    -t n           Text colors.  1=normal, 0=disabled.\n");
 	dw_printf ("    -a n           Audio statistics interval in seconds.  0 to disable.\n");
 #if __WIN32__
