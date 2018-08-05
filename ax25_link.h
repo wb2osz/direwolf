@@ -52,6 +52,8 @@ void ax25_link_init (struct misc_config_s *pconfig);
 // These functions must be called on a single thread, one at a time.
 // The Data Link Queue (DLQ) is used to serialize events from multiple sources.
 
+// Maybe the dispatch switch should be moved to ax25_link.c so they can all
+// be made static and they can't be called from the wrong place accidentally.
 
 void dl_connect_request (dlq_item_t *E);
 
@@ -67,6 +69,8 @@ void dl_client_cleanup (dlq_item_t *E);
 
 
 void lm_data_indication (dlq_item_t *E);
+
+void lm_seize_confirm (dlq_item_t *E);
 
 void lm_channel_busy (dlq_item_t *E);
 

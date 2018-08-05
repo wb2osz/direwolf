@@ -156,6 +156,8 @@
  *		Implemented Multi Selective Reject.
  *		More efficient generation of SREJ frames.
  *		Reduced number of duplicate I frames sent for both REJ and SREJ cases.
+ *		Avoided unnecessary RR when I frame could take care of the ack.
+ *		(This led to issue 132 where outgoing data sometimes got stuck in the queue.)
  *
  *------------------------------------------------------------------*/
 
@@ -590,8 +592,6 @@ static int AX25MODULO(int n, int m, const char *file, const char *func, int line
 
 
 static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len);
-
-static void lm_seize_confirm (ax25_dlsm_t *S);
 
 static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid, char *info_ptr, int info_len);
 static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *info_ptr, int info_len);
@@ -1801,8 +1801,6 @@ static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len)
  *
  * Description:	We need to pause the timers when the channel is busy.
  *
- *		Signal lm_seize_confirm when we have started to transmit.
- *	
  *------------------------------------------------------------------------------*/
 
 static int dcd_status[MAX_CHANS];
@@ -1859,14 +1857,6 @@ void lm_channel_busy (dlq_item_t *E)
 	      S->radio_channel_busy = 1;
 	      PAUSE_T1;
 	      PAUSE_TM201;
-
-	      // Did channel become busy due to PTT turning on?
-
-	      if ( E->activity == OCTYPE_PTT && E->status == 1) {
-
-	        lm_seize_confirm (S);	// C4.2.  "This primitive indicates, to the Data-link State
-					// machine, that the transmission opportunity has arrived."
-	      }
 	    }
 	    else if ( ! busy && S->radio_channel_busy) {
 	      S->radio_channel_busy = 0;
@@ -1901,32 +1891,43 @@ void lm_channel_busy (dlq_item_t *E)
  *
  *------------------------------------------------------------------------------*/
 
-static void lm_seize_confirm (ax25_dlsm_t *S)
+void lm_seize_confirm (dlq_item_t *E)
 {
 
-	switch (S->state) {
+	assert (E->chan >= 0 && E->chan < MAX_CHANS);
 
-	  case 	state_0_disconnected:
-	  case 	state_1_awaiting_connection:
-	  case 	state_2_awaiting_release:
-	  case 	state_5_awaiting_v22_connection:
+	ax25_dlsm_t *S;
 
-	    break;
+	for (S = list_head; S != NULL; S = S->next) {
 
-	  case 	state_3_connected:
-	  case 	state_4_timer_recovery:
+	  if (E->chan == S->chan) {
 
-	    // v1.5 change in strategy.
-	    // New I frames, not sent yet, are delayed until after processing anything in the received transmission.
-	    // Previously we started sending new frames, from the client app, as soon as they arrived.
-	    // Now, we first take care of those in progress before throwing more into the mix.
 
-	    i_frame_pop_off_queue(S);
+	    switch (S->state) {
 
-	    if (S->acknowledge_pending) {
-	      S->acknowledge_pending = 0;
-	      enquiry_response (S, frame_not_AX25, 0);
-	    }
+	      case 	state_0_disconnected:
+	      case 	state_1_awaiting_connection:
+	      case 	state_2_awaiting_release:
+	      case 	state_5_awaiting_v22_connection:
+
+	        break;
+
+	      case 	state_3_connected:
+	      case 	state_4_timer_recovery:
+
+	        // v1.5 change in strategy.
+	        // New I frames, not sent yet, are delayed until after processing anything in the received transmission.
+	        // Previously we started sending new frames, from the client app, as soon as they arrived.
+	        // Now, we first take care of those in progress before throwing more into the mix.
+
+	        i_frame_pop_off_queue(S);
+
+	        // Need an RR if we didn't have I frame send the necessary ack.
+
+	        if (S->acknowledge_pending) {
+	          S->acknowledge_pending = 0;
+	          enquiry_response (S, frame_not_AX25, 0);
+	        }
 
 // Implementation difference: The flow chart for state 3 has LM-RELEASE Request here.
 // I don't think I need it because the transmitter will turn off
@@ -1935,7 +1936,9 @@ static void lm_seize_confirm (ax25_dlsm_t *S)
 // Erratum: The original spec had LM-SEIZE request here, for state 4, which didn't seem right.
 // The 2006 revision has LM-RELEASE Request so states 3 & 4 are the same.
 	
-	    break;
+	        break;
+	    }
+	  }
 	}
 
 } /* lm_seize_confirm */
