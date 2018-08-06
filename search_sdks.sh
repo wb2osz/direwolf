@@ -43,7 +43,7 @@ if [ $valid_flag -eq "0" ]; then
 
     prompt="Select SDK to use:"
 
-    loc1=( $(find /Applications/XCode.app -type d -name "MacOSX10.*.sdk") )
+    loc1=( $(find /Applications/Xcode.app -type l -name "MacOSX10.*.sdk") )
     loc2=( $(find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.*.sdk") )
 
     options=("${loc1[@]}" "${loc2[@]}")
