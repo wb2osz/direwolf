@@ -253,7 +253,7 @@ typedef pthread_mutex_t dw_mutex_t;
 // but always using send/recv makes more sense.
 // Need option to prevent a SIGPIPE signal on Linux.  (added for 1.5 beta 2)
 
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 #define SOCK_SEND(s,data,size) send(s,data,size,0)
 #else
 #define SOCK_SEND(s,data,size) send(s,data,size, MSG_NOSIGNAL)
