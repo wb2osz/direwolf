@@ -134,7 +134,7 @@ static int cm108_write (char *name, int iomask, int iodata);
 
 // CM108B is 0012.
 // CM119B is 0013.
-// CM108AH is 0139 programmable by MSEL and MODE pin.
+// CM108AH is 013c programmable by MSEL and MODE pin.
 // CM119A is 013A programmable by MSEL and MODE pin.
 
 // To make matters even more confusing, these can be overridden
@@ -144,11 +144,10 @@ static int cm108_write (char *name, int iomask, int iodata);
 #define CMEDIA_PID1_MIN 0x0008		// range for CM108, CM109, CM119 (no following letters)
 #define CMEDIA_PID1_MAX 0x000f
 
-#define CMEDIA_PID_CM108AH	0x0139		// CM108AH
+#define CMEDIA_PID_CM108AH	0x013c		// CM108AH
 #define CMEDIA_PID_CM108B	0x0012		// CM108B
 #define CMEDIA_PID_CM119A	0x013a		// CM119A
 #define CMEDIA_PID_CM119B	0x0013		// CM119B
-#define CMEDIA_PID_HS100	0x013c		// HS100
 
 // The SSS chips seem to be pretty much compatible but they have only two GPIO.
 // https://irongarment.wordpress.com/2011/03/29/cm108-compatible-chips-with-gpio/
@@ -169,7 +168,6 @@ static int cm108_write (char *name, int iomask, int iodata);
 //	CM119		0d8c	0008-000f *	8
 //	CM119A		0d8c	013a *		8
 //	CM119B		0d8c	0013		8
-//	HS100		0d8c	013c		0
 //
 //	SSS1621		0c76	1605		2 	per ZL3AME, Can't find data sheet
 //	SSS1623		0c76	1607,160b	2	per ZL3AME, Not in data sheet.
