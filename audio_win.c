@@ -951,7 +951,15 @@ int audio_put (int a, int c)
 	  timeout--;
 	  if (timeout <= 0) {
 	    text_color_set(DW_COLOR_ERROR);
+
+// TODO: open issues 78 & 165.  How can we avoid/improve this?
+
 	    dw_printf ("Audio output failure waiting for buffer.\n");
+	    dw_printf ("This can occur when we are producing audio output for\n");
+	    dw_printf ("transmit and the operating system doesn't provide buffer\n");
+	    dw_printf ("space after waiting and retrying many times.\n");
+	    //dw_printf ("In recent years, this has been reported only when running the\n");
+	    //dw_printf ("Windows version with VMWare on a Macintosh.\n");
 	    ptt_term ();
 	    return (-1);
 	  }
