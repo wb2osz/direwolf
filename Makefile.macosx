@@ -74,8 +74,9 @@ CFLAGS += -D_BSD_SOURCE
 # get much better results by telling it we have at least a Pentium 3
 # which hass the SSE instructions.
 
-CFLAGS += -march=core2 -msse4.1 -std=gnu99
+#CFLAGS += -march=core2 -msse4.1 -std=gnu99
 #CFLAGS += -march=pentium3 -sse
+CFLAGS += -march=native
 
 
 # Add -ffastmath in only if compiler version recognizes it.
