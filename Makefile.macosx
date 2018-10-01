@@ -44,7 +44,7 @@ ifeq (${DARWIN_CC},)
 DARWIN_CC := $(shell which gcc)
 EXTRA_CFLAGS :=
 else
-EXTRA_CFLAGS := -fvectorize -fslp-vectorize -fslp-vectorize-aggressive -pthread
+EXTRA_CFLAGS := -fvectorize -fslp-vectorize -pthread
 endif
 
 # Change as required in support of the available libraries
