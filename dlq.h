@@ -35,7 +35,7 @@ typedef struct cdata_s {
 
 /* Types of things that can be in queue. */
 
-typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_CHANNEL_BUSY, DLQ_CLIENT_CLEANUP} dlq_type_t;
+typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_CHANNEL_BUSY, DLQ_SEIZE_CONFIRM, DLQ_CLIENT_CLEANUP} dlq_type_t;
 
 
 /* A queue item. */
@@ -115,6 +115,8 @@ void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
 void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
 
 void dlq_channel_busy (int chan, int activity, int status);
+
+void dlq_seize_confirm (int chan);
 
 void dlq_client_cleanup (int client);
 

@@ -312,7 +312,7 @@ W# COM3 and the client application will use COM4.
 W#
 W# Uncomment following line to use this feature.
 W
-W#NULLMODEM COM3
+W#SERIALKISS COM3
 W
 W
 C#
@@ -434,22 +434,26 @@ C#PBEACON sendto=IG delay=0:30 every=60:00 symbol="igate" overlay=T lat=42^37.14
 C
 C
 C# To relay messages from the Internet to radio, you need to add
-C# one more option with the transmit channel number and a VIA path.
+C# one more options with the transmit channel number and a VIA path.
 C
 C#IGTXVIA 0 WIDE1-1
 C
-C# You might want to apply a filter for what packets will be obtained from the server.
-C# Read about filters here:  http://www.aprs-is.net/javaprsfilter.aspx
+C# The APRS Internet Server (APRS-IS) has its own idea about what you
+C# should be transmitting.  This includes "messages" addressed to stations
+C# recently heard in your area.  For special situations, you can subscribe
+C# to
+C# decrease what you are already subscribed to.  This is known as a server
+C# side filter.  Read here:  http://www.aprs-is.net/javaprsfilter.aspx
 C# Example, positions and objects within 50 km of my location:
 C
 C#IGFILTER m/50 
 C
-C# That is known as a server-side filter.  It is processed by the IGate server.
-C# You can also apply local filtering to limit what will be transmitted on the 
-C# RF side.  For example, transmit only "messages" on channel 0 and weather 
-C# reports on channel 1. 
+C# Sometimes the server will send you more than you want. You can also apply
+C# local filtering to limit what will be transmitted on the RF side.
+C# For example, transmit only "messages" (which is the default) on channel 0
+C# and weather reports on channel 1.
 C
-C#FILTER IG 0 t/m
+C#FILTER IG 0 i/30
 C#FILTER IG 1 t/wn
 C
 C# Finally, we don't want to flood the radio channel.  

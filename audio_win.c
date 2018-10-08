@@ -313,8 +313,13 @@ int audio_open (struct audio_s *pa)
 
 	      /* Does config file have a number?  */
 	      /* If so, it is an index into list of devices. */
+	      /* Originally only a single digit was recognized.  */
+	      /* v 1.5 also recognizes two digits.  (Issue 116) */
 
 	      if (strlen(pa->adev[a].adevice_in) == 1 && isdigit(pa->adev[a].adevice_in[0])) {
+	        in_dev_no[a] = atoi(pa->adev[a].adevice_in);
+	      }
+	      else if (strlen(pa->adev[a].adevice_in) == 2 && isdigit(pa->adev[a].adevice_in[0]) && isdigit(pa->adev[a].adevice_in[1])) {
 	        in_dev_no[a] = atoi(pa->adev[a].adevice_in);
 	      }
 
@@ -342,6 +347,9 @@ int audio_open (struct audio_s *pa)
  * Purhaps we'd like to add UDP for an SDR transmitter.
  */
 	    if (strlen(pa->adev[a].adevice_out) == 1 && isdigit(pa->adev[a].adevice_out[0])) {
+	      out_dev_no[a] = atoi(pa->adev[a].adevice_out);
+	    }
+	    else if (strlen(pa->adev[a].adevice_out) == 2 && isdigit(pa->adev[a].adevice_out[0]) && isdigit(pa->adev[a].adevice_out[1])) {
 	      out_dev_no[a] = atoi(pa->adev[a].adevice_out);
 	    }
 
@@ -842,7 +850,7 @@ int audio_get (int a)
 
               assert (A->udp_sock > 0);
 
-	      res = recv (A->udp_sock, A->stream_data, SDR_UDP_BUF_MAXLEN, 0);
+	      res = SOCK_RECV (A->udp_sock, A->stream_data, SDR_UDP_BUF_MAXLEN);
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Can't read from udp socket, errno %d", WSAGetLastError());
@@ -943,7 +951,15 @@ int audio_put (int a, int c)
 	  timeout--;
 	  if (timeout <= 0) {
 	    text_color_set(DW_COLOR_ERROR);
+
+// TODO: open issues 78 & 165.  How can we avoid/improve this?
+
 	    dw_printf ("Audio output failure waiting for buffer.\n");
+	    dw_printf ("This can occur when we are producing audio output for\n");
+	    dw_printf ("transmit and the operating system doesn't provide buffer\n");
+	    dw_printf ("space after waiting and retrying many times.\n");
+	    //dw_printf ("In recent years, this has been reported only when running the\n");
+	    //dw_printf ("Windows version with VMWare on a Macintosh.\n");
 	    ptt_term ();
 	    return (-1);
 	  }

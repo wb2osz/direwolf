@@ -33,6 +33,9 @@
  *		APRS iGate properties
  *		http://wiki.ham.fi/APRS_iGate_properties
  *
+ *		Notes to iGate developers
+ *		https://github.com/hessu/aprsc/blob/master/doc/IGATE-HINTS.md#igates-dropping-duplicate-packets-unnecessarily
+ *
  *		SATgate mode.
  *		http://www.tapr.org/pipermail/aprssig/2016-January/045283.html
  *
@@ -1263,7 +1266,7 @@ static void send_msg_to_server (const char *imsg, int imsg_len)
 
 
 #if __WIN32__	
-        err = send (igate_sock, stemp, stemp_len, 0);
+        err = SOCK_SEND (igate_sock, stemp, stemp_len);
 	if (err == SOCKET_ERROR)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -1274,7 +1277,7 @@ static void send_msg_to_server (const char *imsg, int imsg_len)
 	  WSACleanup();
 	}
 #else
-        err = write (igate_sock, stemp, stemp_len);
+        err = SOCK_SEND (igate_sock, stemp, stemp_len);
 	if (err <= 0)
 	{
 	  text_color_set(DW_COLOR_ERROR);
@@ -1316,11 +1319,7 @@ static int get1ch (void)
 	  // TODO: might read complete packets and unpack from own buffer
 	  // rather than using a system call for each byte.
 
-#if __WIN32__
-	  n = recv (igate_sock, (char*)(&ch), 1, 0);
-#else
-	  n = read (igate_sock, &ch, 1);
-#endif
+	  n = SOCK_RECV (igate_sock, (char*)(&ch), 1);
 
 	  if (n == 1) {
 #if DEBUG9
@@ -1959,9 +1958,37 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  *		There is a 1 / 65536 chance of getting a false positive match
  *		which is good enough for this application.
  *
+ *
+ * Original thinking:
+ *
+ *		Occasionally someone will get on one of the discussion groups and say:
+ *		I don't think my IGate is working.  I look at packets, from local stations,
+ *		on aprs.fi or findu.com, and they are always through some other IGate station,
+ *		never mine.
+ *		Then someone has to explain, this is not a valid strategy for analyzing
+ *		everything going thru the network.   The APRS-IS servers drop duplicate
+ *		packets (ignoring the via path) within a 30 second period.  If some
+ *		other IGate gets the same thing there a millisecond faster than you,
+ *		the one you send is discarded.
+ *		In this scenario, it would make sense to perform additional duplicate
+ *		suppression before forwarding RF packets to the Server.
+ *		I don't recall if I saw some specific recommendation to do this or if
+ *		it just seemed like the obvious thing to do to avoid sending useless
+ *		stuff that would just be discarded anyhow.  It seems others came to the
+ *		same conclusion.  http://www.tapr.org/pipermail/aprssig/2016-July/045907.html
+ *
+ * Version 1.5:	Rethink strategy.
+ *
+ *		Issue 85, https://github.com/wb2osz/direwolf/issues/85 ,
+ *		got me thinking about this some more.  Sending more information will
+ *		allow the APRS-IS servers to perform future additional network analysis.
+ *		To make a long story short, the RF>IS direction duplicate checking
+ *		is now disabled.   The code is still there in case I change my mind
+ *		and want to add a configuration option to allow it.  The dedupe
+ *		time is set to 0 which means don't do the checking.
+ *
  *--------------------------------------------------------------------*/
 
-#define RX2IG_DEDUPE_TIME 60		/* Do not send duplicate within 60 seconds. */
 #define RX2IG_HISTORY_MAX 30		/* Remember the last 30 sent to IGate server. */
 
 static int rx2ig_insert_next;
@@ -1981,6 +2008,12 @@ static void rx_to_ig_init (void)
 
 static void rx_to_ig_remember (packet_t pp)
 {
+
+// No need to save the information if we are not doing duplicate checking.
+
+	if (save_igate_config_p->rx2ig_dedupe_time == 0) {
+	  return;
+	}
 
        	rx2ig_time_stamp[rx2ig_insert_next] = time(NULL);
         rx2ig_checksum[rx2ig_insert_next] = ax25_dedupe_crc(pp);
@@ -2031,8 +2064,21 @@ static int rx_to_ig_allow (packet_t pp)
 	  dw_printf ("rx_to_ig_allow? %d \"%s>%s:%s\"\n", crc, src, dest, pinfo);
 	}
 
+
+// Do we have duplicate checking at all in the RF>IS direction?
+
+	if (save_igate_config_p->rx2ig_dedupe_time == 0) {
+	  if (s_debug >= 2) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("rx_to_ig_allow? YES, no dedupe checking\n");
+	  }
+	  return 1;
+	}
+
+// Yes, check for duplicates within certain time.
+
 	for (j=0; j<RX2IG_HISTORY_MAX; j++) {
-	  if (rx2ig_checksum[j] == crc && rx2ig_time_stamp[j] >= now - RX2IG_DEDUPE_TIME) {
+	  if (rx2ig_checksum[j] == crc && rx2ig_time_stamp[j] >= now - save_igate_config_p->rx2ig_dedupe_time) {
 	    if (s_debug >= 2) {
 	      text_color_set(DW_COLOR_DEBUG);
 	      // could be multiple entries and this might not be the most recent.

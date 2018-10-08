@@ -16,7 +16,7 @@
 #
 
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest kissutil
 
 
 # People say we need -mthreads option for threads to work properly.
@@ -30,6 +30,8 @@ CFLAGS := -Ofast -march=pentium3 -msse -Iregex -Iutm -Igeotranz -mthreads -DUSE_
 AR := ar
 
 CFLAGS += -g
+# TEMP EXPERIMENT - DO NOT RELEASE
+#CFLAGS += -fsanitize=undefined
 
 # For version 1.4, we upgrade from gcc 4.6.2 to 4.9.3.
 
@@ -98,11 +100,11 @@ demod_psk.o  : fsk_demod_state.h
 direwolf : direwolf.o config.o recv.o demod.o dsp.o demod_afsk.o demod_psk.o demod_9600.o hdlc_rec.o \
 		hdlc_rec2.o multi_modem.o rdq.o rrbb.o dlq.o \
 		fcs_calc.o ax25_pad.o ax25_pad2.o xid.o \
-		decode_aprs.o symbols.o server.o kiss.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
+		decode_aprs.o symbols.o server.o kiss.o kissserial.o kissnet.o kiss_frame.o hdlc_send.o fcs_calc.o \
 		gen_tone.o morse.o audio_win.o audio_stats.o digipeater.o cdigipeater.o pfilter.o dedupe.o tq.o xmit.o \
 		ptt.o beacon.o dwgps.o encode_aprs.o latlong.o textcolor.o \
 		dtmf.o aprs_tt.o tt_user.o tt_text.o igate.o waypoint.o serial_port.o log.o telemetry.o \
-		dwgps.o dwgpsnmea.o dtime_now.o mheard.o ax25_link.o \
+		dwgps.o dwgpsnmea.o dtime_now.o mheard.o ax25_link.o cm108.c \
 		dw-icon.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
@@ -159,7 +161,9 @@ tocalls-symbols :
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.c regex.a misc.a geotranz.a
+# First three use .c rather than .o because they depend on DECAMAIN definition.
+
+decode_aprs : decode_aprs.c kiss_frame.c ax25_pad.c dwgpsnmea.o dwgps.o serial_port.o symbols.o  textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o regex.a misc.a geotranz.a
 	$(CC) $(CFLAGS) -DDECAMAIN -o decode_aprs $^
 
 
@@ -191,6 +195,12 @@ log2gpx : log2gpx.c textcolor.o misc.a
 
 gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o morse.o dtmf.o textcolor.o dsp.o misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^
+
+
+# Connected mode packet application server.
+
+appserver : appserver.o textcolor.o ax25_pad.o fcs_calc.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
 
@@ -266,7 +276,6 @@ strlcat.o : misc/strlcat.c
 
 
 # Combine some unit tests into a single regression sanity check.
-
 
 check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
 
@@ -548,6 +557,14 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
 
+# Talk to a KISS TNC.
+
+# Note:  kiss_frame.c has conditional compilation on KISSUTIL.
+
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o sock.o dtime_now.o misc.a regex.a
+	$(CC) $(CFLAGS) -DKISSUTIL -o $@ $^ -lwinmm -lws2_32
+
+
 # Touch Tone to Speech sample application.
 
 ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o misc.a regex.a
@@ -591,7 +608,7 @@ z := $(notdir ${CURDIR})
 
 .PHONY: dist-win
 dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2ll.exe \
-			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe \
+			aclients.exe log2gpx.exe gen_packets.exe atest.exe ttcalc.exe kissutil.exe \
 		 	generic.conf dwespeak.bat \
 			README.md CHANGES.md \
 			doc/User-Guide.pdf \
@@ -600,20 +617,25 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 	rm -f ../$z-win.zip
 	egrep '^C|^W' generic.conf | cut -c2-999 > direwolf.conf
 	unix2dos direwolf.conf
+	cp doc/README.md README-doc.md
 	zip --junk-paths ../$z-win.zip \
 		README.md \
 		CHANGES.md \
-		doc/User-Guide.pdf \
-		doc/Raspberry-Pi-APRS.pdf \
+		README-doc.md \
+		doc/2400-4800-PSK-for-APRS-Packet-Radio.pdf \
 		doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf \
 		doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf \
+		doc/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf \
 		doc/APRS-Telemetry-Toolkit.pdf \
 		doc/APRStt-Implementation-Notes.pdf \
 		doc/APRStt-interface-for-SARTrack.pdf \
 		doc/APRStt-Listening-Example.pdf \
+		doc/Bluetooth-KISS-TNC.pdf \
+		doc/Going-beyond-9600-baud.pdf \
 		doc/Raspberry-Pi-APRS.pdf \
 		doc/Raspberry-Pi-APRS-Tracker.pdf \
 		doc/Raspberry-Pi-SDR-IGate.pdf \
+		doc/Successful-APRS-IGate-Operation.pdf \
 		doc/User-Guide.pdf \
 		doc/WA8LMF-TNC-Test-CD-Results.pdf \
 		LICENSE* \
@@ -628,12 +650,34 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		gen_packets.exe \
 		atest.exe \
 		ttcalc.exe \
+		kissutil.exe \
 		dwespeak.bat \
 		telemetry-toolkit/*
+	rm README-doc.md
 
 
 # Reminders if pdf files are not up to date.
 
+doc/User-Guide.pdf : doc/User-Guide.docx
+	echo "***** User-Guide.pdf is out of date *****"
+
+doc/Raspberry-Pi-APRS.pdf : doc/Raspberry-Pi-APRS.docx
+	echo "***** Raspberry-Pi-APRS.pdf is out of date *****" 
+
+doc/Raspberry-Pi-APRS-Tracker.pdf : doc/Raspberry-Pi-APRS-Tracker.docx
+	echo "***** Raspberry-Pi-APRS-Tracker.pdf is out of date *****" 
+
+doc/APRStt-Implementation-Notes.pdf : doc/APRStt-Implementation-Notes.docx
+	echo "***** APRStt-Implementation-Notes.pdf is out of date *****"
+
+doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf : doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.docx
+	echo "***** A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf is out of date *****"
+
+doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf : doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.docx
+	echo "***** A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf is out of date *****"
+
+doc/APRS-Telemetry-Toolkit.pdf : doc/APRS-Telemetry-Toolkit.docx
+	echo "***** APRS-Telemetry-Toolkit.pdf is out of date *****"
 
 
 
@@ -647,4 +691,5 @@ backup :
 # The following is updated by "make depend"
 #
 # DO NOT DELETE
+
 

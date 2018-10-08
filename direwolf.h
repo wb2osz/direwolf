@@ -32,7 +32,6 @@
 #endif
 
 
-
 /*
  * Previously, we could handle only a single audio device.
  * This meant we could have only two radio channels.
@@ -117,6 +116,43 @@
           (_result) )
 #else
 #include <pthread.h>
+#endif
+
+
+#ifdef __APPLE__
+
+// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2072
+
+// The original suggestion was to add this to only ptt.c.
+// I thought it would make sense to put it here, so it will apply to all files,
+// consistently, rather than only one file ptt.c.
+
+// The placement of this is critical.  Putting it earlier was a problem.
+// https://github.com/wb2osz/direwolf/issues/113
+
+// It needs to be after the include pthread.h because
+// pthread.h pulls in <sys/cdefs.h>, which redefines __DARWIN_C_LEVEL back to ansi,
+// which breaks things.
+// Maybe it should just go in ptt.c as originally suggested.
+
+// #define __DARWIN_C_LEVEL  __DARWIN_C_FULL
+
+// There is a more involved patch here:
+//  https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2458
+
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
+
+// Defining _DARWIN_C_SOURCE ensures that the definition for the cfmakeraw function (or similar)
+// are pulled in through the include file <sys/termios.h>.
+
+#ifdef __DARWIN_C_LEVEL
+#undef __DARWIN_C_LEVEL
+#endif
+
+#define __DARWIN_C_LEVEL  __DARWIN_C_FULL
+
 #endif
 
 
@@ -211,6 +247,18 @@ typedef pthread_mutex_t dw_mutex_t;
 
 #endif
 
+
+
+// Formerly used write/read on Linux, for some forgotten reason,
+// but always using send/recv makes more sense.
+// Need option to prevent a SIGPIPE signal on Linux.  (added for 1.5 beta 2)
+
+#if __WIN32__ || __APPLE__
+#define SOCK_SEND(s,data,size) send(s,data,size,0)
+#else
+#define SOCK_SEND(s,data,size) send(s,data,size, MSG_NOSIGNAL)
+#endif
+#define SOCK_RECV(s,data,size) recv(s,data,size,0)
 
 
 /* Platform differences for string functions. */

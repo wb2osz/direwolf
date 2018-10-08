@@ -1,13 +1,7 @@
-
-// TODO: Needs more clean up and testing of error conditions.
-
-// TODO: use this in place of other similar code.
-
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -73,8 +67,10 @@
  * Inputs:	devicename	- For Windows, usually like COM5.
  *				  For Linux, usually /dev/tty...
  *				  "COMn" also allowed and converted to /dev/ttyS(n-1)
+ *				  Could be /dev/rfcomm0 for Bluetooth.
  *
- *		baud		- Speed.  4800, 9600, etc.
+ *		baud		- Speed.  1200, 4800, 9600 bps, etc.
+ *				  If 0, leave it alone.
  *
  * Returns 	Handle for serial port or MYFDERROR for error.
  *
@@ -143,6 +139,7 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 
 	switch (baud) {
 
+	  case 0:	/* Leave it alone. */		break;
 	  case 1200:	dcb.BaudRate = CBR_1200;	break;
 	  case 2400:	dcb.BaudRate = CBR_2400;	break;
 	  case 4800:	dcb.BaudRate = CBR_4800;	break;
@@ -233,15 +230,19 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 
 	switch (baud) {
 
+	  case 0:	/* Leave it alone. */						break;
 	  case 1200:	cfsetispeed (&ts, B1200);	cfsetospeed (&ts, B1200); 	break;
 	  case 2400:	cfsetispeed (&ts, B2400);	cfsetospeed (&ts, B2400); 	break;
 	  case 4800:	cfsetispeed (&ts, B4800);	cfsetospeed (&ts, B4800); 	break;
 	  case 9600:	cfsetispeed (&ts, B9600);	cfsetospeed (&ts, B9600); 	break;
 	  case 19200:	cfsetispeed (&ts, B19200);	cfsetospeed (&ts, B19200); 	break;
 	  case 38400:	cfsetispeed (&ts, B38400);	cfsetospeed (&ts, B38400); 	break;
+#ifndef __APPLE__
+	  // Not defined for Mac OSX.
+	  // https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2072
 	  case 57600:	cfsetispeed (&ts, B57600);	cfsetospeed (&ts, B57600); 	break;
 	  case 115200:	cfsetispeed (&ts, B115200);	cfsetospeed (&ts, B115200); 	break;
-
+#endif
 	  default:	text_color_set(DW_COLOR_ERROR);
 	  		dw_printf ("serial_port_open: Unsupported speed %d.  Using 4800.\n", baud);
 			cfsetispeed (&ts, B4800);	cfsetospeed (&ts, B4800);
@@ -305,8 +306,10 @@ int serial_port_write (MYFDTYPE fd, char *str, int len)
 	}
 	else if ((int)nwritten != len) 
 	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Error writing to serial port.  Only %d of %d written.\n\n", (int)nwritten, len);
+	  // Do we want this message here?
+	  // Or rely on caller to check and provide something more meaningful for the usage?
+	  //text_color_set(DW_COLOR_ERROR);
+	  //dw_printf ("Error writing to serial port.  Only %d of %d written.\n\n", (int)nwritten, len);
 	}
 
 	return (nwritten);
@@ -317,8 +320,10 @@ int serial_port_write (MYFDTYPE fd, char *str, int len)
         written = write (fd, str, (size_t)len);
 	if (written != len)
 	{
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Error writing to serial port. err=%d\n\n", written);
+	  // Do we want this message here?
+	  // Or rely on caller to check and provide something more meaningful for the usage?
+	  //text_color_set(DW_COLOR_ERROR);
+	  //dw_printf ("Error writing to serial port. err=%d\n\n", written);
 	  return (-1);
 	}
 
@@ -402,8 +407,9 @@ int serial_port_get1 (MYFDTYPE fd)
 	CloseHandle(ov_rd.hEvent); 
 
 	if (n != 1) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Serial port failed to get one byte. n=%d.\n\n", (int)n);
+	  //text_color_set(DW_COLOR_ERROR);
+	  //dw_printf ("Serial port failed to get one byte. n=%d.\n\n", (int)n);
+	  return (-1);
 	}
 
 
@@ -414,8 +420,8 @@ int serial_port_get1 (MYFDTYPE fd)
 	n = read(fd, &ch, (size_t)1);
 
 	if (n != 1) {
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("serial_port_get1(%d) returns -1 for error.\n", fd);
+	  //text_color_set(DW_COLOR_DEBUG);
+	  //dw_printf ("serial_port_get1(%d) returns -1 for error.\n", fd);
 	  return (-1);
 	}
 
@@ -447,8 +453,14 @@ int serial_port_get1 (MYFDTYPE fd)
  *
  *--------------------------------------------------------------------*/
 
-
-// TODO: 
+void serial_port_close (MYFDTYPE fd)
+{
+#if __WIN32__
+	CloseHandle (fd);
+#else
+	close (fd);
+#endif
+}
 
 
 /* end serial_port.c */

@@ -767,6 +767,53 @@ void dlq_channel_busy (int chan, int activity, int status)
 
 
 
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dlq_seize_confirm
+ *
+ * Purpose:     Inform data link state machine that the transmitter is on.
+ *		This is in reponse to lm_seize_request.
+ *
+ * Inputs:	chan		- Radio channel number.
+ *
+ * Outputs:	Request is appended to queue for processing by
+ *		the data link state machine.
+ *
+ * Description:	When removed from the data link state machine queue, this
+ *		becomes lm_seize_confirm.
+ *
+ *--------------------------------------------------------------------*/
+
+void dlq_seize_confirm (int chan)
+{
+	struct dlq_item_s *pnew;
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("dlq_seize_confirm (chan=%d)\n", chan);
+#endif
+
+
+/* Allocate a new queue item. */
+
+	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	s_new_count++;
+
+	pnew->type = DLQ_SEIZE_CONFIRM;
+	pnew->chan = chan;
+
+/* Put it into queue. */
+
+	append_to_queue (pnew);
+
+
+} /* end dlq_seize_confirm */
+
+
+
+
 /*-------------------------------------------------------------------
  *
  * Name:        dlq_client_cleanup

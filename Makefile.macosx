@@ -24,9 +24,10 @@
 # 3. Removed fsk_fast_filter.h from atest receipe, clang compiler was having
 #    a hissy fit. Not check with GCC.
 
-APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc
+APPS := direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients atest log2gpx gen_packets ttcalc kissutil
 
-all :  $(APPS) direwolf.desktop direwolf.conf	@echo " "
+all :  $(APPS) direwolf.conf
+	@echo " "
 	@echo "Next step install with: "
 	@echo " "
 	@echo "      sudo make install"
@@ -35,27 +36,6 @@ all :  $(APPS) direwolf.desktop direwolf.conf	@echo " "
 
 SYS_LIBS :=
 SYS_MIN :=
-#SDK := $(shell find /Developer -maxdepth 1 -type d -name "SDKs")
-#$(info $$SDK = ${SDK})
-#ifeq (${SDK},/Developer/SDKs)
-#	SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.8.sdk")
-#	ifeq (${SDK},/Developer/SDKs/MacOSX10.8.sdk)
-#		SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.8.sdk
-#		SYS_MIN := -mmacosx-version-min=10.8
-#	else
-#		SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.9.sdk")
-#		ifeq (${SDK},/Developer/SDKs/MacOSX10.9.sdk)
-#			SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.9.sdk
-#			SYS_MIN := -mmacosx-version-min=10.9
-#		else
-#			SDK := $(shell find /Developer/SDKs -maxdepth 1 -type d -name "MacOSX10.10.sdk")
-#			ifeq (${SDK},/Developer/SDKs/MacOSX10.10.sdk)
-#				SYS_LIBS := -isystem /Developer/SDKs/MacOSX10.10.sdk
-#				SYS_MIN := -mmacosx-version-min=10.10
-#			endif
-#		endif
-#	endif
-#endif
 
 SYS_LIBS := $(shell ./search_sdks.sh)
 EXTRA_CFLAGS :=
@@ -69,8 +49,12 @@ endif
 
 # Change as required in support of the available libraries
 
-#CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+UNAME_M := $(shell uname -m)
+ifeq (${UNAME_M},x86_64)
+CC := $(DARWIN_CC) -m64 $(SYS_LIBS) $(SYS_MIN)
+else
 CC := $(DARWIN_CC) -m32 $(SYS_LIBS) $(SYS_MIN)
+endif
 
 # _XOPEN_SOURCE=600 and _DEFAULT_SOURCE=1 are needed for glibc >= 2.24.
 # Explanation here:  https://github.com/wb2osz/direwolf/issues/62
@@ -85,86 +69,14 @@ CFLAGS += -D_BSD_SOURCE
 
 # $(info $$CC is [${CC}])
 
-#
-# The DSP filters spend a lot of time spinning around in little
-# loops multiplying and adding arrays of numbers.  The Intel "SSE"
-# instructions, introduced in 1999 with the Pentium III series,
-# can speed this up considerably.
-#
-# SSE2 instructions, added in 2000, don't seem to offer any advantage.
-#
-#
-# Let's take a look at the effect of the compile options.
-#
-#
-# Times are elapsed time to process Track 2 of the TNC test CD.
-#
-# i.e.   "./atest 02_Track_2.wav"
-# Default demodulator type is new "E" added for version 1.2.
-#
 
-#
-# ---------- x86 (32 bit) ----------
-#
-
-#
-# gcc 4.6.3 running on Ubuntu 12.04.05.
-# Intel(R) Celeron(R) CPU 2.53GHz.  Appears to have only 32 bit instructions.
-# Probably from around 2004 or 2005.
-#
-# When gcc is generating code for a 32 bit x86 target, it assumes the ancient
-# i386 processor.  This is good for portability but bad for performance.
-#
-# The code can run considerably faster by taking advantage of the SSE instructions
-# available in the Pentium 3 or later.
-#
-#       seconds options		comments
-#       ------  -------		--------
-#         524
-#         183	-O2
-#         182	-O3
-#         183	-O3 -ffast-math  	(should be same as -Ofast)
-#         184	-Ofast
-#         189	-O3 -ffast-math -march=pentium
-#         122	-O3 -ffast-math -msse
-#         122	-O3 -ffast-math -march=pentium -msse
-#         121	-O3 -ffast-math -march=pentium3   (this implies -msse)
-#         120	-O3 -ffast-math -march=native
-#
-# Note that "-march=native" is essentially the same as "-march=pentium3."
-#
-
-# If the compiler is generating code for the i386 target, we can
-# get much better results by telling it we have at least a Pentium 3.
+# If the compiler is generating code for a 32 bit target (-m32), we can
+# get much better results by telling it we have at least a Pentium 3
+# which hass the SSE instructions.
 
 CFLAGS += -march=core2 -msse4.1 -std=gnu99
 #CFLAGS += -march=pentium3 -sse
 
-#
-# gcc 4.8.2 running on Ubuntu 14.04.1.
-# Intel Core 2 Duo from around 2007 or 2008.
-#
-# 64 bit target implies that we have SSE and probably even better vector instructions.
-#
-#       seconds options		comments
-#       ------  -------		--------
-#         245
-#          75	-01
-#          72 	-02
-#          71  	-03
-#          73  	-O3 -march=native
-#          42	-O3 -ffast-math
-#          42  	-Ofast			(note below)
-#          40	-O3 -ffast-math -march=native
-#
-#
-# Note that "-Ofast" is a newer option roughly equivalent to "-O3 -ffast-math".
-# I use the longer form because it is compatible with older compilers.
-#
-# Why don't I don't have "-march=native?"
-# Older compilers don't recognize "native" as one of the valid options.
-# One article said it was added with gcc 4.2 but I haven't verified that.
-#
 
 # Add -ffastmath in only if compiler version recognizes it.
 
@@ -172,22 +84,6 @@ useffast := $(shell gcc --help -v 2>/dev/null | grep ffast-math)
 ifneq ($(useffast),)
 CFLAGS += -ffast-math
 endif
-
-#
-# You would expect "-march=native" to produce the fastest code.
-# Why don't I use it here?
-#
-#	1. In my benchmarks, above, it has a negligible impact if any at all.
-#	2. Some older versions of gcc don't recognize "native" as a valid choice.
-#	3. Results are less portable.  Not a consideration if you are
-#		building only for your own use but very important for anyone
-#		redistributing a "binary" version.
-#
-# If you are planning to distribute the binary version to other
-# people (in some ham radio software collection, RPM, or DEB package),
-# avoid # fine tuning it for your particular computer.  It could
-# cause compatibility issues for those with older computers.
-#
 
 #CFLAGS += -D_FORTIFY_SOURCE
 
@@ -237,7 +133,7 @@ direwolf : direwolf.o aprs_tt.o audio_portaudio.o audio_stats.o ax25_link.o ax25
 		demod.o digipeater.o cdigipeater.o dlq.o dsp.o dtime_now.o dtmf.o dwgps.o \
 		encode_aprs.o encode_aprs.o fcs_calc.o fcs_calc.o gen_tone.o \
 		geotranz.a hdlc_rec.o hdlc_rec2.o hdlc_send.o igate.o kiss_frame.o \
-		kiss.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
+		kiss.o kissserial.o kissnet.o latlong.o latlong.o log.o morse.o multi_modem.o \
 		waypoint.o serial_port.o pfilter.o ptt.o rdq.o recv.o rrbb.o server.o \
 		symbols.o telemetry.o textcolor.o tq.o tt_text.o tt_user.o xid.o xmit.o \
 		dwgps.o dwgpsnmea.o mheard.o
@@ -295,30 +191,24 @@ direwolf.conf : generic.conf
 
 
 # Where should we install it?
-
-# My understanding, of the convention, is that something you compile
-# from source, that is not a standard part of the operating system,
-# should go in /usr/local/bin.
-
-# This is a step in the right direction but not sufficient to use /usr instead.
+# Macports typically installs in /opt/local so maybe you want to use that instead.
 
 INSTALLDIR := /usr/local
+#INSTALLDIR := /opt/local
 
 # TODO:  Test this better.
 
-# Optional installation into /usr/local/...
+# Optional installation into INSTALLDIR.
 # Needs to be run as root or with sudo.
-# TODO: Review file locations.
 
 # Command to "install" to system directories.  "install" for Linux.  "ginstall" for Mac.
 
 INSTALL=ginstall
 
 .PHONY: install
-install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png direwolf.desktop
+install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon.png
 #
-# Applications, not installed with package manager, normally go in /usr/local/bin.
-# /usr/bin is used instead when installing from .DEB or .RPM package.
+# Applications.
 #
 	$(INSTALL) direwolf $(INSTALLDIR)/bin
 	$(INSTALL) decode_aprs $(INSTALLDIR)/bin
@@ -331,6 +221,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) gen_packets $(INSTALLDIR)/bin
 	$(INSTALL) atest $(INSTALLDIR)/bin
 	$(INSTALL) ttcalc $(INSTALLDIR)/bin
+	$(INSTALL) kissutil $(INSTALLDIR)/bin
 	$(INSTALL) dwespeak.sh $(INSTALLDIR)/bin
 #
 # Telemetry Toolkit executables.   Other .conf and .txt files will go into doc directory.
@@ -346,11 +237,11 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 #
 # Misc. data such as "tocall" to system mapping.
 #
-	$(INSTALL) -D --mode=644 tocalls.txt /usr/share/direwolf/tocalls.txt
-	$(INSTALL) -D --mode=644 symbols-new.txt /usr/share/direwolf/symbols-new.txt
-	$(INSTALL) -D --mode=644 symbolsX.txt /usr/share/direwolf/symbolsX.txt
-	$(INSTALL) -D --mode=644 dw-icon.png /usr/share/direwolf/dw-icon.png
-	$(INSTALL) -D --mode=644 direwolf.desktop /usr/share/applications/direwolf.desktop
+	$(INSTALL) -D --mode=644 tocalls.txt $(INSTALLDIR)/share/direwolf/tocalls.txt
+	$(INSTALL) -D --mode=644 symbols-new.txt $(INSTALLDIR)/share/direwolf/symbols-new.txt
+	$(INSTALL) -D --mode=644 symbolsX.txt $(INSTALLDIR)/share/direwolf/symbolsX.txt
+	$(INSTALL) -D --mode=644 dw-icon.png $(INSTALLDIR)/share/direwolf/dw-icon.png
+
 #
 # Documentation.  Various plain text files and PDF.
 #
@@ -359,15 +250,26 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 LICENSE-dire-wolf.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-dire-wolf.txt
 	$(INSTALL) -D --mode=644 LICENSE-other.txt $(INSTALLDIR)/share/doc/direwolf/LICENSE-other.txt
 #
-	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+# ./README.md is an overview for the project main page.
+# doc/README.md contains an overview of the PDF file contents and is more useful here.
+#
+	$(INSTALL) -D --mode=644 doc/README.md $(INSTALLDIR)/share/doc/direwolf/README.md
+	$(INSTALL) -D --mode=644 doc/2400-4800-PSK-for-APRS-Packet-Radio.pdf $(INSTALLDIR)/share/doc/direwolf/2400-4800-PSK-for-APRS-Packet-Radio.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -D --mode=644 doc/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf $(INSTALLDIR)/share/doc/direwolf/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf
+	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
+	$(INSTALL) -D --mode=644 doc/APRStt-Listening-Example.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Listening-Example.pdf
+	$(INSTALL) -D --mode=644 doc/Bluetooth-KISS-TNC.pdf $(INSTALLDIR)/share/doc/direwolf/Bluetooth-KISS-TNC.pdf
+	$(INSTALL) -D --mode=644 doc/Going-beyond-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/Going-beyond-9600-baud.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-APRS-Tracker.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-APRS-Tracker.pdf
 	$(INSTALL) -D --mode=644 doc/Raspberry-Pi-SDR-IGate.pdf $(INSTALLDIR)/share/doc/direwolf/Raspberry-Pi-SDR-IGate.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-Implementation-Notes.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-Implementation-Notes.pdf
-	$(INSTALL) -D --mode=644 doc/APRStt-interface-for-SARTrack.pdf $(INSTALLDIR)/share/doc/direwolf/APRStt-interface-for-SARTrack.pdf
-	$(INSTALL) -D --mode=644 doc/APRS-Telemetry-Toolkit.pdf $(INSTALLDIR)/share/doc/direwolf/APRS-Telemetry-Toolkit.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf
-	$(INSTALL) -D --mode=644 doc/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf $(INSTALLDIR)/share/doc/direwolf/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf
+	$(INSTALL) -D --mode=644 doc/Successful-APRS-IGate-Operation.pdf $(INSTALLDIR)/share/doc/direwolf/Successful-APRS-IGate-Operation.pdf
+	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(INSTALLDIR)/share/doc/direwolf/User-Guide.pdf
+	$(INSTALL) -D --mode=644 doc/WA8LMF-TNC-Test-CD-Results.pdf $(INSTALLDIR)/share/doc/direwolf/WA8LMF-TNC-Test-CD-Results.pdf
 #
 # Sample config files also go into the doc directory.
 # When building from source, these can be put in home directory with "make install-conf".
@@ -419,7 +321,9 @@ install-conf : direwolf.conf
 
 # Separate application to decode raw data.
 
-decode_aprs : decode_aprs.c dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o ax25_pad.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o
+# First three use .c rather than .o because they depend on DECAMAIN definition.
+
+decode_aprs : decode_aprs.c kiss_frame.c ax25_pad.c  dwgpsnmea.o dwgps.o dwgpsd.o serial_port.o symbols.o textcolor.o fcs_calc.o latlong.o log.o telemetry.o tt_text.o
 	$(CC) $(CFLAGS) -DDECAMAIN -o $@ $^ -lm
 
 # Convert between text and touch tone representation.
@@ -472,7 +376,7 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_9600.c hdlc_rec.c hdlc_rec2.o
 # Unit test for demodulators
 
 atest : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
-        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c dtest_now.o latlong.c symbols.c textcolor.c tt_text.c
+        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c dtime_now.o latlong.c symbols.c textcolor.c tt_text.c
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 #atest : atest.c fsk_fast_filter.h demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.c hdlc_rec.c hdlc_rec2.o multi_modem.o rrbb.o \
 #        fcs_calc.c ax25_pad.c decode_aprs.c dwgpsnmea.o dwgps.o serial_port.o telemetry.c latlong.c symbols.c textcolor.c tt_text.c
@@ -522,6 +426,14 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c
 	$(CC) $(CFLAGS) -g -o $@ $^
 
 
+# Talk to a KISS TNC.
+# Note:  kiss_frame.c has conditional compilation on KISSUTIL.
+
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dtime_now.o sock.o
+	$(CC) $(CFLAGS) -g -DKISSUTIL -o $@ $^
+
+
+
 # Touch Tone to Speech sample application.
 
 ttcalc : ttcalc.o ax25_pad.o fcs_calc.o textcolor.o
@@ -555,6 +467,7 @@ dist-mac: direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	$(INSTALLDIR)/bin/gen_packets \
 	$(INSTALLDIR)/bin/atest \
 	$(INSTALLDIR)/bin/ttcalc \
+	$(INSTALLDIR)/bin/kissutil \
 	$(INSTALLDIR)/bin/dwespeak.sh \
 	$(INSTALLDIR)/share/direwolf/tocalls.txt \
 	$(INSTALLDIR)/share/direwolf/config/direwolf.conf \
@@ -575,6 +488,7 @@ dist-mac: direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx ge
 	$(INSTALLDIR)/man/man1/decode_aprs.1 \
 	$(INSTALLDIR)/man/man1/direwolf.1 \
 	$(INSTALLDIR)/man/man1/gen_packets.1 \
+	$(INSTALLDIR)/man/man1/kissutil.1 \
 	$(INSTALLDIR)/man/man1/ll2utm.1 \
 	$(INSTALLDIR)/man/man1/log2gpx.1 \
 	$(INSTALLDIR)/man/man1/text2tt.1 \

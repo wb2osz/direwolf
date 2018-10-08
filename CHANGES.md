@@ -2,6 +2,64 @@
 # Revision History #
 
 
+## Version 1.5  --  September 2018 ##
+
+
+### New Features: ###
+
+- PTT using GPIO pin of CM108/CM119 (e.g. DMK URI, RB-USB RIM), Linux only.
+
+- More efficient error recovery for AX.25 connected mode.  Better generation and processing of REJ and SREJ to reduce unnecessary duplicate "**I**" frames.
+
+- New configuration option, "**V20**", for listing stations known to not understand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
+
+- New "**NOXID**" configuration file option to avoid sending XID command to listed station(s).  If other end is a partial v2.2 implementation, which recognizes SABME, but not XID, we would waste a lot of time resending XID many times before giving up.   This is less drastic than the "**V20**" option which doesn't even attempt to use v2.2 with listed station(s).
+
+- New application "**kissutil**" for troubleshooting a KISS TNC or interfacing to an application via files.
+
+- KISS "Set Hardware" command to report transmit queue length.
+
+- TCP KISS can now handle multiple concurrent applications.
+
+- Linux can use serial port for KISS in addition to a pseudo terminal.
+
+- decode_aprs utility can now accept KISS frames and AX.25 frames as series of two digit hexadecimal numbers.
+
+- Full Duplex operation.  (Put "FULLDUP ON" in channel section of configuration file.)
+
+- Time slots for beaconing.
+
+- Allow single log file with fixed name rather than starting a new one each day.
+
+
+
+### Bugs Fixed: ###
+
+- Possible crash when CDIGIPEAT did not include the optional alias.
+
+- PACLEN configuration item no longer restricts length of received frames.
+
+- Strange failures when trying to use multiple KISS client applications over TCP.  Only Linux was affected.  
+
+- Under certain conditions, outgoing connected mode data would get stuck in a queue and not be transmitted.  This could happen if client application sends a burst of data larger than the "window" size (MAXFRAME or EMAXFRAME option).
+
+
+- Little typographical / spelling errors in messages.
+
+
+### Documentation: ###
+
+
+- New document ***Bluetooth-KISS-TNC.pdf*** explaining how to use KISS over Bluetooth.
+
+- Updates describing cheap SDR frequency inaccuracy and how to compensate for it.
+
+### Notes: ###
+
+Windows binary distribution now uses gcc (MinGW) version 6.3.0.
+
+----------
+
 ## Version 1.4  -- April 2017 ##
 
 

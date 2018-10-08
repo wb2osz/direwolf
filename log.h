@@ -10,7 +10,7 @@
 
 
 
-void log_init (char *path);	
+void log_init (int daily_names, char *path);
 
 void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_t retries);
 

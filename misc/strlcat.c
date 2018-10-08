@@ -27,11 +27,11 @@
  *
  *---------------------------------------------------------------*/
 
-
+#include "direwolf.h"
 
 #include <stdlib.h>
 #include <string.h>
-#include "direwolf.h"
+
 #include "textcolor.h"
 
 

@@ -707,7 +707,7 @@ packet_t ax25_dup (packet_t copy_from)
  *
  *		in_addr		- Input such as "WB2OSZ-15*"
  *
- * 		strict		- TRUE for strict checking (6 characters, no lower case,
+ * 		strict		- 1 (true) for strict checking (6 characters, no lower case,
  *				  SSID must be in range of 0 to 15).
  *				  Strict is appropriate for packets sent
  *				  over the radio.  Communication with IGate
@@ -715,6 +715,8 @@ packet_t ax25_dup (packet_t copy_from)
  *				  alphanumeric characters for the SSID.
  *				  We also get messages like this from a server.
  *					KB1POR>APU25N,TCPIP*,qAC,T2NUENGLD:...
+ *
+ *				  2 (extra true) will complain if * is found at end.
  *
  * Outputs:	out_addr	- Address without any SSID.
  *				  Must be at least AX25_MAX_ADDR_LEN bytes.
@@ -724,6 +726,7 @@ packet_t ax25_dup (packet_t copy_from)
  *		out_heard	- True if "*" found.
  *
  * Returns:	True (1) if OK, false (0) if any error.
+ *		When 0, out_addr, out_ssid, and out_heard are unpredictable.
  *
  *
  *------------------------------------------------------------------------------*/
@@ -744,35 +747,53 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	*out_ssid = 0;
 	*out_heard = 0;
 
-	if (strict && strlen(in_addr) >= 2 && strncmp(in_addr, "qA", 2) == 0) {
-
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("%sAddress \"%s\" is a \"q-construct\" used for communicating\n", position_name[position], in_addr);
-	  dw_printf ("with APRS Internet Servers.  It was not expected here.\n");
-	}
-
-	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
-
 	if (position < -1) position = -1;
 	if (position > AX25_REPEATER_8) position = AX25_REPEATER_8;
 	position++;	/* Adjust for position_name above. */
 
+
+	if (strict && strlen(in_addr) >= 2 && strncmp(in_addr, "qA", 2) == 0) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("%sAddress \"%s\" is a \"q-construct\" used for communicating with\n", position_name[position], in_addr);
+	  dw_printf ("APRS Internet Servers.  It should never appear when going over the radio.\n");
+	}
+
+	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
+
+
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
 	i = 0;
-	for (p = in_addr; isalnum(*p); p++) {
+	for (p = in_addr; *p != '\0' && *p != '-' && *p != '*'; p++) {
 	  if (i >= maxlen) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("%sAddress is too long. \"%s\" has more than %d characters.\n", position_name[position], in_addr, maxlen);
 	    return 0;
 	  }
+	  if ( ! isalnum(*p)) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("%sAddress, \"%s\" contains character other than letter or digit in character position %d.\n", position_name[position], in_addr, (int)(long)(p-in_addr)+1);
+	    return 0;
+	  }
+
 	  out_addr[i++] = *p;
 	  out_addr[i] = '\0';
+
+#if DECAMAIN	// Hack when running in decode_aprs utility.
+		// Exempt the "qA..." case because it was already mentioned.
+
+	  if (strict && islower(*p) && strncmp(in_addr, "qA", 2) != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("%sAddress has lower case letters. \"%s\" must be all upper case.\n", position_name[position], in_addr);
+	  }
+#else
 	  if (strict && islower(*p)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("%sAddress has lower case letters. \"%s\" must be all upper case.\n", position_name[position], in_addr);
 	    return 0;
 	  }
+#endif
 	}
 	
 	j = 0;
@@ -804,11 +825,16 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	if (*p == '*') {
 	  *out_heard = 1;
 	  p++;
+	  if (strict == 2) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("\"*\" is not allowed at end of address \"%s\" here.\n", in_addr);
+	    return 0;
+	  }
 	}
 
 	if (*p != '\0') {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Invalid character \"%c\" found in %saddress \"%s\".\n", *p, position_name[position], in_addr);
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid character \"%c\" found in %saddress \"%s\".\n", *p, position_name[position], in_addr);
 	  return 0;
 	}
 
@@ -1257,13 +1283,22 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	  return;
 	}
 
-	memset (station, 0, 7);
-	for (i=0; i<6; i++) {
-	  unsigned char ch;
+	// At one time this would stop at the first space, on the assumption we would have only trailing spaces.
+	// Then there was a forum discussion where someone encountered the address " WIDE2" with a leading space.
+	// In that case, we would have returned a zero length string here.
+	// Now we return exactly what is in the address field and trim trailing spaces.
+	// This will provide better information for troubleshooting.
 
-	  ch = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
-	  if (ch <= ' ') break;
-	  station[i] = ch;
+	for (i=0; i<6; i++) {
+	  station[i] = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
+	}
+	station[6] = '\0';
+
+	for (i=5; i>=0; i--) {
+	  if (station[i] == ' ')
+	    station[i] = '\0';
+	  else
+	    break;
 	}
 
 	ssid = ax25_get_ssid (this_p, n);
@@ -1322,13 +1357,22 @@ void ax25_get_addr_no_ssid (packet_t this_p, int n, char *station)
 	  return;
 	}
 
-	memset (station, 0, 7);
-	for (i=0; i<6; i++) {
-	  unsigned char ch;
+	// At one time this would stop at the first space, on the assumption we would have only trailing spaces.
+	// Then there was a forum discussion where someone encountered the address " WIDE2" with a leading space.
+	// In that case, we would have returned a zero length string here.
+	// Now we return exactly what is in the address field and trim trailing spaces.
+	// This will provide better information for troubleshooting.
 
-	  ch = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
-	  if (ch <= ' ') break;
-	  station[i] = ch;
+	for (i=0; i<6; i++) {
+	  station[i] = (this_p->frame_data[n*7+i] >> 1) & 0x7f;
+	}
+	station[6] = '\0';
+
+	for (i=5; i>=0; i--) {
+	  if (station[i] == ' ')
+	    station[i] = '\0';
+	  else
+	    break;
 	}
 
 } /* end ax25_get_addr_no_ssid */
@@ -1956,7 +2000,7 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
 	assert (this_p->magic1 == MAGIC);
 	assert (this_p->magic2 == MAGIC);
 
-	assert (this_p->frame_len > 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
+	assert (this_p->frame_len >= 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
 
 	memcpy (result, this_p->frame_data, this_p->frame_len);
 
@@ -2457,6 +2501,33 @@ int ax25_get_pid (packet_t this_p)
 	}
 	return (-1);
 }
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_get_frame_len
+ *
+ * Purpose:	Get length of frame.
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *		
+ * Returns:	Number of octets in the frame buffer.  
+ *		Does NOT include the extra 2 for FCS.
+ *
+ *------------------------------------------------------------------*/
+
+int ax25_get_frame_len (packet_t this_p) 
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	assert (this_p->frame_len >= 0 && this_p->frame_len <= AX25_MAX_PACKET_LEN);
+
+	return (this_p->frame_len);
+
+} /* end ax25_get_frame_len */
+
 
 
 /*------------------------------------------------------------------------------

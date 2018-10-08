@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -59,6 +59,8 @@
  *		
  *			'y'	Ask Outstanding frames waiting on a Port   (new in 1.2)
  *
+ *			'Y'	How many frames waiting for transmit for a particular station (new in 1.5)
+ *
  *			'C'	Connect, Start an AX.25 Connection			(new in 1.4)
  *
  *			'v'	Connect VIA, Start an AX.25 circuit thru digipeaters	(new in 1.4)
@@ -91,6 +93,8 @@
  *				(Enabled with 'm' command.)
  *
  *			'y'	Outstanding frames waiting on a Port   (new in 1.2)
+ *
+ *			'Y'	How many frames waiting for transmit for a particular station (new in 1.5)
  *
  *			'C'	AX.25 Connection Received		(new in 1.4)
  *
@@ -487,14 +491,16 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, cmd_listen_thread, (void*)client, 0, NULL);
 	  if (cmd_listen_th[client] == NULL) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Could not create AGW command listening thread\n");
+	    dw_printf ("Could not create AGW command listening thread for client %d\n", client);
 	    return;
 	  }
 #else
 	  e = pthread_create (&cmd_listen_tid[client], NULL, cmd_listen_thread, (void *)(long)client);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    perror("Could not create AGW command listening thread");
+	    dw_printf ("Could not create AGW command listening thread for client %d\n", client);
+	    // Replace add perror with better message handling.
+	    perror("");
 	    return;
 	  }
 #endif
@@ -637,8 +643,7 @@ static THREAD_F connect_listen_thread (void *arg)
             }
 
 	    text_color_set(DW_COLOR_INFO);
-// TODO: "attached" or some other term would be better because "connected" has a different meaning for AX.25.
-	    dw_printf("\nConnected to AGW client application %d ...\n\n", client);
+	    dw_printf("\nAttached to AGW client application %d ...\n\n", client);
 
 /*
  * The command to change this is actually a toggle, not explicit on or off.
@@ -729,7 +734,7 @@ static THREAD_F connect_listen_thread (void *arg)
             client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
 	    text_color_set(DW_COLOR_INFO);
-	    dw_printf("\nConnected to AGW client application %d...\n\n", client);
+	    dw_printf("\nAttached to AGW client application %d...\n\n", client);
 
 /*
  * The command to change this is actually a toggle, not explicit on or off.
@@ -813,7 +818,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    }
 
 #if __WIN32__	
-            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE), 0);
+            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -824,7 +829,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      dlq_client_cleanup (client);
 	    }
 #else
-            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
+            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -917,8 +922,8 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
-#if __WIN32__	
-            err = send (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE), 0);
+#if __WIN32__
+            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err == SOCKET_ERROR)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -929,7 +934,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      dlq_client_cleanup (client);
 	    }
 #else
-            err = write (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
+            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
@@ -1142,14 +1147,7 @@ static int read_from_socket (int fd, char *ptr, int len)
 	while (got_bytes < len) {
 	  int n;
 
-#if __WIN32__
-
-//TODO: any flags for send/recv?
-
-	  n = recv (fd, ptr + got_bytes, len - got_bytes, 0);
-#else
-	  n = read (fd, ptr + got_bytes, len - got_bytes);
-#endif
+	  n = SOCK_RECV (fd, ptr + got_bytes, len - got_bytes);
 
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
@@ -1192,10 +1190,7 @@ static void send_to_client (int client, void *reply_p)
 {
 	struct agwpe_s *ph;
 	int len;
-#if __WIN32__
-#else
 	int err;
-#endif
 
 	ph = (struct agwpe_s *) reply_p;	// Replies are often hdr + other stuff.
 
@@ -1213,12 +1208,8 @@ static void send_to_client (int client, void *reply_p)
 	  debug_print (TO_CLIENT, client, ph, len);
 	}
 
-#if __WIN32__     
-	send (client_sock[client], (char*)(ph), len, 0);
-#else
-	err = write (client_sock[client], ph, len);
+	err = SOCK_SEND (client_sock[client], (char*)(ph), len);
 	(void)err;
-#endif
 }
 
 
@@ -1260,16 +1251,20 @@ static THREAD_F cmd_listen_thread (void *arg)
 	  }
 
 /*
- * Take some precautions to guard against bad data
- * which could cause problems later.
+ * Take some precautions to guard against bad data which could cause problems later.
  */
+	if (cmd.hdr.portx < 0 || cmd.hdr.portx >= MAX_CHANS) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\nInvalid port number, %d, in command '%c', from AGW client application %d.\n",
+			cmd.hdr.portx, cmd.hdr.datakind, client);
+	  cmd.hdr.portx = 0;	// avoid subscript out of bounds, try to keep going.
+	}
 
 /*
- * Call to/from must not exceeed 9 characters.
+ * Call to/from fields are 10 bytes but contents must not exceeed 9 characters.
  * It's not guaranteed that unused bytes will contain 0 so we
  * don't issue error message in this case. 
  */
-
 	  cmd.hdr.call_from[sizeof(cmd.hdr.call_from)-1] = '\0';
 	  cmd.hdr.call_to[sizeof(cmd.hdr.call_to)-1] = '\0';
 
@@ -1456,6 +1451,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		// YAAC asks for this.
 		// Fake it to keep application happy.
+	        // TODO:  Supply real values instead of just faking it.
 
 	        reply.on_air_baud_rate = 0;
 		reply.traffic_level = 1;
@@ -1697,7 +1693,17 @@ static THREAD_F cmd_listen_thread (void *arg)
 	        struct via_info {
 	          unsigned char num_digi;	/* Expect to be in range 1 to 7.  Why not up to 8? */
 		  char dcall[7][10];
-	        } *v = (struct via_info *)cmd.data;
+	        } 
+#if 1
+		// October 2017.  gcc ??? complained:
+		//     warning: dereferencing pointer 'v' does break strict-aliasing rules
+		// Try adding this attribute to get rid of the warning.
+	        // If this upsets your compiler, take it out.
+	        // Let me know.  Maybe we could put in a compiler version check here.
+
+	           __attribute__((__may_alias__))
+#endif
+	                              *v = (struct via_info *)cmd.data;
 
 	        char callsigns[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
 	        int num_calls = 2;	/* 2 plus any digipeaters. */
@@ -1843,6 +1849,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'y':				/* Ask Outstanding frames waiting on a Port  */
 
+	      /* Number of frames sitting in transmit queue for specified channel. */
 	      {
 		struct {
 		  struct agwpe_s hdr;
@@ -1857,7 +1864,40 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int n = 0;
 	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
-		  n = tq_count (cmd.hdr.portx, TQ_PRIO_0_HI) + tq_count (cmd.hdr.portx, TQ_PRIO_1_LO);
+		  n = tq_count (cmd.hdr.portx, -1, "", "", 0);
+		}
+		reply.data_NETLE = host2netle(n);
+
+	        send_to_client (client, &reply);
+	      }
+	      break;
+
+	    case 'Y':				/* How Many Outstanding frames wait for tx for a particular station  */
+
+	      /* Number of frames sitting in transmit queue for given channel, */
+	      /* source (optional) and destination addresses. */
+	      {
+	        char source[AX25_MAX_ADDR_LEN];
+	        char dest[AX25_MAX_ADDR_LEN];
+
+		struct {
+		  struct agwpe_s hdr;
+		  int data_NETLE;			// Little endian order.
+		} reply;
+
+	        strlcpy (source, cmd.hdr.call_from, sizeof(source));
+	        strlcpy (dest, cmd.hdr.call_to, sizeof(dest));
+
+	        memset (&reply, 0, sizeof(reply));
+		reply.hdr.portx = cmd.hdr.portx;	/* Reply with same port number, addresses. */
+	        reply.hdr.datakind = 'Y';
+	        strlcpy (reply.hdr.call_from, source, sizeof(reply.hdr.call_from));
+	        strlcpy (reply.hdr.call_to, dest, sizeof(reply.hdr.call_to));
+	        reply.hdr.data_len_NETLE = host2netle(4);
+
+	        int n = 0;
+	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
+		  n = tq_count (cmd.hdr.portx, -1, source, dest, 0);
 		}
 		reply.data_NETLE = host2netle(n);
 

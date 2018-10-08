@@ -23,15 +23,18 @@ struct cdigi_config_s {
 /*
  * Rules for each of the [from_chan][to_chan] combinations.
  */
+	int	enabled[MAX_CHANS][MAX_CHANS];	// Is it enabled for from/to pair?
 
+	int has_alias[MAX_CHANS][MAX_CHANS];	// If there was no alias in the config file,
+						// the structure below will not be set up
+						// properly and an attempt to use it could
+						// result in a crash.  (fixed v1.5)
+						// Not needed for [APRS] DIGIPEAT because
+						// the alias is mandatory there.
 	regex_t	alias[MAX_CHANS][MAX_CHANS];
 
-	int	enabled[MAX_CHANS][MAX_CHANS];
-
-	char *filter_str[MAX_CHANS+1][MAX_CHANS+1];
+	char *cfilter_str[MAX_CHANS][MAX_CHANS];
 						// NULL or optional Packet Filter strings such as "t/m".
-						// Notice the size of arrays is one larger than normal.
-						// That extra position is for the IGate.
 };
 
 /*

@@ -782,7 +782,7 @@ long Convert_USNG_To_Geodetic (char* USNG,
  */
 { /* Convert_USNG_To_Geodetic */
   long zone;
-  char hemisphere;
+  char hemisphere = '?';
   double easting;
   double northing;
   long zone_exists;
@@ -1178,9 +1178,9 @@ long Convert_USNG_To_UPS ( char   *USNG,
   double false_northing;      /* False northing for 3rd letter              */
   double grid_easting;        /* easting for 100,000 meter grid square      */
   double grid_northing;       /* northing for 100,000 meter grid square     */
-  long zone;
+  long zone = 0;
   long letters[USNG_LETTERS];
-  long in_precision;
+  long in_precision = 0;
   int index = 0;
   long error_code = USNG_NO_ERROR;
 

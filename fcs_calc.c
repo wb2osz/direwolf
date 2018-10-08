@@ -87,6 +87,22 @@ unsigned short fcs_calc (unsigned char *data, int len)
 }
 
 
+/*
+ * CRC is also used for duplicate checking for the digipeater and IGate.
+ * A packet is considered a duplicate if the source, destination, and
+ * information parts match.  In other words, we ignore the via path
+ * which changes along the way.
+ * Rather than keeping a variable length string we just keep a 16 bit
+ * CRC which takes less memory and processing to compare.
+ *
+ * This can result in occasional false matches.  If we had a random
+ * 16 bit number, there is a 1/65536 ( = 0.0015 % ) chance that it will
+ * match and we will drop something that should be passed along.
+ *
+ * Looking at it another way, there is a 0.9999847412109375 (out of 1)
+ * probability of doing the right thing.
+ */
+
 /* 
  * This can be used when we want to calculate a single CRC over disjoint data.
  *

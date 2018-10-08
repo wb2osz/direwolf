@@ -34,7 +34,7 @@ packet_t tq_remove (int chan, int prio);
 
 packet_t tq_peek (int chan, int prio);
 
-int tq_count (int chan, int prio);
+int tq_count (int chan, int prio, char *source, char *dest, int bytes);
 
 #endif
 

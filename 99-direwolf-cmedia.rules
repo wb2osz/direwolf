@@ -1,0 +1,30 @@
+# Normally, all of /dev/hidraw* are accessible only by root.
+#
+#	$ ls -l /dev/hidraw*
+#	crw------- 1 root root 247, 0 Sep 24 09:40 /dev/hidraw0
+#
+# An ordinary user, trying to acccess it will be denied.
+#
+# Unnecessarily running applications as root is generally a bad idea because it makes it too easy
+# to accidentally trash your system.  We need to relax the restrictions so ordinary users can use these devices.
+#
+# If all went well with installation, the  /etc/udev/rules.d directory should contain a file called
+# 99-direwolf-cmedia.rules  containing:
+#
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", GROUP="audio", MODE="0660"
+
+#
+# I used the "audio" group, mimicking the permissions on the sound side of the device.
+#
+#	$ ls -l /dev/snd/pcm*
+#	crw-rw----+ 1 root audio 116, 16 Sep 24 09:40 /dev/snd/pcmC0D0p
+#	crw-rw----+ 1 root audio 116, 17 Sep 24 09:40 /dev/snd/pcmC0D1p
+#
+# You should see something similar to this where someone in the "audio" group has read-write access.
+#
+#	$ ls -l /dev/hidraw*
+#	crw-rw---- 1 root audio 247, 0 Oct  6 19:24 /dev/hidraw0
+#
+# Read the User Guide and run the "cm108" application for more information.
+#

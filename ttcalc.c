@@ -1,4 +1,3 @@
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
@@ -108,11 +107,10 @@ int main (int argc, char *argv[])
 	char data[1024];
 	char hostname[30] = "localhost";
 	char port[10] = "8000";
+	int err;
 
 #if __WIN32__
 #else
-	int err;
-
  	setlinebuf (stdout);
 #endif
 
@@ -142,13 +140,8 @@ int main (int argc, char *argv[])
 
 	mon_cmd.kind_lo = 'k';
 
-#if __WIN32__	      
-	send (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd), 0);
-#else
-	err = write (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
+	err = SOCK_SEND (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
 	(void)err;
-#endif
-
 
 /*
  * Print all of the monitored packets.
@@ -157,11 +150,7 @@ int main (int argc, char *argv[])
 	while (1) {
 	  int n;
 
-#if __WIN32__
-	  n = recv (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd), 0);
-#else
-	  n = read (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
-#endif
+	  n = SOCK_RECV (server_sock, (char*)(&mon_cmd), sizeof(mon_cmd));
 
 	  if (n != sizeof(mon_cmd)) {
 	    printf ("Read error, received %d command bytes.\n", n);
@@ -171,14 +160,10 @@ int main (int argc, char *argv[])
 	  assert (mon_cmd.data_len >= 0 && mon_cmd.data_len < (int)(sizeof(data)));
 
 	  if (mon_cmd.data_len > 0) {
-#if __WIN32__
-	    n = recv (server_sock, data, mon_cmd.data_len, 0);
-#else
-	    n = read (server_sock, data, mon_cmd.data_len);
-#endif
+	    n = SOCK_RECV (server_sock, data, mon_cmd.data_len);
 
 	    if (n != mon_cmd.data_len) {
-	      printf ("Read error, client received %d data bytes when %d expected.\n", n, mon_cmd.data_len);
+	      printf ("Read error, client received %d data bytes when %d expected.  Terminating.\n", n, mon_cmd.data_len);
 	      exit (1);
 	    }
 	  }
@@ -254,11 +239,7 @@ int main (int argc, char *argv[])
 	      xmit_raw.hdr.kind_lo = 'K';
 	      xmit_raw.hdr.data_len = 1 + ax25_pack (reply_pp, xmit_raw.frame);
 
-#if __WIN32__	      
-	      send (server_sock, (char*)(&xmit_raw), sizeof(xmit_raw.hdr)+xmit_raw.hdr.data_len, 0);
-#else
-	      err = write (server_sock, (char*)(&xmit_raw), sizeof(xmit_raw.hdr)+xmit_raw.hdr.data_len);
-#endif
+	      err = SOCK_SEND (server_sock, (char*)(&xmit_raw), sizeof(xmit_raw.hdr)+xmit_raw.hdr.data_len);
 	      ax25_delete (reply_pp);
 	    }
 

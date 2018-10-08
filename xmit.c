@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -74,6 +74,7 @@
 #include "morse.h"
 #include "dtmf.h"
 #include "xid.h"
+#include "dlq.h"
 
 
 
@@ -101,9 +102,11 @@ static int xmit_txtail[MAX_CHANS];	/* Amount of time to keep transmitting after 
 					/* dropping PTT too soon and chopping off the end */
 					/* of the frame.  Again 10 mS units. */
 
+static int xmit_fulldup[MAX_CHANS];	/* Full duplex if non-zero. */
+
 static int xmit_bits_per_sec[MAX_CHANS];	/* Data transmission rate. */
-					/* Often called baud rate which is equivalent in */
-					/* this case but could be different with other */
+					/* Often called baud rate which is equivalent for */
+					/* 1200 & 9600 cases but could be different with other */
 					/* modulation techniques. */
 
 static int g_debug_xmit_packet;		/* print packet in hexadecimal form for debugging. */
@@ -112,10 +115,41 @@ static int g_debug_xmit_packet;		/* print packet in hexadecimal form for debuggi
 // TODO: When this was first written, bits/sec was same as baud.
 // Need to revisit this for PSK modes where they are not the same.
 
+#if 0		// Added during 1.5 beta test
+
+static int BITS_TO_MS (int b, int ch) {
+
+	int bits_per_symbol;
+
+	switch (save_audio_config_p->achan[ch].modem_type) {
+	  case MODEM_QPSK:	bits_per_symbol = 2; break;
+	  case MODEM_8PSK:	bits_per_symbol = 3; break;
+	  case default:		bits_per_symbol = 1; break;
+	}
+
+	return ( (b * 1000) / (xmit_bits_per_sec[(ch)] * bits_per_symbol) );
+}
+
+static int MS_TO_BITS (int ms, int ch) {
+
+	int bits_per_symbol;
+
+	switch (save_audio_config_p->achan[ch].modem_type) {
+	  case MODEM_QPSK:	bits_per_symbol = 2; break;
+	  case MODEM_8PSK:	bits_per_symbol = 3; break;
+	  case default:		bits_per_symbol = 1; break;
+	}
+
+	return ( (ms * xmit_bits_per_sec[(ch)] * bits_per_symbol) / 1000 );  TODO...
+}
+
+#else		// OK for 1200, 9600 but wrong for PSK
 
 #define BITS_TO_MS(b,ch) (((b)*1000)/xmit_bits_per_sec[(ch)])
 
 #define MS_TO_BITS(ms,ch) (((ms)*xmit_bits_per_sec[(ch)])/1000)
+
+#endif
 
 #define MAXX(a,b) (((a)>(b)) ? (a) : (b))
 
@@ -137,7 +171,7 @@ static dw_mutex_t audio_out_dev_mutex[MAX_ADEVS];
 
 
 
-static int wait_for_clear_channel (int channel, int slotttime, int persist);
+static int wait_for_clear_channel (int channel, int slotttime, int persist, int fulldup);
 static void xmit_ax25_frames (int c, int p, packet_t pp, int max_bundle);
 static int send_one_frame (int c, int p, packet_t pp);
 static void xmit_speech (int c, packet_t pp);
@@ -218,6 +252,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 	  xmit_persist[j] = p_modem->achan[j].persist;
 	  xmit_txdelay[j] = p_modem->achan[j].txdelay;
 	  xmit_txtail[j] = p_modem->achan[j].txtail;
+	  xmit_fulldup[j] = p_modem->achan[j].fulldup;
 	}
 
 #if DEBUG
@@ -306,6 +341,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
  *		xmit_set_persist
  *		xmit_set_slottime
  *		xmit_set_txtail
+ *		xmit_set_fulldup
  *				
  *
  * Purpose:     The KISS protocol, and maybe others, can specify
@@ -352,6 +388,13 @@ void xmit_set_txtail (int channel, int value)
 {
 	if (channel >= 0 && channel < MAX_CHANS) {
 	  xmit_txtail[channel] = value;
+	}
+}
+
+void xmit_set_fulldup (int channel, int value)
+{
+	if (channel >= 0 && channel < MAX_CHANS) {
+	  xmit_fulldup[channel] = value;
 	}
 }
 
@@ -490,7 +533,7 @@ static void * xmit_thread (void *arg)
  * If there is something in the high priority queue, begin transmitting immediately.
  * Otherwise, wait a random amount of time, in hopes of minimizing collisions.
  */
-	    ok = wait_for_clear_channel (chan, xmit_slottime[chan], xmit_persist[chan]);
+	    ok = wait_for_clear_channel (chan, xmit_slottime[chan], xmit_persist[chan], xmit_fulldup[chan]);
 
 	    prio = TQ_PRIO_1_LO;
 	    pp = tq_remove (chan, TQ_PRIO_0_HI);
@@ -670,6 +713,8 @@ static void * xmit_thread (void *arg)
  *		Once we have control of the channel, we might as well keep going.
  *		[High] Priority frames will always go to head of the line,
  *
+ * Version 1.5:	Add full duplex option.
+ *
  *--------------------------------------------------------------------*/
 
 
@@ -710,12 +755,23 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 #endif
 	ptt_set (OCTYPE_PTT, chan, 1);
 
+
+// Inform data link state machine that we are now transmitting.
+
+	dlq_seize_confirm (chan);	// C4.2.  "This primitive indicates, to the Data-link State
+					// machine, that the transmission opportunity has arrived."
+
 	pre_flags = MS_TO_BITS(xmit_txdelay[chan] * 10, chan) / 8;
 	num_bits =  hdlc_send_flags (chan, pre_flags, 0);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("xmit_thread: txdelay=%d [*10], pre_flags=%d, num_bits=%d\n", xmit_txdelay[chan], pre_flags, num_bits);
 #endif
+
+	SLEEP_MS (10);			// Give data link state machine a chance to
+					// to stuff more frames into the transmit queue,
+					// in response to dlq_seize_confirm, so
+					// we don't run off the end too soon.
 
 
 /*
@@ -900,13 +956,43 @@ static int send_one_frame (int c, int p, packet_t pp)
 
 
 	if (ax25_is_null_frame(pp)) {
+
+	  // Issue 132 - We could end up in a situation where:
+	  // Transmitter is already on.
+	  // Application wants to send a frame.
+	  // dl_seize_request turns into this null frame.
+	  // It was being ignored here so the data got stuck in the queue.
+	  // I think the solution is to send back a seize confirm here.
+	  // It shouldn't hurt if we send it redundantly.
+	  // Added for 1.5 beta test 4.
+
+	  dlq_seize_confirm (c);	// C4.2.  "This primitive indicates, to the Data-link State
+					// machine, that the transmission opportunity has arrived."
+
+	  SLEEP_MS (10);		// Give data link state machine a chance to
+					// to stuff more frames into the transmit queue,
+					// in response to dlq_seize_confirm, so
+					// we don't run off the end too soon.
+
 	  return(0);
+	}
+
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
 	}
 
 	ax25_format_addrs (pp, stemp);
 	info_len = ax25_get_info (pp, &pinfo);
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d%c] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L');
+	dw_printf ("[%d%c%s] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L', ts);
 	dw_printf ("%s", stemp);			/* stations followed by : */
 
 /* Demystify non-APRS.  Use same format for received frames in direwolf.c. */
@@ -925,7 +1011,7 @@ static int send_one_frame (int c, int p, packet_t pp)
 
 	  if (ftype == frame_type_U_XID) {
 	    struct xid_param_s param;
-	    char info2text[100];
+	    char info2text[150];
 
 	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
 	    dw_printf (" %s\n", info2text);
@@ -1008,11 +1094,23 @@ static void xmit_speech (int c, packet_t pp)
  * Print spoken packet.  Prefix by channel.
  */
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
+
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.speech] \"%s\"\n", c, pinfo);
+	dw_printf ("[%d.speech%s] \"%s\"\n", c, ts, pinfo);
 
 
 	if (strlen(save_audio_config_p->tts_script) == 0) {
@@ -1123,11 +1221,22 @@ static void xmit_morse (int c, packet_t pp, int wpm)
 	int length_ms, wait_ms;
 	double start_ptt, wait_until, now;
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
 
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.morse] \"%s\"\n", c, pinfo);
+	dw_printf ("[%d.morse%s] \"%s\"\n", c, ts, pinfo);
 
 	ptt_set (OCTYPE_PTT, c, 1);
 	start_ptt = dtime_now();
@@ -1184,11 +1293,22 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
 	int length_ms, wait_ms;
 	double start_ptt, wait_until, now;
 
+	char ts[100];		// optional time stamp.
+
+	if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	  char tstmp[100];
+	  timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	  strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	  strlcat (ts, tstmp, sizeof(ts));
+	}
+	else {
+	  strlcpy (ts, "", sizeof(ts));
+	}
 
 	info_len = ax25_get_info (pp, &pinfo);
 	(void)info_len;
 	text_color_set(DW_COLOR_XMIT);
-	dw_printf ("[%d.dtmf] \"%s\"\n", c, pinfo);
+	dw_printf ("[%d.dtmf%s] \"%s\"\n", c, ts, pinfo);
 
 	ptt_set (OCTYPE_PTT, c, 1);
 	start_ptt = dtime_now();
@@ -1231,11 +1351,18 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
  *		slottime - 	Amount of time to wait for each iteration
  *				of the waiting algorithm.  10 mSec units.
  *
- *		persist -	Probability of transmitting 
+ *		persist -	Probability of transmitting.
+ *
+ *		fulldup -	Full duplex.  Just start sending immediately.
  *
  * Returns:	1 for OK.  0 for timeout.
  *
  * Description:	New in version 1.2: also obtain a lock on audio out device.
+ *
+ *		New in version 1.5: full duplex.
+ *		Just start transmitting rather than waiting for clear channel.
+ *		This would only be appropriate when transmit and receive are
+ *		using different radio freqencies.  e.g.  VHF up, UHF down satellite.
  *
  * Transmit delay algorithm:
  *
@@ -1271,9 +1398,16 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
 #define WAIT_TIMEOUT_MS (60 * 1000)	
 #define WAIT_CHECK_EVERY_MS 10
 
-static int wait_for_clear_channel (int chan, int slottime, int persist)
+static int wait_for_clear_channel (int chan, int slottime, int persist, int fulldup)
 {
 	int n = 0;
+
+/*
+ * For dull duplex we skip the channel busy check and random wait.
+ * We still need to wait if operating in stereo and the other audio
+ * half is busy.
+ */
+	if ( ! fulldup) {
 
 start_over_again:
 
@@ -1317,6 +1451,7 @@ start_over_again:
 	  if (r <= persist) {
 	    break;
  	  }	
+	}
 	}
 
 /*

@@ -1,5 +1,8 @@
 
 #include "direwolf.h"
+
+#include <stdio.h>
+
 #include "textcolor.h"
 #include "dtime_now.h"
 
@@ -17,8 +20,28 @@
 #include <sys/time.h>
 #endif
 
+#include <string.h>		// needed for Mac.
 
 
+/*------------------------------------------------------------------
+ *
+ * Name:	dtime_now
+ *
+ * Purpose:   	Return current time as double precision.
+ *		
+ * Input:	none
+ *
+ * Returns:	Unix time, as double precision, so we can get resolution
+ *		finer than one second.		
+ *
+ * Description:	Normal unix time is in seconds since 1/1/1970 00:00:00 UTC.
+ *		Sometimes we want resolution finer than a second.
+ *		Rather than having a separate variable for the fractional
+ *		part of a second, and having extra calculations everywhere,
+ *		simply use double precision floating point to make usage
+ *		easier.
+ *		
+ *---------------------------------------------------------------*/
 
 
 double dtime_now (void)
@@ -59,3 +82,148 @@ double dtime_now (void)
 
 	return (result);
 }
+
+
+#if __WIN32__
+
+/* 
+ * Windows doesn't have localtime_r.
+ * It should have the equivalent localtime_s, with opposite parameter
+ * order,  but I get undefined reference when trying to use it.
+ */
+
+static struct tm *localtime_r(time_t *clock, struct tm *res)
+{
+	struct tm *tm;
+
+	tm = localtime (clock);
+	memcpy (res, tm, sizeof(struct tm));
+	return (res);
+}
+
+#endif
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:	timestamp_now
+ *
+ * Purpose:   	Convert local time to one of these formats for debug output.
+ *
+ *			HH:MM:SS
+ *			HH:MM:SS.mmm
+ *		
+ * Input:	result_size	- Size of result location.
+ *				  Should be at least 9 or 13.
+ *
+ *		show_ms		- True to display milliseconds.
+ *
+ * Output:	result		- Result is placed here.
+ *
+ *---------------------------------------------------------------*/
+
+void timestamp_now (char *result, int result_size, int show_ms)
+{
+	double now = dtime_now();
+	time_t t = (int)now;
+	struct tm tm;
+
+	localtime_r (&t, &tm);
+	strftime (result, result_size, "%H:%M:%S", &tm);
+
+	if (show_ms) {
+	  int ms = (now - (int)t) * 1000;
+	  char strms[16];
+
+	  if (ms == 1000) ms = 999;
+	  sprintf (strms, ".%03d", ms);
+	  strlcat (result, strms, result_size);
+	}
+
+}  /* end timestamp_now */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:	timestamp_user_format
+ *
+ * Purpose:   	Convert local time user-specified format.  e.g.
+ *
+ *			HH:MM:SS
+ *			mm/dd/YYYY HH:MM:SS
+ *			dd/mm/YYYY HH:MM:SS
+ *		
+ * Input:	result_size	- Size of result location.
+ *
+ *		user_format	- See strftime documentation.
+ *
+ *					https://linux.die.net/man/3/strftime
+ *					https://msdn.microsoft.com/en-us/library/aa272978(v=vs.60).aspx
+ *					
+ *				  Note that Windows does not support all of the Linux formats.
+ *				  For example, Linux has %T which is equivalent to %H:%M:%S
+ *
+ * Output:	result		- Result is placed here.
+ *
+ *---------------------------------------------------------------*/
+
+void timestamp_user_format (char *result, int result_size, char *user_format)
+{
+	double now = dtime_now();
+	time_t t = (int)now;
+	struct tm tm;
+
+	localtime_r (&t, &tm);
+	strftime (result, result_size, user_format, &tm);
+
+}  /* end timestamp_user_format */
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:	timestamp_filename
+ *
+ * Purpose:   	Generate unique file name based on the current time.
+ *		The format will be:		
+ *
+ *			YYYYMMDD-HHMMSS-mmm
+ *		
+ * Input:	result_size	- Size of result location.
+ *				  Should be at least 20.
+ *
+ * Output:	result		- Result is placed here.
+ *
+ * Description:	This is for the kissutil "-r" option which places
+ *		each received frame in a new file.  It is possible to
+ *		have two packets arrive in less than a second so we
+ *		need more than one second resolution.
+ *
+ *		What if someone wants UTC, rather than local time?
+ *		You can simply set an environment variable like this:
+ *
+ *			TZ=UTC direwolf
+ *
+ *		so it's probably not worth the effort to add another
+ *		option.
+ *
+ *---------------------------------------------------------------*/
+
+void timestamp_filename (char *result, int result_size)
+{
+	double now = dtime_now();
+	time_t t = (int)now;
+	struct tm tm;
+
+	localtime_r (&t, &tm);
+	strftime (result, result_size, "%Y%m%d-%H%M%S", &tm);
+
+	int ms = (now - (int)t) * 1000;
+	char strms[16];
+
+	if (ms == 1000) ms = 999;
+	sprintf (strms, "-%03d", ms);
+	strlcat (result, strms, result_size);
+
+}  /* end timestamp_filename */
+

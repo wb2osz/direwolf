@@ -468,7 +468,7 @@ int tt_text_to_call10 (const char *text, int quiet, char *buttons)
 	int errors = 0;
 	int found;
 	char padded[8];
-	char stemp[8];
+	char stemp[11];
 
 
 	strcpy (buttons, "");

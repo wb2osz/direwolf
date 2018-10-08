@@ -312,7 +312,13 @@ int main (int argc, char *argv[])
 	      /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
 	      /* that need to be kept in sync.  Maybe it could be a common function someday. */
 
-	      if (my_audio_config.achan[0].baud < 600) {
+	      if (my_audio_config.achan[0].baud == 100) {
+                my_audio_config.achan[0].modem_type = MODEM_AFSK;
+                my_audio_config.achan[0].mark_freq = 1615;
+                my_audio_config.achan[0].space_freq = 1785;
+	        strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	      }
+	      else if (my_audio_config.achan[0].baud < 600) {
                 my_audio_config.achan[0].modem_type = MODEM_AFSK;
                 my_audio_config.achan[0].mark_freq = 1600;
                 my_audio_config.achan[0].space_freq = 1800;

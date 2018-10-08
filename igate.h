@@ -39,6 +39,9 @@ struct igate_config_s {
 	char t2_passcode[8];		/* Max. 5 digits. Could be "-1". */
 
 	char *t2_filter;		/* Optional filter for IS -> RF direction. */
+					/* This is the "server side" filter. */
+					/* A better name would be subscription or something */
+					/* like that because we can only ask for more. */
 
 /*
  * For transmitting.
@@ -70,6 +73,11 @@ struct igate_config_s {
 					/* or a small number to allow more. */
 
 /*
+ * Receiver to IS data options.
+ */
+	int rx2ig_dedupe_time;		/* seconds.  0 to disable. */
+
+/*
  * Special SATgate mode to delay packets heard directly.
  */
 	int satgate_delay;		/* seconds.  0 to disable. */
@@ -81,6 +89,10 @@ struct igate_config_s {
 
 #define IGATE_TX_LIMIT_5_DEFAULT 20
 #define IGATE_TX_LIMIT_5_MAX     80
+
+#define IGATE_RX2IG_DEDUPE_TIME 0		/* Issue 85.  0 means disable dupe checking in RF>IS direction. */
+						/* See comments in rx_to_ig_remember & rx_to_ig_allow. */
+						/* Currently there is no configuration setting to change this. */
 
 #define DEFAULT_SATGATE_DELAY 10
 #define MIN_SATGATE_DELAY 5

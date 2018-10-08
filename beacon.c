@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -141,6 +141,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo);
 void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct igate_config_s *pigate)
 {
 	time_t now;
+	struct tm tm;
 	int j;
 	int count;
 #if __WIN32__
@@ -270,21 +271,71 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 	}
 
 /*
- * Calculate first time for each beacon from the 'delay' value.
+ * Calculate first time for each beacon from the 'slot' or 'delay' value.
  */
 
 	now = time(NULL);
+	localtime_r (&now, &tm);
 
 	for (j=0; j<g_misc_config_p->num_beacons; j++) {
+	  struct beacon_s *bp = & (g_misc_config_p->beacon[j]);
 #if DEBUG
 
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("beacon[%d] chan=%d, delay=%d, every=%d\n",
+	  dw_printf ("beacon[%d] chan=%d, delay=%d, slot=%d, every=%d\n",
 		j,
-		g_misc_config_p->beacon[j].sendto_chan,
-		g_misc_config_p->beacon[j].delay,
-		g_misc_config_p->beacon[j].every);
+		bp->sendto_chan,
+		bp->delay,
+		bp->slot,
+		bp->every);
 #endif
+
+/*
+ * If timeslots, there must be a full number of beacon intervals per hour.
+ */
+#define IS_GOOD(x) ((3600/(x))*(x) == 3600)
+
+	  if (bp->slot != G_UNKNOWN) {
+
+	    if ( ! IS_GOOD(bp->every)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: When using timeslots, there must be a whole number of beacon intervals per hour.\n", bp->lineno);
+
+	      // Try to make it valid by adjusting up or down.
+
+	      int n;
+	      for (n=1; ; n++) {
+	        int e;
+	        e = bp->every + n;
+	        if (e > 3600) {
+	          bp->every = 3600;
+	          break;
+	        }
+	        if (IS_GOOD(e)) {
+	          bp->every = e;
+	          break;
+	        }
+	        e = bp->every - n;
+	        if (e < 1) {
+	          bp->every = 1;	// Impose a larger minimum?
+	          break;
+	        }
+	        if (IS_GOOD(e)) {
+	          bp->every = e;
+	          break;
+	        }
+	      }
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Time between slotted beacons has been adjusted to %d seconds.\n", bp->lineno, bp->every);
+	    }
+/*
+ * Determine when next slot time will arrive.
+ */
+	    bp->delay = bp->slot - (tm.tm_min * 60 + tm.tm_sec);
+	    while (bp->delay > bp->every) bp->delay -= bp->every;
+	    while (bp->delay < 5) bp->delay += bp->every;
+	  }
+
 	  g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].delay;
 	}
 
@@ -491,10 +542,12 @@ static void * beacon_thread (void *arg)
  */
 	  for (j=0; j<g_misc_config_p->num_beacons; j++) {
 
-	    if (g_misc_config_p->beacon[j].btype == BEACON_IGNORE)
+	    struct beacon_s *bp = & (g_misc_config_p->beacon[j]);
+
+	    if (bp->btype == BEACON_IGNORE)
 	      continue;
 
-	    if (g_misc_config_p->beacon[j].next <= now) {
+	    if (bp->next <= now) {
 
 	      /* Send the beacon. */
 
@@ -503,13 +556,20 @@ static void * beacon_thread (void *arg)
 	      /* Calculate when the next one should be sent. */
 	      /* Easy for fixed interval.  SmartBeaconing takes more effort. */
 
-	      if (g_misc_config_p->beacon[j].btype == BEACON_TRACKER) {
+	      if (bp->btype == BEACON_TRACKER) {
 
 	        if (gpsinfo.fix < DWFIX_2D) {
 	          /* Fix not available so beacon was not sent. */
-	          /* Try again in a couple seconds. */
 
-	          g_misc_config_p->beacon[j].next = now + 2;
+		  if (g_misc_config_p->sb_configured) {
+	            /* Try again in a couple seconds. */
+	            bp->next = now + 2;
+	          }
+	          else {
+	            /* Stay with the schedule. */
+	            /* Important for slotted.  Might reconsider otherwise. */
+	            bp->next += bp->every;
+	          }
 	        }
 	        else if (g_misc_config_p->sb_configured) {
 
@@ -519,18 +579,21 @@ static void * beacon_thread (void *arg)
 		  sb_prev_time = now;
 		  sb_prev_course = gpsinfo.track;
 
-	          g_misc_config_p->beacon[j].next = sb_calculate_next_time (now, 
+	          bp->next = sb_calculate_next_time (now,
 			DW_KNOTS_TO_MPH(gpsinfo.speed_knots), gpsinfo.track,
 			sb_prev_time, sb_prev_course);
 	        }
 	        else {
-	          g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].every;
+	          /* Tracker beacon, fixed spacing. */
+	          bp->next += bp->every;
 	        }
 	      }
 	      else {
-	        /* non-tracker beacons are at fixed spacing. */
+	        /* Non-tracker beacon, fixed spacing. */
+		/* Increment by 'every' so slotted times come out right. */
+	        /* i.e. Don't take relative to now in case there was some delay. */
 
-	        g_misc_config_p->beacon[j].next = now + g_misc_config_p->beacon[j].every;
+	        bp->next += bp->every;
 	      }
 
 	    }  /* if time to send it */
@@ -682,6 +745,7 @@ static time_t sb_calculate_next_time (time_t now,
 static void beacon_send (int j, dwgps_info_t *gpsinfo)
 {
 
+	struct beacon_s *bp = & (g_misc_config_p->beacon[j]);
 
 	      int strict = 1;	/* Strict packet checking because they will go over air. */
 	      char stemp[20];
@@ -704,13 +768,13 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
  */
 	      strlcpy (mycall, "NOCALL", sizeof(mycall));
 
-	      assert (g_misc_config_p->beacon[j].sendto_chan >= 0);
+	      assert (bp->sendto_chan >= 0);
 
-	      strlcpy (mycall, g_modem_config_p->achan[g_misc_config_p->beacon[j].sendto_chan].mycall, sizeof(mycall));
+	      strlcpy (mycall, g_modem_config_p->achan[bp->sendto_chan].mycall, sizeof(mycall));
 	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("MYCALL not set for beacon in config file line %d.\n", g_misc_config_p->beacon[j].lineno);
+	        dw_printf ("MYCALL not set for beacon in config file line %d.\n", bp->lineno);
 		return;
 	      }
 
@@ -723,17 +787,17 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	      strlcpy (beacon_text, mycall, sizeof(beacon_text));
 	      strlcat (beacon_text, ">", sizeof(beacon_text));
 
-	      if (g_misc_config_p->beacon[j].dest != NULL) {
-	        strlcat (beacon_text, g_misc_config_p->beacon[j].dest, sizeof(beacon_text));
+	      if (bp->dest != NULL) {
+	        strlcat (beacon_text, bp->dest, sizeof(beacon_text));
 	      } 
 	      else {
 	         snprintf (stemp, sizeof(stemp), "%s%1d%1d", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION);
 	         strlcat (beacon_text, stemp, sizeof(beacon_text));
 	      }
 
-	      if (g_misc_config_p->beacon[j].via != NULL) {
+	      if (bp->via != NULL) {
 	        strlcat (beacon_text, ",", sizeof(beacon_text));
-	        strlcat (beacon_text, g_misc_config_p->beacon[j].via, sizeof(beacon_text));
+	        strlcat (beacon_text, bp->via, sizeof(beacon_text));
 	      }
 	      strlcat (beacon_text, ":", sizeof(beacon_text));
 
@@ -746,23 +810,23 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 // TODO: test & document.
 
 	      strlcpy (super_comment, "", sizeof(super_comment));
-	      if (g_misc_config_p->beacon[j].comment != NULL) {
-	        strlcpy (super_comment, g_misc_config_p->beacon[j].comment, sizeof(super_comment));
+	      if (bp->comment != NULL) {
+	        strlcpy (super_comment, bp->comment, sizeof(super_comment));
 	      }
 
-	      if (g_misc_config_p->beacon[j].commentcmd != NULL) {
+	      if (bp->commentcmd != NULL) {
 	        char var_comment[AX25_MAX_INFO_LEN];
 	        int k;
 
 	        /* Run given command to get variable part of comment. */
 
-	        k = dw_run_cmd (g_misc_config_p->beacon[j].commentcmd, 2, var_comment, sizeof(var_comment));
+	        k = dw_run_cmd (bp->commentcmd, 2, var_comment, sizeof(var_comment));
 	        if (k > 0) {
 	          strlcat (super_comment, var_comment, sizeof(super_comment));
 	        }
 	        else {
 		  text_color_set(DW_COLOR_ERROR);
-	    	  dw_printf ("xBEACON, config file line %d, COMMENTCMD failure.\n", g_misc_config_p->beacon[j].lineno);
+	          dw_printf ("xBEACON, config file line %d, COMMENTCMD failure.\n", bp->lineno);
 	        }
 	      }
 
@@ -770,17 +834,17 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 /* 
  * Add the info part depending on beacon type. 
  */
-	      switch (g_misc_config_p->beacon[j].btype) {
+	      switch (bp->btype) {
 
 		case BEACON_POSITION:
 
-		  encode_position (g_misc_config_p->beacon[j].messaging, g_misc_config_p->beacon[j].compress,
-			g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, 0,
-			(int)roundf(DW_METERS_TO_FEET(g_misc_config_p->beacon[j].alt_m)),
-			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
-			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
+		  encode_position (bp->messaging, bp->compress,
+			bp->lat, bp->lon, bp->ambiguity,
+			(int)roundf(DW_METERS_TO_FEET(bp->alt_m)),
+			bp->symtab, bp->symbol,
+			bp->power, bp->height, bp->gain, bp->dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */
-			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset,
+			bp->freq, bp->tone, bp->offset,
 			super_comment,
 			info, sizeof(info));
 		  strlcat (beacon_text, info, sizeof(beacon_text));
@@ -788,11 +852,11 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		case BEACON_OBJECT:
 
-		  encode_object (g_misc_config_p->beacon[j].objname, g_misc_config_p->beacon[j].compress, 0, g_misc_config_p->beacon[j].lat, g_misc_config_p->beacon[j].lon, 0,
-			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
-			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
+		  encode_object (bp->objname, bp->compress, 0, bp->lat, bp->lon, bp->ambiguity,
+			bp->symtab, bp->symbol,
+			bp->power, bp->height, bp->gain, bp->dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */
-			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset, super_comment,
+			bp->freq, bp->tone, bp->offset, super_comment,
 			info, sizeof(info));
 		  strlcat (beacon_text, info, sizeof(beacon_text));
 		  break;
@@ -809,7 +873,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	            /* transmission of altitude from GPS. */
 
 	            my_alt_ft = G_UNKNOWN;
-	            if (gpsinfo->fix >= 3 && gpsinfo->altitude != G_UNKNOWN && g_misc_config_p->beacon[j].alt_m > 0) {
+	            if (gpsinfo->fix >= 3 && gpsinfo->altitude != G_UNKNOWN && bp->alt_m > 0) {
 	              my_alt_ft = (int)roundf(DW_METERS_TO_FEET(gpsinfo->altitude));
 	            }
 
@@ -818,12 +882,12 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	              coarse = (int)roundf(gpsinfo->track);
 	            }
 
-		    encode_position (g_misc_config_p->beacon[j].messaging, g_misc_config_p->beacon[j].compress, 
-			gpsinfo->dlat, gpsinfo->dlon, 0, my_alt_ft,
-			g_misc_config_p->beacon[j].symtab, g_misc_config_p->beacon[j].symbol, 
-			g_misc_config_p->beacon[j].power, g_misc_config_p->beacon[j].height, g_misc_config_p->beacon[j].gain, g_misc_config_p->beacon[j].dir,
+		    encode_position (bp->messaging, bp->compress,
+			gpsinfo->dlat, gpsinfo->dlon, bp->ambiguity, my_alt_ft,
+			bp->symtab, bp->symbol,
+			bp->power, bp->height, bp->gain, bp->dir,
 			coarse, (int)roundf(gpsinfo->speed_knots),
-			g_misc_config_p->beacon[j].freq, g_misc_config_p->beacon[j].tone, g_misc_config_p->beacon[j].offset,
+			bp->freq, bp->tone, bp->offset,
 			super_comment,
 			info, sizeof(info));
 		    strlcat (beacon_text, info, sizeof(beacon_text));
@@ -845,8 +909,8 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	  	      A.g_dcs    = G_UNKNOWN;
 
 		      strlcpy (A.g_src, mycall, sizeof(A.g_src));
-		      A.g_symbol_table = g_misc_config_p->beacon[j].symtab;
-		      A.g_symbol_code = g_misc_config_p->beacon[j].symbol;
+		      A.g_symbol_table = bp->symtab;
+		      A.g_symbol_code = bp->symbol;
 		      A.g_lat = gpsinfo->dlat;
 		      A.g_lon = gpsinfo->dlon;
 		      A.g_speed_mph = DW_KNOTS_TO_MPH(gpsinfo->speed_knots);
@@ -865,25 +929,25 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		case BEACON_CUSTOM:
 
-		  if (g_misc_config_p->beacon[j].custom_info != NULL) {
+		  if (bp->custom_info != NULL) {
 
 		    /* Fixed handcrafted text. */
 
-	            strlcat (beacon_text, g_misc_config_p->beacon[j].custom_info, sizeof(beacon_text));
+	            strlcat (beacon_text, bp->custom_info, sizeof(beacon_text));
 		  }
-		  else if (g_misc_config_p->beacon[j].custom_infocmd != NULL) {
+		  else if (bp->custom_infocmd != NULL) {
 		    char info_part[AX25_MAX_INFO_LEN];
 		    int k;
 
 	            /* Run given command to obtain the info part for packet. */
 
-		    k = dw_run_cmd (g_misc_config_p->beacon[j].custom_infocmd, 2, info_part, sizeof(info_part));
+		    k = dw_run_cmd (bp->custom_infocmd, 2, info_part, sizeof(info_part));
 		    if (k > 0) {
 	              strlcat (beacon_text, info_part, sizeof(beacon_text));
 	            }
 	            else {
 		      text_color_set(DW_COLOR_ERROR);
-	    	      dw_printf ("CBEACON, config file line %d, INFOCMD failure.\n", g_misc_config_p->beacon[j].lineno);
+	              dw_printf ("CBEACON, config file line %d, INFOCMD failure.\n", bp->lineno);
 		      strlcpy (beacon_text, "", sizeof(beacon_text));  // abort!
 	            }
 		  }
@@ -935,7 +999,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	        alevel_t alevel;
 
 
-	        switch (g_misc_config_p->beacon[j].sendto_type) {
+	        switch (bp->sendto_type) {
 
 	          case SENDTO_IGATE:
 
@@ -949,7 +1013,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 		  case SENDTO_XMIT:
 		  default:
 
-	            tq_append (g_misc_config_p->beacon[j].sendto_chan, TQ_PRIO_1_LO, pp);
+	            tq_append (bp->sendto_chan, TQ_PRIO_1_LO, pp);
 		    break;
 
 		  case SENDTO_RECV:
@@ -957,13 +1021,13 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	            /* Simulated reception from radio. */
 
 		    memset (&alevel, 0xff, sizeof(alevel));
-	            dlq_rec_frame (g_misc_config_p->beacon[j].sendto_chan, 0, 0, pp, alevel, 0, "");
+	            dlq_rec_frame (bp->sendto_chan, 0, 0, pp, alevel, 0, "");
 	            break; 
 		}
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file: Failed to parse packet constructed from line %d.\n", g_misc_config_p->beacon[j].lineno);
+	        dw_printf ("Config file: Failed to parse packet constructed from line %d.\n", bp->lineno);
 	        dw_printf ("%s\n", beacon_text);
 	      }
 

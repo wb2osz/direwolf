@@ -292,6 +292,14 @@ unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) {
  *
  *------------------------------------------------------------------------------*/
 
+static float dc_average[MAX_CHANS];
+
+int multi_modem_get_dc_average (int chan)
+{
+	// Scale to +- 200 so it will like the deviation measurement.
+
+	return ( (int) ((float)(dc_average[chan]) * (200.0f / 32767.0f) ) );
+}
 
 __attribute__((hot))
 void multi_modem_process_sample (int chan, int audio_sample) 
@@ -300,11 +308,28 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	int subchan;
 	static int i = 0;	/* for interleaving among multiple demodulators. */
 
-// TODO: temp debug, remove this.
+// Accumulate an average DC bias level.
+// Shouldn't happen with a soundcard but could with mistuned SDR.
 
-	assert (save_audio_config_p->achan[chan].num_subchan > 0 && save_audio_config_p->achan[chan].num_subchan <= MAX_SUBCHANS);
-	assert (save_audio_config_p->achan[chan].num_slicers > 0 && save_audio_config_p->achan[chan].num_slicers <= MAX_SLICERS);
+	dc_average[chan] = dc_average[chan] * 0.999f + (float)audio_sample * 0.001f;
 
+
+// Issue 128.  Someone ran into this.
+
+	//assert (save_audio_config_p->achan[chan].num_subchan > 0 && save_audio_config_p->achan[chan].num_subchan <= MAX_SUBCHANS);
+	//assert (save_audio_config_p->achan[chan].num_slicers > 0 && save_audio_config_p->achan[chan].num_slicers <= MAX_SLICERS);
+
+	if (save_audio_config_p->achan[chan].num_subchan <= 0 || save_audio_config_p->achan[chan].num_subchan > MAX_SUBCHANS ||
+	    save_audio_config_p->achan[chan].num_slicers <= 0 || save_audio_config_p->achan[chan].num_slicers > MAX_SLICERS) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("ERROR!  Something is seriously wrong in %s %s.\n", __FILE__, __func__);
+	  dw_printf ("chan = %d, num_subchan = %d [max %d], num_slicers = %d [max %d]\n", chan,
+									save_audio_config_p->achan[chan].num_subchan, MAX_SUBCHANS,
+									save_audio_config_p->achan[chan].num_slicers, MAX_SLICERS);
+	  dw_printf ("Please report this message and include a copy of your configuration file.\n");
+	  exit (EXIT_FAILURE);
+	}
 
 	/* Formerly one loop. */
 	/* 1.2: We can feed one demodulator but end up with multiple outputs. */

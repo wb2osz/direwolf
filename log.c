@@ -28,6 +28,13 @@
  *		unreadable, format, write separated properties into 
  *		CSV format for easy reading and later processing.
  *
+ *		There are two alternatives here.
+ *
+ *		-L logfile		Specify full file path.
+ *
+ *		-l logdir		Daily names will be created here.
+ *
+ *		Use one or the other but not both.
  *
  *------------------------------------------------------------------*/
 
@@ -91,26 +98,39 @@ static void quote_for_csv (char *out, size_t outsize, const char *in) {
  *
  * Purpose:	Initialization at start of application.
  *
- * Inputs:	path		- Path of log file directory.
+ * Inputs:	daily_names	- True if daily names should be generated.
+ *				  In this case path is a directory.
+ *				  When false, path would be the file name.
+ *
+ *		path		- Log file name or just directory.
  *				  Use "." for current directory.
  *				  Empty string disables feature.
  *
- * Global Out:	g_log_dir 	- Save directory here for later use.
+ * Global Out:	g_daily_names	- True if daily names should be generated.
+ *
+ *		g_log_path 	- Save directory or full name here for later use.
+ *
  *		g_log_fp	- File pointer for writing.
+ *				  Note that file is kept open.
+ *				  We don't open/close for every new item.
+ *
  *		g_open_fname	- Name of currently open file.
+ *				  Applicable only when g_daily_names is true.
  *
  *------------------------------------------------------------------*/
 
-static char g_log_dir[80];
+static int g_daily_names;
+static char g_log_path[80];
 static FILE *g_log_fp;
 static char g_open_fname[20];
 
 
-void log_init (char *path) 
+void log_init (int daily_names, char *path)
 { 
 	struct stat st;
 
-	strlcpy (g_log_dir, "", sizeof(g_log_dir));
+	g_daily_names = daily_names;
+	strlcpy (g_log_path, "", sizeof(g_log_path));
 	g_log_fp = NULL;
 	strlcpy (g_open_fname, "", sizeof(g_open_fname));
 
@@ -118,42 +138,57 @@ void log_init (char *path)
 	  return;
 	}
 
-	if (stat(path,&st) == 0) {
-	  // Exists, but is it a directory?
-	  if (S_ISDIR(st.st_mode)) {
-	    // Specified directory exists.
-	    strlcpy (g_log_dir, path, sizeof(g_log_dir));
+	if (g_daily_names) {
+
+// Original strategy.  Automatic daily file names.
+
+	  if (stat(path,&st) == 0) {
+	    // Exists, but is it a directory?
+	    if (S_ISDIR(st.st_mode)) {
+	      // Specified directory exists.
+	      strlcpy (g_log_path, path, sizeof(g_log_path));
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Log file location \"%s\" is not a directory.\n", path);
+	      dw_printf ("Using current working directory \".\" instead.\n");
+	      strlcpy (g_log_path, ".", sizeof(g_log_path));
+	    }
 	  }
 	  else {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Log file location \"%s\" is not a directory.\n", path);
-	    dw_printf ("Using current working directory \".\" instead.\n");
-	    strlcpy (g_log_dir, ".", sizeof(g_log_dir));
+	    // Doesn't exist.  Try to create it.
+	    // parent directory must exist.
+	    // We don't create multiple levels like "mkdir -p"
+#if __WIN32__
+	    if (_mkdir (path) == 0) {
+#else
+	    if (mkdir (path, 0777) == 0) {
+#endif
+	      // Success.
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Log file location \"%s\" has been created.\n", path);
+	      strlcpy (g_log_path, path, sizeof(g_log_path));
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Failed to create log file location \"%s\".\n", path);
+	      dw_printf ("%s\n", strerror(errno));
+	      dw_printf ("Using current working directory \".\" instead.\n");
+	      strlcpy (g_log_path, ".", sizeof(g_log_path));
+	    }
 	  }
 	}
 	else {
-	  // Doesn't exist.  Try to create it.
-	  // parent directory must exist.
-	  // We don't create multiple levels like "mkdir -p"
-#if __WIN32__
-	  if (_mkdir (path) == 0) {
-#else
-	  if (mkdir (path, 0777) == 0) {
-#endif
-	    // Success.
-	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("Log file location \"%s\" has been created.\n", path);
-	    strlcpy (g_log_dir, path, sizeof(g_log_dir));
-	  }
-	  else {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Failed to create log file location \"%s\".\n", path);
-	    dw_printf ("%s\n", strerror(errno));
-	    dw_printf ("Using current working directory \".\" instead.\n");
-	    strlcpy (g_log_dir, ".", sizeof(g_log_dir));
-	  }
+
+// Added in version 1.5.  Single file.
+// Typically logrotate would be used to keep size under control.
+
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Log file is \"%s\"\n", path);
+	  strlcpy (g_log_path, path, sizeof(g_log_path));
 	}
-}
+
+} /* end log_init */
 
 
 
@@ -177,71 +212,119 @@ void log_init (char *path)
 
 void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_t retries)
 {
-	time_t now; 		// make 'now' a parameter so we can process historical data ???
-	char fname[20];
+	time_t now;
 	struct tm tm;
 
 
-	if (strlen(g_log_dir) == 0) return;
+	if (strlen(g_log_path) == 0) return;
 
-	// Generate the file name from current date, UTC.
-
-	now = time(NULL);
+	now = time(NULL);			// Get current time.
 	(void)gmtime_r (&now, &tm);	
 
-	// Microsoft doesn't recognize %F as equivalent to %Y-%m-%d
 
-	strftime (fname, sizeof(fname), "%Y-%m-%d.log", &tm);
+	if (g_daily_names) {
 
-	// Close current file if name has changed
+// Original strategy.  Automatic daily file names.
 
-	if (g_log_fp != NULL && strcmp(fname, g_open_fname) != 0) {
-	  log_term ();
-	}
+	  char fname[20];
 
-	// Open for append if not already open.
+	  // Generate the file name from current date, UTC.
+	  // Why UTC rather than local time?  I don't recall the reasoning.
+	  // It's been there a few years and no on complained so leave it alone for now.
 
-	if (g_log_fp == NULL) {
-	  char full_path[120];
-	  struct stat st;
-	  int already_there;
+	  // Microsoft doesn't recognize %F as equivalent to %Y-%m-%d
 
-	  strlcpy (full_path, g_log_dir, sizeof(full_path));
+	  strftime (fname, sizeof(fname), "%Y-%m-%d.log", &tm);
+
+	  // Close current file if name has changed
+
+	  if (g_log_fp != NULL && strcmp(fname, g_open_fname) != 0) {
+	    log_term ();
+	  }
+
+	  // Open for append if not already open.
+
+	  if (g_log_fp == NULL) {
+	    char full_path[120];
+	    struct stat st;
+	    int already_there;
+
+	    strlcpy (full_path, g_log_path, sizeof(full_path));
 #if __WIN32__
-	  strlcat (full_path, "\\", sizeof(full_path));
+	    strlcat (full_path, "\\", sizeof(full_path));
 #else
-	  strlcat (full_path, "/", sizeof(full_path));
+	    strlcat (full_path, "/", sizeof(full_path));
 #endif
-	  strlcat (full_path, fname, sizeof(full_path));
+	    strlcat (full_path, fname, sizeof(full_path));
 
-	  // See if it already exists.
-	  // This is used later to write a header if it did not exist already.
+	    // See if file already exists and not empty.
+	    // This is used later to write a header if it did not exist already.
 
-	  already_there = stat(full_path,&st) == 0;
+	    already_there = (stat(full_path,&st) == 0) && (st.st_size > 0);
 
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf("Opening log file \"%s\".\n", fname);
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf("Opening log file \"%s\".\n", fname);
 
-	  g_log_fp = fopen (full_path, "a");
+	    g_log_fp = fopen (full_path, "a");
 
-	  if (g_log_fp != NULL) {
-	    strlcpy (g_open_fname, fname, sizeof(g_open_fname));
-	  }
-	  else {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("Can't open log file \"%s\" for write.\n", full_path);
-	    dw_printf ("%s\n", strerror(errno));
-	    strlcpy (g_open_fname, "", sizeof(g_open_fname));
-	    return;
-	  }
+	    if (g_log_fp != NULL) {
+	      strlcpy (g_open_fname, fname, sizeof(g_open_fname));
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Can't open log file \"%s\" for write.\n", full_path);
+	      dw_printf ("%s\n", strerror(errno));
+	      strlcpy (g_open_fname, "", sizeof(g_open_fname));
+	      return;
+	    }
 
-	  // Write a header suitable for importing into a spreadsheet
-	  // only if this will be the first line.
+	    // Write a header suitable for importing into a spreadsheet
+	    // only if this will be the first line.
 	
-	  if ( ! already_there) {
-	    fprintf (g_log_fp, "chan,utime,isotime,source,heard,level,error,dti,name,symbol,latitude,longitude,speed,course,altitude,frequency,offset,tone,system,status,comment\n");
+	    if ( ! already_there) {
+	      fprintf (g_log_fp, "chan,utime,isotime,source,heard,level,error,dti,name,symbol,latitude,longitude,speed,course,altitude,frequency,offset,tone,system,status,telemetry,comment\n");
+	    }
 	  }
 	}
+	else {
+
+// Added in version 1.5.  Single file.
+
+	  // Open for append if not already open.
+
+	  if (g_log_fp == NULL) {
+	    struct stat st;
+	    int already_there;
+
+	    // See if file already exists and not empty.
+	    // This is used later to write a header if it did not exist already.
+
+	    already_there = (stat(g_log_path,&st) == 0) && (st.st_size > 0);
+
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf("Opening log file \"%s\"\n", g_log_path);
+
+	    g_log_fp = fopen (g_log_path, "a");
+
+	    if (g_log_fp == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Can't open log file \"%s\" for write.\n", g_log_path);
+	      dw_printf ("%s\n", strerror(errno));
+	      strlcpy (g_log_path, "", sizeof(g_log_path));
+	      return;
+	    }
+
+	    // Write a header suitable for importing into a spreadsheet
+	    // only if this will be the first line.
+
+	    if ( ! already_there) {
+	      fprintf (g_log_fp, "chan,utime,isotime,source,heard,level,error,dti,name,symbol,latitude,longitude,speed,course,altitude,frequency,offset,tone,system,status,telemetry,comment\n");
+	    }
+	  }
+	}
+
+
+// Add line to file if it is now open.
 
 	if (g_log_fp != NULL) {
 
@@ -439,7 +522,13 @@ void log_term (void)
 	if (g_log_fp != NULL) {
 
 	  text_color_set(DW_COLOR_INFO);
-	  dw_printf("Closing log file \"%s\".\n", g_open_fname);
+
+	  if (g_daily_names) {
+	    dw_printf("Closing log file \"%s\".\n", g_open_fname);
+	  }
+	  else {
+	    dw_printf("Closing log file \"%s\".\n", g_log_path);
+	  }
 
 	  fclose (g_log_fp);
 

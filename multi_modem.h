@@ -14,6 +14,8 @@ void multi_modem_init (struct audio_s *pmodem);
 
 void multi_modem_process_sample (int c, int audio_sample);
 
+int multi_modem_get_dc_average (int chan);
+
 void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries);
 
 #endif

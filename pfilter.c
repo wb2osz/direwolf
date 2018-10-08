@@ -874,11 +874,15 @@ static int filt_t (pfstate_t *pf)
 	
 	    case 'p':				/* Position */
 	      if (*infop == '!') return (1);
-	      if (*infop == '\'') return (1);
 	      if (*infop == '/') return (1);
 	      if (*infop == '=') return (1);
 	      if (*infop == '@') return (1);
-	      if (*infop == '`') return (1);
+	      if (*infop == '\'') return (1);	// MIC-E
+	      if (*infop == '`') return (1);	// MIC-E
+
+	      // What if we have "_" symbol code for weather?
+	      // Still consider as position.
+	      // The same packet can match more than one type here.
 	      break;
 
 	    case 'o':				/* Object */
@@ -897,6 +901,11 @@ static int filt_t (pfstate_t *pf)
 	      if (*infop == '?') return (1);
 	      break;
 
+	    case 'c':				/* station Capabilities - my extension */
+						/* Most often used for IGate statistics. */
+	      if (*infop == '<') return (1);
+	      break;
+
 	    case 's':				/* Status */
 	      if (*infop == '>') return (1);
 	      break;
@@ -910,16 +919,32 @@ static int filt_t (pfstate_t *pf)
 	      if (*infop == '{') return (1);
 	      break;
 
+	    case 'h':				/* third party Header - my extension */
+	      if (*infop == '}') return (1);
+	      break;
+
 	    case 'w':				/* Weather */
-	      if (*infop == '@') return (1);
-	      if (*infop == '*') return (1);
-	      if (*infop == '_') return (1);
+
+	      if (*infop == '*') return (1);			// Peet Bros
+	      if (*infop == '_') return (1);			// Weather report, no position.
+	      if (strncmp(infop, "!!", 2) == 0) return(1);	// Ultimeter 2000.
 
 	      /* '$' is normally raw GPS. Check for special case. */
+
 	      if (strncmp(infop, "$ULTW", 5) == 0) return (1);
 
-	      /* TODO: Positions !=/@ can be weather. */
-	      /* Need to check for _ symbol. */
+	      /* Positions !=/@ with symbol code _ are weather. */
+
+	      if (strchr("!=/@", *infop) != NULL &&
+			pf->decoded.g_symbol_code == '_') return (1);
+
+	      /* Object with _ symbol is also weather.  APRS protocol spec page 66. */
+
+	      if (*infop == ';' &&
+			pf->decoded.g_symbol_code == '_') return (1);
+
+// TODO: need more test cases at end for new weather cases.
+
 	      break;
 
 	    case 'n':				/* NWS format */
@@ -1059,15 +1084,51 @@ static int filt_r (pfstate_t *pf, char *sdist)
  *
  * Description:	
  *		  
+ *		s/pri
+ *		s/pri/alt
+ *		s/pri/alt/
+ *		s/pri/alt/over
+ *
  *		"pri" is zero or more symbols from the primary symbol set.
+ *			Symbol codes are any printable ASCII character other than | or ~.
+ *			(Zero symbols here would be sensible only if later alt part is specified.)
  *		"alt" is one or more symbols from the alternate symbol set.
- *		"over" is overlay characters.  Overlays apply only to the alternate symbol set.
+ *		"over" is overlay characters for the alternate symbol set.
+ *			Only upper case letters, digits, and \ are allowed here.
+ *			If the last part is not specified, any overlay or lack of overlay, is ignored.
+ *			If the last part is specified, only the listed overlays will match.
+ *			An explicit lack of overlay is represented by the \ character.
  *		
  *		Examples:
- *			s/->		Allow house and car from primary symbol table.
- *			s//#		Allow alternate table digipeater, with or without overlay.
- *			s//#/\		Allow alternate table digipeater, only if no overlay.
- *			s//#/SL1	Allow alternate table digipeater, with overlay S, L, or 1
+ *			s/O		Balloon.
+ *			s/->		House or car from primary symbol table.
+ *
+ *			s//#		Alternate table digipeater, with or without overlay.
+ *			s//#/\		Alternate table digipeater, only if no overlay.
+ *			s//#/SL1	Alternate table digipeater, with overlay S, L, or 1.
+ *			s//#/SL\	Alternate table digipeater, with S, L, or no overlay.
+ *
+ *			s/s/s		Any variation of watercraft.  Either symbol table.  With or without overlay.
+ *			s/s/s/		Ship or ship sideview, only if no overlay.
+ *			s//s/J		Jet Ski.
+ *
+ *		What if you want to use the / symbol when / is being used as a delimiter here?  Recall that you
+ *		can use some other special character after the initial lower case letter and this becomes the
+ *		delimiter for the rest of the specification.
+ *
+ *		Examples:
+ *
+ *			s:/		Red Dot.
+ *			s::/		Waypoint Destination, with or without overlay.
+ *			s:/:/		Either Red Dot or Waypoint Destination.
+ *			s:/:/:		Either Red Dot or Waypoint Destination, no overlay.
+ *
+ *		Bad example:
+ *
+ *			Someone tried using this to include ballons:   s/'/O/-/#/_
+ *			probably following the buddy filter pattern of / between each alternative.
+ *			There should be an error message because it has more than 3 delimiter characters.
+ *
  * 
  *------------------------------------------------------------------------------*/
 
@@ -1075,8 +1136,9 @@ static int filt_s (pfstate_t *pf)
 {
 	char str[MAX_TOKEN_LEN];
 	char *cp;
-	char sep[2];
-	char *pri, *alt, *over;
+	char sep[2];		// Delimiter character.  Typically / but it could be different.
+	char *pri = NULL, *alt = NULL, *over = NULL, *extra = NULL;
+	char *x;
 
 
 	strlcpy (str, pf->token_str, sizeof(str));
@@ -1084,51 +1146,132 @@ static int filt_s (pfstate_t *pf)
 	sep[1] = '\0';
 	cp = str + 2;
 
-// TODO: check here.
+
+// First, separate the parts and do a strict syntax check.
 
 	pri = strsep (&cp, sep);
 
-	if (pri == NULL) {
+	if (pri != NULL) {
+
+	  // Zero length is acceptable if alternate symbol(s) specified.  Will check that later.
+
+	  for (x = pri; *x != '\0'; x++) {
+	    if ( ! isprint(*x) || *x == '|' || *x == '~') {
+	      print_error (pf, "Symbol filter, primary must be printable ASCII character(s) other than | or ~.");
+	      return (-1);
+	    }
+	  }
+
+	  alt = strsep (&cp, sep);
+
+	  if (alt != NULL) {
+
+	    // Zero length after second / would be pointless.
+
+	    if (strlen(alt) == 0) {
+	      print_error (pf, "Nothing specified for alternate symbol table.");
+	      return (-1);
+	    }
+
+	    for (x = alt; *x != '\0'; x++) {
+	      if ( ! isprint(*x) || *x == '|' || *x == '~') {
+	        print_error (pf, "Symbol filter, alternate must be printable ASCII character(s) other than | or ~.");
+	        return (-1);
+	      }
+	    }
+
+	    over = strsep (&cp, sep);
+
+	    if (over != NULL) {
+
+	      // Zero length is acceptable and is not the same as missing.
+
+	      for (x = over; *x != '\0'; x++) {
+	        if ( (! isupper(*x)) && (! isdigit(*x)) && *x != '\\') {
+	          print_error (pf, "Symbol filter, overlay must be upper case letter, digit, or \\.");
+	          return (-1);
+	        }
+	      }
+
+	      extra = strsep (&cp, sep);
+
+	      if (extra != NULL) {
+	        print_error (pf, "More than 3 delimiter characters in Symbol filter.");
+	        return (-1);
+	      }
+	    }
+	  }
+	  else {
+	    // No alt part is OK if at least one primary symbol was specified.
+	    if (strlen(pri) == 0) {
+	      print_error (pf, "No symbols specified for Symbol filter.");
+	      return (-1);
+	    }
+	  }
+	}
+	else {
 	  print_error (pf, "Missing arguments for Symbol filter.");
 	  return (-1);
 	}
 
-	if (pf->decoded.g_symbol_table == '/' && strchr(pri, pf->decoded.g_symbol_code) != NULL) {
-	  /* Found in primary symbols. All done. */
-	  return (1);
-	}
 
-	alt = strsep (&cp, sep);
-	if (alt == NULL) {
+// This applies only for Position, Object, Item.
+// decode_aprs() should set symbol code to space to mean undefined.
+
+	if (pf->decoded.g_symbol_code == ' ') {
 	  return (0);
 	}
-	if (strlen(alt) == 0) {
-	  /* We have s/.../ */
-	  print_error (pf, "Missing alternate symbols for Symbol filter.");
-	  return (-1);
+
+
+// Look for Primary symbols.
+
+	if (pf->decoded.g_symbol_table == '/') {
+	  if (pri != NULL && strlen(pri) > 0) {
+	    return (strchr(pri, pf->decoded.g_symbol_code) != NULL);
+	  }
+	}
+
+	if (alt == NULL) {
+	  return (0);
 	}
 
 	//printf ("alt=\"%s\"  sym='%c'\n", alt, pf->decoded.g_symbol_code);
 
-	if (strchr(alt, pf->decoded.g_symbol_code) == NULL) {
-	  /* Not found in alternate symbols. Reject. */
-	  return (0);
+// Look for Alternate symbols.
+
+	if (strchr(alt, pf->decoded.g_symbol_code) != NULL) {
+
+	  // We have a match but that might not be enough.
+	  // We must see if there was an overlay part specified.
+
+	  if (over != NULL) {
+
+	    if (strlen(over) > 0) {
+
+	      // Non-zero length overlay part was specified.
+	      // Need to match one of them.
+
+	      return (strchr(over, pf->decoded.g_symbol_table) != NULL);
+	    }
+	    else {
+
+	      // Zero length overlay part was specified.
+	      // We must have no overlay, i.e.  table is \.
+
+	      return (pf->decoded.g_symbol_table == '\\');
+	    }
+	  }
+	  else {
+
+	    // No check of overlay part.  Just make sure it is not primary table.
+
+	    return (pf->decoded.g_symbol_table != '/');
+	  }
 	}
 
-	over = strsep (&cp, sep);
-	if (over == NULL) {
-	  /* alternate, with or without overlay. */
-	  return (pf->decoded.g_symbol_table != '/');
-	}
+	return (0);
 
-	// printf ("over=\"%s\"  table='%c'\n", over, pf->decoded.g_symbol_table);
-
-	if (strlen(over) == 0) {
-	  return (pf->decoded.g_symbol_table == '\\');
-	}
-
-	return (strchr(over, pf->decoded.g_symbol_table) != NULL);
-}
+} /* end filt_s */
 
 
 /*------------------------------------------------------------------------------
@@ -1494,10 +1637,15 @@ int main ()
 	pftest (126, "t/n", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 1);
 	pftest (127, "t/",  "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 0);
 
-	pftest (130, "r/42.6/-71.3/10", "WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
-	pftest (131, "r/42.6/-71.3/10", "WA1PLE-5>APWW10,W1MHL,N8VIM,WIDE2*:@022301h4208.75N/07115.16WoAPRS-IS for Win32", 0);
+	pftest (128, "t/c",  "S0RCE>DEST:<stationcapabilities", 1);
+	pftest (129, "t/h",  "S0RCE>DEST:<stationcapabilities", 0);
+	pftest (130, "t/h",  "S0RCE>DEST:}thirdpartyheaderwhatever", 1);
+	pftest (131, "t/c",  "S0RCE>DEST:}thirdpartyheaderwhatever", 0);
 
-	pftest (140, "( t/t & b/WB2OSZ ) | ( t/o & ! r/42.6/-71.3/1 )", "WB2OSZ>APDW12:;home     *111111z4237.14N/07120.83W-Chelmsford MA", 1);
+	pftest (140, "r/42.6/-71.3/10", "WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (141, "r/42.6/-71.3/10", "WA1PLE-5>APWW10,W1MHL,N8VIM,WIDE2*:@022301h4208.75N/07115.16WoAPRS-IS for Win32", 0);
+
+	pftest (145, "( t/t & b/WB2OSZ ) | ( t/o & ! r/42.6/-71.3/1 )", "WB2OSZ>APDW12:;home     *111111z4237.14N/07120.83W-Chelmsford MA", 1);
 
 	pftest (150, "s/->", "WB2OSZ-5>APDW12:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
 	pftest (151, "s/->", "WB2OSZ-5>APDW12:!4237.14N/07120.83W-PHG7140Chelmsford MA", 1);
@@ -1515,13 +1663,28 @@ int main ()
 	pftest (160, "s//#/LS1", "WB2OSZ-5>APDW12:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
 	pftest (161, "s//#/LS1", "WB2OSZ-5>APDW12:!4237.14N\\07120.83W#PHG7140Chelmsford MA", 0);
 	pftest (162, "s//#/LS1", "WB2OSZ-5>APDW12:!4237.14N/07120.83W#PHG7140Chelmsford MA", 0);
+	pftest (163, "s//#/LS\\", "WB2OSZ-5>APDW12:!4237.14N\\07120.83W#PHG7140Chelmsford MA", 1);
 
-	pftest (170, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
-	pftest (171, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1*,DIGI2,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
-	pftest (172, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
-	pftest (173, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3*,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
-	pftest (174, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3,DIGI4*:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
-	pftest (175, "v/DIGI9/DIGI2", "WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
+	pftest (170, "s:/", "WB2OSZ-5>APDW12:!4237.14N/07120.83W/PHG7140Chelmsford MA", 1);
+	pftest (171, "s:/", "WB2OSZ-5>APDW12:!4237.14N\\07120.83W/PHG7140Chelmsford MA", 0);
+	pftest (172, "s::/", "WB2OSZ-5>APDW12:!4237.14N/07120.83W/PHG7140Chelmsford MA", 0);
+	pftest (173, "s::/", "WB2OSZ-5>APDW12:!4237.14N\\07120.83W/PHG7140Chelmsford MA", 1);
+	pftest (174, "s:/:/", "WB2OSZ-5>APDW12:!4237.14N/07120.83W/PHG7140Chelmsford MA", 1);
+	pftest (175, "s:/:/", "WB2OSZ-5>APDW12:!4237.14N\\07120.83W/PHG7140Chelmsford MA", 1);
+	pftest (176, "s:/:/", "WB2OSZ-5>APDW12:!4237.14NX07120.83W/PHG7140Chelmsford MA", 1);
+	pftest (177, "s:/:/:X", "WB2OSZ-5>APDW12:!4237.14NX07120.83W/PHG7140Chelmsford MA", 1);
+
+	// FIXME: Different on Windows and  64 bit Linux.
+	//pftest (178, "s:/:/:", "WB2OSZ-5>APDW12:!4237.14NX07120.83W/PHG7140Chelmsford MA", 1);
+
+	pftest (179, "s:/:/:\\", "WB2OSZ-5>APDW12:!4237.14NX07120.83W/PHG7140Chelmsford MA", 0);
+
+	pftest (180, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (181, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1*,DIGI2,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (182, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (183, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3*,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
+	pftest (184, "v/DIGI2/DIGI3", "WB2OSZ-5>APDW12,DIGI1,DIGI2,DIGI3,DIGI4*:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
+	pftest (185, "v/DIGI9/DIGI2", "WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
 
 	/* Test error reporting. */
 
@@ -1540,11 +1703,22 @@ int main ()
 	pftest (226, "i/30/8/",              "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
 	pftest (227, "i/30/8",               "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
 
-	// FIXME: behaves differently on Windows and Linux
+	// FIXME: behaves differently on Windows and Linux.  Why?
+	// On Windows we have our own version of strsep because it's not in the MS library.
+	// It must behave differently than the Linux version when nothing follows the last separator.
 	//pftest (228, "i/30/",                "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
 
 	pftest (229, "i/30",                 "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
 	pftest (230, "i/",                   "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+
+	pftest (240, "s/", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+	pftest (241, "s/'/O/-/#/_", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+	pftest (242, "s/O/O/c", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+	pftest (243, "s/O/O/1/2", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+	pftest (244, "s/O/|/1", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+	pftest (245, "s//", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+	pftest (246, "s///", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
+
 
 // TODO: to be continued...
 

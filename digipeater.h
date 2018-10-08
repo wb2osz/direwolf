@@ -38,8 +38,6 @@ struct digi_config_s {
 
 	enum preempt_e { PREEMPT_OFF, PREEMPT_DROP, PREEMPT_MARK, PREEMPT_TRACE } preempt[MAX_CHANS][MAX_CHANS];
 
-	//char type_filter[MAX_CHANS][MAX_CHANS][20]; // TODO1.2: remove this
-
 	char *filter_str[MAX_CHANS+1][MAX_CHANS+1];
 						// NULL or optional Packet Filter strings such as "t/m".
 						// Notice the size of arrays is one larger than normal.

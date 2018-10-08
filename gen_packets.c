@@ -84,7 +84,8 @@
 static int seed = 1;
 
 static int my_rand (void) {
-	seed = ((seed * 1103515245) + 12345) & MY_RAND_MAX;
+	// Perform the calculation as unsigned to avoid signed overflow error.
+	seed = (int)(((unsigned)seed * 1103515245) + 12345) & MY_RAND_MAX;
 	return (seed);
 }
 
@@ -254,7 +255,7 @@ int main(int argc, char **argv)
               modem.achan[0].baud = atoi(optarg);
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
-              if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
+              if (modem.achan[0].baud != 100 && (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD)) {
                 text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
                 exit (EXIT_FAILURE);
@@ -263,7 +264,12 @@ int main(int argc, char **argv)
 	      /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
 	      /* that need to be kept in sync.  Maybe it could be a common function someday. */
 
-	      if (modem.achan[0].baud < 600) {
+	      if (modem.achan[0].baud == 100) {
+                  modem.achan[0].modem_type = MODEM_AFSK;
+                  modem.achan[0].mark_freq = 1615;
+                  modem.achan[0].space_freq = 1785;
+	      }
+	      else if (modem.achan[0].baud < 600) {
                   modem.achan[0].modem_type = MODEM_AFSK;
                   modem.achan[0].mark_freq = 1600;		// Typical for HF SSB
                   modem.achan[0].space_freq = 1800;
@@ -446,7 +452,7 @@ int main(int argc, char **argv)
 
         if (strlen(output_file) == 0) {
           text_color_set(DW_COLOR_ERROR); 
-          dw_printf ("ERROR: The -o ouput file option must be specified.\n");
+          dw_printf ("ERROR: The -o output file option must be specified.\n");
           usage (argv);
           exit (1);
         }
@@ -619,7 +625,7 @@ int main(int argc, char **argv)
  */
 	  for (i = 1; i <= packet_count; i++) {
 
-	    char stemp[80];
+	    char stemp[88];
 	
 	    if (modem.achan[0].baud < 600) {
 	      /* e.g. 300 bps AFSK - About 2/3 should be decoded properly. */

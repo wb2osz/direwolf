@@ -1,4 +1,4 @@
-# Documentation for Dire Wolf #
+﻿# Documentation for Dire Wolf #
 
 Click on the document name to view in your web browser or the link following to download the PDF file.
 
@@ -24,6 +24,10 @@ These dive into more detail for specialized topics or typical usage scenarios.
 	Dire Wolf can serve as a gateway between the APRS radio network and APRS-IS servers on the Internet.
 
     This explains how it all works, proper configuration, and troubleshooting.
+
+- [**Bluetooth KISS TNC**](Bluetooth-KISS-TNC.pdf)  [ [*download*](../../../raw/master/doc/Bluetooth-KISS-TNC.pdf) ]
+
+	Eliminate the cable between your TNC and application.  Use Bluetooth instead.  
 
 - [**APRStt Implementation Notes**](APRStt-Implementation-Notes.pdf)  [ [*download*](../../../raw/master/doc/APRStt-Implementation-Notes.pdf) ]
 

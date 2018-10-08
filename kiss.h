@@ -1,6 +1,8 @@
 
 /* 
  * Name:	kiss.h
+ *
+ * This is for the pseudo terminal KISS interface.
  */
 
 
@@ -11,11 +13,11 @@
 
 
 
-void kiss_init (struct misc_config_s *misc_config);
+void kisspt_init (struct misc_config_s *misc_config);
 
-void kiss_send_rec_packet (int chan, unsigned char *fbuf,  int flen);
+void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client);
 
-void kiss_serial_set_debug (int n);
+void kisspt_set_debug (int n);
 
 
 /* end kiss.h */

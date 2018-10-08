@@ -59,6 +59,17 @@
  *
  * Returns:     None
  *
+ * Idea for future:
+ *		Non zero ambiguity removes least significant digits without rounding.
+ *		Maybe we could use -1 and -2 to add extra digits using !DAO! as
+ *		documented in http://www.aprs.org/datum.txt
+ *
+ *		For example, -1 adds one more human readable digit.
+ *			lat minutes 12.345 would produce "12.34" and !W5 !
+ *
+ *		-2 would encode almost 2 digits in base 91.
+ *			lat minutes 10.0027 would produce "10.00" and !w: !
+ *
  *----------------------------------------------------------------*/
 
 void latitude_to_str (double dlat, int ambiguity, char *slat)
@@ -557,6 +568,92 @@ double ll_distance_km (double lat1, double lon1, double lat2, double lon2)
 
 /*------------------------------------------------------------------
  *
+ * Function:	ll_bearing_deg
+ *
+ * Purpose:	Calculate bearing between two locations.
+ *
+ * Inputs:	lat1, lon1	- starting location, in degrees.
+ *		lat2, lon2	- destination location
+ *
+ * Returns:	Initial Bearing, in degrees.
+ *		The calculation produces Range +- 180 degrees.
+ *		But I think that 0 - 360 would be more customary?
+ *
+ *------------------------------------------------------------------*/
+
+double ll_bearing_deg (double lat1, double lon1, double lat2, double lon2)
+{
+	double b;
+
+	lat1 *= M_PI / 180;
+	lon1 *= M_PI / 180;
+	lat2 *= M_PI / 180;
+	lon2 *= M_PI / 180;
+
+	b = atan2 (sin(lon2-lon1) * cos(lat2),
+		cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lon2-lon1));
+
+	b *= 180 / M_PI;
+	if (b < 0) b += 360;
+
+	return (b);
+}
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ll_dest_lat
+ *		ll_dest_lon
+ *
+ * Purpose:	Calculate the destination location given a starting point,
+ *		distance, and bearing,
+ *
+ * Inputs:	lat1, lon1	- starting location, in degrees.
+ *		dist		- distance in km.
+ *		bearing		- direction in degrees.  Shouldn't matter
+ *				  if it is in +- 180 or 0 to 360 range.
+ *
+ * Returns:	New latitude or longitude.
+ *
+ *------------------------------------------------------------------*/
+
+double ll_dest_lat (double lat1, double lon1, double dist, double bearing)
+{
+	double lat2;
+
+	lat1 *= M_PI / 180;	// Everything to radians.
+	lon1 *= M_PI / 180;
+	bearing *= M_PI / 180;
+
+	lat2 = asin(sin(lat1) * cos(dist/R) + cos(lat1) * sin(dist/R) * cos(bearing));
+
+	lat2 *= 180 / M_PI;	// Back to degrees.
+
+	return (lat2);
+}
+
+double ll_dest_lon (double lat1, double lon1, double dist, double bearing)
+{
+	double lon2;
+	double lat2;
+
+	lat1 *= M_PI / 180;	// Everything to radians.
+	lon1 *= M_PI / 180;
+	bearing *= M_PI / 180;
+
+	lat2 = asin(sin(lat1) * cos(dist/R) + cos(lat1) * sin(dist/R) * cos(bearing));
+
+	lon2 = lon1 + atan2(sin(bearing) * sin(dist/R) * cos(lat1), cos(dist/R) - sin(lat1) * sin(lat2));
+
+	lon2 *= 180 / M_PI;	// Back to degrees.
+
+	return (lon2);
+}
+
+
+
+/*------------------------------------------------------------------
+ *
  * Function:	ll_from_grid_square
  *
  * Purpose:	Convert Maidenhead locator to latitude and longitude.
@@ -776,6 +873,7 @@ int main (int argc, char *argv[])
 	int errors = 0;
 	int ok;
 	double dlat, dlon;
+	double d, b;
 
 /* Latitude to APRS format. */
 
@@ -858,6 +956,55 @@ int main (int argc, char *argv[])
 	if (strcmp(result, "{{!!") != 0) { errors++; dw_printf ("Error 3.6: Did not expect \"%s\"\n", result); }
 
 // to be continued for others...  NMEA...
+
+
+/* Distance & bearing - Take a couple examples from other places and see if we get similar results. */
+
+	// http://www.movable-type.co.uk/scripts/latlong.html
+
+	d = ll_distance_km (35., 45., 35., 135.);
+	b = ll_bearing_deg (35., 45., 35., 135.);
+
+	if (d < 7862 || d > 7882) { errors++; dw_printf ("Error 5.1: Did not expect distance %.1f\n", d); }
+
+	if (b < 59.7 || b > 60.3) { errors++; dw_printf ("Error 5.2: Did not expect bearing %.1f\n", b); }
+
+	// Sydney to Kinsale.  https://woodshole.er.usgs.gov/staffpages/cpolloni/manitou/ccal.htm
+
+	d = ll_distance_km (-33.8688, 151.2093, 51.7059, -8.5222);
+	b = ll_bearing_deg (-33.8688, 151.2093, 51.7059, -8.5222);
+
+	if (d < 17435 || d > 17455) { errors++; dw_printf ("Error 5.3: Did not expect distance %.1f\n", d); }
+
+	if (b < 327-1 || b > 327+1) { errors++; dw_printf ("Error 5.4: Did not expect bearing %.1f\n", b); }
+
+
+/*
+ * More distance and bearing.
+ * Here we will start at some location1 (lat1,lon1) and go some distance (d1) at some bearing (b1).
+ * This results in a new location2 (lat2, lon2).
+ * We then calculate the distance and bearing from location1 to location2 and compare with the intention.
+ */
+	int lat1, lon1, d1 = 10, b1;
+	double lat2, lon2, d2, b2;
+
+	for (lat1 = -60; lat1 <= 60; lat1 += 30) {
+	  for (lon1 = -180; lon1 <= 180; lon1 +=30) {
+	    for (b1 = 0; b1 < 360; b1 += 15) {
+
+	      lat2 = ll_dest_lat ((double)lat1, (double)lon1, (double)d1, (double)b1);
+	      lon2 = ll_dest_lon ((double)lat1, (double)lon1, (double)d1, (double)b1);
+
+	      d2 = ll_distance_km ((double)lat1, (double)lon1, lat2, lon2);
+	      b2 = ll_bearing_deg ((double)lat1, (double)lon1, lat2, lon2);
+	      if (b2 > 359.9 && b2 < 360.1) b2 = 0;
+
+	      // must be within 0.1% of distance and 0.1 degree.
+	      if (d2 < 0.999 * d1 || d2 > 1.001 * d1) { errors++; dw_printf ("Error 5.8: lat1=%d, lon2=%d, d1=%d, b1=%d, d2=%.2f\n", lat1, lon1, d1, b1, d2); }
+	      if (b2 < b1 - 0.1 || b2 > b1 + 0.1)       { errors++; dw_printf ("Error 5.9: lat1=%d, lon2=%d, d1=%d, b1=%d, b2=%.2f\n", lat1, lon1, d1, b1, b2); }
+	    }
+	  }
+	}
 
 
 /* Maidenhead locator to lat/long. */

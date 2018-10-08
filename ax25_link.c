@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017, 2018  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -33,8 +33,8 @@
  *		get refused, and fall back to trying version 2.0.
  *
  *
- *	State		Client App		State Mach.		Peer
- *	-----		----------		-----------		----
+ *	State		Client App		State Machine		Peer
+ *	-----		----------		-------------		----
  *
  *	0 disc
  *			Conn. Req  --->
@@ -51,8 +51,8 @@
  *		Typical sequence when other end initiates connection.
  *
  *
- *	State		Client App		State Mach.		Peer
- *	-----		----------		-----------		----
+ *	State		Client App		State Machine		Peer
+ *	-----		----------		-------------		----
  *
  *	0 disc
  *								  <---	SABME or SABM
@@ -63,20 +63,33 @@
  *
  *	*note:
  *
- * 	By reading the v2.2 spec, I expected a 2.0 implementation to send
- *	FRMR in response to SABME.  In testing, I found that the KPC-3+ sent DM.
+ * 	After carefully studying the v2.2 spec, I expected a 2.0 implementation to send
+ *	FRMR in response to SABME.  This is important.  If a v2.2 implementation
+ *	gets FRMR, in response to SABME, it switches to v2.0 and sends SABM instead.
  *
- *	After consulting the 2.0 spec, it says, that when in disconnected 
- *	mode, it will respond to any command other than SABM or UI frame with a DM 
- *	response with P/F set to 1.  I can see where they might get that idea.
+ *	The v2.0 protocol spec, section 2.3.4.3.3.1, states that FRMR should be sent when
+ *	an invalid or not implemented command is received.  That all fits together.
  *
- *	I think the rule about sending FRMR for any unrecognized command should take precedence. 
+ *	In testing, I found that the KPC-3+ sent DM.
  *
- * 
+ *	I can see where they might get that idea.
+ *	The v2.0 spec says that when in disconnected mode, it should respond to any
+ *	command other than SABM or UI frame with a DM response with P/F set to 1.
+ *	I think it was implemented wrong.  2.3.4.3.3.1 should take precedence.
+ *
+ *	The TM-D710 does absolutely nothing in response to SABME.
+ *	Not responding at all is just plain wrong.   To work around this, I put
+ *	in a special hack to start sending SABM after a certain number of
+ *	SABME go unanswered.   There is more discussion in the User Guide.
+ *
  * References:
  *		* AX.25 Amateur Packet-Radio Link-Layer Protocol Version 2.0, October 1984
  *
- * 			https://www.tapr.org/pub_ax25.html 
+ * 			https://www.tapr.org/pub_ax25.html
+ *			http://lea.hamradio.si/~s53mv/nbp/nbp/AX25V20.pdf
+ *
+ *			At first glance, they look pretty much the same, but the second one
+ *			is more complete with 4 appendices, including a state table.
  *
  *		* AX.25 Link Access Protocol for Amateur Packet Radio Version 2.2 Revision: July 1998
  *
@@ -92,17 +105,26 @@
  *				"This is a new version of the 1998 standard. It has had all figures
  *				 redone using Microsoft Visio. Errors in the SDL have been corrected."
  *
- *			The SDL diagrams are dated 2006.  I wish I knew about this version earlier
- *			before doing most of the implementation.  :-(
+ *			The SDL diagrams are dated 2006.  I wish I had known about this version, with
+ *			several corrections, before doing most of the implementation.  :-(
  *
+ *			The title page still says July 1998 so it's not immediately obvious this
+ *			is different than the one on the TAPR site.
+ *
+ *		* AX.25  ...  Latest revision, in progress.
+ *
+ *			http://www.nj7p.org/
+ *
+ *			This is currently being revised in cooperation with software authors
+ *			who have noticed some issues during implementation.
  *
  *		The functions here are based on the SDL diagrams but turned inside out.
  *		It seems more intuitive to have a function for each type of input and then decide
  *		what to do depending on the state.  This also reduces duplicate code because we
  *		often see the same flow chart segments, for the same input, appearing in multiple states.
  *
- * Erratum:	The protocol spec has many places that appear to be errors or are ambiguous so I wasn't
- *		sure what to do.  These should be annotated with Errata comments so we can easily go
+ * Errata:	The protocol spec has many places that appear to be errors or are ambiguous so I wasn't
+ *		sure what to do.  These should be annotated with "erratum" comments so we can easily go
  *		back and revisit them.
  *
  * X.25:	The AX.25 protocol is based on, but does not necessarily adhere to, the X.25 protocol.
@@ -110,11 +132,12 @@
  *
  *			http://www.itu.int/rec/T-REC-X.25-199610-I/en/
  *  
- * Current Status:  This is still under development.
+ * Version 1.4, released April 2017:
  *
- *		Features partially tested:
+ *		Features tested reasonably well:
  *
  *			Connect to/from a KPC-3+ and send I frames in both directions.
+ *			Same with TM-D710A.
  *			v2.2 connect between two instances of direwolf.  (Can't find another v2.2 for testing.)
  *			Modulo 8 & 128 sequence numbers.
  *			Recovery from simulated transmission errors using either REJ or SREJ.
@@ -127,6 +150,14 @@
  *			Acting as a digipeater.
  *			T3 timer.
  *			Compatibility with additional types of TNC.
+ *
+ * Version 1.5, December 2017:
+ *
+ *		Implemented Multi Selective Reject.
+ *		More efficient generation of SREJ frames.
+ *		Reduced number of duplicate I frames sent for both REJ and SREJ cases.
+ *		Avoided unnecessary RR when I frame could take care of the ack.
+ *		(This led to issue 132 where outgoing data sometimes got stuck in the queue.)
  *
  *------------------------------------------------------------------*/
 
@@ -157,6 +188,7 @@
 #define MAX(a,b) ((a)>(b)?(a):(b))
 
 // Debug switches for different types of information.
+// Should have command line options instead of changing source and recompiling.
 
 static int s_debug_protocol_errors = 1;	// Less serious Protocol errors.
 					// Useful for debugging but unnecessarily alarming other times.
@@ -166,7 +198,6 @@ static int s_debug_client_app = 0;	// Interaction with client application.
 
 static int s_debug_radio = 0;		// Received frames and channel busy status.
 					// lm_data_indication, lm_channel_busy
-
 static int s_debug_variables = 0;	// Variables, state changes.
 
 static int s_debug_retry = 0;		// Related to lost I frames, REJ, SREJ, timeout, resending.
@@ -239,10 +270,10 @@ typedef struct ax25_dlsm_s {
 						// Determines whether we have one or two control
 						// octets.  128 allows a much larger window size.
 
-	int srej_enabled;			// Is other end capable of processing SREJ?  (Am I allowed to send it?)
-						// Starts out as false for v2.0 or true for v2.2.
-						// Can be changed when exchanging capabilities.
-						// Can be used only with modulo 128.
+	enum srej_e srej_enable;		// Is other end capable of processing SREJ?  (Am I allowed to send it?)
+						// Starts out as 'srej_none' for v2.0 or 'srej_single' for v2.2.
+						// Can be changed to 'srej_multi' with XID exchange.
+						// Should be used only with modulo 128.  (Is this enforced?)
 
 	int n1_paclen;				// Maximum length of information field, in bytes.
 						// Starts out as 256 but can be negotiated higher.
@@ -257,7 +288,7 @@ typedef struct ax25_dlsm_s {
 	int k_maxframe;				// Window size. Defaults to 4 (mod 8) or 32 (mod 128).
 						// Maximum number of unacknowledged information
 						// frames that can be outstanding.
-						// "MAXFRAME" parameter in configuration file.
+						// "MAXFRAME" or "EMAXFRAME" parameter in configuration file.
 
 	int rc;					// Retry count.  Give up after n2.
 
@@ -288,11 +319,19 @@ typedef struct ax25_dlsm_s {
 
 	int reject_exception;			// A REJ frame has been sent to the remote station. (boolean)
 
+						// This is used only when receving an I frame, in states 3 & 4, SREJ not enabled.
+						// When an I frame has an unepected N(S),
+						//   - if not already set, set it and send REJ.
+						// When an I frame with expected N(S) is received, clear it.
+						// This would prevent us from sending additional REJ while
+						// waiting for result from first one.
+						// What happens if the REJ gets lost?   Is it resent somehow?
+
 	int own_receiver_busy;			// Layer 3 is busy and can't receive I frames.
 						// We have no API to convey this information so it should always be 0.
 
 	int acknowledge_pending;		// I frames have been successfully received but not yet
-						// acknowledged to the remote station.
+						// acknowledged TO the remote station.
 						// Set when receiving the next expected I frame and P=0.
 						// This gets cleared by sending any I, RR, RNR, REJ.
 						// Cleared when sending SREJ with F=1.
@@ -381,7 +420,7 @@ typedef struct ax25_dlsm_s {
 // Counting outgoing could probably be done in lm_data_request so
 // it would not have to be scattered all over the place.  TBD
 
-	int count_recv_frame_type[frame_not_AX25+1];	
+	int count_recv_frame_type[frame_not_AX25+1];
 
 	int peak_rc_value;			// Peak value of retry count (rc).
 
@@ -390,6 +429,9 @@ typedef struct ax25_dlsm_s {
 
 	cdata_t *i_frame_queue;		// Connected data from client which has not been transmitted yet.
 						// Linked list.
+						// The name is misleading because these are just blocks of
+						// data, not "I frames" at this point.  The name comes from
+						// the protocol specification.
 
 	cdata_t *txdata_by_ns[128];		// Data which has already been transmitted.
 						// Indexed by N(S) in case it gets lost and needs to be sent again.
@@ -469,6 +511,7 @@ static reg_callsign_t *reg_callsign_list = NULL;
 			  text_color_set(DW_COLOR_DEBUG);					\
 		          dw_printf ("V(S) = %d at %s %d\n", S->vs, __func__, __LINE__);	\
 		        }									\
+			assert (S->vs >= 0 && S->vs < S->modulo);				\
 		  }
 
 // If other guy acks reception of an I frame, we should never get an REJ or SREJ
@@ -480,6 +523,7 @@ static reg_callsign_t *reg_callsign_list = NULL;
 			  text_color_set(DW_COLOR_DEBUG);					\
 		          dw_printf ("V(A) = %d at %s %d\n", S->va, __func__, __LINE__);	\
 		        }									\
+			assert (S->va >= 0 && S->va < S->modulo);				\
 	                int x = AX25MODULO(n-1, S->modulo, __FILE__, __func__, __LINE__);	\
 	                while (S->txdata_by_ns[x] != NULL) {					\
 	                  cdata_delete (S->txdata_by_ns[x]);					\
@@ -493,12 +537,25 @@ static reg_callsign_t *reg_callsign_list = NULL;
 			  text_color_set(DW_COLOR_DEBUG);					\
 		          dw_printf ("V(R) = %d at %s %d\n", S->vr, __func__, __LINE__);	\
 		        }									\
+			assert (S->vr >= 0 && S->vr < S->modulo);				\
+		  }
+
+#define SET_RC(n) {	S->rc = (n);								\
+	                if (s_debug_variables) {						\
+			  text_color_set(DW_COLOR_DEBUG);					\
+		          dw_printf ("rc = %d at %s %d, state = %d\n", S->rc, __func__, __LINE__, S->state);		\
+		        }									\
 		  }
 
 
 //TODO:  Make this a macro so we can simplify calls yet keep debug output if something goes wrong.
 
+#if 0
+#define AX25MODULO(n) ax25modulo((n), S->modulo, __FILE__, __func__, __LINE__)
+static int ax25modulo(int n, int m, const char *file, const char *func, int line)
+#else
 static int AX25MODULO(int n, int m, const char *file, const char *func, int line)
+#endif
 {
 	if (m != 8 && m != 128) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -508,6 +565,13 @@ static int AX25MODULO(int n, int m, const char *file, const char *func, int line
 	// Use masking, rather than % operator, so negative numbers are handled properly.
 	return (n & (m-1));
 }
+
+
+// Test whether we can send more or if we need to wait
+// because we have reached 'maxframe' outstanding frames.
+// Argument must be 'S'.
+
+#define WITHIN_WINDOW_SIZE(x) (x->vs != AX25MODULO(x->va + x->k_maxframe, x->modulo, __FILE__, __func__, __LINE__))
 
 
 // Timer macros to provide debug output with location from where they are called.
@@ -529,15 +593,13 @@ static int AX25MODULO(int n, int m, const char *file, const char *func, int line
 
 static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len);
 
-static void lm_seize_confirm (ax25_dlsm_t *S);
-
 static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid, char *info_ptr, int info_len);
 static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *info_ptr, int info_len);
 static int is_ns_in_window (ax25_dlsm_t *S, int ns);
 static void send_srej_frames (ax25_dlsm_t *S, int *resend, int count, int allow_f1);
 static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr);
 static void rej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr);
-static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr);
+static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr, unsigned char *info_ptr, int info_len);
 
 static void sabm_e_frame (ax25_dlsm_t *S, int extended, int p);
 static void disc_frame (ax25_dlsm_t *S, int f);
@@ -885,6 +947,8 @@ void dl_connect_request (dlq_item_t *E)
 {
 	ax25_dlsm_t *S;
 	int ok_to_create = 1;
+	int old_version;
+	int n;
 
 	if (s_debug_client_app) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -902,7 +966,16 @@ void dl_connect_request (dlq_item_t *E)
 
 	    INIT_T1V_SRT;
 
-	    if (g_misc_config_p->maxv22 == 0) {		// Don't attempt v2.2.
+// See if destination station is in list for v2.0 only.
+
+	    old_version = 0;
+	    for (n = 0; n < g_misc_config_p->v20_count && ! old_version; n++) {
+	      if (strcmp(E->addrs[AX25_DESTINATION],g_misc_config_p->v20_addrs[n]) == 0) {
+	        old_version = 1;
+	      }
+	    }
+
+	    if (old_version || g_misc_config_p->maxv22 == 0) {		// Don't attempt v2.2.
 
 	      set_version_2_0 (S);
 
@@ -992,7 +1065,7 @@ void dl_disconnect_request (dlq_item_t *E)
 	  case 	state_1_awaiting_connection:
 	  case 	state_5_awaiting_v22_connection:
 
-// TODO: FIXME requeue.  Not sure what to do here.
+// TODO: "requeue."  Not sure what to do here.
 // If we put it back in the queue we will get it back again probably still in same state.
 // Need a way to defer it until the next state change.
 
@@ -1000,6 +1073,13 @@ void dl_disconnect_request (dlq_item_t *E)
 	    
 	  case 	state_2_awaiting_release:
 	    {
+	      // We have previously started the disconnect sequence and are waiting
+	      // for a UA from the other guy.  Meanwhile, the application got
+	      // impatient and sent us another disconnect request.  What should
+	      // we do?  Ignore it and let the disconnect sequence run its
+	      // course?  Or should we complete the sequence without waiting
+	      // for the other guy to ack?
+
 	      // Erratum.  Flow chart simply says "DM (expedited)."
 	      // This is the only place we have expedited.  Is this correct?
 
@@ -1010,6 +1090,13 @@ void dl_disconnect_request (dlq_item_t *E)
 	      packet_t pp = ax25_u_frame (S->addrs, S->num_addr, cr, frame_type_U_DM, p, nopid, NULL, 0);
 	      lm_data_request (S->chan, TQ_PRIO_0_HI, pp);	// HI means expedited.
 
+	      // Erratum: Shouldn't we inform the user when going to disconnected state?
+	      // Notifying the application, here, is my own enhancement.
+
+	      text_color_set(DW_COLOR_INFO);
+	      dw_printf ("Stream %d: Disconnected from %s.\n", S->stream_id, S->addrs[PEERCALL]);
+	      server_link_terminated (S->chan, S->client, S->addrs[PEERCALL], S->addrs[OWNCALL], 0);
+
 	      STOP_T1;
 	      enter_new_state (S, state_0_disconnected, __func__, __LINE__);
 	    }
@@ -1019,7 +1106,7 @@ void dl_disconnect_request (dlq_item_t *E)
 	  case 	state_4_timer_recovery:
 
 	    discard_i_queue (S);
-	    S->rc = 0;			// I think this should be 1 but I'm not that worried about it.
+	    SET_RC(0);			// I think this should be 1 but I'm not that worried about it.
 
 	    cmdres_t cmd = cr_cmd;
 	    int p = 1;
@@ -1307,7 +1394,27 @@ static void data_request_good_size (ax25_dlsm_t *S, cdata_t *txdata)
 	    break;
 	}
 
-	i_frame_pop_off_queue (S);
+	// v1.5 change in strategy.
+	// New I frames, not sent yet, are delayed until after processing anything in the received transmission.
+	// Give the transmit process a kick unless other side is busy or we have reached our window size.
+	// Previously we had i_frame_pop_off_queue here which would start sending new stuff before we
+	// finished dealing with stuff already in progress.
+
+	switch (S->state) {
+
+	  case 	state_3_connected:
+	  case 	state_4_timer_recovery:
+
+	    if ( ( ! S->peer_receiver_busy ) &&
+	            WITHIN_WINDOW_SIZE(S) ) {
+	      S->acknowledge_pending = 1;
+	      lm_seize_request (S->chan);
+	    }
+	    break;
+
+	  default:
+	    break;
+	}
 
 } /* end data_request_good_size */
 
@@ -1694,8 +1801,6 @@ static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len)
  *
  * Description:	We need to pause the timers when the channel is busy.
  *
- *		Signal lm_seize_confirm when we have started to transmit.
- *	
  *------------------------------------------------------------------------------*/
 
 static int dcd_status[MAX_CHANS];
@@ -1752,14 +1857,6 @@ void lm_channel_busy (dlq_item_t *E)
 	      S->radio_channel_busy = 1;
 	      PAUSE_T1;
 	      PAUSE_TM201;
-
-	      // Did channel become busy due to PTT turning on?
-
-	      if ( E->activity == OCTYPE_PTT && E->status == 1) {
-
-	        lm_seize_confirm (S);	// C4.2.  "This primitive indicates, to the Data-link State
-					// machine, that the transmission opportunity has arrived."
-	      }
 	    }
 	    else if ( ! busy && S->radio_channel_busy) {
 	      S->radio_channel_busy = 0;
@@ -1783,36 +1880,65 @@ void lm_channel_busy (dlq_item_t *E)
  * Description:	C4.2.  This primitive indicates to the Data-link State Machine that
  *		the transmission opportunity has arrived.
  *
+ * Version 1.5:	Originally this only invoked inquiry_response to provide an ack if not already
+ *		taken care of by an earlier frame in this transmission.
+ *		After noticing the unnecessary I frame duplication and differing N(R) in the same
+ *		transmission, I came to the conclusion that we should delay sending of new
+ *		(not resends as a result of rej or srej) frames until after after processing
+ *		of everything in the incoming transmission.
+ *		The protocol spec simply has "I frame pops off queue" without any indication about
+ *		what might trigger this event.
+ *
  *------------------------------------------------------------------------------*/
 
-static void lm_seize_confirm (ax25_dlsm_t *S)
+void lm_seize_confirm (dlq_item_t *E)
 {
 
-	switch (S->state) {
+	assert (E->chan >= 0 && E->chan < MAX_CHANS);
 
-	  case 	state_0_disconnected:
-	  case 	state_1_awaiting_connection:
-	  case 	state_2_awaiting_release:
-	  case 	state_5_awaiting_v22_connection:
+	ax25_dlsm_t *S;
 
-	    break;
+	for (S = list_head; S != NULL; S = S->next) {
 
-	  case 	state_3_connected:
-	  case 	state_4_timer_recovery:
+	  if (E->chan == S->chan) {
 
-	    if (S->acknowledge_pending) {
-	      S->acknowledge_pending = 0;
-	      enquiry_response (S, frame_not_AX25, 0);
-	    }
 
-// Implemenation difference: The flow chart for state 3 has LM-RELEASE Request here.
+	    switch (S->state) {
+
+	      case 	state_0_disconnected:
+	      case 	state_1_awaiting_connection:
+	      case 	state_2_awaiting_release:
+	      case 	state_5_awaiting_v22_connection:
+
+	        break;
+
+	      case 	state_3_connected:
+	      case 	state_4_timer_recovery:
+
+	        // v1.5 change in strategy.
+	        // New I frames, not sent yet, are delayed until after processing anything in the received transmission.
+	        // Previously we started sending new frames, from the client app, as soon as they arrived.
+	        // Now, we first take care of those in progress before throwing more into the mix.
+
+	        i_frame_pop_off_queue(S);
+
+	        // Need an RR if we didn't have I frame send the necessary ack.
+
+	        if (S->acknowledge_pending) {
+	          S->acknowledge_pending = 0;
+	          enquiry_response (S, frame_not_AX25, 0);
+	        }
+
+// Implementation difference: The flow chart for state 3 has LM-RELEASE Request here.
 // I don't think I need it because the transmitter will turn off
 // automatically once the queue is empty.
 
 // Erratum: The original spec had LM-SEIZE request here, for state 4, which didn't seem right.
 // The 2006 revision has LM-RELEASE Request so states 3 & 4 are the same.
 	
-	    break;
+	        break;
+	    }
+	  }
 	}
 
 } /* lm_seize_confirm */
@@ -2022,8 +2148,14 @@ void lm_data_indication (dlq_item_t *E)
 	    rej_frame (S, cr, pf, nr);
 	    break;
 
-	  case frame_type_S_SREJ:      // Selective Reject - Ask for single frame repeat
-	    srej_frame (S, cr, pf, nr);
+	  case frame_type_S_SREJ:      // Selective Reject - Ask for selective frame(s) repeat
+	    {
+	      unsigned char *info_ptr;
+	      int info_len;
+
+	      info_len = ax25_get_info (E->pp, &info_ptr);
+	      srej_frame (S, cr, pf, nr, info_ptr, info_len);
+	    }
 	    break;
 
 	  case frame_type_U_SABME:     // Set Async Balanced Mode, Extended
@@ -2083,7 +2215,20 @@ void lm_data_indication (dlq_item_t *E)
 	    break;
 	}
 
-	i_frame_pop_off_queue (S);
+// An incoming frame might have ack'ed frames we sent or indicated peer is no longer busy.
+// Rather than putting this test in many places, where those conditions, may have changed,
+// we will try to catch them all on this single path.
+// Start transmission if we now have some outgoing data ready to go.
+// (Added in 1.5 beta 3 for issue 132.)
+
+	if ( S->i_frame_queue != NULL &&
+		(S->state == state_3_connected || S->state == state_4_timer_recovery) &&
+		( ! S->peer_receiver_busy ) &&
+		WITHIN_WINDOW_SIZE(S) ) {
+
+	  //S->acknowledge_pending = 1;
+	  lm_seize_request (S->chan);
+	}
 
 } /* end lm_data_indication */
 
@@ -2198,7 +2343,14 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 	    // Look carefully.  The original had two tiny differences between the two states.
 	    // In the 2006 version, these differences no longer exist.
 
-	    if (info_len >= 0 && info_len <= S->n1_paclen) {
+	    // Erratum: SDL asks: Is information field length <= N1 (paclen).
+	    // (github issue 102 - Thanks to KK6WHJ for pointing this out.)
+	    // Just because we are limiting the size of our transmitted data, it doesn't mean
+	    // that the other end will be doing the same.  With v2.2, the XID frame can be
+	    // used to negotiate a maximum info length but with v2.0, there is no way for the
+	    // other end to know our paclen value.
+
+	    if (info_len >= 0 && info_len <= AX25_MAX_INFO_LEN) {
 
 	      if (is_good_nr(S,nr)) {
 
@@ -2209,7 +2361,7 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 		// Erratum: Discrepancy between original and 2006 version.
 
 		// Pattern noticed:  Anytime we have "is_good_nr" which tests for V(A) <= N(R) <= V(S),
-		// we should always call "check_i_frame_acked" or at least set V(A) from N(R).
+		// we should always call "check_i_frame_ackd" or at least set V(A) from N(R).
 
 #if 0	// Erratum: original - states 3 & 4 differ here.
 
@@ -2228,6 +2380,22 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 	        check_i_frame_ackd (S,nr);
 #endif
 
+// Erratum: v1.5 - My addition.
+// I noticed that we sometimes got stuck in state 4 and rc crept up slowly even though
+// we received 'I' frames with N(R) values indicating that the other side received everything
+// that we sent.  Eventually rc could reach the limit and we would get an error.
+// If we are in state 4, and other guy ack'ed last I frame we sent, transition to state 3.
+// We had a similar situation for RR/RNR for cases other than response, F=1.
+
+	        if (S->state == state_4_timer_recovery && S->va == S->vs) {
+
+	          STOP_T1;
+	          select_t1_value (S);
+	          START_T3;
+	          SET_RC(0);
+	          enter_new_state (S, state_3_connected, __func__, __LINE__);
+	        }
+
 	        if (S->own_receiver_busy) {
 	          // This should be unreachable because we currently don't have a way to set own_receiver_busy.
 	          // But we might the capability someday so implement this while we are here.
@@ -2239,7 +2407,7 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 	            int nr = S->vr;
 	            packet_t pp;
  
-	            pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RNR, S->modulo, nr, f);
+	            pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RNR, S->modulo, nr, f, NULL, 0);
 
 	            // I wonder if this difference is intentional or if only one place was
 	            // was modified after a cut-n-paste of the flow chart segment.
@@ -2259,13 +2427,17 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 #endif
 	            S->acknowledge_pending = 0;
 	          }
+
 	        }
-	        else {		// N(R) out of expected range.
+	        else {		// Own receiver not busy.
 
 		  i_frame_continued (S, p, ns, pid, info_ptr, info_len);
 	        }
+
+
 	      }
-	      else {
+	      else {		// N(R) not in expected range.
+
 	        nr_error_recovery (S);
 	        // my enhancement.  See below.
 	        enter_new_state (S, S->modulo == 128 ? state_5_awaiting_v22_connection : state_1_awaiting_connection, __func__, __LINE__);
@@ -2275,7 +2447,7 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
 				// Wouldn't even get to CRC check if not octet aligned.
 
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Stream %d: AX.25 Protocol Error O: Information part length, %d, not in range of 0 thru %d.\n", S->stream_id, info_len, S->n1_paclen);
+	      dw_printf ("Stream %d: AX.25 Protocol Error O: Information part length, %d, not in range of 0 thru %d.\n", S->stream_id, info_len, AX25_MAX_INFO_LEN);
 
 	      establish_data_link (S);
 	      S->layer_3_initiated = 0;
@@ -2325,6 +2497,8 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
  *
  *		4.3.2.4. Selective Reject (SREJ) Command and Response
  *
+ * 	(Erratum: SREJ is only response with F bit.)
+ *
  *		The selective reject, SREJ, frame is used by the receiving TNC to request retransmission of the single I frame
  *		numbered N(R). If the P/F bit in the SREJ frame is set to "1", then I frames numbered up to N(R)-1 inclusive are
  *		considered as acknowledged. However, if the P/F bit in the SREJ frame is set to "0", then the N(R) of the SREJ
@@ -2371,6 +2545,9 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
  *		links are operational.
  *
  *		6.4.4.3. Selective Reject-Reject (SREJ/REJ)
+ *
+ *	(Erratum: REJ/SREJ should not be mixed.  Basic (mod 8) allows only REJ.
+ *		  Extended (mod 128) gives you a choice of one or the other for a link.)
  *
  *		When an I frame is received with a correct FCS but its send sequence number N(S) does not match the current
  *		receiver's receive state variable, and if N(S) indicates 2 or more frames are missing, a REJ frame is transmitted.
@@ -2450,7 +2627,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 	    cmdres_t cr = cr_res;	// response with F set to 1.
 	    packet_t pp;
 
-	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f);
+	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f, NULL, 0);
 	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 	    S->acknowledge_pending = 0;
 	  }
@@ -2481,12 +2658,12 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 	    cmdres_t cr = cr_res;	// response with F set to 1.
 	    packet_t pp;
 
-	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f);
+	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f, NULL, 0);
 	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 	    S->acknowledge_pending = 0;
 	  }
 	}
-	else if ( ! S->srej_enabled) {
+	else if (S->srej_enable == srej_none) {
 
 // The received sequence number is not the expected one and we can't use SREJ.
 // The old v2.0 approach is to send and REJ with the number we are expecting.
@@ -2508,7 +2685,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 	      dw_printf ("sending REJ, at %s %d, SREJ not enabled case, V(R)=%d", __func__, __LINE__, S->vr);
 	  }
 
-	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_REJ, S->modulo, nr, f);
+	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_REJ, S->modulo, nr, f, NULL, 0);
 	  lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
 	  S->acknowledge_pending = 0;
@@ -2558,31 +2735,60 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 	      int nr = S->vr;
 	      packet_t pp;
 
-	      pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RNR, S->modulo, nr, f);
+	      pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RNR, S->modulo, nr, f, NULL, 0);
 	      lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 	    }
 	    else if (S->rxdata_by_ns[ AX25MODULO(ns - 1, S->modulo, __FILE__, __func__, __LINE__)] == NULL) {
 
 // Ask for missing frames when we don't have N(S)-1 in the receive buffer.
 
-// I would think that we would want to set F when sending N(R) = V(R) but it says use F=0 here.
-// Don't understand why yet.
+// In version 1.4:
+// We end up sending more SREJ than necessary and and get back redundant information.  Example:
+// When we see 113 missing, we ask for a resend.
+// When we see 115 & 116 missing, a cummulative SREJ asks for everything.
+// The other end dutifully sends 113 twice.
+//
+// [0.4] DW1>DW0:(SREJ res, n(r)=113, f=0)
+// [0.4] DW1>DW0:(SREJ res, n(r)=113, f=1)<0xe6><0xe8>
+//
+// [0L] DW0>DW1:(I cmd, n(s)=113, n(r)=11, p=0, pid=0xf0)0114 send data<0x0d>
+// [0L] DW0>DW1:(I cmd, n(s)=113, n(r)=11, p=0, pid=0xf0)0114 send data<0x0d>
+// [0L] DW0>DW1:(I cmd, n(s)=115, n(r)=11, p=0, pid=0xf0)0116 send data<0x0d>
+// [0L] DW0>DW1:(I cmd, n(s)=116, n(r)=11, p=0, pid=0xf0)0117 send data<0x0d>
 
-// I like my method better.  It does not generate duplicate requests for gaps in the same transmission.
-// This creates a cummulative list each time and would cause repeats to be sent more often than necessary.
 
-	      int resend[128];
-	      int count = 0;
+// Version 1.5:
+// Don't generate duplicate requests for gaps in the same transmission.
+
+// Ideally, we might wait until carrier drops and then use one Multi-SREJ for entire transmission but
+// we will keep that for another day.
+// Probably need a flag similar to acknowledge_pending (or ask_resend_count, here) and the ask_for_resend array.
+// It could then be processed first in lm_seize_confirm.
+
+	      int ask_for_resend[128];
+	      int ask_resend_count = 0;
 	      int x;
-	      int allow_f1 = 0;		// F=1 from X.25 2.4.6.4 b) 3)
 
-	      for (x = S->vr; x != ns; x = AX25MODULO(x + 1, S->modulo, __FILE__, __func__, __LINE__)) {
-	        if (S->rxdata_by_ns[x] == NULL) {
-	          resend[count++] = AX25MODULO(x, S->modulo, __FILE__, __func__, __LINE__);
-	        }
+// Version 1.5
+// Erratum:  AX.25 says use F=0 here.  Doesn't make sense.
+// We would want to set F when sending N(R) = V(R).
+//	      int allow_f1 = 0;		// F=1 from X.25 2.4.6.4 b) 3)
+	      int allow_f1 = 1;		// F=1 from X.25 2.4.6.4 b) 3)
+
+// send only for this gap, not cummulative from V(R).
+
+	      int last = AX25MODULO(ns - 1, S->modulo, __FILE__, __func__, __LINE__);
+	      int first = last;
+	      while (first != S->vr && S->rxdata_by_ns[AX25MODULO(first - 1, S->modulo, __FILE__, __func__, __LINE__)] == NULL) {
+	        first = AX25MODULO(first - 1, S->modulo, __FILE__, __func__, __LINE__);
 	      }
-	
-	      send_srej_frames (S, resend, count, allow_f1);
+	      x = first;
+	      do {
+	        ask_for_resend[ask_resend_count++] = AX25MODULO(x, S->modulo, __FILE__, __func__, __LINE__);
+	        x = AX25MODULO(x + 1, S->modulo, __FILE__, __func__, __LINE__);
+	      } while (x != AX25MODULO(last + 1, S->modulo, __FILE__, __func__, __LINE__));
+
+	      send_srej_frames (S, ask_for_resend, ask_resend_count, allow_f1);
 	    }
 	  }
 	  else {
@@ -2634,8 +2840,8 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 // In this case, we need to ask for a resend of 1 & 2.
 // More generally, the range of V(R) thru N(S)-1.
 
-	    int resend[128];
-	    int count = 0;
+	    int ask_for_resend[128];
+	    int ask_resend_count = 0;
 	    int i;
 	    int allow_f1 = 1;
 
@@ -2643,10 +2849,10 @@ text_color_set(DW_COLOR_ERROR);
 dw_printf ("%s:%d, zero exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, S->vr, ns);
 
 	    for (i = S->vr; i != ns; i = AX25MODULO(i+1, S->modulo, __FILE__, __func__, __LINE__)) {
-	      resend[count++] = i;
+	      ask_for_resend[ask_resend_count++] = i;
 	    }
 
-	    send_srej_frames (S, resend, count, allow_f1);
+	    send_srej_frames (S, ask_for_resend, ask_resend_count, allow_f1);
 	  }
 	  else {
 
@@ -2661,7 +2867,7 @@ dw_printf ("%s:%d, zero exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, S->
 // This can be achieved by searching S->rxdata_by_ns, starting with N(S)-1, and counting
 // how many empty slots we have before finding a saved frame.
 
-	    int count = 0;
+	    int ask_resend_count = 0;
 	    int first;
 
 text_color_set(DW_COLOR_ERROR);
@@ -2673,7 +2879,7 @@ dw_printf ("%s:%d, %d srej exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, 
 	        //  Oops!  Went too far.  This I frame was already processed.
 		text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("INTERNAL ERROR calulating what to put in SREJ, %s line %d\n", __func__, __LINE__);
-	        dw_printf ("V(R)=%d, N(S)=%d, SREJ exception=%d, first=%d, count=%d\n", S->vr, ns, selective_reject_exception(S), first, count);
+	        dw_printf ("V(R)=%d, N(S)=%d, SREJ exception=%d, first=%d, ask_resend_count=%d\n", S->vr, ns, selective_reject_exception(S), first, ask_resend_count);
 		int k;
 	        for (k=0; k<128; k++) {
 	          if (S->rxdata_by_ns[k] != NULL) {
@@ -2682,30 +2888,28 @@ dw_printf ("%s:%d, %d srej exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, 
 	        }
 	        break;
 	      }
-	      count++;
+	      ask_resend_count++;
 	      first = AX25MODULO(first - 1, S->modulo, __FILE__, __func__, __LINE__);
 	    }
 
 	    // Go beyond the slot where we already have an I frame.
 	    first = AX25MODULO(first + 1, S->modulo, __FILE__, __func__, __LINE__);
 	    
-	    // The count could be 0.  e.g. We got 4 rather than 7 in this example.
+	    // The ask_resend_count could be 0.  e.g. We got 4 rather than 7 in this example.
 
-	    if (count > 0) {
-	      int resend[128];
+	    if (ask_resend_count > 0) {
+	      int ask_for_resend[128];
 	      int n;
 	      int allow_f1 = 1;
 
-	      for (n = 0; n < count; n++) {
-	        resend[n] = AX25MODULO(first + n, S->modulo, __FILE__, __func__, __LINE__);;
+	      for (n = 0; n < ask_resend_count; n++) {
+	        ask_for_resend[n] = AX25MODULO(first + n, S->modulo, __FILE__, __func__, __LINE__);;
 	      }
 	
-	      send_srej_frames (S, resend, count, allow_f1);
+	      send_srej_frames (S, ask_for_resend, ask_resend_count, allow_f1);
 	    }
 
 	  } /* end SREJ exception */
-
-
 
 #endif	// my earlier attempt.
 
@@ -2721,7 +2925,7 @@ dw_printf ("%s:%d, %d srej exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, 
 	  S->acknowledge_pending = 0;
 #endif
 
-	} /* end srej_enabled */
+	} /* end srej enabled */
 
 
 } /* end i_frame_continued */
@@ -2789,16 +2993,22 @@ static int is_ns_in_window (ax25_dlsm_t *S, int ns)
  * Purpose:	Ask for a resend of I frames with specified sequence numbers.
  *
  * Inputs:	resend		- Array of N(S) values for missing I frames.
+ *
  *		count		- Number of items in array.
+ *
  *		allow_f1	- When true, set F=1 when asking for V(R).
+ *
  *					X.25 section 2.4.6.4 b) 3) says F should be set to 0
  *						when receiving I frame out of sequence.
+ *
  *					X.25 sections 2.4.6.11 & 2.3.5.2.2 say set F to 1 when 
  *						responding to command with P=1.  (our enquiry_response function). 
  *
- * Future?	The X.25 protocol spec allows additional sequence numbers in one frame
+ * Version 1.5:	The X.25 protocol spec allows additional sequence numbers in one frame
  *		by using the INFO part.
- *		It would be easy but we haven't done that here to remain compatible with AX.25.
+ *		By default that feature is off but can be negotiated with XID.
+ *		We should be able to use this between two direwolf stations while
+ *		maintaining compatibility with the original AX.25 v2.2.
  *
  *------------------------------------------------------------------------------*/
 
@@ -2863,6 +3073,60 @@ static void send_srej_frames (ax25_dlsm_t *S, int *resend, int count, int allow_
 	  dw_printf ("\n");
 	}
 
+// Multi-SREJ - Use info part for additional sequence number(s) instead of sending separate SREJ for each.
+
+	if (S->srej_enable == srej_multi && count > 1) {
+
+	  unsigned char info[128];
+	  int info_len = 0;
+
+	  for (i = 1; i < count; i++) {		// skip first one
+
+	    if (resend[i] < 0 || resend[i] >= S->modulo) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("INTERNAL ERROR, additional nr=%d, modulo=%d, %s line %d\n", resend[i], S->modulo, __func__, __LINE__);
+	    }
+
+	    // There is also a form to specify a range but I don't
+	    // think it is worth the effort to generate it.  Maybe later.
+
+	    if (S->modulo == 8) {
+	      info[info_len++] = resend[i] << 5;
+	    }
+	    else {
+	      info[info_len++] = resend[i] << 1;
+	    }
+	  }
+
+	  f = 0;
+	  nr = resend[0];
+	  f = allow_f1 && (nr == S->vr);
+					// Possibly set if we are asking for the next after
+					// the last one received in contiguous order.
+
+					// This could only apply to the first in
+					// the list so this would not go in the loop.
+
+	  if (f) {			// In this case the other end is being
+					// informed of my V(R) so no additional
+					// RR etc. is needed.
+					// TODO:  Need to think about this.
+	    S->acknowledge_pending = 0;
+	  }
+
+	  if (nr < 0 || nr >= S->modulo) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("INTERNAL ERROR, nr=%d, modulo=%d, %s line %d\n", nr, S->modulo, __func__, __LINE__);
+	    nr = AX25MODULO(nr, S->modulo, __FILE__, __func__, __LINE__);
+	  }
+
+	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_SREJ, S->modulo, nr, f, info, info_len);
+	  lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
+	  return;
+	}
+
+// Multi-SREJ not enabled.  Send separate SREJ for each desired sequence number.
+
 	for (i = 0; i < count; i++) {
 
 	  nr = resend[i];
@@ -2883,7 +3147,7 @@ static void send_srej_frames (ax25_dlsm_t *S, int *resend, int count, int allow_
 	    nr = AX25MODULO(nr, S->modulo, __FILE__, __func__, __LINE__);
 	  }
 
-	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_SREJ, S->modulo, nr, f);
+	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_SREJ, S->modulo, nr, f, NULL, 0);
 	  lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 	}
 
@@ -2987,7 +3251,6 @@ static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr
 	      // dw_printf ("rr_rnr_frame (), line %d, state=%d, good nr=%d, calling check_i_frame_ackd\n", __LINE__, S->state, nr);
 
 	      check_i_frame_ackd (S, nr);
-	      // keep current state.
 	    }
 	    else {
 	      if (s_debug_retry) {
@@ -3008,9 +3271,11 @@ static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr
 
 	    if (cr == cr_res && pf == 1) {
 
+// RR/RNR Response with F==1.
+
 	      if (s_debug_retry) {
 	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("rr_rnr_frame (), Response, pf=1, line %d, state=%d, good nr, calling check_i_frame_ackd\n", __LINE__, S->state);
+	        dw_printf ("rr_rnr_frame (), Response, f=%d, line %d, state=%d, good nr, calling check_i_frame_ackd\n", pf, __LINE__, S->state);
 	      }
 
 	      STOP_T1;
@@ -3021,7 +3286,7 @@ static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr
 	        SET_VA(nr);
 	        if (S->vs == S->va) {		// all caught up with ack from other guy.
 	          START_T3;
-	          S->rc =0;			// My enhancement.  See Erratum note in select_t1_value.
+	          SET_RC(0);			// My enhancement.  See Erratum note in select_t1_value.
 	          enter_new_state (S, state_3_connected, __func__, __LINE__);
 	        }
 	        else {
@@ -3049,21 +3314,44 @@ static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr
 	      }
 	    }
 	    else {
+
+// RR/RNR command, either P value.
+// RR/RNR response, F==0
+
 	      if (cr == cr_cmd && pf == 1) {
 	        int f = 1;
 	        enquiry_response (S, ready ? frame_type_S_RR : frame_type_S_RNR, f);
 	      }
 
 	      if (is_good_nr(S,nr)) {
+
 	        SET_VA(nr);
-	        // REJ state 4 is identical but has conditional invoke_retransmission here.
+
+// Erratum: v1.5 - my addition.
+// I noticed that we sometimes got stuck in state 4 and rc crept up slowly even though
+// we received RR frames with N(R) values indicating that the other side received everything
+// that we sent.  Eventually rc could reach the limit and we would get an error.
+// If we are in state 4, and other guy ack'ed last I frame we sent, transition to state 3.
+// The same thing was done for receving I frames after check_i_frame_ackd.
+
+// Thought: Could we simply call check_i_frame_ackd, for consistency, rather than only setting V(A)?
+
+	        if (cr == cr_res && pf == 0) {
+
+	          if (S->vs == S->va) {		// all caught up with ack from other guy.
+	            STOP_T1;
+	            select_t1_value (S);
+	            START_T3;
+	            SET_RC(0);
+	            enter_new_state (S, state_3_connected, __func__, __LINE__);
+	          }
+	        }
 	      }
 	      else {
 	        nr_error_recovery (S);
 	        enter_new_state (S, S->modulo == 128 ? state_5_awaiting_v22_connection : state_1_awaiting_connection, __func__, __LINE__);
 	      }
 	    }
-
 	    break;
 	}
 
@@ -3261,7 +3549,7 @@ static void rej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr)
 	        SET_VA(nr);
 	        if (S->vs == S->va) {
 	          START_T3;
-	          S->rc =0;			// My enhancement.  See Erratum note in select_t1_value.
+	          SET_RC(0);			// My enhancement.  See Erratum note in select_t1_value.
 	          enter_new_state (S, state_3_connected, __func__, __LINE__);
 	        }
 	        else {
@@ -3324,6 +3612,8 @@ static void rej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr)
  *		cr	- Is this command or response?
  *		f	- Final bit.   When set, it is ack-ing up thru N(R)-1
  *		nr	- N(R) from the frame.  Peer has asked for a resend of I frame with this N(S).
+ *		info	- Information field, used only for Multi-SREJ
+ *		info_len - Information field length, bytes.
  *
  * Description:	4.3.2.4. Selective Reject (SREJ) Command and Response
  *
@@ -3418,7 +3708,9 @@ static void rej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr)
  *
  *------------------------------------------------------------------------------*/
 
-static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
+static int resend_for_srej (ax25_dlsm_t *S, int nr, unsigned char *info, int info_len);
+
+static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr, unsigned char *info, int info_len)
 {
 
 	switch (S->state) {
@@ -3431,7 +3723,7 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	  case 	state_5_awaiting_v22_connection:
 	    // Do nothing.
 
-	    // Erratum: The original spec said stay in same state.
+	    // Erratum: The original spec said stay in same state.  (Seems correct.)
 	    // 2006 revision shows state 5 transitioning into 1.  I think that is wrong.
 	    // probably a cut-n-paste from state 1 to 5 and that part not updated.
 	    break;
@@ -3475,28 +3767,13 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	      START_T3;
 	      select_t1_value(S);
 
-	      // Resend I frame with N(S) equal to the N(R) in the SREJ.
-	      // Note:  X.25 says info part can contain additional sequence numbers.
-	      // Here we stay with Ax.25 and don't consider the info part.
 
-	      cdata_t *txdata = S->txdata_by_ns[nr];
-
-	      if (txdata != NULL) {
-
-	        cmdres_t cr = cr_cmd;
-	        int i_frame_ns = nr;
-	        int i_frame_nr = S->vr;
- 	        int p = 0;
-
-	        packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p, txdata->pid, (unsigned char *)(txdata->data), txdata->len);
-
-	        // dw_printf ("calling lm_data_request for I frame, %s line %d\n", __func__, __LINE__);
-
-	        lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
+	      int num_resent = resend_for_srej (S, nr, info, info_len);
+	      if (num_resent) {
 
 // my addition
 // Erratum: We sent I frame(s) and want to timeout if no ack comes back.
-// We also sent N(R) so no need for extra RR at the end only for that.
+// We also sent N(R), from V(R), so no need for extra RR at the end only for that.
 
 // We would sometimes end up in a situation where T1 was stopped on
 // both ends and everyone would wait for the other guy to timeout and do something.
@@ -3505,10 +3782,6 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	        STOP_T3;
 	        START_T1;
 	        S->acknowledge_pending = 0;
-	      }
-	      else {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Stream %d: INTERNAL ERROR for SREJ.  I frame for N(S)=%d is not available.\n", S->stream_id, nr);
 	      }
 	      // keep same state.
 	    }
@@ -3520,6 +3793,11 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	    break;
 
 	  case 	state_4_timer_recovery:
+
+	    if (s_debug_timers) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("state 4 timer recovery, %s %d  nr=%d, f=%d\n", __func__, __LINE__, nr, f);
+	    }
 
 	    S->peer_receiver_busy = 0;
 
@@ -3544,14 +3822,29 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	      if (f) {				// f=1 means ack up thru previous sequence.
 						// Erratum:  2006 version tests "P".  Original has "F."
 	        SET_VA(nr);
+
+	        if (s_debug_timers) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("state 4 timer recovery, %s %d    set v(a)= %d\n", __func__, __LINE__, S->va);
+	        }
 	      }
 
 	      if (S->vs == S->va) {		// ACKs all caught up.  Back to state 3.
 
+			// Erratum:  I think this is unreachable.
+			// If the other side is asking for I frame with sequence X, it must have
+			// received X+1 or later.  That means my V(S) must be X+2 or greater.
+			// So, I don't think we can ever have V(S) == V(A) here.
+			// If we were to remove the 'if' test and true part, case 4 would then
+			// be exactly the same as state 4.  We need to rely on RR to get us
+			// back to state 3.
+
 	        START_T3;
-	        S->rc =0;			// My enhancement.  See Erratum note in select_t1_value.
+	        SET_RC(0);			// My enhancement.  See Erratum note in select_t1_value.
 	        enter_new_state (S, state_3_connected, __func__, __LINE__);
 
+	        // text_color_set(DW_COLOR_ERROR);
+	        // dw_printf ("state 4 timer recovery, go to state 3 \n");
 	      }
 	      else {
 
@@ -3560,21 +3853,11 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 #if 1	// This is from the original protocol spec.
 	// Resend I frame with N(S) equal to the N(R) in the SREJ.
 
-	        cdata_t *txdata = S->txdata_by_ns[nr];
+	        //text_color_set(DW_COLOR_ERROR);
+	        //dw_printf ("state 4 timer recovery, send requested frame(s) \n");
 
-	        if (txdata != NULL) {
-
-	          cmdres_t cr = cr_cmd;
-	          int i_frame_ns = nr;
-	          int i_frame_nr = S->vr;
- 	          int p = 0;
-
-	          packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p, txdata->pid, (unsigned char *)(txdata->data), txdata->len);
-
-	          // dw_printf ("calling lm_data_request for I frame, %s line %d\n", __func__, __LINE__);
-
-	          lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
-
+	        int num_resent = resend_for_srej (S, nr, info, info_len);
+	        if (num_resent) {
 // my addition
 // Erratum: We sent I frame(s) and want to timeout if no ack comes back.
 // We also sent N(R), from V(R), so no need for extra RR at the end only for that.
@@ -3587,11 +3870,6 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	          START_T1;
 	          S->acknowledge_pending = 0;
 	        }
-	        else {
-	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Stream %d: INTERNAL ERROR for SREJ.  I frame for N(S)=%d is not available.\n", S->stream_id, nr);
-	        }
-
 #else	// Erratum!  This is from the 2006 revision.
 	// We should resend only the single requested I frame.
 	// I think there was a cut-n-paste from the REJ flow chart and this particular place did not get changed.
@@ -3608,6 +3886,87 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr)
 	}
 
 } /* end srej_frame */
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	resend_for_srej
+ *
+ * Purpose:	Resend the I frame(s) specified in SREJ response.
+ *
+ * Inputs:	S	- Data Link State Machine.
+ *		nr	- N(R) from the frame.  Peer has asked for a resend of I frame with this N(S).
+ *		info	- Information field, might contain additional sequence numbers for Multi-SREJ.
+ *		info_len - Information field length, bytes.
+ *
+ * Returns:	Number of frames sent.  Should be at least one.
+ *
+ * Description:	Simply resend requested frame(s).
+ *		The calling context will worry about the F bit and other state stuff.
+ *
+ *------------------------------------------------------------------------------*/
+
+static int resend_for_srej (ax25_dlsm_t *S, int nr, unsigned char *info, int info_len)
+{
+	cmdres_t cr = cr_cmd;
+	int i_frame_nr = S->vr;
+	int i_frame_ns = nr;
+	int p = 0;
+	int num_resent = 0;
+
+	// Resend I frame with N(S) equal to the N(R) in the SREJ.
+	// Additional sequence numbers can be in optional information part.
+
+	cdata_t *txdata = S->txdata_by_ns[i_frame_ns];
+
+	if (txdata != NULL) {
+	  packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p, txdata->pid, (unsigned char *)(txdata->data), txdata->len);
+	  // dw_printf ("calling lm_data_request for I frame, %s line %d\n", __func__, __LINE__);
+	  lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
+	  num_resent++;
+	}
+	else {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Stream %d: INTERNAL ERROR for SREJ.  I frame for N(S)=%d is not available.\n", S->stream_id, i_frame_ns);
+	}
+
+// Multi-SREJ if there is an information part.
+
+	int j;
+	for (j = 0; j < info_len; j++) {
+
+		// We can have a single sequence number like this:
+		//    	xxx00000	(mod 8)
+		//	xxxxxxx0	(mod 128)
+		// or we can have span (mod 128 only) like this, with the first and last:
+		//	xxxxxxx1
+		//	xxxxxxx1
+		//
+		// Note that the sequence number is shifted left by one
+		// and if the LSB is set, there should be two adjacent bytes
+		// with it set.
+
+	  if (S->modulo == 8) {
+	    i_frame_ns = (info[j] >> 5) & 0x07;	// no provision for span.
+	  }
+	  else {
+	    i_frame_ns = (info[j] >> 1) & 0x7f;	// TODO: test LSB and possible loop here.
+	  }
+
+	  txdata = S->txdata_by_ns[i_frame_ns];
+	  if (txdata != NULL) {
+	    packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p, txdata->pid, (unsigned char *)(txdata->data), txdata->len);
+	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
+	    num_resent++;
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Stream %d: INTERNAL ERROR for Multi-SREJ.  I frame for N(S)=%d is not available.\n", S->stream_id, i_frame_ns);
+	  }
+	}
+	return (num_resent);
+
+} /* end resend_for_srej */
+
 
 
 
@@ -3701,7 +4060,7 @@ static void sabm_e_frame (ax25_dlsm_t *S, int extended, int p)
 	    INIT_T1V_SRT;
 
 	    START_T3;
-	    S->rc =0;			// My enhancement.  See Erratum note in select_t1_value.
+	    SET_RC(0);			// My enhancement.  See Erratum note in select_t1_value.
 	    enter_new_state (S, state_3_connected, __func__, __LINE__);
 	    break;
 
@@ -3809,7 +4168,7 @@ static void sabm_e_frame (ax25_dlsm_t *S, int extended, int p)
 	      SET_VS(0);
 	      SET_VA(0);
 	      SET_VR(0);
-	      S->rc =0;			// My enhancement.  See Erratum note in select_t1_value.
+	      SET_RC(0);			// My enhancement.  See Erratum note in select_t1_value.
 	      enter_new_state (S, state_3_connected, __func__, __LINE__);
 	    }
 	    break;
@@ -4237,7 +4596,7 @@ static void ua_frame (ax25_dlsm_t *S, int f)
 	        mdl_negotiate_request (S);
 	      }
 
-	      S->rc =0;			// My enhancement.  See Erratum note in select_t1_value.
+	      SET_RC(0);			// My enhancement.  See Erratum note in select_t1_value.
 	      enter_new_state (S, state_3_connected, __func__, __LINE__);
 	    }
 	    else {
@@ -4515,7 +4874,7 @@ static void ui_frame (ax25_dlsm_t *S, cmdres_t cr, int pf)
 static void xid_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, unsigned char *info_ptr, int info_len)
 {
 	struct xid_param_s param;
-	char desc[120];
+	char desc[150];
 	int ok;
 	unsigned char xinfo[40];
 	int xlen;
@@ -4542,7 +4901,7 @@ static void xid_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, unsigned char *info_
 		if (ok) {
 		  negotiation_response (S, &param);
 
-	          xlen = xid_encode (&param, xinfo);
+	          xlen = xid_encode (&param, xinfo, res);
 
 	          pp = ax25_u_frame (S->addrs, S->num_addr, res, frame_type_U_XID, f, nopid, xinfo, xlen);
 	          lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
@@ -4782,7 +5141,7 @@ static void t1_expiry (ax25_dlsm_t *S)
 
 	      packet_t pp;
 
-	      S->rc++;
+	      SET_RC(S->rc+1);
 	      if (S->rc > S->peak_rc_value) S->peak_rc_value = S->rc;	// Keep statistics.
 
 	      pp = ax25_u_frame (S->addrs, S->num_addr, cmd, (S->state == state_5_awaiting_v22_connection) ? frame_type_U_SABME : frame_type_U_SABM, p, nopid, NULL, 0);
@@ -4808,7 +5167,7 @@ static void t1_expiry (ax25_dlsm_t *S)
 
 	      packet_t pp;
 
-	      S->rc++;
+	      SET_RC(S->rc+1);
 	      if (S->rc > S->peak_rc_value) S->peak_rc_value = S->rc;
 
 	      pp = ax25_u_frame (S->addrs, S->num_addr, cmd, frame_type_U_DISC, p, nopid, NULL, 0);
@@ -4821,7 +5180,7 @@ static void t1_expiry (ax25_dlsm_t *S)
 
 	  case 	state_3_connected:
 
-	    S->rc = 1;
+	    SET_RC(1);
 	    transmit_enquiry (S);
 	    enter_new_state (S, state_4_timer_recovery, __func__, __LINE__);
 	    break;
@@ -4832,25 +5191,25 @@ static void t1_expiry (ax25_dlsm_t *S)
 
 // Erratum: 2006 version, page 103, is missing yes/no labels on decision blocks.
 
-	      if (S->va != S->vr) {
+	      if (S->va != S->vs) {
 
 	        if (s_debug_protocol_errors) {
 	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Stream %d: AX.25 Protocol Error I: N2 timeouts: unacknowledged data.\n", S->stream_id);
+	          dw_printf ("Stream %d: AX.25 Protocol Error I: %d timeouts: unacknowledged sent data.\n", S->stream_id, S->n2_retry);
 	        }
 	      }
 	      else if (S->peer_receiver_busy) {
 
 	        if (s_debug_protocol_errors) {
 	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Stream %d: AX.25 Protocol Error U: N2 timeouts: extended peer busy condition.\n", S->stream_id);
+	          dw_printf ("Stream %d: AX.25 Protocol Error U: %d timeouts: extended peer busy condition.\n", S->stream_id, S->n2_retry);
 	        }
 	      }
 	      else {
 
 	        if (s_debug_protocol_errors) {
 	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("Stream %d: AX.25 Protocol Error T: N2 timeouts: no response to enquiry.\n", S->stream_id);
+	          dw_printf ("Stream %d: AX.25 Protocol Error T: %d timeouts: no response to enquiry.\n", S->stream_id, S->n2_retry);
 	        }
 	      }
 
@@ -4875,7 +5234,7 @@ static void t1_expiry (ax25_dlsm_t *S)
 	      enter_new_state (S, state_0_disconnected, __func__, __LINE__);
 	    }
 	    else {
-	      S->rc++;
+	      SET_RC(S->rc+1);
 	      if (S->rc > S->peak_rc_value) S->peak_rc_value = S->rc;	// gather statistics.
 
 	      transmit_enquiry (S);
@@ -4939,7 +5298,7 @@ static void t3_expiry (ax25_dlsm_t *S)
 
 // Erratum: Original sets RC to 0, 2006 revision sets RC to 1 which makes more sense.
 
-	    S->rc = 1;
+	    SET_RC(1);
 	    transmit_enquiry (S);
 	    enter_new_state (S, state_4_timer_recovery, __func__, __LINE__);
 	    break;
@@ -5002,7 +5361,7 @@ static void tm201_expiry (ax25_dlsm_t *S)
 
               initiate_negotiation (S, &param);
 
-	      xlen = xid_encode (&param, xinfo);
+	      xlen = xid_encode (&param, xinfo, cmd);
 
 	      pp = ax25_u_frame (S->addrs, S->num_addr, cmd, frame_type_U_XID, p, nopid, xinfo, xlen);
 	      lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
@@ -5076,7 +5435,7 @@ static void establish_data_link (ax25_dlsm_t *S)
 // Flow chart shows setting RC to 0 and we end up sending SAMB(e) 11 times when N2 (RETRY) is 10.
 // It should be 1 rather than 0.
 
-	S->rc = 1;
+	SET_RC(1);
 	pp = ax25_u_frame (S->addrs, S->num_addr, cmd, (S->modulo == 128) ? frame_type_U_SABME : frame_type_U_SABM, p, nopid, NULL, 0);
 	lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 	STOP_T3;
@@ -5171,14 +5530,14 @@ static void transmit_enquiry (ax25_dlsm_t *S)
 
 	if (s_debug_retry) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\n****** TRANSMIT ENQUIRY ******\n\n");
+	  dw_printf ("\n****** TRANSMIT ENQUIRY   RR/RNR cmd P=1 ****** state=%d, rc=%d\n\n", S->state, S->rc);
 	}
 
 // This is the ONLY place that we send RR/RNR *command* with P=1.
 // Everywhere else should be response.
 // I don't think we ever use RR/RNR command P=0 but need to check on that.
 
-	pp = ax25_s_frame (S->addrs, S->num_addr, cmd, S->own_receiver_busy ? frame_type_S_RNR : frame_type_S_RR, S->modulo, nr, p);
+	pp = ax25_s_frame (S->addrs, S->num_addr, cmd, S->own_receiver_busy ? frame_type_S_RNR : frame_type_S_RR, S->modulo, nr, p, NULL, 0);
 
 	lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
@@ -5222,7 +5581,7 @@ static void transmit_enquiry (ax25_dlsm_t *S)
  *		The next response frame returned to a supervisory command frame with the P bit set to "1", received during
  *		the information transfer state, is an RR, RNR or REJ response frame with the F bit set to "1".
  *
- * Erattum!	The flow chart says RR/RNR *command* but I'm confident should be response.
+ * Erattum!	The flow chart says RR/RNR *command* but I'm confident it should be response.
  *
  * Erratum:	Ax.25 spec has nothing here for SREJ.  See X.25 2.4.6.11 for explanation.
  * 
@@ -5252,13 +5611,14 @@ static void enquiry_response (ax25_dlsm_t *S, ax25_frame_type_t frame_type, int 
 
 // I'm busy.
 
-	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RNR, S->modulo, nr, f);
+	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RNR, S->modulo, nr, f, NULL, 0);
 	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
-	    S->acknowledge_pending = 0;
+	    S->acknowledge_pending = 0;		// because we sent N(R) from V(R).
 	  }
 
-	  else if (S->srej_enabled) {
+	  else if (S->srej_enable == srej_single || S->srej_enable == srej_multi) {
+
 
 // SREJ is enabled. This is based on X.25 2.4.6.11.
 
@@ -5305,7 +5665,7 @@ static void enquiry_response (ax25_dlsm_t *S, ax25_frame_type_t frame_type, int 
 
 // Not waiting for fill in of missing frames.		X.25 2.4.6.11 c)
 
-	      pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f);
+	      pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f, NULL, 0);
 	      lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
 	      S->acknowledge_pending = 0;
@@ -5319,7 +5679,12 @@ static void enquiry_response (ax25_dlsm_t *S, ax25_frame_type_t frame_type, int 
 // And when we look at what happens when RR response, F=1 is received in state 4, it is
 // effectively REJ when N(R) is not the same as V(S).
 
-	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f);
+	    if (s_debug_retry) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("\n****** ENQUIRY RESPONSE srej not enbled, sending RR resp F=%d ******\n\n", f);
+	    }
+
+	    pp = ax25_s_frame (S->addrs, S->num_addr, cr, frame_type_S_RR, S->modulo, nr, f, NULL, 0);
 	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
 	    S->acknowledge_pending = 0;
@@ -5331,7 +5696,7 @@ static void enquiry_response (ax25_dlsm_t *S, ax25_frame_type_t frame_type, int 
 
 // For cases other than (RR, RNR, I) command, P=1.
 
-	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, S->own_receiver_busy ? frame_type_S_RNR : frame_type_S_RR, S->modulo, nr, f);
+	  pp = ax25_s_frame (S->addrs, S->num_addr, cr, S->own_receiver_busy ? frame_type_S_RNR : frame_type_S_RR, S->modulo, nr, f, NULL, 0);
 	  lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
 	  S->acknowledge_pending = 0;
@@ -5343,7 +5708,7 @@ static void enquiry_response (ax25_dlsm_t *S, ax25_frame_type_t frame_type, int 
 // Erratum:  This is woefully inadequate when SREJ is enabled.
 // Erratum:  Flow chart says RR/RNR command but I'm confident it should be response.
 
-	pp = ax25_s_frame (S->addrs, S->num_addr, cr, S->own_receiver_busy ? frame_type_S_RNR : frame_type_S_RR, S->modulo, nr, f);
+	pp = ax25_s_frame (S->addrs, S->num_addr, cr, S->own_receiver_busy ? frame_type_S_RNR : frame_type_S_RR, S->modulo, nr, f, NULL, 0);
 	lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
 
 	S->acknowledge_pending = 0;
@@ -5363,8 +5728,13 @@ static void enquiry_response (ax25_dlsm_t *S, ax25_frame_type_t frame_type, int 
  *			  	  Continue will all up to and including current V(S) value.
  * 
  * Description:	Resend one or more frames that have already been sent.
+ *		Should always send at least one.
  *
  *		This is probably the result of getting REJ asking for a resend.
+ *
+ * Context:	I would expect the caller to clear 'acknowledge_pending' after calling this
+ *		because we sent N(R), from V(R), to ack what was received from other guy.
+ *		I would also expect Stop T3 & Start T1 at the same place.
  *
  *------------------------------------------------------------------------------*/
 
@@ -5379,6 +5749,19 @@ static void invoke_retransmission (ax25_dlsm_t *S, int nr_input)
 
 	int local_vs;
 	int sent_count = 0;
+
+	if (s_debug_misc) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("invoke_retransmission(): starting with %d, state=%d, rc=%d, \n", nr_input, S->state, S->rc);
+	}
+
+// I don't think we should be here if SREJ is enabled.
+// TODO: Figure out why this happens occasionally.
+
+//	if (S->srej_enable != srej_none) {
+//	  text_color_set(DW_COLOR_ERROR);
+//	  dw_printf ("Internal Error, Did not expect to be here when SREJ enabled.  %s %s %d\n", __FILE__, __func__, __LINE__);
+//	}
 	
 	if (S->txdata_by_ns[nr_input] == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -5399,7 +5782,7 @@ static void invoke_retransmission (ax25_dlsm_t *S, int nr_input)
 
 	    if (s_debug_misc) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("invoke_retransmission(): state=%d, Resending N(S) = %d, probably as result of REJ N(R) = %d\n", S->state, ns, nr_input);
+	      dw_printf ("invoke_retransmission(): Resending N(S) = %d\n", ns);
 	    }
 
 	    packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, nr, ns, p,
@@ -5438,7 +5821,9 @@ static void invoke_retransmission (ax25_dlsm_t *S, int nr_input)
  *
  * Outputs:	S->va	- updated from nr.
  *
- * Description:	TBD...  Document when this is used.
+ * Description:	This is called for:
+ *		- 'I' frame received and N(R) is in expected range, states 3 & 4.
+ *		- RR/RNR command with p=1 received and N(R) is in expected range, state 3 only.
  * 
  *------------------------------------------------------------------------------*/
 
@@ -5670,7 +6055,7 @@ static void select_t1_value (ax25_dlsm_t *S)
 
 static void set_version_2_0 (ax25_dlsm_t *S)
 {
-	S->srej_enabled = 0;
+	S->srej_enable = srej_none;
 	S->modulo = 8;
 	S->n1_paclen = g_misc_config_p->paclen;
 	S->k_maxframe = g_misc_config_p->maxframe_basic;
@@ -5687,8 +6072,8 @@ static void set_version_2_0 (ax25_dlsm_t *S)
 
 static void set_version_2_2 (ax25_dlsm_t *S)
 {
-	S->srej_enabled = 1;
-	//S->srej_enabled = 0;		// temporarily disable for testing of REJ only with modulo 128
+	S->srej_enable = srej_single;	// Start with single.
+					// Can be increased to multi with XID exchange.
 	S->modulo = 128;
 	S->n1_paclen = g_misc_config_p->paclen;
 	S->k_maxframe = g_misc_config_p->maxframe_extended;
@@ -5725,7 +6110,7 @@ static void set_version_2_2 (ax25_dlsm_t *S)
  *
  * Pattern noticed:  Anytime we have "is_good_nr" returning true, we should always
  *			- set V(A) from N(R) or
- *			- call "check_i_frame_acked" which does the same and some timer stuff. 
+ *			- call "check_i_frame_ackd" which does the same and some timer stuff.
  *
  *------------------------------------------------------------------------------*/
 
@@ -5772,7 +6157,7 @@ static int is_good_nr (ax25_dlsm_t *S, int nr)
  *		k
  *
  * Outputs:	v(s) is incremented for each processed.
- *		ack_pending = 0
+ *		acknowledge_pending = 0
  *
  *------------------------------------------------------------------------------*/
 
@@ -5843,7 +6228,7 @@ static void i_frame_pop_off_queue (ax25_dlsm_t *S)
     
 	    while ( ( ! S->peer_receiver_busy ) &&
 	            S->i_frame_queue != NULL &&
-	            S->vs != AX25MODULO(S->va + S->k_maxframe, S->modulo, __FILE__, __func__, __LINE__) ) {
+	            WITHIN_WINDOW_SIZE(S) ) {
 
 	      cdata_t *txdata;
 
@@ -5943,7 +6328,7 @@ static void discard_i_queue (ax25_dlsm_t *S)
  *
  *------------------------------------------------------------------------------*/
 
-// TODO:  requeuing...
+// TODO:  requeuing???
 
 static void enter_new_state (ax25_dlsm_t *S, enum dlsm_state_e new_state, const char *from_func, int from_line)
 {
@@ -5999,7 +6384,18 @@ static void mdl_negotiate_request (ax25_dlsm_t *S)
 	int p = 1;
 	int nopid = 0;
 	packet_t pp;
+	int n;
 
+// At least one known [partial] v2.2 implementation understands SABME but not XID.
+// Rather than wasting time, sending XID repeatedly until giving up, we have a workaround.
+// The configuration file can contain a list of stations known not to respond to XID.
+// Obviously this applies only to v2.2 because XID was not part of v2.0.
+
+	for (n = 0; n < g_misc_config_p->noxid_count; n++) {
+	  if (strcmp(S->addrs[PEERCALL],g_misc_config_p->noxid_addrs[n]) == 0) {
+	    return;
+	  }
+	}
 
 	switch (S->mdl_state) {
 
@@ -6007,7 +6403,7 @@ static void mdl_negotiate_request (ax25_dlsm_t *S)
 
 	    initiate_negotiation (S, &param);
 
-	    xlen = xid_encode (&param, xinfo);
+	    xlen = xid_encode (&param, xinfo, cmd);
 
 	    pp = ax25_u_frame (S->addrs, S->num_addr, cmd, frame_type_U_XID, p, nopid, xinfo, xlen);
 	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
@@ -6040,7 +6436,17 @@ static void mdl_negotiate_request (ax25_dlsm_t *S)
 static void initiate_negotiation (ax25_dlsm_t *S, struct xid_param_s *param)
 {
 	    param->full_duplex = 0;
-	    param->rej = S->srej_enabled ? selective_reject : implicit_reject;
+	    switch (S->srej_enable) {
+	      case srej_single:
+	      case srej_multi:
+	        param->srej = srej_multi;	// see if other end reconizes it.
+	        break;
+	      case srej_none:
+	      default:
+	        param->srej = srej_none;
+	        break;
+	    }
+
 	    param->modulo = S->modulo;
 	    param->i_field_length_rx = S->n1_paclen;	// Hmmmm.  Should we ask for what the user
 							// specified for PACLEN or offer the maximum
@@ -6074,9 +6480,7 @@ static void initiate_negotiation (ax25_dlsm_t *S, struct xid_param_s *param)
 static void negotiation_response (ax25_dlsm_t *S, struct xid_param_s *param)
 {
 
-// Full duplex would not be that difficult.
-// Just ignore the Carrier Detect when transmitting.
-// But we haven't done that yet.
+// TODO: Integrate with new full duplex capability in v1.5.
 
 	param->full_duplex = 0;
 
@@ -6094,11 +6498,8 @@ static void negotiation_response (ax25_dlsm_t *S, struct xid_param_s *param)
 // Erratum:  2006 version, section, 4.3.3.7 says default selective reject - reject.
 // We can't do that.
 
-	if (param->rej == unknown_reject) {
-	  param->rej = (param->modulo == 128) ? selective_reject : implicit_reject;	// not specified, set default
-	}
-	else {
-	  param->rej = MIN(param->rej, selective_reject);
+	if (param->srej == srej_not_specified) {
+	  param->srej = (param->modulo == 128) ? srej_single : srej_none;	// not specified, set default
 	}
 
 // We can currently do up to 2k.
@@ -6166,8 +6567,8 @@ static void negotiation_response (ax25_dlsm_t *S, struct xid_param_s *param)
 
 static void complete_negotiation (ax25_dlsm_t *S, struct xid_param_s *param)
 {
-	if (param->rej != unknown_reject) {
-	  S->srej_enabled = param->rej >= selective_reject;
+	if (param->srej != srej_not_specified) {
+	  S->srej_enable = param->srej;
 	}
 
 	if (param->modulo != modulo_unknown) {

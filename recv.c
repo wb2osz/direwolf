@@ -378,6 +378,11 @@ void recv_process (void)
 	          lm_channel_busy (pitem);
 	          break;
 
+		case DLQ_SEIZE_CONFIRM:
+
+	          lm_seize_confirm (pitem);
+	          break;
+
 	        case DLQ_CLIENT_CLEANUP:
 
 	          dl_client_cleanup (pitem);

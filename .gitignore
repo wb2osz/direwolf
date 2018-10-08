@@ -105,3 +105,5 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+/use_this_sdk
+*.dSYM
