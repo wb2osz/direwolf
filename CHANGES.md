@@ -1,41 +1,19 @@
 
 # Revision History #
 
-## Version 1.5 -- Beta Test 3 -- July 2018 ##
 
-### New Features: ###
-
-- "**NOXID**" configuration file option to avoid sending XID command to listed station(s).  If other end is a partial v2.2 implementation, which recognizes SABME, but not XID, we would waste a lot of time resending XID many times before giving up.   This is less drastic than the "**V20**" option which doesn't even attempt to use v2.2 with listed station(s).
-
-### Bugs Fixed: ###
-
-- Issue 132 - Under certain conditions, outgoing connected mode data would get stuck in a queue and not be transmitted.  This could happen if client application sends a burst of data larger than the "window" size (MAXFRAME or EMAXFRAME option).
-
-### Notes: ###
-
-Windows binary distribution now uses gcc (MinGW) version 6.3.0.
-
-
-
-## Version 1.5 -- Beta Test 2 -- February 2018 ##
-
-### Bugs Fixed: ###
-
-- Strange failures when trying to use multiple KISS client applications over TCP.  Only Linux was affected.  
-
-
-## Version 1.5 -- Beta Test -- January 2018 ##
+## Version 1.5  --  September 2018 ##
 
 
 ### New Features: ###
 
 - PTT using GPIO pin of CM108/CM119 (e.g. DMK URI, RB-USB RIM), Linux only.
 
+- More efficient error recovery for AX.25 connected mode.  Better generation and processing of REJ and SREJ to reduce unnecessary duplicate "**I**" frames.
 
-- More efficient error recovery for AX.25 connected mode.  Better generation and processing of REJ and SREJ to reduce unnecessary duplicate I frames.
+- New configuration option, "**V20**", for listing stations known to not understand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
 
-- New configuration option, V20, for listing stations known to not understand AX.25 v2.2.  This will speed up connection by going right to SABM and not trying SABME first and failing.
-
+- New "**NOXID**" configuration file option to avoid sending XID command to listed station(s).  If other end is a partial v2.2 implementation, which recognizes SABME, but not XID, we would waste a lot of time resending XID many times before giving up.   This is less drastic than the "**V20**" option which doesn't even attempt to use v2.2 with listed station(s).
 
 - New application "**kissutil**" for troubleshooting a KISS TNC or interfacing to an application via files.
 
@@ -61,6 +39,11 @@ Windows binary distribution now uses gcc (MinGW) version 6.3.0.
 
 - PACLEN configuration item no longer restricts length of received frames.
 
+- Strange failures when trying to use multiple KISS client applications over TCP.  Only Linux was affected.  
+
+- Under certain conditions, outgoing connected mode data would get stuck in a queue and not be transmitted.  This could happen if client application sends a burst of data larger than the "window" size (MAXFRAME or EMAXFRAME option).
+
+
 - Little typographical / spelling errors in messages.
 
 
@@ -71,7 +54,9 @@ Windows binary distribution now uses gcc (MinGW) version 6.3.0.
 
 - Updates describing cheap SDR frequency inaccuracy and how to compensate for it.
 
+### Notes: ###
 
+Windows binary distribution now uses gcc (MinGW) version 6.3.0.
 
 ----------
 

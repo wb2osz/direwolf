@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -986,20 +986,23 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  *			ADEVICE    plughw:1,0			-- same for in and out.
  *			ADEVICE	   plughw:2,0  plughw:3,0	-- different in/out for a channel or channel pair.
+ *			ADEVICE1   udp:7355  default		-- from Software defined radio (SDR) via UDP.
  *	
  */
 
 	  /* Note that ALSA name can contain comma such as hw:1,0 */
 
 	  if (strncasecmp(t, "ADEVICE", 7) == 0) {
+	    /* "ADEVICE" is equivalent to "ADEVICE0". */
 	    adevice = 0;
-	    if (isdigit(t[7])) {
-	      adevice = t[7] - '0';
+	    if (strlen(t) >= 8) {
+	      adevice = atoi(t+7);
 	    }
 
 	    if (adevice < 0 || adevice >= MAX_ADEVS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Device number %d out of range for ADEVICE command on line %d.\n", adevice, line);
+	      dw_printf ("If you really need more than %d audio devices, increase MAX_ADEVS and recompile.\n", MAX_ADEVS);
 	      adevice = 0;
 	      continue;
 	    }
