@@ -458,6 +458,8 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	    exit (1);
 	  }
 	}
+	/* Wait for udev adjust permissions */
+	sleep (1);
 	close (fd);
 
 /*
