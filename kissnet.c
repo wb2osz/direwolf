@@ -106,11 +106,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef __OpenBSD__
 #include <errno.h>
-#else
-#include <sys/errno.h>
-#endif
 #endif
 
 #include <unistd.h>

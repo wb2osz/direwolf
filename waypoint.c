@@ -41,7 +41,7 @@
 #else
 #include <stdlib.h>
 #include <ctype.h>
-#include <sys/errno.h>
+#include <errno.h>
 #endif
 
 #include <assert.h>

@@ -44,7 +44,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/errno.h>
+#include <errno.h>
 
 #endif
 

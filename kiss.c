@@ -115,12 +115,8 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
-
-#ifdef __OpenBSD__
 #include <errno.h>
-#else
-#include <sys/errno.h>
-#endif
+
 
 #include "tq.h"
 #include "ax25_pad.h"

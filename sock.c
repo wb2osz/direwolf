@@ -54,7 +54,7 @@
 #include <netinet/tcp.h>
 #include <fcntl.h>
 //#include <termios.h>
-#include <sys/errno.h>
+#include <errno.h>
 
 #endif
 
