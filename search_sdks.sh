@@ -85,6 +85,7 @@ if [ ! -z "$selected_sdk" ]; then
 
     # Remove the "u" if 10.4u Universal SDK is used.
     min_str="${min_str%%u}"
+    min_str="${min_str:-10.14}"
 
     system_sdk="-isystem ${selected_sdk} -mmacosx-version-min=${min_str}"
 else
