@@ -274,7 +274,8 @@ static void * read_gpsnmea_thread (void *arg)
 
 /* Process sentence. */
 
-	      if (strncmp(gps_msg, "$GPRMC", 6) == 0) {
+	      if (strncmp(gps_msg, "$GPRMC", 6) == 0 ||
+		  strncmp(gps_msg, "$GNRMC", 6) == 0) {
 
 		f = dwgpsnmea_gprmc (gps_msg, 0, &info.dlat, &info.dlon, &info.speed_knots, &info.track);
 
@@ -318,7 +319,8 @@ static void * read_gpsnmea_thread (void *arg)
 	        }
 
 	      }
-	      else if (strncmp(gps_msg, "$GPGGA", 6) == 0) {
+	      else if (strncmp(gps_msg, "$GPGGA", 6) == 0 ||
+		       strncmp(gps_msg, "$GNGGA", 6) == 0) {
 		int nsat;
 
 		f = dwgpsnmea_gpgga (gps_msg, 0, &info.dlat, &info.dlon, &info.altitude, &nsat);

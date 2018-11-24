@@ -920,14 +920,16 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 
 static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen) 
 {
-	if (strncmp((char*)info, "$GPRMC,", 7) == 0)
+	if (strncmp((char*)info, "$GPRMC,", 7) == 0 ||
+	    strncmp((char*)info, "$GNRMC,", 7) == 0)
 	{
 	  float speed_knots = G_UNKNOWN;
 
 	  (void) dwgpsnmea_gprmc ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &speed_knots, &(A->g_course));
 	  A->g_speed_mph = DW_KNOTS_TO_MPH(speed_knots);
 	}
-	else if (strncmp((char*)info, "$GPGGA,", 7) == 0)
+	else if (strncmp((char*)info, "$GPGGA,", 7) == 0 ||
+	         strncmp((char*)info, "$GNGGA,", 7) == 0)
 	{
 	  float alt_meters = G_UNKNOWN;
 	  int num_sat = 0;
