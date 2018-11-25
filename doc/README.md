@@ -2,6 +2,13 @@
 
 Click on the document name to view in your web browser or the link following to download the PDF file.
 
+
+## Slide Show ##
+
+Brief summary of packet radio / APRS history and the capbilities of Dire Wolf.
+
+[Power Point presentation](https://github.com/wb2osz/direwolf-presentation)  -- Why not give a talk at a local club meeting?
+
 ## Essential Reading ##
  
 - [**User Guide**](User-Guide.pdf)  [ [*download*](../../../raw/master/doc/User-Guide.pdf) ]
