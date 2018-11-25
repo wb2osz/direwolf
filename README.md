@@ -91,6 +91,8 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 [Latest Development Version](https://github.com/wb2osz/direwolf/tree/dev/doc)
 
+[Power Point presentation](https://github.com/wb2osz/direwolf-presentation)  -- Why not give a talk at a local club meeting?
+
 
 ## Installation ##
 
