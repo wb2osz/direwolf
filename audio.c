@@ -1204,6 +1204,17 @@ int audio_flush (int a)
 
 	    snd_pcm_recover (adev[a].audio_out_handle, k, 1);
 	  }
+          else if (k == -ESTRPIPE) {
+            text_color_set(DW_COLOR_ERROR);
+            dw_printf ("Driver suspended, recovering\n");
+            snd_pcm_recover(adev[a].audio_out_handle, k, 1);
+          }
+          else if (k == -EBADFD) {
+            k = snd_pcm_prepare (adev[a].audio_out_handle);
+            if(k < 0) {
+              dw_printf ("Error preparing after bad state: %s\n", snd_strerror(k));
+            }
+          }
  	  else if (k < 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Audio write error: %s\n", snd_strerror(k));
@@ -1211,7 +1222,10 @@ int audio_flush (int a)
 	    /* Some other error condition. */
 	    /* Try again. What do we have to lose? */
 
-	    snd_pcm_recover (adev[a].audio_out_handle, k, 1);
+            k = snd_pcm_prepare (adev[a].audio_out_handle);
+            if(k < 0) {
+              dw_printf ("Error preparing after error: %s\n", snd_strerror(k));
+            }
 	  }
  	  else if (k != adev[a].outbuf_len / adev[a].bytes_per_frame) {
 	    text_color_set(DW_COLOR_ERROR);
