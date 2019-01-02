@@ -159,6 +159,7 @@ static THREAD_F connect_listen_thread (void *arg);
 static THREAD_F kissnet_listen_thread (void *arg);
 
 
+static struct misc_config_s *s_misc_config_p;
 
 static int kiss_debug = 0;		/* Print information flowing from and to client. */
 
@@ -204,6 +205,8 @@ void kissnet_init (struct misc_config_s *mc)
 	pthread_t cmd_listen_tid[MAX_NET_CLIENTS];
 	int e;
 #endif
+	s_misc_config_p = mc;
+
 	int kiss_port = mc->kiss_port;		/* default 8001 but easily changed. */
 
 
@@ -648,6 +651,90 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 	}
 	
 } /* end kissnet_send_rec_packet */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        kissnet_copy
+ *
+ * Purpose:     Send data from one network KISS client to all others.
+ *
+ * Inputs:	in_msg		- KISS frame data without the framing or escapes.
+ *				  The first byte is channel (port) and command (should be data).
+ *
+ *		in_len 		- Number of bytes in above.
+ *
+ *		chan		- Channel.  Redundant because it is also in first byte of kiss_msg.
+ *				  Not currently used.
+ *
+ *		cmd		- KISS command nybble.  Redundant because it is in first byte.
+ *				  Should be 0 because I'm expecting this only for data.
+ *
+ *		from_client	- Number of network (TCP) client instance.
+ *				  Should be 0, 1, 2, ...
+ *
+ *
+ * Global In:	kiss_copy	- From misc. configuration.
+ *				  This enables the feature.
+ *
+ *
+ * Description:	Send message to any attached network KISS clients, other than the one where it came from.
+ *		Enable this by putting KISSCOPY in the configuration file.
+ *		Note that this applies only to network (TCP) KISS clients, not serial port, or pseudo terminal.
+ *
+ *
+ *--------------------------------------------------------------------*/
+
+
+void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, int from_client)
+{
+	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
+	int kiss_len;
+	int err;
+	int send_to;
+
+	(void) chan;
+	(void) cmd;
+
+	if (s_misc_config_p->kiss_copy) {
+
+	  for (send_to = 0; send_to < MAX_NET_CLIENTS;  send_to++) {
+
+	    if (send_to != from_client && client_sock[send_to] != -1) {
+
+	      kiss_len = kiss_encapsulate (in_msg, in_len, kiss_buff);
+
+	      /* This has the escapes and the surrounding FENDs. */
+
+	      if (kiss_debug) {
+	        kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
+	      }
+
+#if __WIN32__
+              err = SOCK_SEND(client_sock[send_to], (char*)kiss_buff, kiss_len);
+	      if (err == SOCKET_ERROR)
+	      {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\nError %d copying message to KISS client %d application.  Closing connection.\n\n", WSAGetLastError(), send_to);
+	        closesocket (client_sock[send_to]);
+	        client_sock[send_to] = -1;
+	        WSACleanup();
+	      }
+#else
+              err = SOCK_SEND (client_sock[send_to], kiss_buff, kiss_len);
+	      if (err <= 0)
+	      {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\nError copying message to KISS client %d application.  Closing connection.\n\n", send_to);
+	        close (client_sock[send_to]);
+	        client_sock[send_to] = -1;
+	      }
+#endif
+	    } // if origin and destination different.
+	  } // loop over all KISS network clients.
+	} // Feature enabled.
+
+} /* end kissnet_copy */
 
 
 

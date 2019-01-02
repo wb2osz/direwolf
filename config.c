@@ -854,6 +854,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->agwpe_port = DEFAULT_AGWPE_PORT;
 	p_misc_config->kiss_port = DEFAULT_KISS_PORT;
 	p_misc_config->enable_kiss_pt = 0;				/* -p option */
+	p_misc_config->kiss_copy = 0;
 
 	/* Defaults from http://info.aprs.net/index.php?title=SmartBeaconing */
 
@@ -4332,6 +4333,16 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	  }
 
+
+/*
+ * KISSCOPY 		- Data from network KISS client is copied to all others.
+ */
+
+	  else if (strcasecmp(t, "KISSCOPY") == 0) {
+	    p_misc_config->kiss_copy = 1;
+	  }
+
+
 /*
  * GPSNMEA		- Device name for reading from GPS receiver.
  */
@@ -4712,6 +4723,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_misc_config->maxframe_basic = n;
 	    }
 	    else {
+	      p_misc_config->maxframe_basic = AX25_K_MAXFRAME_BASIC_DEFAULT;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid MAXFRAME value outside range of %d to %d. Using default %d.\n",
 			line, AX25_K_MAXFRAME_BASIC_MIN, AX25_K_MAXFRAME_BASIC_MAX, p_misc_config->maxframe_basic);
@@ -4737,6 +4749,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_misc_config->maxframe_extended = n;
 	    }
 	    else {
+	      p_misc_config->maxframe_extended = AX25_K_MAXFRAME_EXTENDED_DEFAULT;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Invalid EMAXFRAME value outside of range %d to %d. Using default %d.\n",
 			line, AX25_K_MAXFRAME_EXTENDED_MIN, AX25_K_MAXFRAME_EXTENDED_MAX, p_misc_config->maxframe_extended);

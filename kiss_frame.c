@@ -93,6 +93,7 @@
 #include "tq.h"
 #include "xmit.h"
 #include "version.h"
+#include "kissnet.h"
 
 
 /* In server.c.  Should probably move to some misc. function file. */
@@ -506,7 +507,7 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, v
  *		debug		- Debug option is selected.
  *
  *		client		- Client app number for TCP KISS.
- *				  Ignored for pseudo termal and serial port.
+ *				  Should be -1 for pseudo termal and serial port.
  *
  *		sendfun		- Function to send something to the client application.
  *				  "Set Hardware" can send a response.
@@ -522,7 +523,7 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug, int client, v
 
 void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
 {
-	int port;
+	int port;		// Should rename to chan because that's what we use everywhere else.
 	int cmd;
 	packet_t pp;
 	alevel_t alevel;
@@ -534,6 +535,10 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	{
 	  case KISS_CMD_DATA_FRAME:				/* 0 = Data Frame */
 
+	    if (client >= 0) {
+	      kissnet_copy (kiss_msg, kiss_len, port, cmd, client);
+	    }
+
 	    /* Special hack - Discard apparently bad data from Linux AX25. */
 
 	    /* Note July 2017: There is a variant of of KISS, called SMACK, that assumes */
@@ -544,6 +549,36 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	    /* and if so, turn it off in the application configuration? */
 	    /* Our current default is a maximum of 6 channels but it is easily */
 	    /* increased by changing one number and recompiling. */
+
+// Additional information, from Mike Playle, December 2018, for Issue #42
+//
+//	I came across this the other day with Xastir, and took a quick look.
+//	The problem is fixable without the kiss_frame.c hack, which doesn't help with Xastir anyway.
+//
+//	Workaround
+//
+//	After the kissattach command, put the interface into CRC mode "none" with a command like this:
+//
+//	# kissparms -c 1 -p radio
+//
+//	Analysis
+//
+//	The source of this behaviour is the kernel's KISS implementation:
+//
+//	https://elixir.bootlin.com/linux/v4.9/source/drivers/net/hamradio/mkiss.c#L489
+//
+//	It defaults to starting in state CRC_MODE_SMACK_TEST and ending up in mode CRC_NONE
+//	after the first two packets, which have their framing byte modified by this code in the process.
+//	It looks to me like deliberate behaviour on the kernel's part.
+//
+//	Setting the CRC mode explicitly before sending any packets stops this state machine from running.
+//
+//	Is this a bug? I don't know - that's up to you! Maybe it would make sense for Direwolf to set
+//	the CRC mode itself, or to expect this behaviour and ignore these flags on the first packets
+//	received from the Linux pty.
+//
+//	This workaround seems sound to me, though, so perhaps this is just a documentation issue.
+
 
 	    if (kiss_len > 16 &&
 	        (port == 2 || port == 8) &&

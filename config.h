@@ -35,6 +35,7 @@ struct misc_config_s {
 
 	int agwpe_port;		/* Port number for the "AGW TCPIP Socket Interface" */
 	int kiss_port;		/* Port number for the "TCP KISS" protocol. */
+	int kiss_copy;		/* Data from network KISS client is copied to all others. */
 	int enable_kiss_pt;	/* Enable pseudo terminal for KISS. */
 				/* Want this to be off by default because it hangs */
 				/* after a while if nothing is reading from other end. */
