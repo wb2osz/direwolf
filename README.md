@@ -117,6 +117,10 @@ For more details see the **User Guide** in the [**doc** directory](https://githu
 
 This should give you the most recent stable release.  If you want the latest (possibly unstable) development version, use "git checkout dev" before the first "make" command.
 
+Depending on your machine, maybe you will need libasound2-dev to be installed first. If so, then:
+
+   `sudo apt-get install libasound2-dev`
+
 For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
 
