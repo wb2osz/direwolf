@@ -21,7 +21,7 @@
 
 /*------------------------------------------------------------------
  *
- * Module:      sock.c
+ * Module:      dwsock.c
  *
  * Purpose:   	Functions for TCP sockets.
  *		
@@ -66,14 +66,14 @@
 #include <time.h>
 
 #include "textcolor.h"
-#include "sock.h"
+#include "dwsock.h"
 
 static void shuffle (struct addrinfo *host[], int nhosts);
 
 
 /*-------------------------------------------------------------------
  *
- * Name:        sock_init
+ * Name:        dwsock_init
  *
  * Purpose:     Preparation before using socket interface. 
  *
@@ -97,7 +97,7 @@ static void shuffle (struct addrinfo *host[], int nhosts);
  *
  *--------------------------------------------------------------------*/
 
-int sock_init(void)
+int dwsock_init(void)
 {
 #if __WIN32__
 	WSADATA wsadata;
@@ -119,7 +119,7 @@ int sock_init(void)
 #endif
 	return (0);
 
-} /* end sock_init */
+} /* end dwsock_init */
 
 
 
@@ -141,7 +141,7 @@ int sock_init(void)
  *		debug		- Print debugging information.
  *
  * Outputs:	ipaddr_str	- The IP address, in text form, is placed here in case
- *				  the caller wants it.  Should be SOCK_IPADDR_LEN bytes.
+ *				  the caller wants it.  Should be DWSOCK_IPADDR_LEN bytes.
  *
  * Returns:	Socket Handle / file descriptor or -1 for error.
  *
@@ -160,7 +160,7 @@ int sock_init(void)
  *
  *--------------------------------------------------------------------*/
 
-int sock_connect (char *hostname, char *port, char *description, int allow_ipv6, int debug, char ipaddr_str[SOCK_IPADDR_LEN])
+int dwsock_connect (char *hostname, char *port, char *description, int allow_ipv6, int debug, char ipaddr_str[DWSOCK_IPADDR_LEN])
 {
 #define MAX_HOSTS 50
 
@@ -172,7 +172,7 @@ int sock_connect (char *hostname, char *port, char *description, int allow_ipv6,
 	int err;
 	int server_sock = -1;
 
-	strlcpy (ipaddr_str, "???", SOCK_IPADDR_LEN);
+	strlcpy (ipaddr_str, "???", DWSOCK_IPADDR_LEN);
 	memset (&hints, 0, sizeof(hints));
 
 	hints.ai_family = AF_UNSPEC;	/* Allow either IPv4 or IPv6. */
@@ -212,7 +212,7 @@ int sock_connect (char *hostname, char *port, char *description, int allow_ipv6,
 
 	  if (debug) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    sock_ia_to_text (ai->ai_family, ai->ai_addr, ipaddr_str, SOCK_IPADDR_LEN);
+	    dwsock_ia_to_text (ai->ai_family, ai->ai_addr, ipaddr_str, DWSOCK_IPADDR_LEN);
 	    dw_printf ("    %s\n", ipaddr_str);
 	  }
 
@@ -226,7 +226,7 @@ int sock_connect (char *hostname, char *port, char *description, int allow_ipv6,
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("addresses for hostname:\n");
 	  for (n=0; n<num_hosts; n++) {
-	    sock_ia_to_text (hosts[n]->ai_family, hosts[n]->ai_addr, ipaddr_str, SOCK_IPADDR_LEN);
+	    dwsock_ia_to_text (hosts[n]->ai_family, hosts[n]->ai_addr, ipaddr_str, DWSOCK_IPADDR_LEN);
 	    dw_printf ("    %s\n", ipaddr_str);
 	  }
 	}
@@ -242,7 +242,7 @@ int sock_connect (char *hostname, char *port, char *description, int allow_ipv6,
 #endif
 	  ai = hosts[n];
 
-	  sock_ia_to_text (ai->ai_family, ai->ai_addr, ipaddr_str, SOCK_IPADDR_LEN);
+	  dwsock_ia_to_text (ai->ai_family, ai->ai_addr, ipaddr_str, DWSOCK_IPADDR_LEN);
 	  is = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 #if __WIN32__
 	  if (is == INVALID_SOCKET) {
@@ -313,13 +313,13 @@ int sock_connect (char *hostname, char *port, char *description, int allow_ipv6,
 
 	return (server_sock);
 
-} /* end sock_connect */
+} /* end dwsock_connect */
 
 
 
 /*-------------------------------------------------------------------
  *
- * Name:        sock_bind
+ * Name:        dwsock_bind
  *
  * Purpose:     We also have a bunch of duplicate code for the server side.
  *
@@ -366,7 +366,7 @@ static void shuffle (struct addrinfo *host[], int nhosts)
 
 /*-------------------------------------------------------------------
  *
- * Name:        sock_ia_to_text
+ * Name:        dwsock_ia_to_text
  *
  * Purpose:     Convert binary IP Address to text form.
  *
@@ -392,7 +392,7 @@ static void shuffle (struct addrinfo *host[], int nhosts)
  *	
  *--------------------------------------------------------------------*/
 
-char *sock_ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t StringBufSize)
+char *dwsock_ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t StringBufSize)
 {
 	struct sockaddr_in *sa4;
 	struct sockaddr_in6 *sa6;
@@ -433,6 +433,19 @@ char *sock_ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t Stri
 	}
 	return pStringBuf;
 
-} /* end sock_ia_to_text */
+} /* end dwsock_ia_to_text */
 
-/* end sock.c */
+
+void dwsock_close (int fd)
+{
+#if __WIN32__
+	      closesocket (fd);
+#else
+	      close (fd);
+#endif
+}
+
+
+
+
+/* end dwsock.c */

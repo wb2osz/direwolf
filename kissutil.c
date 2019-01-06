@@ -65,7 +65,7 @@
 #include "textcolor.h"
 #include "serial_port.h"
 #include "kiss_frame.h"
-#include "sock.h"
+#include "dwsock.h"
 #include "dtime_now.h"
 #include "audio.h"		// for DEFAULT_TXDELAY, etc.
 #include "dtime_now.h"
@@ -611,7 +611,7 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 static THREAD_F tnc_listen_net (void *arg)
 {
 	int err;
-	char ipaddr_str[SOCK_IPADDR_LEN];  	// Text form of IP address.
+	char ipaddr_str[DWSOCK_IPADDR_LEN];  	// Text form of IP address.
 	char data[4096];
 	int allow_ipv6 = 0;		// Maybe someday.
 	int debug = 0;
@@ -620,7 +620,7 @@ static THREAD_F tnc_listen_net (void *arg)
 
 	memset (&kstate, 0, sizeof(kstate));
 
-	err = sock_init ();
+	err = dwsock_init ();
 	if (err < 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Network interface failure.  Can't go on.\n");
@@ -633,7 +633,7 @@ static THREAD_F tnc_listen_net (void *arg)
 	// For the IGate we would loop around and try to reconnect if the TNC
 	// goes away.  We should probably do the same here.
 
-	server_sock = sock_connect (hostname, port, "TCP KISS TNC", allow_ipv6, debug, ipaddr_str);
+	server_sock = dwsock_connect (hostname, port, "TCP KISS TNC", allow_ipv6, debug, ipaddr_str);
 
 	if (server_sock == -1) {
 	  text_color_set(DW_COLOR_ERROR);
