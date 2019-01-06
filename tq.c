@@ -930,11 +930,17 @@ static int tq_is_empty (int chan)
  *
  *--------------------------------------------------------------------*/
 
+//#define DEBUG2 1
+
+
 int tq_count (int chan, int prio, char *source, char *dest, int bytes)
 {
 
-	packet_t pp;
-	int n;
+
+#if DEBUG2
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("tq_count(chan=%d, prio=%d, source=\"%s\", dest=\"%s\", bytes=%d)\n", chan, prio, source, dest, bytes);
+#endif
 
 	if (prio == -1) {
 	  return (tq_count(chan, TQ_PRIO_0_HI, source, dest, bytes)
@@ -950,6 +956,10 @@ int tq_count (int chan, int prio, char *source, char *dest, int bytes)
 	}
 
 	if (queue_head[chan][prio] == 0) {
+#if DEBUG2
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("tq_count: queue chan %d, prio %d is empty, returning 0.\n", chan, prio);
+#endif
 	  return (0);
 	}
 
@@ -957,19 +967,33 @@ int tq_count (int chan, int prio, char *source, char *dest, int bytes)
 
 	dw_mutex_lock (&tq_mutex);
 
-	n = 0;
-	pp = queue_head[chan][prio];
+	int n = 0;		// Result.  Number of bytes or packets.
+	packet_t pp = queue_head[chan][prio];;
+
 	while (pp != NULL) {
+	 if (ax25_get_num_addr(pp) >= AX25_MIN_ADDRS) {
+	  // Consider only real packets.
+
 	  int count_it = 1;
 
 	  if (source != NULL && *source != '\0') {
 	    char frame_source[AX25_MAX_ADDR_LEN];
 	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, frame_source);
+#if DEBUG2
+	// I'm cringing at the thought of printing while in a critical region.  But it's only for temp debug.  :-(
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("tq_count: compare to frame source %s\n", frame_source);
+#endif
 	    if (strcmp(source,frame_source) != 0) count_it = 0;
 	  }
 	  if (count_it && dest != NULL && *dest != '\0') {
 	    char frame_dest[AX25_MAX_ADDR_LEN];
 	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, frame_dest);
+#if DEBUG2
+	// I'm cringing at the thought of printing while in a critical region.  But it's only for debug debug.  :-(
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("tq_count: compare to frame destination %s\n", frame_dest);
+#endif
 	    if (strcmp(dest,frame_dest) != 0) count_it = 0;
 	  }
 
@@ -981,12 +1005,13 @@ int tq_count (int chan, int prio, char *source, char *dest, int bytes)
 	      n++;
 	    }
 	  }
-	  pp = ax25_get_nextp(pp);
+	 }
+	 pp = ax25_get_nextp(pp);
 	}
 
 	dw_mutex_unlock (&tq_mutex);
 
-#if DEBUG
+#if DEBUG2
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_count(%d, %d, \"%s\", \"%s\", %d) returns %d\n", chan, prio, source, dest, bytes, n);
 #endif
