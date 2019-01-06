@@ -1,6 +1,12 @@
-APRS TO-CALL VERSION NUMBERS                            12 Dec 2017
+APRS TO-CALL VERSION NUMBERS                             3 Dec 2018
 -------------------------------------------------------------------
                                                              WB4APR
+ 3 Dec 18 added APRARX forVK5QI's radiosonde tracking 
+ 8 Nov 18 added APELKx for WB8ELK balloons
+24 Oct 18 added APGBLN for NW5W's GoBalloon
+18 Apr 18 added APBKxx for PY5BK Bravo Tracker in Brazil
+ 7 Mar 18 added APERSx  Runner tracking by Jason,KG7YKZ
+ 8 Jan 18 added APTCHE PU3IKE in Brazil TcheTracker/Tcheduino
 12 Dec 17 Added APHWxx for use in "HamWAN
 11 Dec 17 Added APDVxx for OE6PLD's SSTV with APRS status exchange
 20 Nov 17 added APPICO DB1NTO' PicoAPRS 
@@ -58,6 +64,7 @@ a TOCALL number series:
       APB2MF  DL2MF - MF2APRS Radiosonde for balloons
       APBLxx  BigRedBee BeeLine  
       APBLO   MOdel Rocketry K7RKT
+      APBKxx  PY5BK Bravo Tracker in Brazil
       APBPQx  John G8BPQ Digipeater/IGate
       APBMxx  BrandMeister DMR Server for R3ABM 
  APC  APCxxx  Cellular applications
@@ -90,13 +97,16 @@ a TOCALL number series:
       APDWxx  DireWolf, WB2OSZ
  APE  APExxx  Telemetry devices
       APECAN  Pecan Pico APRS Balloon Tracker
+      APELKx  WB8ELK balloons
       APERXQ  Experimental tracker by PE1RXQ
+      APERSx  Runner tracking by Jason,KG7YKZ
  APF  APFxxx  Firenet
       APFGxx  Flood Gage (KP4DJT)
       APFIxx  for APRS.FI OH7LZB, Hessu
       APFPRS  for FreeDV by Jeroen PE1RXQ
  APG  APGxxx  Gates, etc
       APGOxx  for AA3NJ PDA application
+      APGBLN for NW5W's GoBalloon
  APH  APHKxx  for LA1BR tracker/digipeater
       APHAXn  SM2APRS by PY2UEP
       APHTxx  HMTracker by IU0AAC 
@@ -153,6 +163,7 @@ a TOCALL number series:
  APQ  APQxxx  Earthquake data
  APR  APR8xx  APRSdos versions 800+
       APR2MF  DL2MF - MF2APRS Radiosonde WX reporting
+      APRARX  VK5QI's radiosonde tracking
       APRDxx  APRSdata, APRSdr
       APRGxx  aprsg igate software, OH2GVE
       APRHH2  HamHud 2
@@ -180,6 +191,7 @@ a TOCALL number series:
       APT3xx  Tiny Track III
       APTAxx  K4ATM's tiny track
       APTBxx  TinyAPRS by BG5HHP Was APTAxx till Sep 2017
+      APTCHE  PU3IKE in Brazil TcheTracker/Tcheduino
       APTIGR  TigerTrack
       APTKPT  TrackPoint N0LP
       APTTxx  Tiny Track
