@@ -373,6 +373,11 @@ void recv_process (void)
 	          dl_unregister_callsign (pitem);
 	          break;
 
+	        case DLQ_OUTSTANDING_FRAMES_REQUEST:
+
+	          dl_outstanding_frames_request (pitem);
+	          break;
+
 		case DLQ_CHANNEL_BUSY:
 
 	          lm_channel_busy (pitem);
