@@ -65,6 +65,8 @@ void dl_register_callsign (dlq_item_t *E);
 
 void dl_unregister_callsign (dlq_item_t *E);
 
+void dl_outstanding_frames_request (dlq_item_t *E);
+
 void dl_client_cleanup (dlq_item_t *E);
 
 
