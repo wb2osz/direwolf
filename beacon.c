@@ -221,6 +221,15 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 	              text_color_set(DW_COLOR_ERROR);
 	              dw_printf ("Config file, line %d: GPS must be configured to use TBEACON.\n", g_misc_config_p->beacon[j].lineno);
 	              g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
+#if __WIN32__
+	              dw_printf ("You must specify the GPSNMEA command in your configuration file.\n");
+	              dw_printf ("This contains the name of the serial port where the receiver is connected.\n");
+#else
+	              dw_printf ("You must specify the source of the GPS data in your configuration file.\n");
+	              dw_printf ("It can be either GPSD, meaning the gpsd daemon, or GPSNMEA for\n");
+	              dw_printf ("for a serial port connection with exclusive use.\n");
+#endif
+
 	            }
 	          }
 		  break;
