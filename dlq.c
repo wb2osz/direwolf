@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015, 2016, 2018  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -553,7 +553,69 @@ void dlq_disconnect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int 
 
 	append_to_queue (pnew);
 
-} /* end dlq_connect_request */
+} /* end dlq_disconnect_request */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        dlq_outstanding_frames_request
+ *
+ * Purpose:     Client application wants to know number of outstanding information
+ *		frames supplied, supplied by the client, that have not yet been
+ *		delivered to the remote station.
+ *
+ * Inputs:	addrs		- Source (owncall), destination (peercall)
+ *
+ *		num_addr	- Number of addresses.  Should be 2.
+ *				  If more they will be ignored.
+ *
+ *		chan		- Channel, 0 is first.
+ *
+ *		client		- Client application instance.  We could have multiple
+ *				  applications, all on the same channel, connecting
+ *				  to different stations.   We need to know which one
+ *				  should get the results.
+ *
+ * Outputs:	Request is appended to queue for processing by
+ *		the data link state machine.
+ *
+ * Description:	The data link state machine will count up all information frames 
+ *		for the given source(mycall) / destination(remote) / channel link.
+ *		A 'Y' response will be sent back to the client application.
+ *
+ *--------------------------------------------------------------------*/
+
+void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client)
+{
+	struct dlq_item_s *pnew;
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("dlq_outstanding_frames_request (...)\n");
+#endif
+
+	assert (chan >= 0 && chan < MAX_CHANS);
+
+/* Allocate a new queue item. */
+
+	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	s_new_count++;
+
+	pnew->type = DLQ_OUTSTANDING_FRAMES_REQUEST;
+	pnew->chan = chan;
+	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
+	pnew->num_addr = num_addr;
+	pnew->client = client;
+
+/* Put it into queue. */
+
+	append_to_queue (pnew);
+
+} /* end dlq_outstanding_frames_request */
+
+
+
+
 
 
 /*-------------------------------------------------------------------

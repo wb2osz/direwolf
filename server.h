@@ -24,5 +24,7 @@ void server_link_terminated (int chan, int client, char *remote_call, char *own_
 
 void server_rec_conn_data (int chan, int client, char *remote_call, char *own_call, int pid, char *data_ptr, int data_len);
 
+void server_outstanding_frames_reply (int chan, int client, char *own_call, char *remote_call, int count);
+
 
 /* end server.h */

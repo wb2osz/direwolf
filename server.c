@@ -136,11 +136,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#ifdef __OpenBSD__
 #include <errno.h>
-#else
-#include <sys/errno.h>
-#endif
 #endif
 
 #include <unistd.h>
@@ -1123,6 +1119,50 @@ void server_rec_conn_data (int chan, int client, char *remote_call, char *own_ca
 
 /*-------------------------------------------------------------------
  *
+ * Name:        server_outstanding_frames_reply
+ *
+ * Purpose:     Send 'Y' Outstanding frames for connected data to the application.
+ *
+ * Inputs:	chan		- Which radio channel.
+ *
+ * 		client		- Which one of potentially several clients.
+ *
+ *		own_call	- Callsign[-ssid] of my end.
+ *
+ *		remote_call	- Callsign[-ssid] of remote station.
+ *
+ *		count		- Number of frames sent from the application but
+ *				  not yet received by the other station.
+ *
+ *--------------------------------------------------------------------*/
+
+void server_outstanding_frames_reply (int chan, int client, char *own_call, char *remote_call, int count)
+{
+
+	struct {
+	  struct agwpe_s hdr;
+	  int count_NETLE;
+	} reply;
+
+
+	memset (&reply.hdr, 0, sizeof(reply.hdr));
+
+	reply.hdr.portx = chan;
+	reply.hdr.datakind = 'Y';
+
+	strlcpy (reply.hdr.call_from, own_call,    sizeof(reply.hdr.call_from));
+	strlcpy (reply.hdr.call_to,   remote_call, sizeof(reply.hdr.call_to));
+
+	reply.hdr.data_len_NETLE = host2netle(4);
+	reply.count_NETLE = host2netle(count);
+
+	send_to_client (client, &reply);
+
+} /* end server_outstanding_frames_reply */
+
+
+/*-------------------------------------------------------------------
+ *
  * Name:        read_from_socket
  *
  * Purpose:     Read from socket until we have desired number of bytes.
@@ -1220,8 +1260,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 	struct {
 	  struct agwpe_s hdr;		/* Command header. */
 	
-	  char data[512];		/* Additional data used by some commands. */
+	  char data[AX25_MAX_PACKET_LEN]; /* Additional data used by some commands. */
 					/* Maximum for 'V': 1 + 8*10 + 256 */
+					/* Maximum for 'D': Info part length + 1 */
 	} cmd;
 
 	int client = (int)(long)arg;
@@ -1864,6 +1905,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int n = 0;
 	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
+	          // Count both normal and expedited in transmit queue for given channel.
 		  n = tq_count (cmd.hdr.portx, -1, "", "", 0);
 		}
 		reply.data_NETLE = host2netle(n);
@@ -1874,34 +1916,53 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'Y':				/* How Many Outstanding frames wait for tx for a particular station  */
 
-	      /* Number of frames sitting in transmit queue for given channel, */
-	      /* source (optional) and destination addresses. */
+	      // This is different than the above 'y' because this refers to a specific
+	      // link in connected mode.
+
+	      // This would be useful for a couple different purposes.
+
+	      // When sending bulk data, we want to keep a fair amount queued up to take
+	      // advantage of large window sizes (MAXFRAME, EMAXFRAME).  On the other
+	      // hand we don't want to get TOO far ahead when transferring a large file.
+
+	      // Before disconnecting from another station, it would be good to know
+	      // that it actually received the last message we sent.  For this reason,
+	      // I think it would be good for this to include information frames that were 
+	      // transmitted but not yet acknowleged.
+	      // You could say that a particular frame is still waiting to be sent even
+	      // if was already sent because it could be sent again if lost previously.
+
+	      // The documentation is inconsistent about the address order.
+	      // One place says "callfrom" is my callsign and "callto" is the other guy.
+	      // That would make sense.  We are asking about frames going to the other guy.
+
+	      // But another place says it depends on who initiated the connection.
+	      //
+	      //	"If we started the connection CallFrom=US and CallTo=THEM
+	      //	If the other end started the connection CallFrom=THEM and CallTo=US"
+	      //
+	      // The response description says nothing about the order; it just mentions two addresses.
+	      // If you are writing a client or server application, the order would
+	      // be clear but right here it could be either case.
+	      //
+	      // Another version of the documentation mentioned the source address being optional.
+	      //
+
+	      // The only way to get this information is from inside the data link state machine.
+	      // We will send a request to it and the result coming out will be used to
+	      // send the reply back to the client application.
+
 	      {
-	        char source[AX25_MAX_ADDR_LEN];
-	        char dest[AX25_MAX_ADDR_LEN];
 
-		struct {
-		  struct agwpe_s hdr;
-		  int data_NETLE;			// Little endian order.
-		} reply;
+	        char callsigns[2][AX25_MAX_ADDR_LEN];
+	        const int num_calls = 2;
 
-	        strlcpy (source, cmd.hdr.call_from, sizeof(source));
-	        strlcpy (dest, cmd.hdr.call_to, sizeof(dest));
+	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
+	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
 
-	        memset (&reply, 0, sizeof(reply));
-		reply.hdr.portx = cmd.hdr.portx;	/* Reply with same port number, addresses. */
-	        reply.hdr.datakind = 'Y';
-	        strlcpy (reply.hdr.call_from, source, sizeof(reply.hdr.call_from));
-	        strlcpy (reply.hdr.call_to, dest, sizeof(reply.hdr.call_to));
-	        reply.hdr.data_len_NETLE = host2netle(4);
+	        // Issue 169.  Proper implementation for 'Y'.
+	        dlq_outstanding_frames_request (callsigns, num_calls, cmd.hdr.portx, client);
 
-	        int n = 0;
-	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
-		  n = tq_count (cmd.hdr.portx, -1, source, dest, 0);
-		}
-		reply.data_NETLE = host2netle(n);
-
-	        send_to_client (client, &reply);
 	      }
 	      break;
 

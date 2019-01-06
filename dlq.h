@@ -35,7 +35,7 @@ typedef struct cdata_s {
 
 /* Types of things that can be in queue. */
 
-typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_CHANNEL_BUSY, DLQ_SEIZE_CONFIRM, DLQ_CLIENT_CLEANUP} dlq_type_t;
+typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_OUTSTANDING_FRAMES_REQUEST, DLQ_CHANNEL_BUSY, DLQ_SEIZE_CONFIRM, DLQ_CLIENT_CLEANUP} dlq_type_t;
 
 
 /* A queue item. */
@@ -107,6 +107,8 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid);
 
 void dlq_disconnect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client);
+
+void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client);
 
 void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid, char *xdata_ptr, int xdata_len);
 

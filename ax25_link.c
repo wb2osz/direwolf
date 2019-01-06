@@ -887,6 +887,7 @@ static ax25_dlsm_t *get_link_handle (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 //
 //			dl_connect_request
 //			dl_disconnect_request
+//			dl_outstanding_frames_request	- (mine) Ask about outgoing queue for a link.
 //			dl_data_request			- send connected data
 //			dl_unit_data_request		- not implemented.  APRS & KISS bypass this
 //			dl_flow_off			- not implemented.  Not in AGW API.
@@ -1502,6 +1503,80 @@ void dl_unregister_callsign (dlq_item_t *E)
 	}
 
 } /* end dl_unregister_callsign */
+
+
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	dl_outstanding_frames_request
+ *
+ * Purpose:	Client app wants to know how many frames are still on their way
+ *		to other station.  This is handy for flow control.  We would like
+ *		to keep the pipeline filled sufficiently to take advantage of a
+ *		large window size (MAXFRAMES).  It is also good to know that the
+ *		the last packet sent was actually received before we commence
+ *		the disconnect.
+ *
+ * Inputs:	E	- Event from the queue.
+ *			  The caller will free it.
+ *
+ * Outputs:	This gets back to the AGW server which sends the 'Y' reply.
+ *
+ * Description:	This is the sum of:
+ *		- Incoming connected data, from application still in the queue.
+ *		- I frames which have been transmitted but not yet acknowleged.
+ *
+ *------------------------------------------------------------------------------*/
+
+void dl_outstanding_frames_request (dlq_item_t *E)
+{
+	ax25_dlsm_t *S;
+	int ok_to_create = 0;	// must exist already.
+
+
+	if (s_debug_client_app) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("dl_outstanding_frames_request ( to %s )\n", E->addrs[PEERCALL]);
+	}
+
+	S = get_link_handle (E->addrs, E->num_addr, E->chan, E->client, ok_to_create);
+
+	if (S == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Can't get outstanding frames for %s -> %s, chan %d\n", E->addrs[OWNCALL], E->addrs[PEERCALL], E->chan);
+	  server_outstanding_frames_reply (E->chan, E->client, E->addrs[OWNCALL], E->addrs[PEERCALL], 0);
+	  return;
+	}
+
+// Add up these
+//
+//	cdata_t *i_frame_queue;			// Connected data from client which has not been transmitted yet.
+//						// Linked list.
+//						// The name is misleading because these are just blocks of
+//						// data, not "I frames" at this point.  The name comes from
+//						// the protocol specification.
+//
+//	cdata_t *txdata_by_ns[128];		// Data which has already been transmitted.
+//						// Indexed by N(S) in case it gets lost and needs to be sent again.
+//						// Cleared out when we get ACK for it.
+
+	int count1 = 0;
+	cdata_t *incoming;
+	for (incoming = S->i_frame_queue; incoming != NULL; incoming = incoming->next) {
+	  count1++;
+	}
+
+	int count2 = 0;
+	int k;
+	for (k = 0; k < S->modulo; k++) {
+	  if (S->txdata_by_ns[k] != NULL) {
+	    count2++;
+	  }
+	}
+
+	server_outstanding_frames_reply (S->chan, S->client, S->addrs[OWNCALL], S->addrs[PEERCALL], count1 + count2);
+
+} // end dl_outstanding_frames_request
 
 
 
