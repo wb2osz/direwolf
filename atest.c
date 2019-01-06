@@ -137,7 +137,8 @@ static struct {
 
 static FILE *fp;
 static int e_o_f;
-static int packets_decoded = 0;
+static int packets_decoded_one = 0;
+static int packets_decoded_total = 0;
 static int decimate = 0;		/* Reduce that sampling rate if set. */
 					/* 1 = normal, 2 = half, etc. */
 
@@ -182,7 +183,8 @@ int main (int argc, char *argv[])
 	int channel;
 
 	double start_time;		// Time when we started so we can measure elapsed time.
-	double duration;		// Length of the audio file in seconds.
+	double one_filetime = 0;		// Length of one audio file in seconds.
+	double total_filetime = 0;		// Length of all audio files in seconds.
 	double elapsed;			// Time it took us to process it.
 
 
@@ -433,6 +435,11 @@ int main (int argc, char *argv[])
 	  usage ();
 	}
 
+
+	start_time = dtime_now();
+
+	while (optind < argc) {
+
 	fp = fopen(argv[optind], "rb");
         if (fp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -440,8 +447,6 @@ int main (int argc, char *argv[])
 	  //perror ("more info?");
           exit (EXIT_FAILURE);
         }
-
-	start_time = dtime_now();
 
 /*
  * Read the file header.  
@@ -515,17 +520,20 @@ int main (int argc, char *argv[])
 		my_audio_config.adev[0].samples_per_sec,
 		my_audio_config.adev[0].bits_per_sample,
 		my_audio_config.adev[0].num_channels);
-	duration = (double) wav_data.datasize /
+	one_filetime = (double) wav_data.datasize /
 		((my_audio_config.adev[0].bits_per_sample / 8) * my_audio_config.adev[0].num_channels * my_audio_config.adev[0].samples_per_sec);
+	total_filetime += one_filetime;
+
 	dw_printf ("%d audio bytes in file.  Duration = %.1f seconds.\n",
 		(int)(wav_data.datasize),
-		duration);
+		one_filetime);
 	dw_printf ("Fix Bits level = %d\n", my_audio_config.achan[0].fix_bits);
 		
 /*
  * Initialize the AFSK demodulator and HDLC decoder.
  */
 	multi_modem_init (&my_audio_config);
+	packets_decoded_one = 0;
 
 
 	e_o_f = 0;
@@ -578,17 +586,23 @@ int main (int argc, char *argv[])
 	}
 #endif
 
+	dw_printf ("%d from %s\n", packets_decoded_one, argv[optind]);
+	packets_decoded_total += packets_decoded_one;
+
+	fclose (fp);
+	optind++;
+	}
 
 	elapsed = dtime_now() - start_time;
 
-	dw_printf ("%d packets decoded in %.3f seconds.  %.1f x realtime\n", packets_decoded, elapsed, duration/elapsed);
+	dw_printf ("%d packets decoded in %.3f seconds.  %.1f x realtime\n", packets_decoded_total, elapsed, total_filetime/elapsed);
 
-	if (error_if_less_than != -1 && packets_decoded < error_if_less_than) {
+	if (error_if_less_than != -1 && packets_decoded_total < error_if_less_than) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n * * * TEST FAILED: number decoded is less than %d * * * \n", error_if_less_than);
 	  exit (EXIT_FAILURE);
 	}
-	if (error_if_greater_than != -1 && packets_decoded > error_if_greater_than) {
+	if (error_if_greater_than != -1 && packets_decoded_total > error_if_greater_than) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n * * * TEST FAILED: number decoded is greater than %d * * * \n", error_if_greater_than);
 	  exit (EXIT_FAILURE);
@@ -660,7 +674,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	char heard[AX25_MAX_ADDR_LEN];
 	char alevel_text[AX25_ALEVEL_TO_TEXT_SIZE];
 
-	packets_decoded++;
+	packets_decoded_one++;
 
 	ax25_format_addrs (pp, stemp);
 
@@ -686,7 +700,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n");
-	dw_printf("DECODED[%d] ", packets_decoded );
+	dw_printf("DECODED[%d] ", packets_decoded_one );
 
 	/* Insert time stamp relative to start of file. */
 
