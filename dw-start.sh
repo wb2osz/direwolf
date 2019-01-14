@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Run this from crontab periodically to start up
 # Dire Wolf automatically.

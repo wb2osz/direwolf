@@ -46,7 +46,11 @@
 #else 
 
 #include <stdlib.h>
+#ifdef __OpenBSD__
+#include <errno.h>
+#else
 #include <sys/errno.h>
+#endif
 #include <sys/types.h>
 #include <sys/socket.h>
 
