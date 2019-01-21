@@ -382,6 +382,45 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    D->pll_searching_inertia = 0.64;
 	    break;
 
+	  case 'H':
+
+		/* Experiment in Version 1.6 			*/
+		/* 1200 baud - Started out as a copy of E but	*/
+		/* will probably have little tweaks after the	*/
+		/* major experiment.				*/
+		/* Enhancements: 				*/
+		/*  + Look back and sample the bit position.	*/
+		/*  + Avoid smearing by long filter and low pass. */
+
+	    D->use_prefilter = 1;		/* first, a bandpass filter. */
+	    D->prefilter_baud = 0.21;
+	    D->pre_filter_len_bits = 184 * 1200. / 44100.;
+	    D->pre_filter_len_bits = 235 * 1200. / 44100.;
+	    D->pre_window = BP_WINDOW_TRUNCATED;
+
+	    D->ms_filter_len_bits = 65 * 1200. / 44100.;	// Just over 2 bit times.
+	    D->ms_window = BP_WINDOW_COSINE;
+
+	    /* New for synchronous re-demod in 1.6. */
+	    D->play_it_again_sample = 1;
+	    D->m2_filter_len_bits = 44 * 1200. / 44100.;	// a little more than 1 bit time.
+	    D->s2_filter_len_bits = 48 * 1200. / 44100.;	// a little more than 1 bit time.
+	    D->ms2_window = BP_WINDOW_TRUNCATED;
+	    D->lp_delay_fract = 0.53;		// FIXME:  This is backwards.
+
+	    D->lpf_use_fir = 1;
+	    D->lpf_baud = 1.10;
+	    D->lp_filter_len_bits = 64 * 1200. / 44100.;
+	    D->lp_window = BP_WINDOW_TRUNCATED;
+
+	    D->agc_fast_attack = 0.820;
+	    D->agc_slow_decay = 0.000214;
+	    D->hysteresis = 0.001;
+
+	    D->pll_locked_inertia = 0.765;
+	    D->pll_searching_inertia = 0.44;
+	    break;
+
 	  default:
 
 	    text_color_set(DW_COLOR_ERROR);
@@ -394,6 +433,9 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 #endif
 #ifdef TUNE_MS_WINDOW
 	D->ms_window = TUNE_MS_WINDOW;
+#endif
+#ifdef TUNE_MS2_WINDOW
+	D->ms2_window = TUNE_MS2_WINDOW;
 #endif
 #ifdef TUNE_LP_WINDOW
 	D->lp_window = TUNE_LP_WINDOW;
@@ -417,7 +459,9 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 #ifdef TUNE_PRE_BAUD
 	D->prefilter_baud = TUNE_PRE_BAUD;
 #endif
-
+#ifdef TUNE_LP_DELAY_FRACT
+	D->lp_delay_fract = TUNE_LP_DELAY_FRACT;
+#endif
 
 /*
  * Calculate constants used for timing.
@@ -432,6 +476,8 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	D->pre_filter_size = (int) round( D->pre_filter_len_bits * (float)samples_per_sec / (float)baud );
 	D->ms_filter_size = (int) round( D->ms_filter_len_bits * (float)samples_per_sec / (float)baud );
+	D->m2_filter_size = (int) round( D->m2_filter_len_bits * (float)samples_per_sec / (float)baud );
+	D->s2_filter_size = (int) round( D->s2_filter_len_bits * (float)samples_per_sec / (float)baud );
 	D->lp_filter_size = (int) round( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud );
 	  	 
 /* Experiment with other sizes. */
@@ -442,6 +488,12 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 #ifdef TUNE_MS_FILTER_SIZE
 	D->ms_filter_size = TUNE_MS_FILTER_SIZE;
 #endif
+#ifdef TUNE_M2_FILTER_SIZE
+	D->m2_filter_size = TUNE_M2_FILTER_SIZE;
+#endif
+#ifdef TUNE_S2_FILTER_SIZE
+	D->s2_filter_size = TUNE_S2_FILTER_SIZE;
+#endif
 #ifdef TUNE_LP_FILTER_SIZE
 	D->lp_filter_size = TUNE_LP_FILTER_SIZE;
 #endif
@@ -450,7 +502,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	assert (D->ms_filter_size >= 4);
 	//assert (D->lp_filter_size >= 4);
 
-	if (D->pre_filter_size > MAX_FILTER_SIZE) 
+	if (D->pre_filter_size > MAX_FILTER_SIZE)
 	{
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Calculated filter size of %d is too large.\n", D->pre_filter_size);
@@ -460,10 +512,29 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  exit (1);
 	}
 
-	if (D->ms_filter_size > MAX_FILTER_SIZE) 
+	if (D->ms_filter_size > MAX_FILTER_SIZE)
 	{
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Calculated filter size of %d is too large.\n", D->ms_filter_size);
+	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
+	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
+							MAX_FILTER_SIZE);
+	  exit (1);
+	}
+
+	if (D->m2_filter_size * 2 > MAX_FILTER_SIZE)
+	{
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Calculated filter size of %d is too large.\n", D->m2_filter_size);
+	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
+	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
+							MAX_FILTER_SIZE);
+	  exit (1);
+	}
+	if (D->s2_filter_size * 2 > MAX_FILTER_SIZE)
+	{
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Calculated filter size of %d is too large.\n", D->s2_filter_size);
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
@@ -502,10 +573,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  f1 = f1 / (float)samples_per_sec;
 	  f2 = f2 / (float)samples_per_sec;
 	  
-	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, BP_WINDOW_HAMMING);
-	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, BP_WINDOW_BLACKMAN);
-	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, BP_WINDOW_COSINE);
-	  //gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, D->bp_window);
 	  gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, D->pre_window);
 	}
 
@@ -525,46 +592,8 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("   j     shape   M sin   M cos \n");
 #endif
 
-	  float Gs = 0, Gc = 0;
 
-          for (j=0; j<D->ms_filter_size; j++) {
-	    float am;
-	    float center;
-	    float shape = 1.0f;		/* Shape is an attempt to smooth out the */
-					/* abrupt edges in hopes of reducing */
-					/* overshoot and ringing. */
-					/* My first thought was to use a cosine shape. */
-					/* Should investigate Hamming and Blackman */
-					/* windows mentioned in the literature. */
-					/* http://en.wikipedia.org/wiki/Window_function */
-
-	    center = 0.5f * (D->ms_filter_size - 1);
-	    am = ((float)(j - center) / (float)samples_per_sec) * ((float)mark_freq) * (2.0f * (float)M_PI);
-
-	    shape = window (D->ms_window, D->ms_filter_size, j);
-
-	    D->m_sin_table[j] = sinf(am) * shape;
-	    D->m_cos_table[j] = cosf(am) * shape;
-
-	    Gs += D->m_sin_table[j] * sinf(am);
-	    Gc += D->m_cos_table[j] * cosf(am);
-
-#if DEBUG1
-	    dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, D->m_sin_table[j], D->m_cos_table[j]) ;
-#endif
-          }
-
-
-/* Normalize for unity gain */
-
-#if DEBUG1
-	  dw_printf ("Before normalizing, Gs = %.2f, Gc = %.2f\n", Gs, Gc) ;
-#endif
-          for (j=0; j<D->ms_filter_size; j++) {
-	    D->m_sin_table[j] = D->m_sin_table[j] / Gs;
-	    D->m_cos_table[j] = D->m_cos_table[j] / Gc;
-	  }
-
+	  gen_ms (mark_freq, samples_per_sec, D->m_sin_table, D->m_cos_table, D->ms_filter_size, D->ms_window);
 
 #if DEBUG1
 	  text_color_set(DW_COLOR_DEBUG);
@@ -572,39 +601,14 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("Space\n");
 	  dw_printf ("   j     shape   S sin   S cos\n");
 #endif
-	  Gs = 0;
-	  Gc = 0;
 
-          for (j=0; j<D->ms_filter_size; j++) {
-	    float as;
-	    float center;
-	    float shape = 1.0f;
+	  gen_ms (space_freq, samples_per_sec, D->s_sin_table, D->s_cos_table, D->ms_filter_size, D->ms_window);
 
-	    center = 0.5 * (D->ms_filter_size - 1);
-	    as = ((float)(j - center) / (float)samples_per_sec) * ((float)space_freq) * (2.0f * (float)M_PI);
+	  // Note that these are twice as long so we can try matching different phases.
 
-	    shape = window (D->ms_window, D->ms_filter_size, j);
-
-	    D->s_sin_table[j] = sinf(as) * shape;
-	    D->s_cos_table[j] = cosf(as) * shape;
-
-	    Gs += D->s_sin_table[j] * sinf(as);
-	    Gc += D->s_cos_table[j] * cosf(as);
-
-#if DEBUG1
-	    dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, D->s_sin_table[j], D->s_cos_table[j] ) ;
-#endif
-          }
-
-
-/* Normalize for unity gain */
-
-#if DEBUG1
-	  dw_printf ("Before normalizing, Gs = %.2f, Gc = %.2f\n", Gs, Gc) ;
-#endif
-          for (j=0; j<D->ms_filter_size; j++) {
-	    D->s_sin_table[j] = D->s_sin_table[j] / Gs;
-	    D->s_cos_table[j] = D->s_cos_table[j] / Gc;
+	  if (D->play_it_again_sample) {
+	    gen_ms (mark_freq, samples_per_sec, D->m2_sin_table, D->m2_cos_table, D->m2_filter_size * 2, D->ms2_window);
+	    gen_ms (space_freq, samples_per_sec, D->s2_sin_table, D->s2_cos_table, D->s2_filter_size * 2, D->ms2_window);
 	  }
 
 /*
@@ -616,7 +620,11 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	if (D->lpf_use_fir) {
 	  float fc;
 	  fc = baud * D->lpf_baud / (float)samples_per_sec;
-	  gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window);
+	  D->lp_filter_delay = gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, D->lp_delay_fract);
+	}
+	else {
+	  // D->lp_filter_delay = 
+	  // Only needed for looking back and I don't expect to use IIR in that case.
 	}
 
 /*
@@ -853,15 +861,22 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
  * Optional bandpass filter before the mark/space discriminator.
  */
 
+// FIXME:  calculate how much we really need.
+
+	int extra = 0;
+	if (D->play_it_again_sample) {
+	  extra = D->lp_filter_size;
+	}
+
 	if (D->use_prefilter) {
 	  float cleaner;
 
 	  push_sample (fsam, D->raw_cb, D->pre_filter_size);
 	  cleaner = convolve (D->raw_cb, D->pre_filter, D->pre_filter_size);
-	  push_sample (cleaner, D->ms_in_cb, D->ms_filter_size);
+	  push_sample (cleaner, D->ms_in_cb, D->ms_filter_size + extra);
 	}
 	else {
-	  push_sample (fsam, D->ms_in_cb, D->ms_filter_size);
+	  push_sample (fsam, D->ms_in_cb, D->ms_filter_size + extra);
 	}
 
 /*
@@ -978,7 +993,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
  * Here is an excellent explanation:
  * http://www.febo.com/packet/layer-one/transmit.html
  *
- * Under real conditions, we find that the higher tone has a
+ * Under real conditions, we find that the higher tone usually has a
  * considerably smaller amplitude due to the passband characteristics
  * of the transmitter and receiver.  To make matters worse, it
  * varies considerably from one station to another.
@@ -1133,8 +1148,79 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, 
 
 	  /* Overflow. */
 
-	  hdlc_rec_bit (chan, subchan, slice, demod_data, 0, -1);
+// In version 1.6 we will try a new experiment.
+// The tone filters are about 2 bit times wide so this smears the signal.
+// I originally expected this to be about 1 bit time but 2 turned out
+// to give the best results after extensive experimentation.
+// We are looking at half of each adjacent bit, not just the one we want.
+// The low pass filter also smears the signal.
+//
+// We will try to look back in time and re-demodulate only the time period of the bit.
+//
+
+	  if (D->play_it_again_sample) {	// New in 1.6.  Currently 'H' demod profile.
+
+// FIXME: double check position and draw picture.
+
+#if 0
+	    // This provided a slight benefit.
+
+	    int offset = ( D->ms_filter_size - D->m2_filter_size ) / 2 + D->lp_filter_delay;
+
+	    float m_sum1 = convolve (D->ms_in_cb + offset, D->m2_sin_table, D->m2_filter_size);
+	    float m_sum2 = convolve (D->ms_in_cb + offset, D->m2_cos_table, D->m2_filter_size);
+	    float m_amp = sqrtf(m_sum1 * m_sum1 + m_sum2 * m_sum2);
+
+	    offset = ( D->ms_filter_size - D->s2_filter_size ) / 2 + D->lp_filter_delay;
+
+	    float s_sum1 = convolve (D->ms_in_cb + offset, D->s2_sin_table, D->s2_filter_size);
+	    float s_sum2 = convolve (D->ms_in_cb + offset, D->s2_cos_table, D->s2_filter_size);
+	    float s_amp = sqrtf(s_sum1 * s_sum1 + s_sum2 * s_sum2);
+#else
+	    // Here we try something completely new.
+	    // Rather than taking the vector magnitude of the I+Q components,
+	    // correlate it with only a sine wave.  We don't know the phase so
+	    // we will try matching with a bunch of different phases and take the best match.
+
+	    // Trying match with cosine as well could be beneficial for lower sample rates.
+
+	    int j;
+	    float m_amp = 0;
+	    float s_amp = 0;
+
+	    int offset = ( D->ms_filter_size - D->m2_filter_size ) / 2 + D->lp_filter_delay;
+
+	    for (j = 0; j <= D->m2_filter_size; j++) {
+	      float match = fabsf(convolve (D->ms_in_cb + offset, D->m2_sin_table + j, D->m2_filter_size));
+	      if (match > m_amp) m_amp = match;
+	    }
+
+	    offset = ( D->ms_filter_size - D->s2_filter_size ) / 2 + D->lp_filter_delay;
+
+	    for (j = 0; j <= D->s2_filter_size; j++) {
+	      float match = fabsf(convolve (D->ms_in_cb + offset, D->s2_sin_table + j, D->s2_filter_size));
+	      if (match > s_amp) s_amp = match;
+	    }
+#endif
+
+	    int resampled;
+	    if (D->num_slicers > 1) {
+	      resampled = m_amp > s_amp * space_gain[slice];
+	    }
+	    else {
+	      resampled = m_amp > s_amp;
+	    }
+
+	    hdlc_rec_bit (chan, subchan, slice, resampled, 0, -1);
+	  }
+	  else {
+	    // Traditional way, after the low pass filter.
+	    hdlc_rec_bit (chan, subchan, slice, demod_data, 0, -1);
+	  }
 	}
+
+	// Even if we used alternative method to extract the data bit,
+	//  we still use the low pass output for the PLL.
 
         if (demod_data != D->slicer[slice].prev_demod_data) {
 

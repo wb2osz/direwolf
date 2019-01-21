@@ -250,7 +250,9 @@ int main(int argc, char **argv)
 						/*    9600 implies scrambled. */
 
 						/* If you want something else, specify -B first */
-						/* then anything to override these defaults. */
+						/* then anything to override these defaults with -m, -s, or -g. */
+
+						// FIXME: options should not be order dependent.
 
               modem.achan[0].baud = atoi(optarg);
               text_color_set(DW_COLOR_INFO); 
@@ -307,6 +309,8 @@ int main(int argc, char **argv)
               break;
 
             case 'g':				/* -g for g3ruh scrambling */
+
+	      // FIXME:  order dependent.  -g must come after -B.
 
               modem.achan[0].modem_type = MODEM_SCRAMBLE;
               text_color_set(DW_COLOR_INFO); 

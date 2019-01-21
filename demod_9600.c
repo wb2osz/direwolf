@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011, 2012, 2013, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2015, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -141,22 +141,42 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 //	  case 'K':			// upsample x3 with filtering.
 //	  case 'L':			// upsample x4 with filtering.
 
-	    D->lp_filter_len_bits =  76 * 9600.0 / (44100.0 * 2.0);
+
+	    D->lp_filter_len_bits =  1.0;
 
 	    // Works best with odd number in some tests.  Even is better in others.
 	    //D->lp_filter_size = ((int) (0.5f * ( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud ))) * 2 + 1;
+
 	    D->lp_filter_size = (int) (( D->lp_filter_len_bits * (float)samples_per_sec / baud) + 0.5f);
 
-	    D->lp_window = BP_WINDOW_HAMMING;
-	    D->lpf_baud = 0.62;
+	    D->lp_window = BP_WINDOW_COSINE;
+
+	    D->lpf_baud = 1.00;
 
 	    D->agc_fast_attack = 0.080;
 	    D->agc_slow_decay =  0.00012;
 
 	    D->pll_locked_inertia = 0.89;
 	    D->pll_searching_inertia = 0.67;
+
+	    D->play_it_again_sample = 0;		// TODO: 1.6 experiment.
+							// assuming lp_filter_size > lp2_filter_size
+
+	    D->lp2_filter_size =  samples_per_sec / baud;	// samples for 1 bit
+
+
 //	    break;
 //	}
+
+#if 0
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("----------  %s  (%d, %d)  -----------\n", __func__, samples_per_sec, baud);
+	dw_printf ("filter_len_bits = %.2f\n", D->lp_filter_len_bits);
+	dw_printf ("lp_filter_size = %d\n", D->lp_filter_size);
+	dw_printf ("lp_window = %d\n", D->lp_window);
+	dw_printf ("lpf_baud = %.2f\n", D->lpf_baud);
+	dw_printf ("samples per bit = %.1f\n", (double)samples_per_sec / baud);
+#endif
 
         D->pll_step_per_sample = 
 		(int) round(TICKS_PER_PLL_CYCLE * (double) baud / (double)samples_per_sec);
@@ -194,7 +214,13 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 
 	//dw_printf ("demod_9600_init: call gen_lowpass(fc=%.2f, , size=%d, )\n", fc, D->lp_filter_size);
 
-	gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window);
+	(void)gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, 0);
+
+// Go back and resample where bit is expected.
+
+	fc = (float)baud * 1 / (float)samples_per_sec;
+
+	(void)gen_lowpass (fc, D->lp2_filter, D->lp2_filter_size, D->lp_window, 0);
 
 	/* Version 1.2: Experiment with different slicing levels. */
 
@@ -481,15 +507,14 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  *
  *		Results???  TBD
  *
+ * Version 1.6:	New experiment where filter size to extract clock is not the same
+ *		as filter to extract the data bit value.
+ *
  *--------------------------------------------------------------------*/
 
 __attribute__((hot))
 inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_f, struct demodulator_state_s *D)
 {
-
-/*
- */
-
 	D->slicer[slice].prev_d_c_pll = D->slicer[slice].data_clock_pll;
 
 	// Perform the add as unsigned to avoid signed overflow error.
@@ -499,7 +524,31 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 
 	  /* Overflow.  Was large positive, wrapped around, now large negative. */
 
-	  hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, 1, D->slicer[slice].lfsr);
+
+	  if (D->play_it_again_sample) {	// New experiment in 1.6.
+
+// FIXME: double check position and draw picture.
+
+	    int offset = ( D->lp_filter_size - D->lp2_filter_size ) / 2;
+
+	    float amp = convolve (D->raw_cb + offset, D->lp2_filter, D->lp2_filter_size);
+
+	    int resampled;
+
+	    if (D->num_slicers > 1) {
+	      resampled = amp - slice_point[slice] > 0;;
+	    }
+	    else {
+	      resampled = amp > 0;
+	    }
+
+	    hdlc_rec_bit (chan, subchan, slice, resampled, 1, D->slicer[slice].lfsr);
+	  }
+	  else {
+
+// traditional
+	    hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, 1, D->slicer[slice].lfsr);
+	  }
 	}
 
 /*

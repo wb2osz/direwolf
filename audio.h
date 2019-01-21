@@ -138,6 +138,8 @@ struct audio_s {
 	    int decimate;		/* Reduce AFSK sample rate by this factor to */
 					/* decrease computational requirements. */
 
+	    int upsample;		/* Upsample by this factor for G3RUH. */
+
 	    int interleave;		/* If > 1, interleave samples among multiple decoders. */
 					/* Quick hack for experiment. */
 

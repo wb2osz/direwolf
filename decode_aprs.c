@@ -219,8 +219,8 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	if ( ( ! A->g_quiet ) && ( (int)strlen((char*)pinfo) != info_len) ) {
 
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("'nul' character found in Information part.  This should never happen.\n");
-	  dw_printf("It seems that %s is transmitting with defective software.\n", A->g_src);
+	  dw_printf("'nul' character found in Information part.  This should never happen with APRS.\n");
+	  dw_printf("If this is meant to be APRS, %s is transmitting with defective software.\n", A->g_src);
 
 	  if (strcmp((char*)pinfo, "4P") == 0) {
 	    dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");

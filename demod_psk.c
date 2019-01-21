@@ -510,7 +510,7 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
  */
 
 	float fc = correct_baud * D->lpf_baud / (float)samples_per_sec;
-	gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window);
+	(void)gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, 0);
 
 /*
  * No point in having multiple numbers for signal level.

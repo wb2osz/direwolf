@@ -1,10 +1,7 @@
-//#define DEBUG 1
-//#define DEBUG2 1
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -106,59 +103,9 @@ static int bit_count[MAX_CHANS];	// Counter incremented for each bit transmitted
 static int save_bit[MAX_CHANS];
 
 
-/*
- * The K9NG/G3RUH output originally took a very simple and lazy approach.
- * We simply generated a square wave with + or - the desired amplitude.
- * This has a couple undesirable properties.
- *
- *	- Transmitting a square wave would splatter into adjacent
- *	   channels of the transmitter doesn't limit the bandwidth.
- *
- *	- The usual sample rate of 44100 is not a multiple of the 
- *	   baud rate so jitter would be added to the zero crossings.
- *
- * Starting in version 1.2, we try to overcome these issues by using
- * a higher sample rate, low pass filtering, and down sampling.
- *
- * What sort of low pass filter would be appropriate?  Intuitively,
- * we would expect a cutoff frequency somewhere between baud/2 and baud.
- * The current values were found with a small amount of trial and 
- * error for best results.  Future improvement is certainly possible.
- */
-
-/* 
- * For low pass filtering of 9600 baud data. 
- */
-
-/* Add sample to buffer and shift the rest down. */
-// TODO:  Can we have one copy of these in dsp.h?
-
-static inline void push_sample (float val, float *buff, int size)
-{
-	memmove(buff+1,buff,(size-1)*sizeof(float));
-	buff[0] = val; 
-}
+static int prev_dat[MAX_CHANS];		// Previous data bit.  Used for G3RUH style.
 
 
-/* FIR filter kernel. */
-
-static inline float convolve (const float *data, const float *filter, int filter_size)
-{
-	  float sum = 0;
-	  int j;
-
-	  for (j=0; j<filter_size; j++) {
-	    sum += filter[j] * data[j];
-	  }
-	  return (sum);
-}
-
-static int lp_filter_size[MAX_CHANS];
-static float raw[MAX_CHANS][MAX_FILTER_SIZE] __attribute__((aligned(16)));
-static float lp_filter[MAX_CHANS][MAX_FILTER_SIZE] __attribute__((aligned(16)));
-static int resample[MAX_CHANS];
-
-#define UPSAMPLE 2
 
 
 /*------------------------------------------------------------------
@@ -179,6 +126,8 @@ static int resample[MAX_CHANS];
  *					samples_per_sec
  *
  *		amp		- Signal amplitude on scale of 0 .. 100.
+ *
+ *				  100% uses the full 16 bit sample range of +-32k.
  *
  *		gen_packets	- True if being called from "gen_packets" utility
  *				  rather than the "direwolf" application.
@@ -211,9 +160,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 
 	save_audio_config_p = audio_config_p;
 	
-
-	amp16bit = (32767 * amp) / 100;
-
+	amp16bit = (int)((32767 * amp) / 100);
 
 	for (chan = 0; chan < MAX_CHANS; chan++) {
 
@@ -266,7 +213,15 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 	        f2_change_per_sample[chan] = f1_change_per_sample[chan];	// Not used.
 	        break;
 
-	      default:
+	      case MODEM_BASEBAND:
+	      case MODEM_SCRAMBLE:
+
+		// Tone is half baud.
+	        ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->achan[chan].baud ) + 0.5);
+	        f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].baud * 0.5 * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
+	        break;
+
+	      default:		// AFSK
 
 	        ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->achan[chan].baud ) + 0.5);
 	        f1_change_per_sample[chan] = (int) (((double)audio_config_p->achan[chan].mark_freq * TICKS_PER_CYCLE / (double)audio_config_p->adev[a].samples_per_sec ) + 0.5);
@@ -298,75 +253,6 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 	  sine_table[j] = s;
         }
 
-
-/*
- * Low pass filter for 9600 baud. 
- */
-
-	for (chan = 0; chan < MAX_CHANS; chan++) {
-
-	  if (audio_config_p->achan[chan].valid && 
-		(audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE 
-		  ||  audio_config_p->achan[chan].modem_type == MODEM_BASEBAND)) {
-
-	    int a = ACHAN2ADEV(chan);
-	    int samples_per_sec;		/* Might be scaled up! */
-	    int baud;
-
-	    /* These numbers were by trial and error.  Need more investigation here. */
-
-	    float filter_len_bits =  88 * 9600.0 / (44100.0 * 2.0);
-						/* Filter length in number of data bits. */
-						/* Currently 9.58 */
-	
-	    float lpf_baud = 0.8;		/* Lowpass cutoff freq as fraction of baud rate */
-
-	    float fc;				/* Cutoff frequency as fraction of sampling frequency. */
-
-/*
- * Normally, we want to generate the same thing whether sending over the air
- * or putting it into a file for other testing.
- * (There is an important exception.  gen_packets can introduce random noise.)
- * In this case, we want more aggressive low pass filtering so it looks more like
- * what we see coming out of a receiver.
- * Specifically, single bits of the same state have considerably reduced amplitude
- * below several same values in a row.
- */
-
-	    if (gen_packets) {
-	      filter_len_bits = 4;
-	      lpf_baud = 0.55;		/* Lowpass cutoff freq as fraction of baud rate */
-	    }
-
-	    samples_per_sec = audio_config_p->adev[a].samples_per_sec * UPSAMPLE;		
-	    baud = audio_config_p->achan[chan].baud;
-
-	    ticks_per_sample[chan] = (int) ((TICKS_PER_CYCLE / (double)samples_per_sec ) + 0.5);
-	    ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)baud ) + 0.5);
-
-	    lp_filter_size[chan] = (int) (( filter_len_bits * (float)samples_per_sec / baud) + 0.5);
-
-	    if (lp_filter_size[chan] < 10) {
-	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("gen_tone_init: unexpected, chan %d, lp_filter_size %d < 10\n", chan, lp_filter_size[chan]);
-	      lp_filter_size[chan] = 10;
-	    }
-	    else if (lp_filter_size[chan] > MAX_FILTER_SIZE) {
-	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("gen_tone_init: unexpected, chan %d, lp_filter_size %d > %d\n", chan, lp_filter_size[chan], MAX_FILTER_SIZE);
-	      lp_filter_size[chan] = MAX_FILTER_SIZE;
-	    }
-
-	    fc = (float)baud * lpf_baud / (float)samples_per_sec;
-
-	    //text_color_set(DW_COLOR_DEBUG);
-	    //dw_printf ("gen_tone_init: chan %d, call gen_lowpass(fc=%.2f, , size=%d, )\n", chan, fc, lp_filter_size[chan]);
-
-	    gen_lowpass (fc, lp_filter[chan], lp_filter_size[chan], BP_WINDOW_HAMMING);
-
-	  }
-	}
-
 	return (0);
 
  } /* end gen_tone_init */
@@ -388,6 +274,11 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
  * Assumption:  fp is open to a file for write.
  *
  * Version 1.4:	Attempt to implement 2400 and 4800 bps PSK modes.
+ *
+ * Version 1.6: For G3RUH, rather than generating square wave and low
+ *		pass filtering, generate the waveform directly.
+ *		This avoids overshoot, ringing, and adding more jitter.
+ *		Alternating bits come out has sine wave of baud/2 Hz.
  *
  *--------------------------------------------------------------------*/
 
@@ -469,7 +360,6 @@ void tone_gen_put_bit (int chan, int dat)
 	do {		/* until enough audio samples for this symbol. */
 
 	  int sam;
-	  float fsam;
 
 	  switch (save_audio_config_p->achan[chan].modem_type) {
 
@@ -499,23 +389,17 @@ void tone_gen_put_bit (int chan, int dat)
 	    case MODEM_BASEBAND:
 	    case MODEM_SCRAMBLE:
 
-#if DEBUG2
-	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("tone_gen_put_bit %d SCR\n", __LINE__);
-#endif
-	      fsam = dat ? amp16bit : (-amp16bit);
-
-	      /* version 1.2 - added a low pass filter instead of square wave out. */
-
-	      push_sample (fsam, raw[chan], lp_filter_size[chan]);
-
-	      resample[chan]++;
-	      if (resample[chan] >= UPSAMPLE) {
-
-	        sam = (int) convolve (raw[chan], lp_filter[chan], lp_filter_size[chan]);
-	        resample[chan] = 0;
-	        gen_tone_put_sample (chan, a, sam);
+	      if (dat != prev_dat[chan]) {
+	        tone_phase[chan] += f1_change_per_sample[chan];
 	      }
+	      else {
+	        if (tone_phase[chan] & 0x80000000)
+	          tone_phase[chan] = 0xc0000000;	// 270 degrees.
+	        else
+	          tone_phase[chan] = 0x40000000;	// 90 degrees.
+	      }
+              sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
+	      gen_tone_put_sample (chan, a, sam);
 	      break;
 
 	    default:
@@ -532,7 +416,10 @@ void tone_gen_put_bit (int chan, int dat)
         } while (bit_len_acc[chan] < ticks_per_bit[chan]);
 
 	bit_len_acc[chan] -= ticks_per_bit[chan];
-}
+
+	prev_dat[chan] = dat;		// Only needed for G3RUH baseband/scrambled.
+
+}  /* end tone_gen_put_bit */
 
 
 void gen_tone_put_sample (int chan, int a, int sam) {
@@ -547,10 +434,21 @@ void gen_tone_put_sample (int chan, int a, int sam) {
 
 	assert (save_audio_config_p->adev[a].bits_per_sample == 16 || save_audio_config_p->adev[a].bits_per_sample == 8);
 
-	// TODO: Should print message telling user to reduce output level.
+	// Bad news if we are clipping and distorting the signal.
+	// We are using the full range.
+	// Too late to change now because everyone would need to recalibrate their
+	// transmit audio level.
 
-	if (sam < -32767) sam = -32767;
-	else if (sam > 32767) sam = 32767;
+	if (sam < -32767) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Warning: Audio sample %d clipped to -32767.\n", sam);
+	  sam = -32767;
+	}
+	else if (sam > 32767) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Warning: Audio sample %d clipped to +32767.\n", sam);
+	  sam = 32767;
+	}
 
 	if (save_audio_config_p->adev[a].num_channels == 1) {
 

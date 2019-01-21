@@ -1261,7 +1261,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * Options:
  *	mark:space	- AFSK tones.  Defaults based on speed.
  *	num@offset	- Multiple decoders on different frequencies.
- *	
+ *	/9		- Divide sample rate by specified number.
+ *	*9		- Upsample ratio for G3RUH.
+ *	[A-Z+-]+	- Letters, plus, minus for the demodulator "profile."
+ *	g3ruh		- This modem type regardless of default for speed.
  */
 
 	  else if (strcasecmp(t, "MODEM") == 0) {
@@ -1320,7 +1323,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               p_audio_config->achan[channel].space_freq = 0;
 	    }
 
-	    /* Get mark frequency. */
+	    /* Get any options. */
 
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -1331,6 +1334,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (alldigits(t)) {
 
 /* old style */
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Old style (pre version 1.2) format will no longer be supported in next version.\n", line);
 
 	      n = atoi(t);
 	      /* Originally the upper limit was 3000. */
@@ -1514,6 +1520,25 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	            text_color_set(DW_COLOR_ERROR);
                     dw_printf ("Line %d: Ignoring unreasonable sample rate division factor of %d.\n", line, n);
 		  }
+		}
+
+		else if (*t == '*') {		/* *upsample */
+		  int n = atoi(t+1);
+
+                  if (n >= 1 && n <= 4) {
+	            p_audio_config->achan[channel].upsample = n;
+		  }
+	    	  else {
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: Ignoring unreasonable upsample ratio of %d.\n", line, n);
+		  }
+		}
+
+		else if (strcasecmp(t, "G3RUH") == 0) {		/* Force G3RUH modem regardless of default for speed. New in 1.6. */
+
+                  p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
+                  p_audio_config->achan[channel].mark_freq = 0;
+                  p_audio_config->achan[channel].space_freq = 0;
 		}
 
 		else {

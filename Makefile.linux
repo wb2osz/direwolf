@@ -735,7 +735,7 @@ install-rpi :
 # Combine some unit tests into a single regression sanity check.
 
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem2400-g check-modem4800
 
 # Can we encode and decode at popular data rates?
 
@@ -753,14 +753,14 @@ check-modem300 : gen_packets atest
 
 check-modem9600 : gen_packets atest
 	./gen_packets -B9600 -n 100 -o /tmp/test96.wav
-	./atest -B9600 -F0 -L50 -G54 /tmp/test96.wav
-	./atest -B9600 -F1 -L55 -G59 /tmp/test96.wav
+	./atest -B9600 -F0 -L61 -G65 /tmp/test96.wav
+	./atest -B9600 -F1 -L62 -G66 /tmp/test96.wav
 	rm /tmp/test96.wav
 
 check-modem19200 : gen_packets atest
 	./gen_packets -r 96000 -B19200 -n 100 -o /tmp/test19.wav
-	./atest -B19200 -F0 -L55 -G59 /tmp/test19.wav
-	./atest -B19200 -F1 -L60 -G64 /tmp/test19.wav
+	./atest -B19200 -F0 -L60 -G64 /tmp/test19.wav
+	./atest -B19200 -F1 -L64 -G68 /tmp/test19.wav
 	rm /tmp/test19.wav
 
 check-modem2400 : gen_packets atest
@@ -768,6 +768,11 @@ check-modem2400 : gen_packets atest
 	./atest -B2400 -F0 -L70 -G78 /tmp/test24.wav
 	./atest -B2400 -F1 -L80 -G87 /tmp/test24.wav
 	rm /tmp/test24.wav
+
+check-modem2400-g : gen_packets atest
+	./gen_packets -B2400 -g -n 100 -o /tmp/test24-g.wav
+	./atest -B2400 -g -F0 -L99 -G100 /tmp/test24-g.wav
+	rm /tmp/test24-g.wav
 
 check-modem4800 : gen_packets atest
 	./gen_packets -B2400 -n 100 -o /tmp/test48.wav

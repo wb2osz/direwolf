@@ -63,7 +63,7 @@ static struct audio_s          *save_audio_config_p;
 
 // TODO: temp experiment.
 
-static int upsample = 2;	// temp experiment.
+
 static int zerostuff = 1;	// temp experiment.
 
 // Current state of all the decoders.
@@ -648,26 +648,77 @@ int demod_init (struct audio_s *pa)
 //#endif
 	      }
 
-#ifdef TUNE_UPSAMPLE
-	      upsample = TUNE_UPSAMPLE;
-#endif
 
 
 #ifdef TUNE_ZEROSTUFF
 	      zerostuff = TUNE_ZEROSTUFF;
 #endif
 
+
+/*
+ * We need a minimum number of audio samples per bit time for good performance.
+ * Easier to check here because demod_9600_init might have an adjusted sample rate.
+ */
+
+	      float ratio = (float)(save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec)
+							/ (float)(save_audio_config_p->achan[chan].baud);
+
+/*
+ * Set reasonable upsample ratio if user did not override.
+ */
+
+	      if (save_audio_config_p->achan[chan].upsample == 0) {
+
+	        if (ratio < 5) {
+
+	          // example: 44100 / 9600 is 4.59
+	          // Big improvement with x2.
+	          // x4 seems to work the best.
+	          // The other parameters are not as touchy.
+	          // Might reduce on ARM if it takes too much CPU power.
+
+	          save_audio_config_p->achan[chan].upsample = 4;
+	        }
+	        else if (ratio < 10) {
+
+	          // 48000 / 9600 is 5.00
+	          // Need more reasearch.  Treat like above for now.
+
+	          save_audio_config_p->achan[chan].upsample = 4;
+	        }
+	        else if (ratio < 15) {
+
+	          // ...
+
+	          save_audio_config_p->achan[chan].upsample = 2;
+	        }
+	        else {	// >= 15
+	          //
+	          // An example of this might be .....
+	          // Probably no benefit.
+
+	          save_audio_config_p->achan[chan].upsample = 1;
+	        }
+	      }
+
+#ifdef TUNE_UPSAMPLE
+	      save_audio_config_p->achan[chan].upsample = TUNE_UPSAMPLE;
+#endif
+
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("Channel %d: %d baud, K9NG/G3RUH, %s, %d sample rate x %d",
-		    chan, save_audio_config_p->achan[chan].baud, 
+		    chan,
+	            save_audio_config_p->achan[chan].baud,
 		    save_audio_config_p->achan[chan].profiles,
-		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, upsample);
+		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+	            save_audio_config_p->achan[chan].upsample);
 	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF) 
 	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");
 	      
 	      struct demodulator_state_s *D;
 	      D = &demodulator_state[chan][0];	// first subchannel
+
 
 	      save_audio_config_p->achan[chan].num_subchan = 1;
               save_audio_config_p->achan[chan].num_slicers = 1;
@@ -681,12 +732,6 @@ int demod_init (struct audio_s *pa)
      	      }
 	        
 
-	      /* We need a minimum number of audio samples per bit time for good performance. */
-	      /* Easier to check here because demod_9600_init might have an adjusted sample rate. */
-
-	      float ratio = (float)(save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec)
-							/ (float)(save_audio_config_p->achan[chan].baud);
-
 	      text_color_set(DW_COLOR_INFO);
 	      dw_printf ("The ratio of audio samples per sec (%d) to data rate in baud (%d) is %.1f\n",
 				save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
@@ -698,6 +743,9 @@ int demod_init (struct audio_s *pa)
 	      }
 	      else if (ratio < 5) {
 	        dw_printf ("This is on the low side for best performance.  Can you use a higher sample rate?\n");
+	        if (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec == 44100) {
+	          dw_printf ("For example, can you use 48000 rather than 44100?\n");
+	        }
 	      }
 	      else if (ratio < 6) {
 	        dw_printf ("Increasing the sample rate should improve decoder performance.\n");
@@ -709,7 +757,7 @@ int demod_init (struct audio_s *pa)
 	        dw_printf ("This is a suitable ratio for good performance.\n");
 	      }
 
-	      demod_9600_init (upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
+	      demod_9600_init (save_audio_config_p->achan[chan].upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
 
@@ -942,17 +990,17 @@ void demod_process_sample (int chan, int subchan, int sam)
 	      /* So far, both are same in tests with different */
 	      /* optimal low pass filter parameters. */
 
-	      for (k=1; k<upsample; k++) {
+	      for (k=1; k<save_audio_config_p->achan[chan].upsample; k++) {
 	        demod_9600_process_sample (chan, 0, D);
 	      }
-	      demod_9600_process_sample (chan, sam * upsample, D);
+	      demod_9600_process_sample (chan, sam * save_audio_config_p->achan[chan].upsample, D);
 	    }
 	    else {
 
 	      /* Linear interpolation. */
 	      static int prev_sam;
 
-	      switch (upsample) {
+	      switch (save_audio_config_p->achan[chan].upsample) {
 	        case 1:
 	          demod_9600_process_sample (chan, sam, D);
 	          break;

@@ -2308,16 +2308,30 @@ void ax25_hex_dump (packet_t this_p)
 	  dw_printf ("%s\n", cp_text);
 	}
 
+	// Address fields must be only upper case letters and digits.
+	// If less than 6 characters, trailing positions are filled with ASCII space.
+	// Using all zero bits in one of these 6 positions is wrong.
+	// Any non printable characters will be printed as "." here.
 
-	dw_printf (" dest    %c%c%c%c%c%c %2d c/r=%d res=%d last=%d\n", 
-				fptr[0]>>1, fptr[1]>>1, fptr[2]>>1, fptr[3]>>1, fptr[4]>>1, fptr[5]>>1,
+	dw_printf (" dest    %c%c%c%c%c%c %2d c/r=%d res=%d last=%d\n",
+				isprint(fptr[0]>>1) ? fptr[0]>>1 : '.',
+				isprint(fptr[1]>>1) ? fptr[1]>>1 : '.',
+				isprint(fptr[2]>>1) ? fptr[2]>>1 : '.',
+				isprint(fptr[3]>>1) ? fptr[3]>>1 : '.',
+				isprint(fptr[4]>>1) ? fptr[4]>>1 : '.',
+				isprint(fptr[5]>>1) ? fptr[5]>>1 : '.',
 				(fptr[6]&SSID_SSID_MASK)>>SSID_SSID_SHIFT,
 				(fptr[6]&SSID_H_MASK)>>SSID_H_SHIFT, 
 				(fptr[6]&SSID_RR_MASK)>>SSID_RR_SHIFT,
 				fptr[6]&SSID_LAST_MASK);
 
 	dw_printf (" source  %c%c%c%c%c%c %2d c/r=%d res=%d last=%d\n", 
-				fptr[7]>>1, fptr[8]>>1, fptr[9]>>1, fptr[10]>>1, fptr[11]>>1, fptr[12]>>1,
+				isprint(fptr[7]>>1) ? fptr[7]>>1 : '.',
+				isprint(fptr[8]>>1) ? fptr[8]>>1 : '.',
+				isprint(fptr[9]>>1) ? fptr[9]>>1 : '.',
+				isprint(fptr[10]>>1) ? fptr[10]>>1 : '.',
+				isprint(fptr[11]>>1) ? fptr[11]>>1 : '.',
+				isprint(fptr[12]>>1) ? fptr[12]>>1 : '.',
 				(fptr[13]&SSID_SSID_MASK)>>SSID_SSID_SHIFT,
 				(fptr[13]&SSID_H_MASK)>>SSID_H_SHIFT, 
 				(fptr[13]&SSID_RR_MASK)>>SSID_RR_SHIFT,
@@ -2327,7 +2341,12 @@ void ax25_hex_dump (packet_t this_p)
 
 	  dw_printf (" digi %d  %c%c%c%c%c%c %2d   h=%d res=%d last=%d\n", 
 				n - 1,
-				fptr[n*7+0]>>1, fptr[n*7+1]>>1, fptr[n*7+2]>>1, fptr[n*7+3]>>1, fptr[n*7+4]>>1, fptr[n*7+5]>>1,
+				isprint(fptr[n*7+0]>>1) ? fptr[n*7+0]>>1 : '.',
+				isprint(fptr[n*7+1]>>1) ? fptr[n*7+1]>>1 : '.',
+				isprint(fptr[n*7+2]>>1) ? fptr[n*7+2]>>1 : '.',
+				isprint(fptr[n*7+3]>>1) ? fptr[n*7+3]>>1 : '.',
+				isprint(fptr[n*7+4]>>1) ? fptr[n*7+4]>>1 : '.',
+				isprint(fptr[n*7+5]>>1) ? fptr[n*7+5]>>1 : '.',
 				(fptr[n*7+6]&SSID_SSID_MASK)>>SSID_SSID_SHIFT,
 				(fptr[n*7+6]&SSID_H_MASK)>>SSID_H_SHIFT, 
 				(fptr[n*7+6]&SSID_RR_MASK)>>SSID_RR_SHIFT,

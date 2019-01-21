@@ -31,6 +31,8 @@ struct demodulator_state_s
 	char profile;			// 'A', 'B', etc.	Upper case.
 					// Only needed to see if we are using 'F' to take fast path.
 
+	int play_it_again_sample;	// Enable new synchronous demod in version 1.6.
+
 #define TICKS_PER_PLL_CYCLE ( 256.0 * 256.0 * 256.0 * 256.0 )
 
 	int pll_step_per_sample;	// PLL is advanced by this much each audio sample.
@@ -39,8 +41,16 @@ struct demodulator_state_s
 
 	int ms_filter_size;		/* Size of mark & space filters, in audio samples. */
 					/* Started off as a guess of one bit length */
-					/* but somewhat longer turned out to be better. */
+					/* but about 2 bit times turned out to be better. */
 					/* Currently using same size for any prefilter. */
+
+	int m2_filter_size;
+	int s2_filter_size;		/* Size of mark & space filters, in audio samples */
+					/* for the synchronous demodulator.  I'm expecting */
+					/* smaller, perhaps just over 1 bit time here. */
+
+	int lp2_filter_size;		/* FSK resampling - Size of Low Pass filter, in audio samples. */
+
 
 #define MAX_FILTER_SIZE 320		/* 304 is needed for profile C, 300 baud & 44100. */
 
@@ -49,6 +59,9 @@ struct demodulator_state_s
  * e.g.  1 means 1/1200 second for 1200 baud.
  */
 	float ms_filter_len_bits;
+	float m2_filter_len_bits;
+	float s2_filter_len_bits;
+	float lp_delay_fract;
 
 /* 
  * Window type for the various filters.
@@ -57,6 +70,7 @@ struct demodulator_state_s
 	bp_window_t pre_window;
 	bp_window_t ms_window;
 	bp_window_t lp_window;
+	bp_window_t ms2_window;		/* New in 1.6. */
 
 
 /*
@@ -79,6 +93,12 @@ struct demodulator_state_s
 	int lp_filter_size;		/* Size of Low Pass filter, in audio samples. */
 					/* Previously it was always the same as the M/S */
 					/* filters but in version 1.2 it's now independent. */
+
+	int lp_filter_delay;		/* Number of samples that the low pass filter */
+					/* delays the signal. */
+	
+					/* New in 1.6. */
+
 
 /*
  * Automatic gain control.  Fast attack and slow decay factors.
@@ -134,6 +154,18 @@ struct demodulator_state_s
 
 	float s_sin_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 	float s_cos_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+/*
+ * Same for the synchronous re-demodulator.
+ */
+
+	float m2_sin_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+	float m2_cos_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	float s2_sin_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+	float s2_cos_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	float lp2_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
 /*
  * These are for PSK only.

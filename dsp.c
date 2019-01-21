@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2015, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -51,7 +51,7 @@
 
 // Don't remove this.  It serves as a reminder that an experiment is underway.
 
-#if defined(TUNE_MS_FILTER_SIZE) || defined(TUNE_AGC_FAST) || defined(TUNE_LPF_BAUD) || defined(TUNE_PLL_LOCKED) || defined(TUNE_PROFILE)
+#if defined(TUNE_MS_FILTER_SIZE) || defined(TUNE_MS2_FILTER_SIZE) || defined(TUNE_AGC_FAST) || defined(TUNE_LPF_BAUD) || defined(TUNE_PLL_LOCKED) || defined(TUNE_PROFILE)
 #define DEBUG1 1		// Don't remove this.
 #endif
 
@@ -118,13 +118,16 @@ float window (bp_window_t type, int size, int j)
  * Inputs:   	fc		- Cutoff frequency as fraction of sampling frequency.
  *		filter_size	- Number of filter taps.
  *		wtype		- Window type, BP_WINDOW_HAMMING, etc.
+ *		lp_delay_fract	- Fudge factor for the delay value.
  *
  * Outputs:     lp_filter
  *		
+ * Returns:	Signal delay thru the filter in number of audio samples.
+ *
  *----------------------------------------------------------------*/
 
  
-void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype)
+int gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype, float lp_delay_fract)
 {
 	int j;
 	float G;
@@ -171,14 +174,69 @@ void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype
         for (j=0; j<filter_size; j++) {
 	  lp_filter[j] = lp_filter[j] / G;
 	}
-}
+
+
+// Calculate the signal delay.
+// If a signal at level 0 steps to level 1, this is the time that it would
+// take for the output to reach 0.5.
+//
+// Examples:
+//
+// Filter has one tap with value of 1.0.
+//	Output is immediate so I would call this delay of 0.
+//
+// Filter coefficients:	0.2, 0.2, 0.2, 0.2, 0.2
+//	"1" inputs	Out
+//	1		0.2
+//	2		0.4
+//	3		0.6
+//
+// In this case, the output does not change immediately.
+// It takes two more samples to reach the half way point
+// so it has a delay of 2.
+
+	float sum = 0;
+	int delay = 0;
+
+	if (lp_delay_fract == 0) lp_delay_fract = 0.5;
+
+        for (j=0; j<filter_size; j++) {
+	  sum += lp_filter[j];
+#if DEBUG1
+	dw_printf ("lp_filter[%d] = %.3f   sum = %.3f   lp_delay_fract = %.3f\n", j, lp_filter[j], sum, lp_delay_fract);
+#endif
+	  if (sum > lp_delay_fract) {
+	    delay = j;
+	    break;
+	  }
+	}
+
+#if DEBUG1
+	  dw_printf ("Low Pass Delay = %d samples\n", delay) ;
+#endif
+
+// Hmmm.  This might have been wasted effort.  The result is always half the number of taps.
+
+	if (delay < 2 || delay > filter_size - 2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error, %s %d, delay %d for size %d\n", __func__, __LINE__, delay, filter_size);
+	}
+
+	return (delay);
+
+}  /* end gen_lowpass */
+
+
+#undef DEBUG1
+
 
 
 /*------------------------------------------------------------------
  *
  * Name:        gen_bandpass
  *
- * Purpose:     Generate band pass filter kernel.
+ * Purpose:     Generate band pass filter kernel for the prefilter.
+ *		This is NOT for the mark/space filters.
  *
  * Inputs:   	f1		- Lower cutoff frequency as fraction of sampling frequency.
  *		f2		- Upper cutoff frequency...
@@ -187,10 +245,10 @@ void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype
  *
  * Outputs:     bp_filter
  *
- * Reference:	http://www.labbookpages.co.uk/audio/firWindowing.html	
+ * Reference:	http://www.labbookpages.co.uk/audio/firWindowing.html
  *
  *		Does it need to be an odd length?
- *	
+ *
  *----------------------------------------------------------------*/
 
 
@@ -200,7 +258,6 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
 	float w;
 	float G;
 	float center = 0.5 * (filter_size - 1);
-
 
 #if DEBUG1
 	text_color_set(DW_COLOR_DEBUG);
@@ -229,7 +286,8 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
 #if DEBUG1
 	  dw_printf ("%6d  %6.2f  %6.3f  %6.3f\n", j, shape, sinc, bp_filter[j] ) ;
 #endif
-        }
+	}
+
 
 /*
  * Normalize bandpass for unity gain in middle of passband.
@@ -249,6 +307,66 @@ void gen_bandpass (float f1, float f2, float *bp_filter, int filter_size, bp_win
         for (j=0; j<filter_size; j++) {
 	  bp_filter[j] = bp_filter[j] / G;
 	}
-}
+
+} /* end gen_bandpass */
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        gen_ms
+ *
+ * Purpose:     Generate mark and space filters.
+ *
+ * Inputs:   	fc		- Tone frequency, i.e. mark or space.
+ *		sps		- Samples per second.
+ *		filter_size	- Number of filter taps.
+ *		wtype		- Window type, BP_WINDOW_HAMMING, etc.
+ *
+ * Outputs:     bp_filter
+ *
+ * Reference:	http://www.labbookpages.co.uk/audio/firWindowing.html
+ *
+ *		Does it need to be an odd length?
+ *
+ *----------------------------------------------------------------*/
+
+
+void gen_ms (int fc, int sps, float *sin_table, float *cos_table, int filter_size, int wtype)
+{
+	int j;
+	float Gs = 0, Gc = 0;;
+
+        for (j=0; j<filter_size; j++) {
+
+	  float center = 0.5f * (filter_size - 1);
+	  float am = ((float)(j - center) / (float)sps) * ((float)fc) * (2.0f * (float)M_PI);
+
+	  float shape = window (wtype, filter_size, j);
+
+	  sin_table[j] = sinf(am) * shape;
+	  cos_table[j] = cosf(am) * shape;
+
+	  Gs += sin_table[j] * sinf(am);
+	  Gc += cos_table[j] * cosf(am);
+
+#if DEBUG1
+	  dw_printf ("%6d  %6.2f  %6.2f  %6.2f\n", j, shape, sin_table[j], cos_table[j]) ;
+#endif
+        }
+
+
+/* Normalize for unity gain */
+
+#if DEBUG1
+	dw_printf ("Before normalizing, Gs = %.2f, Gc = %.2f\n", Gs, Gc) ;
+#endif
+        for (j=0; j<filter_size; j++) {
+	  sin_table[j] = sin_table[j] / Gs;
+	  cos_table[j] = cos_table[j] / Gc;
+	}
+
+} /* end gen_ms */
+
 
 /* end dsp.c */

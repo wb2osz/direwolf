@@ -190,7 +190,7 @@ int main (int argc, char *argv[])
 	struct digi_config_s digi_config;
 	struct cdigi_config_s cdigi_config;
 	struct igate_config_s igate_config;
-	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0;	/* Command line options. */
+	int r_opt = 0, n_opt = 0, b_opt = 0, B_opt = 0, D_opt = 0, U_opt = 0;	/* Command line options. */
 	char P_opt[16];
 	char l_opt_logdir[80];
 	char L_opt_logfile[80];
@@ -199,6 +199,7 @@ int main (int argc, char *argv[])
 	
 	int t_opt = 1;		/* Text color option. */				
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
+	int g_opt = 0;		/* G3RUH mode, ignoring default for speed. */				
 
 	int d_k_opt = 0;	/* "-d k" option for serial port KISS.  Can be repeated for more detail. */					
 	int d_n_opt = 0;	/* "-d n" option for Network KISS.  Can be repeated for more detail. */	
@@ -263,7 +264,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -352,7 +353,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:L:Sa:E:T:",
+          c = getopt_long(argc, argv, "P:B:gD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -404,18 +405,33 @@ int main (int argc, char *argv[])
             }
             break;
 
+          case 'g':				/* -g G3RUH modem, overriding default mode for speed. */
+	 
+	    g_opt = 1;
+            break;
+
 	  case 'P':				/* -P for modem profile. */
 
 	    //debug: dw_printf ("Demodulator profile set to \"%s\"\n", optarg);
 	    strlcpy (P_opt, optarg, sizeof(P_opt)); 
 	    break;	
 
-          case 'D':				/* -D decrease AFSK demodulator sample rate */
+          case 'D':				/* -D divide AFSK demodulator sample rate */
 	 
 	    D_opt = atoi(optarg);
             if (D_opt < 1 || D_opt > 8) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Crazy value for -D. \n");
+              exit (EXIT_FAILURE);
+            }
+            break;
+
+          case 'U':				/* -U multiply G3RUH demodulator sample rate (upsample) */
+	 
+	    U_opt = atoi(optarg);
+            if (U_opt < 1 || U_opt > 4) {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Crazy value for -U. \n");
               exit (EXIT_FAILURE);
             }
             break;
@@ -518,7 +534,7 @@ int main (int argc, char *argv[])
 	    break;
 
 
-	  case 'U':				/* Print UTF-8 test and exit. */
+	  case 'u':				/* Print UTF-8 test and exit. */
 
 	    dw_printf ("\n  UTF-8 test string: ma%c%cana %c%c F%c%c%c%ce\n\n", 
 			0xc3, 0xb1,
@@ -610,15 +626,18 @@ int main (int argc, char *argv[])
 	if (r_opt != 0) {
 	  audio_config.adev[0].samples_per_sec = r_opt;
 	}
+
 	if (n_opt != 0) {
 	  audio_config.adev[0].num_channels = n_opt;
 	  if (n_opt == 2) {
 	    audio_config.achan[1].valid = 1;
 	  }
 	}
+
 	if (b_opt != 0) {
 	  audio_config.adev[0].bits_per_sample = b_opt;
 	}
+
 	if (B_opt != 0) {
 	  audio_config.achan[0].baud = B_opt;
 
@@ -661,6 +680,16 @@ int main (int argc, char *argv[])
 	  }
 	}
 
+	if (g_opt) {
+
+	  // Force G3RUH mode, overriding default for speed.
+	  //   Example:   -B 2400 -g  
+
+	  audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
+          audio_config.achan[0].mark_freq = 0;
+          audio_config.achan[0].space_freq = 0;
+	}
+
 	audio_config.statistics_interval = a_opt;
 
 	if (strlen(P_opt) > 0) { 
@@ -672,6 +701,13 @@ int main (int argc, char *argv[])
 	if (D_opt != 0) {
 	    // Reduce audio sampling rate to reduce CPU requirements.
 	    audio_config.achan[0].decimate = D_opt;
+	}
+
+	if (U_opt != 0) {
+	    // Increase G3RUH audio sampling rate to improve performance.
+	    // The value is normally determined automatically based on audio
+	    // sample rate and baud.  This allows override for experimentation.
+	    audio_config.achan[0].upsample = U_opt;
 	}
 
 	strlcpy(audio_config.timestamp_format, T_opt_timestamp, sizeof(audio_config.timestamp_format));
@@ -1145,9 +1181,10 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  * If it came from DTMF decoder, send it to APRStt gateway.
  * Otherwise, it is a candidate for IGate and digipeater.
  *
- * TODO: It might be useful to have some way to simulate touch tone
- * sequences with BEACON sendto=R... for testing.
+ * TODO: It would be useful to have some way to simulate touch tone
+ * sequences with BEACON sendto=R0 for testing.
  */
+
 	if (subchan == -1) {
 	  if (tt_config.gateway_enabled && info_len >= 2) {
 	    aprs_tt_sequence (chan, (char*)(pinfo+1));
@@ -1254,6 +1291,7 @@ static void usage (char **argv)
 	dw_printf ("                     2400 bps uses QPSK based on V.26 standard.\n");
 	dw_printf ("                     4800 bps uses 8PSK based on V.27 standard.\n");
 	dw_printf ("                     9600 bps and up uses K9NG/G3RUH standard.\n");
+	dw_printf ("    -g             Force G3RUH modem regardless of speed.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");
@@ -1281,7 +1319,7 @@ static void usage (char **argv)
 	dw_printf ("    -p             Enable pseudo terminal for KISS protocol.\n");
 #endif
 	dw_printf ("    -x             Send Xmit level calibration tones.\n");
-	dw_printf ("    -U             Print UTF-8 test string and exit.\n");
+	dw_printf ("    -u             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
 	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
 	dw_printf ("\n");

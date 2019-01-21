@@ -140,7 +140,10 @@ static int e_o_f;
 static int packets_decoded_one = 0;
 static int packets_decoded_total = 0;
 static int decimate = 0;		/* Reduce that sampling rate if set. */
-					/* 1 = normal, 2 = half, etc. */
+					/* 1 = normal, 2 = half, 3 = 1/3, etc. */
+
+static int upsample = 0;		/* Upsample for G3RUH decoder. */
+					/* Non-zero will override the default. */
 
 static struct audio_s my_audio_config;
 
@@ -174,6 +177,13 @@ static int sample_number = -1;		/* Sample number from the file. */
 					/* Incremented only for channel 0. */
 					/* Use to print timestamp, relative to beginning */
 					/* of file, when frame was decoded. */
+
+// command line options.
+
+static int B_opt = DEFAULT_BAUD;	// Bits per second.  Need to change all baud references to bps.
+static int g_opt = 0;			// G3RUH modem regardless of speed.
+static int h_opt = 0;			// Hexadecimal display of received packet.
+
 
 int main (int argc, char *argv[])
 {
@@ -276,6 +286,7 @@ int main (int argc, char *argv[])
 	  //my_audio_config.achan[channel].passall = 1;				
 	}
 
+
 	while (1) {
           //int this_option_optind = optind ? optind : 1;
           int option_index = 0;
@@ -288,7 +299,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "B:P:D:F:L:G:012",
+          c = getopt_long(argc, argv, "B:P:D:U:gF:L:G:012h",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -296,63 +307,13 @@ int main (int argc, char *argv[])
           switch (c) {
 
             case 'B':				/* -B for data Bit rate */
-						/*    300 implies 1600/1800 AFSK. */
-						/*    1200 implies 1200/2200 AFSK. */
-						/*    2400 implies V.26 */
-						/*    9600 implies scrambled. */
+						/* Also implies modem type based on speed. */
+	      B_opt = atoi(optarg);
+              break;
 
-              my_audio_config.achan[0].baud = atoi(optarg);
+            case 'g':				/* -G Force G3RUH regardless of speed. */
 
-              dw_printf ("Data rate set to %d bits / second.\n", my_audio_config.achan[0].baud);
-
-              if (my_audio_config.achan[0].baud < MIN_BAUD || my_audio_config.achan[0].baud > MAX_BAUD) {
-		text_color_set(DW_COLOR_ERROR);
-                dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
-                exit (EXIT_FAILURE);
-              }
-
-	      /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
-	      /* that need to be kept in sync.  Maybe it could be a common function someday. */
-
-	      if (my_audio_config.achan[0].baud == 100) {
-                my_audio_config.achan[0].modem_type = MODEM_AFSK;
-                my_audio_config.achan[0].mark_freq = 1615;
-                my_audio_config.achan[0].space_freq = 1785;
-	        strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
-	      }
-	      else if (my_audio_config.achan[0].baud < 600) {
-                my_audio_config.achan[0].modem_type = MODEM_AFSK;
-                my_audio_config.achan[0].mark_freq = 1600;
-                my_audio_config.achan[0].space_freq = 1800;
-	        strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
-	      }
-	      else if (my_audio_config.achan[0].baud < 1800) {
-                my_audio_config.achan[0].modem_type = MODEM_AFSK;
-                my_audio_config.achan[0].mark_freq = DEFAULT_MARK_FREQ;
-                my_audio_config.achan[0].space_freq = DEFAULT_SPACE_FREQ;
-		// Should default to E+ or something similar later.
-	      }
-	      else if (my_audio_config.achan[0].baud < 3600) {
-                my_audio_config.achan[0].modem_type = MODEM_QPSK;
-                my_audio_config.achan[0].mark_freq = 0;
-                my_audio_config.achan[0].space_freq = 0;
-	        strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
-                dw_printf ("Using V.26 QPSK rather than AFSK.\n");
-	      }
-	      else if (my_audio_config.achan[0].baud < 7200) {
-                my_audio_config.achan[0].modem_type = MODEM_8PSK;
-                my_audio_config.achan[0].mark_freq = 0;
-                my_audio_config.achan[0].space_freq = 0;
-	        strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
-                dw_printf ("Using V.27 8PSK rather than AFSK.\n");
-	      }
-	      else {
-                my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
-                my_audio_config.achan[0].mark_freq = 0;
-                my_audio_config.achan[0].space_freq = 0;
-	        strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
-                dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
-	      }
+	      g_opt = 1;
               break;
 
 	    case 'P':				/* -P for modem profile. */
@@ -374,6 +335,23 @@ int main (int argc, char *argv[])
 	      dw_printf ("Divide audio sample rate by %d\n", decimate);
 	      my_audio_config.achan[0].decimate = decimate;
 	      break;	
+
+	    case 'U':				/* -U upsample for G3RUH to improve performance */
+						/* when the sample rate to baud ratio is low. */
+						/* Actually it is set automatically and this will */
+						/* override the normal calculation. */
+
+	      upsample = atoi(optarg);
+
+	      dw_printf ("Multiply audio sample rate by %d\n", upsample);
+	      if (upsample < 1 || upsample > 4) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Unreasonable value for -U.\n");
+		exit (EXIT_FAILURE);
+	      }
+	      dw_printf ("Multiply audio sample rate by %d\n", upsample);
+	      my_audio_config.achan[0].upsample = upsample;
+	      break;
 
 	    case 'F':				/* -D set "fix bits" level. */
 
@@ -411,6 +389,11 @@ int main (int argc, char *argv[])
 	       decode_only = 2;
 	       break;
 
+	     case 'h':				/* Hexadecimal display. */
+
+	       h_opt = 1;
+	       break;
+
              case '?':
 
               /* Unknown option message was already printed. */
@@ -426,6 +409,75 @@ int main (int argc, char *argv[])
 	    }
         }
     
+/*
+ * Set modem type based on data rate.
+ * (Could be overridden by -g later.)
+ */
+	/*    300 implies 1600/1800 AFSK. */
+	/*    1200 implies 1200/2200 AFSK. */
+	/*    2400 implies V.26 QPSK. */
+	/*    4800 implies V.27 8PSK. */
+	/*    9600 implies G3RUH baseband scrambled. */
+
+        my_audio_config.achan[0].baud = B_opt;
+
+        if (my_audio_config.achan[0].baud < MIN_BAUD || my_audio_config.achan[0].baud > MAX_BAUD) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+          exit (EXIT_FAILURE);
+        }
+
+	/* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
+	/* that need to be kept in sync.  Maybe it could be a common function someday. */
+
+	if (my_audio_config.achan[0].baud == 100) {
+	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
+	  my_audio_config.achan[0].mark_freq = 1615;
+	  my_audio_config.achan[0].space_freq = 1785;
+	  strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	}
+	else if (my_audio_config.achan[0].baud < 600) {
+	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
+	  my_audio_config.achan[0].mark_freq = 1600;
+	  my_audio_config.achan[0].space_freq = 1800;
+	  strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	}
+	else if (my_audio_config.achan[0].baud < 1800) {
+	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
+	  my_audio_config.achan[0].mark_freq = DEFAULT_MARK_FREQ;
+	  my_audio_config.achan[0].space_freq = DEFAULT_SPACE_FREQ;
+	// Should default to E+ or something similar later.
+	}
+	else if (my_audio_config.achan[0].baud < 3600) {
+	  my_audio_config.achan[0].modem_type = MODEM_QPSK;
+	  my_audio_config.achan[0].mark_freq = 0;
+	  my_audio_config.achan[0].space_freq = 0;
+	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
+	}
+	else if (my_audio_config.achan[0].baud < 7200) {
+	  my_audio_config.achan[0].modem_type = MODEM_8PSK;
+	  my_audio_config.achan[0].mark_freq = 0;
+	  my_audio_config.achan[0].space_freq = 0;
+	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
+	}
+	else {
+	  my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
+	  my_audio_config.achan[0].mark_freq = 0;
+	  my_audio_config.achan[0].space_freq = 0;
+	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
+	}
+
+/*
+ * -g option means force g3RUH regardless of speed.
+ */
+
+	if (g_opt) {
+          my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
+          my_audio_config.achan[0].mark_freq = 0;
+          my_audio_config.achan[0].space_freq = 0;
+	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
+	}
+
 	memcpy (&my_audio_config.achan[1], &my_audio_config.achan[0], sizeof(my_audio_config.achan[0]));
 
 
@@ -763,6 +815,21 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	ax25_safe_print ((char *)pinfo, info_len, 0);
 	dw_printf ("\n");
 
+/*
+ * -h option for hexadecimal display.  (new in 1.6)
+ */
+
+	if (h_opt) {
+
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("------\n");
+	  ax25_hex_dump (pp);
+	  dw_printf ("------\n");
+	}
+
+
+
+
 #if 1		// temp experiment  	TODO: remove this.
 
 #include "decode_aprs.h"
@@ -814,7 +881,11 @@ static void usage (void) {
 	dw_printf ("               1200 (default) baud uses 1200/2200 Hz AFSK.\n");
 	dw_printf ("               9600 baud uses K9NG/G2RUH standard.\n");
 	dw_printf ("\n");
+	dw_printf ("        -g     Force G3RUH modem rather rather than default for data rate.\n");
+	dw_printf ("\n");
 	dw_printf ("        -D n   Divide audio sample rate by n.\n");
+	dw_printf ("\n");
+	dw_printf ("        -h     Print frame contents as hexadecimal bytes.\n");
 	dw_printf ("\n");
 	dw_printf ("        -F n   Amount of effort to try fixing frames with an invalid CRC.  \n");
 	dw_printf ("               0 (default) = consider only correct frames.  \n");

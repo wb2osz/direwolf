@@ -16,7 +16,7 @@
 #
 
 
-all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest kissutil
+all : direwolf decode_aprs text2tt tt2text ll2utm utm2ll aclients log2gpx gen_packets atest ttcalc tnctest tnctest-issue-132 kissutil
 
 
 # People say we need -mthreads option for threads to work properly.
@@ -197,11 +197,11 @@ gen_packets : gen_packets.o  ax25_pad.o hdlc_send.o fcs_calc.o gen_tone.o morse.
 	$(CC) $(CFLAGS) -o $@ $^
 
 
-# Connected mode packet application server.
 
-appserver : appserver.o textcolor.o ax25_pad.o fcs_calc.o misc.a
+# Connected mode sample applications for talking to network TNC with AGW protocol.
+
+appserver : appserver.o agwlib.o dwsock.o textcolor.o dtime_now.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
-
 
 
 # -------------------------------------------  Libraries  --------------------------------------------
@@ -277,7 +277,7 @@ strlcat.o : misc/strlcat.c
 
 # Combine some unit tests into a single regression sanity check.
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem4800
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem2400-g check-modem4800
 
 # Can we encode and decode at popular data rates?
 # Verify that single bit fixup increases the count.
@@ -305,8 +305,8 @@ check-modem9600 : gen_packets atest
 	sleep 1
 	gen_packets -B9600 -n 100 -o test96.wav
 	sleep 1
-	atest -B9600 -F0 -L50 -G54 test96.wav
-	atest -B9600 -F1 -L55 -G59 test96.wav
+	atest -B9600 -F0 -L61 -G65 test96.wav
+	atest -B9600 -F1 -L62 -G66 test96.wav
 	sleep 1
 	rm test96.wav
 
@@ -319,8 +319,8 @@ check-modem19200 : gen_packets atest
 	sleep 1
 	gen_packets -r 96000 -B19200 -n 100 -o test19.wav
 	sleep 1
-	atest -B19200 -F0 -L55 -G59 test19.wav
-	atest -B19200 -F1 -L60 -G64 test19.wav
+	atest -B19200 -F0 -L60 -G64 test19.wav
+	atest -B19200 -F1 -L64 -G68 test19.wav
 	sleep 1
 	rm test19.wav
 
@@ -331,6 +331,13 @@ check-modem2400 : gen_packets atest
 	atest -B2400 -F1 -L80 -G87 test24.wav
 	sleep 1
 	rm test24.wav
+
+check-modem2400-g : gen_packets atest
+	gen_packets -B2400 -g -n 100 -o test24-g.wav
+	sleep 1
+	atest -B2400 -g -F0 -L99 -G100 test24-g.wav
+	sleep 1
+	rm test24-g.wav
 
 check-modem4800 : gen_packets atest
 	gen_packets -B4800 -n 100 -o test48.wav
@@ -467,6 +474,9 @@ dtmftest : dtmf.c textcolor.o
 tnctest : tnctest.c textcolor.o dtime_now.o serial_port.o misc.a
 	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
 
+tnctest-issue-132 : tnctest-issue-132.c textcolor.o dtime_now.o serial_port.o misc.a
+	$(CC) $(CFLAGS) -o $@ $^ -lwinmm -lws2_32
+
 
 # For tweaking the demodulator.
 
@@ -481,7 +491,7 @@ testagc : atest.c demod.c dsp.c demod_afsk.c demod_psk.c demod_9600.o fsk_demod_
 		dwgpsnmea.o dwgps.o serial_port.o tt_text.o dtime_now.o regex.a misc.a
 	rm -f atest.exe
 	$(CC) $(CFLAGS) -o atest $^
-	./atest -P GGG- -F 0 ../02_Track_2.wav | grep "packets decoded in" >atest.out
+	./atest -P H+ -F 0 ../01_Track_1.wav ../02_Track_2.wav | grep "packets decoded in" >atest.out
 	echo " " > tune.h
 
 
@@ -509,6 +519,8 @@ testagc96 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c de
 	rm -f atest96.exe
 	$(CC) $(CFLAGS) -o atest96 $^
 	./atest96 -B 9600 ../walkabout9600c.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 ../walkabout9600c.wav noisy96.wav zzz16.wav zzz16.wav zzz16.wav zzz8.wav zzz8.wav zzz8.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 zzz16.wav zzz8.wav | grep "packets decoded in" >atest.out
 	#./atest96 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
 	#./atest96 -B 9600 19990303_0225_9600_8bis_22kHz.wav | grep "packets decoded in" >atest.out
 	#./atest96 -B 9600  19990303_0225_9600_16bit_22kHz.wav | grep "packets decoded in" >atest.out
@@ -561,8 +573,13 @@ aclients : aclients.c ax25_pad.c fcs_calc.c textcolor.c misc.a regex.a
 
 # Note:  kiss_frame.c has conditional compilation on KISSUTIL.
 
-kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o sock.o dtime_now.o misc.a regex.a
+kissutil : kissutil.c kiss_frame.c ax25_pad.o fcs_calc.o textcolor.o serial_port.o dwsock.o dtime_now.o misc.a regex.a
 	$(CC) $(CFLAGS) -DKISSUTIL -o $@ $^ -lwinmm -lws2_32
+
+
+mqtest : aprsmsg.c kiss_frame.c encode_aprs.o ax25_pad.o fcs_calc.o textcolor.o serial_port.o dwsock.o dtime_now.o latlong.o misc.a regex.a
+	$(CC) $(CFLAGS) -DMQTEST -DKISSUTIL -o $@ $^ -lwinmm -lws2_32
+
 
 
 # Touch Tone to Speech sample application.
@@ -582,6 +599,7 @@ walk96 : walk96.c dwgps.o dwgpsnmea.o kiss_frame.o \
 		server.o morse.o dtmf.o audio_stats.o dtime_now.o dlq.o \
 		regex.a misc.a 
 	$(CC) $(CFLAGS) -DWALK96 -o $@ $^ -lwinmm -lws2_32
+
 
 
 
