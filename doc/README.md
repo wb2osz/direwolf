@@ -27,7 +27,7 @@ Brief summary of packet radio / APRS history and the capbilities of Dire Wolf.
 These dive into more detail for specialized topics or typical usage scenarios.
 
 
-- [**Why is 9600 bps only twice as fast as 1200?**](Why-is-9600-only-twice-as-fast-as-1200.pdf)  [ [*download*](../../../raw/dev/doc/Why-is-9600-only-twice-as-fast-as-1200.pdf) ]
+- [**AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?**](Why-is-9600-only-twice-as-fast-as-1200.pdf)  [ [*download*](../../../raw/dev/doc/Why-is-9600-only-twice-as-fast-as-1200.pdf) ]
 
 	Simply switching to a higher data rate will probably result in great disappointment.  You might expect it to be 8 times faster but it can turn out to be only twice as fast.
 
