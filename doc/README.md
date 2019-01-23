@@ -26,6 +26,16 @@ Brief summary of packet radio / APRS history and the capbilities of Dire Wolf.
 
 These dive into more detail for specialized topics or typical usage scenarios.
 
+
+- [**Why is 9600 bps only twice as fast as 1200?**](Why-is-9600-only-twice-as-fast-as-1200.pdf)  [ [*download*](../../../raw/dev/doc/Why-is-9600-only-twice-as-fast-as-1200.pdf) ]
+
+	Simply switching to a higher data rate will probably result in great disappointment.  You might expect it to be 8 times faster but it can turn out to be only twice as fast.
+
+    In this document, we look at why a large increase in data bit rate can produce a much smaller increase in throughput.  We will explore techniques that can be used to make large improvements and drastically speed up large data transfer.
+
+
+
+
 - [**Successful APRS IGate Operation**](Successful-APRS-IGate-Operation.pdf)  [ [*download*](../../../raw/dev/doc/Successful-APRS-IGate-Operation.pdf) ]
 
 	Dire Wolf can serve as a gateway between the APRS radio network and APRS-IS servers on the Internet.
