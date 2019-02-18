@@ -422,7 +422,7 @@ void aprs_tt_sequence (int chan, char *msg)
  * Anything from script, above, will override other predefined responses.
  */
 
-	char audible_response[1000];
+	char audible_response[sizeof(script_response) + 16];
 
 	snprintf (audible_response, sizeof(audible_response), 
 					"APRSTT>%s:%s", 

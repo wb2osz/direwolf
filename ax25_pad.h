@@ -435,7 +435,7 @@ extern unsigned short ax25_m_m_crc (packet_t pp);
 
 extern void ax25_safe_print (char *, int, int ascii_only);
 
-#define AX25_ALEVEL_TO_TEXT_SIZE 32	// overkill but safe.
+#define AX25_ALEVEL_TO_TEXT_SIZE 40	// overkill but safe.
 extern int ax25_alevel_to_text (alevel_t alevel, char text[AX25_ALEVEL_TO_TEXT_SIZE]);
 
 

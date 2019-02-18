@@ -2025,7 +2025,7 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
  *		
  * Outputs:	desc	- Text description such as "I frame" or
  *			  "U frame SABME".   
- *			  Supply 40 bytes to be safe.
+ *			  Supply 56 bytes to be safe.
  *
  *		cr	- Command or response?
  *
@@ -2041,7 +2041,7 @@ int ax25_pack (packet_t this_p, unsigned char result[AX25_MAX_PACKET_LEN])
 
 // TODO: need someway to ensure caller allocated enough space.
 // Should pass in as parameter.
-#define DESC_SIZ 40
+#define DESC_SIZ 56
 
 
 ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, int *pf, int *nr, int *ns) 
