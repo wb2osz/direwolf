@@ -107,6 +107,18 @@ For more details see the **User Guide** in the [**doc** directory](https://githu
 
 ### Linux - Using git clone (recommended) ###
 
+You will probably need to install one of these packages first:
+
+On Debian / Ubuntu / Raspbian:
+
+    sudo apt-get install libasound2-dev
+
+Or on Red Hat / Fedora / Centos:
+
+    sudo yum install alsa-lib-devel
+
+Then on any flavor of Linux:
+
 	cd ~
 	git clone https://www.github.com/wb2osz/direwolf
 	cd direwolf
