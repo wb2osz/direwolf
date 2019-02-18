@@ -1295,7 +1295,11 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	station[6] = '\0';
 
 	for (i=5; i>=0; i--) {
-	  if (station[i] == ' ')
+	  if (station[i] == '\0') {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Station address \"%s\" contains nul character.  AX.25 protocol requires trailing ASCII spaces when less than 6 characters.\n", station);
+	  }
+	  else if (station[i] == ' ')
 	    station[i] = '\0';
 	  else
 	    break;
