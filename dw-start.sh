@@ -10,6 +10,7 @@
 
 # Versioning (this file, not direwolf version)
 #-----------
+# v1.5 - KI6ZHD - Update to auto-detect binary paths and updated GUI start
 # v1.3 - KI6ZHD - added variable support for direwolf binary location
 # v1.2 - KI6ZHD - support different versions of VNC
 # v1.1 - KI6ZHD - expanded version to support running on text-only displays with 
