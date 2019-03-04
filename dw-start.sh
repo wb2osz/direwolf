@@ -4,13 +4,13 @@
 # Dire Wolf automatically.
 
 # See User Guide for more discussion.
-# For release 1.4 it is section 5.7 "Automatic Start Up After Reboot"
+# For release 1.6 it is section 5.7 "Automatic Start Up After Reboot"
 # but it could change in the future as more information is added.
 
 
 # Versioning (this file, not direwolf version)
 #-----------
-# v1.5 - KI6ZHD - Update to auto-detect binary paths and updated GUI start
+# v1.6 - KI6ZHD - Update to auto-detect binary paths and updated GUI start
 # v1.3 - KI6ZHD - added variable support for direwolf binary location
 # v1.2 - KI6ZHD - support different versions of VNC
 # v1.1 - KI6ZHD - expanded version to support running on text-only displays with 
@@ -32,27 +32,35 @@
 
 RUNMODE=AUTO
 
-# Location of the direwolf binary.  Depends on $PATH as shown.
-# change this if you want to use some other specific location.
-# e.g.  DIREWOLF="/usr/local/bin/direwolf"
 
-DIREWOLF="direwolf"
+# Location of the direwolf binary.  Depends on $PATH as shown and how the program
+# was installed.  Change this if you want to use some other specific location.
+# e.g.  DIREWOLF="/usr/bin/direwolf"
+
+DIREWOLF="/usr/local/bin/direwolf"
+
 
 #Direwolf start up command :: two examples where example one is enabled
 #
 # 1. For normal operation as TNC, digipeater, IGate, etc.
 #    Print audio statistics each 100 seconds for troubleshooting.
 #    Change this command to however you wish to start Direwolf
-
-DWCMD="$DIREWOLF -a 100"
-
-#---------------------------------------------------------------
 #
 # 2. Alternative for running with SDR receiver.
 #    Piping one application into another makes it a little more complicated.
 #    We need to use bash for the | to be recognized.
+#
+#    DWCMD="bash -c 'rtl_fm -f 144.39M - | direwolf -c sdr.conf -r 24000 -D 1 -'"
+#
+# Config:
+# This command assumes the direwolf.conf file is in the CURRENT directory that
+# the user is within per the "pwd" command.  If not, enhance this command to 
+# use the "-c" option such as "-c /home/pi/direwolf.conf" syntax
+#
+# Options:
+#   Any other direwolf options such as turning on/off color, etc should go in here
 
-#DWCMD="bash -c 'rtl_fm -f 144.39M - | direwolf -c sdr.conf -r 24000 -D 1 -'"
+DWCMD="$DIREWOLF -a 100 -t 0"
 
 
 #Where will logs go - needs to be writable by non-root users
@@ -66,24 +74,42 @@ LOGFILE=/var/tmp/dw-start.log
 #Status variables
 SUCCESS=0
 
+function CHKERR {
+   if [ $? -ne 0 ]; then
+      echo -e "Last command failed"
+      exit 1
+   fi
+}
+
 function CLI {
+   #Auto-determine if screen is installed
    SCREEN=`which screen`
    if [ $? -ne 0 ]; then
       echo -e "Error: screen is not installed but is required for CLI mode.  Aborting"
       exit 1
    fi
 
-   echo "Direwolf in CLI mode start up"
-   echo "Direwolf in CLI mode start up" >> $LOGFILE
+   echo "Direwolf in CLI mode start up.  All log output recorded to $LOGFILE"
+   echo "Direwolf in CLI mode start up.  All log output recorded to $LOGFILE" >> $LOGFILE
 
    # Screen commands
    #  -d m :: starts the command in detached mode
    #  -S   :: name the session
+   # --
+   #  Remove the "-d m" if you don't want screen to detach and not show direwolf"
    $SCREEN -d -m -S direwolf $DWCMD >> $LOGFILE
+   CHKERR
    SUCCESS=1
+   echo " "
+   echo " " >> $LOGFILE
 
    $SCREEN -list direwolf
+   CHKERR
    $SCREEN -list direwolf >> $LOGFILE
+   echo -e "\nYou can re-attach to the Direwolf screen with:"
+   echo -e "     screen -dr direwolf"
+   echo -e "\nYou can re-attach to the Direwolf screen with:" >> $LOGFILE
+   echo -e "     screen -dr direwolf" >> $LOGFILE
 
    echo "-----------------------"
    echo "-----------------------" >> $LOGFILE
@@ -98,7 +124,10 @@ function GUI {
    # If VNC server is running, use its display number.
    # Otherwise default to :0 (the Xwindows on the HDMI display)
    #
-   export DISPLAY=":0"
+   if [ ! $DISPLAY ]; then
+      echo "No Xdisplay set"
+      #export DISPLAY=":0"
+   fi
 
    #Reviewing for RealVNC sessions (stock in Raspbian Pixel)
    if [ -n "`ps -ef | grep vncserver-x11-serviced | grep -v grep`" ]; then
@@ -112,8 +141,8 @@ function GUI {
       export DISPLAY="$d"
    fi
 
-   echo "Direwolf in GUI mode start up"
-   echo "Direwolf in GUI mode start up" >> $LOGFILE
+   echo "Direwolf in GUI mode start up.  All log output recorded to $LOGFILE"
+   echo "Direwolf in GUI mode start up.  All log output recorded to $LOGFILE" >> $LOGFILE
    echo "DISPLAY=$DISPLAY" 
    echo "DISPLAY=$DISPLAY" >> $LOGFILE
 
@@ -121,14 +150,20 @@ function GUI {
    # Auto adjust the startup for your particular environment:  gnome-terminal, xterm, etc.
    #
 
-   if [ -x /usr/bin/lxterminal ]; then
-      /usr/bin/lxterminal -t "Dire Wolf" -e "$DWCMD" &
+   if [ $(which lxterminal) ]; then
+      #echo "DEBUG: lxterminal stanza"
+      $(which lxterminal) -l -t "Dire Wolf" -e "$DWCMD" &
+      CHKERR
       SUCCESS=1
-     elif [ -x /usr/bin/xterm ]; then
-      /usr/bin/xterm -bg white -fg black -e "$DWCMD" &
+     elif [ $(which xterm) ]; then
+      #echo "DEBUG: xterm stanza"
+      $(which xterm) -bg white -fg black -e "$DWCMD" &
+      CHKERR
       SUCCESS=1
-     elif [ -x /usr/bin/x-terminal-emulator ]; then
-      /usr/bin/x-terminal-emulator -e "$DWCMD" &
+     elif [ $(which x-terminal-emulator) ]; then
+      #echo "DEBUG: x-xterm-emulator stanza"
+      $(which x-terminal-emulator) -e "$DWCMD" &
+      CHKERR
       SUCCESS=1
      else
       echo "Did not find an X terminal emulator.  Reverting to CLI mode"
@@ -147,12 +182,23 @@ function GUI {
 #
 export PATH=/usr/local/bin:$PATH
 
-#Log the start of the script run and re-run
-date >> $LOGFILE
+if [ ! -x $DIREWOLF ]; then
+   echo -e "\nError: Direwolf program not found per the DIREWOLF variable in script.  Aborting.\n"
+   echo -e "\nError: Direwolf program not found per the DIREWOLF variable in script.  Aborting.\n" >> $LOGFILE
+   exit 1
+fi
 
 # First wait a little while in case we just rebooted
 # and the desktop hasn't started up yet.
 #
+echo -e "\ndw-start.sh"
+echo -e "-----------"
+#Log the start of the script run and re-run
+date 
+date >> $LOGFILE
+
+#echo -e "Sleeping for 30 seconds to let any boot/reboot delays conclude"
+echo -e "Sleeping for 30 seconds to let any boot/reboot delays conclude"
 sleep 30
 
 
