@@ -197,6 +197,7 @@ int main (int argc, char *argv[])
 	char input_file[80];
 	char T_opt_timestamp[40];
 	
+	int chan = 0;		/* default audio chanel */
 	int t_opt = 1;		/* Text color option. */				
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
 
@@ -352,7 +353,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:D:c:pxr:b:n:d:q:t:Ul:L:Sa:E:T:",
+          c = getopt_long(argc, argv, "P:B:D:c:pr:b:n:d:q:t:x:Ul:L:Sa:E:T:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -422,7 +423,14 @@ int main (int argc, char *argv[])
 
           case 'x':				/* -x for transmit calibration tones. */
 
-	    xmit_calibrate_option = 1;
+	    chan = atoi(optarg);
+            if ( chan  > 1) {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf("-x option, audio chanel, is out of range.\n");
+              exit (EXIT_FAILURE);
+	    }
+	    else
+	        xmit_calibrate_option = 1;
             break;
 
           case 'r':				/* -r audio samples/sec.  e.g. 44100 */
@@ -760,13 +768,17 @@ int main (int argc, char *argv[])
  */
 
 	if (xmit_calibrate_option) {
+	  if (chan > audio_config.adev[0].num_channels - 1) {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf("-x option, audio chanel %d, is out of range.\n", chan);
+              exit (EXIT_FAILURE);
+	  }
 
 	  int max_duration = 60;  /* seconds */
 	  int n = audio_config.achan[0].baud * max_duration;
-	  int chan = 0;
 	
 	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("\nSending transmit calibration tones.  Press control-C to terminate.\n");
+	  dw_printf ("\nSending transmit calibration tones to channel %d.  Press control-C to terminate.\n", chan);
 
 	  ptt_set (OCTYPE_PTT, chan, 1);
 	  while (n-- > 0) {
@@ -1280,7 +1292,7 @@ static void usage (char **argv)
 #else
 	dw_printf ("    -p             Enable pseudo terminal for KISS protocol.\n");
 #endif
-	dw_printf ("    -x             Send Xmit level calibration tones.\n");
+	dw_printf ("    -x n           Send Xmit level calibration tones. Channel 1 or 0\n");
 	dw_printf ("    -U             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
 	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
