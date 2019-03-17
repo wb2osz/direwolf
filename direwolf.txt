@@ -78,7 +78,7 @@ C#############################################################
 C
 C#
 C# Many people will simply use the default sound device.
-C# Some might want to use an alternative device by chosing it here.
+C# Some might want to use an alternative device by choosing it here.
 C#
 W# When the Windows version starts up, it displays something like 
 W# this with the available sound devices and capabilities:
@@ -134,7 +134,7 @@ L
 L
 C
 C#
-C# Number of audio channels for this souncard:  1 or 2.
+C# Number of audio channels for this soundcard:  1 or 2.
 C#
 C
 CACHANNELS 1
