@@ -385,9 +385,23 @@ int audio_open (struct audio_s *pa)
 	            return -1;
 	          }
 
+		  char mcaddr[20];
+		  unsigned port = DEFAULT_UDP_AUDIO_PORT;
+		  int is_multicast = 0;
+
+		  if (sscanf(audio_in_name, "udp:%[0-9.]:%d", mcaddr, &port)==2) {
+		    is_multicast = 1;
+		  } else if (sscanf(audio_in_name, "udp:%d", &port)==1) {
+		    is_multicast = 0;
+		  } else {
+		    text_color_set(DW_COLOR_ERROR);
+		    dw_printf ("Couldn't parse address '%s'\n", audio_in_name);
+		    return -1;
+		  }
+
 	          memset((char *) &si_me, 0, sizeof(si_me));
 	          si_me.sin_family = AF_INET;   
-	          si_me.sin_port = htons((short)atoi(audio_in_name+4));
+	          si_me.sin_port = htons(port);
 	          si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	          //Bind to the socket
@@ -396,7 +410,27 @@ int audio_open (struct audio_s *pa)
 	            dw_printf ("Couldn't bind socket, errno %d\n", errno);
 	            return -1;
 	          }
-	        }
+
+		  if (is_multicast) {
+		    struct ip_mreq mreq;
+
+		    if(!inet_aton(mcaddr, &mreq.imr_multiaddr)) {
+		      text_color_set(DW_COLOR_ERROR);
+		      dw_printf ("Couldn't parse multicast address %s\n", mcaddr);
+		      return -1;
+		    }
+
+		    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+
+		    if (setsockopt(adev[a].udp_sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+				   &mreq, sizeof(mreq))==-1) {
+		      text_color_set(DW_COLOR_ERROR);
+		      dw_printf ("Couldn't add multicast group, errno %d\n", errno);
+		      return -1;
+		    }
+		  }
+		}
+
 	        adev[a].inbuf_size_in_bytes = SDR_UDP_BUF_MAXLEN; 
 	
 	        break;
