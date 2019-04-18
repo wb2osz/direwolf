@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Run this from crontab periodically to start up
 # Dire Wolf automatically.
@@ -120,14 +120,14 @@ function GUI {
    # Auto adjust the startup for your particular environment:  gnome-terminal, xterm, etc.
    #
 
-   if [ -x /usr/bin/lxterminal ]; then
-      /usr/bin/lxterminal -t "Dire Wolf" -e "$DWCMD" &
+   if $(which lxterminal &> /dev/null); then
+      lxterminal -t "Dire Wolf" -e "$DWCMD" &
       SUCCESS=1
-     elif [ -x /usr/bin/xterm ]; then
-      /usr/bin/xterm -bg white -fg black -e "$DWCMD" &
+     elif $(which xterm &> /dev/null); then
+      xterm -bg white -fg black -e "$DWCMD" &
       SUCCESS=1
-     elif [ -x /usr/bin/x-terminal-emulator ]; then
-      /usr/bin/x-terminal-emulator -e "$DWCMD" &
+     elif $(which x-terminal-emulator &> /dev/null); then
+      x-terminal-emulator -e "$DWCMD" &
       SUCCESS=1
      else
       echo "Did not find an X terminal emulator.  Reverting to CLI mode"
