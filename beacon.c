@@ -172,6 +172,12 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
  * If a serious error is found, set type to BEACON_IGNORE and that
  * table entry should be ignored later on.
  */
+
+// TODO: Better checking.
+// We should really have a table for which keywords are are required,
+// optional, or not allowed for each beacon type.  Options which
+// are not applicable are often silently ignored, causing confusion.
+
 	for (j=0; j<g_misc_config_p->num_beacons; j++) {
 	  int chan = g_misc_config_p->beacon[j].sendto_chan;
 
@@ -207,6 +213,18 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 		    g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
 		    continue;
 		  }	
+
+		  /* INFO and INFOCMD are only for Custom Beacon. */
+
+		  if (g_misc_config_p->beacon[j].custom_info != NULL || g_misc_config_p->beacon[j].custom_infocmd != NULL) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Config file, line %d: INFO or INFOCMD are allowed only for custom beacon.\n", g_misc_config_p->beacon[j].lineno);
+	            dw_printf ("INFO and INFOCMD allow you to specify contents of the Information field so it\n");
+	            dw_printf ("so it would not make sense to use these with other beacon types which construct\n");
+	            dw_printf ("the Information field. Perhaps you want to use COMMENT or COMMENTCMD option.\n");
+		    //g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
+		    continue;
+		  }	
 		  break;
 
 	        case BEACON_TRACKER:
@@ -232,6 +250,18 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 
 	            }
 	          }
+
+		  /* INFO and INFOCMD are only for Custom Beacon. */
+
+		  if (g_misc_config_p->beacon[j].custom_info != NULL || g_misc_config_p->beacon[j].custom_infocmd != NULL) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Config file, line %d: INFO or INFOCMD are allowed only for custom beacon.\n", g_misc_config_p->beacon[j].lineno);
+	            dw_printf ("INFO and INFOCMD allow you to specify contents of the Information field so it\n");
+	            dw_printf ("so it would not make sense to use these with other beacon types which construct\n");
+	            dw_printf ("the Information field. Perhaps you want to use COMMENT or COMMENTCMD option.\n");
+		    //g_misc_config_p->beacon[j].btype = BEACON_IGNORE;
+		    continue;
+		  }	
 		  break;
 
 	        case BEACON_CUSTOM:
