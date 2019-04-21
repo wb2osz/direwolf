@@ -26,6 +26,21 @@
  *		
  * Description:	This version is available for all operating systems.
  *
+ *
+ * TODO:	GPS is no longer the only game in town.
+ *		"GNSS" is often seen as a more general term to include
+ *		other similar systems.  Some receivers will receive
+ *		multiple types at the same time and combine them
+ *		for greater accuracy and reliability.
+ *
+ *		We can now see NMEA sentences with other "Talker IDs."
+ *
+ *			$GPxxx = GPS
+ *			$GLxxx = GLONAS
+ *			$GAxxx = Galileo
+ *			$GBxxx = BeiDou
+ *			$GNxxx = Any combination
+ *
  *---------------------------------------------------------------*/
 
 
@@ -692,6 +707,7 @@ dwfix_t dwgpsnmea_gpgga (char *sentence, int quiet, double *odlat, double *odlon
 	  }
 	  return (DWFIX_ERROR);
 	}
+
 
 	// TODO: num sat...
 
