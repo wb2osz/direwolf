@@ -2,6 +2,33 @@
 # Revision History #
 
 
+## Version 1.6  --  Under Development ##
+
+
+### Bugs Fixed: ###
+
+- Proper counting of frames in transmit queue for AGW protocol 'Y' command.
+
+
+
+### New Features: ###
+
+- "-g" option to force G3RUH mode for lower speeds where a different modem type may be the default.
+
+- "atest -h" will display the frame in hexadecimal for closer inspection.
+
+- Add support for Multi-GNSS NMEA sentences.
+
+
+
+### New Documentation: ###
+
+- ***AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?***
+
+- Power Point slide show in separate repository.  [https://github.com/wb2osz/direwolf-presentation ](https://github.com/wb2osz/direwolf-presentation)
+
+
+
 ## Version 1.5  --  September 2018 ##
 
 
