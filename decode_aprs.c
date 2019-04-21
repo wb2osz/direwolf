@@ -927,6 +927,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	  (void) dwgpsnmea_gprmc ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &speed_knots, &(A->g_course));
 	  A->g_speed_mph = DW_KNOTS_TO_MPH(speed_knots);
+	  strlcpy (A->g_msg_type, "Raw GPS data", sizeof(A->g_msg_type));
 	}
 	else if (strncmp((char*)info, "$GPGGA,", 7) == 0 ||
 	         strncmp((char*)info, "$GNGGA,", 7) == 0)
@@ -936,6 +937,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	  (void) dwgpsnmea_gpgga ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &alt_meters, &num_sat);
 	  A->g_altitude_ft = DW_METERS_TO_FEET(alt_meters);
+	  strlcpy (A->g_msg_type, "Raw GPS data", sizeof(A->g_msg_type));
 	}
 
 	// TODO (low): add a few other sentence types.
