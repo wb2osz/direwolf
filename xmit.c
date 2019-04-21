@@ -522,7 +522,7 @@ static void * xmit_thread (void *arg)
 	  tq_wait_while_empty (chan);
 #if DEBUG
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("xmit_thread, channel %d: woke up\n", c);
+	  dw_printf ("xmit_thread, channel %d: woke up\n", chan);
 #endif
 
 	  // Does this extra loop offer any benefit?
@@ -751,10 +751,9 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("xmit_thread: Turn on PTT now for channel %d. speed = %d\n", chan, xmit_bits_per_sec[chan]);
+	dw_printf ("xmit_thread: t=%.3f, Turn on PTT now for channel %d. speed = %d\n", dtime_now()-time_ptt, chan, xmit_bits_per_sec[chan]);
 #endif
 	ptt_set (OCTYPE_PTT, chan, 1);
-
 
 // Inform data link state machine that we are now transmitting.
 
@@ -765,7 +764,8 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	num_bits =  hdlc_send_flags (chan, pre_flags, 0);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("xmit_thread: txdelay=%d [*10], pre_flags=%d, num_bits=%d\n", xmit_txdelay[chan], pre_flags, num_bits);
+	dw_printf ("xmit_thread: t=%.3f, txdelay=%d [*10], pre_flags=%d, num_bits=%d\n", dtime_now()-time_ptt, xmit_txdelay[chan], pre_flags, num_bits);
+	double presleep = dtime_now();
 #endif
 
 	SLEEP_MS (10);			// Give data link state machine a chance to
@@ -773,6 +773,16 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 					// in response to dlq_seize_confirm, so
 					// we don't run off the end too soon.
 
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	// How long did sleep last?
+	dw_printf ("xmit_thread: t=%.3f, Should be 0.010 second after the above.\n", dtime_now()-time_ptt);
+	double naptime = dtime_now() - presleep;
+	if (naptime > 0.015) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Sleep for 10 ms actually took %.3f second!\n", naptime);
+	}
+#endif
 
 /*
  * Transmit the frame.
@@ -784,7 +794,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	if (nb > 0) numframe++;
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("xmit_thread: flen=%d, nb=%d, num_bits=%d, numframe=%d\n", flen, nb, num_bits, numframe);
+	dw_printf ("xmit_thread: t=%.3f, nb=%d, num_bits=%d, numframe=%d\n", dtime_now()-time_ptt, nb, num_bits, numframe);
 #endif
 	ax25_delete (pp);
 
@@ -826,7 +836,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	        pp = tq_remove (chan, prio);
 #if DEBUG
 	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("xmit_thread: tq_remove(chan=%d, prio=%d) returned %p\n", chan, prio, pp);
+	        dw_printf ("xmit_thread: t=%.3f, tq_remove(chan=%d, prio=%d) returned %p\n", dtime_now()-time_ptt, chan, prio, pp);
 #endif
 
 	        nb = send_one_frame (chan, prio, pp);
@@ -835,7 +845,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	        if (nb > 0) numframe++;
 #if DEBUG
 	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("xmit_thread: flen=%d, nb=%d, num_bits=%d, numframe=%d\n", flen, nb, num_bits, numframe);
+	        dw_printf ("xmit_thread: t=%.3f, nb=%d, num_bits=%d, numframe=%d\n", dtime_now()-time_ptt, nb, num_bits, numframe);
 #endif
 	        ax25_delete (pp);
 
@@ -856,7 +866,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	num_bits += nb;
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("xmit_thread: txtail=%d [*10], post_flags=%d, nb=%d, num_bits=%d\n", xmit_txtail[chan], post_flags, nb, num_bits);
+	dw_printf ("xmit_thread: t=%.3f, txtail=%d [*10], post_flags=%d, nb=%d, num_bits=%d\n", dtime_now()-time_ptt, xmit_txtail[chan], post_flags, nb, num_bits);
 #endif
 
 
@@ -889,7 +899,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("xmit_thread: xmit duration=%d, %d already elapsed since PTT, wait %d more\n", duration, already, wait_more );
+	dw_printf ("xmit_thread: t=%.3f, xmit duration=%d, %d already elapsed since PTT, wait %d more\n", dtime_now()-time_ptt, duration, already, wait_more );
 #endif
 
 	if (wait_more > 0) {
@@ -915,7 +925,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	time_now = dtime_now();
-	dw_printf ("xmit_thread: Turn off PTT now. Actual time on was %d mS, vs. %d desired\n", (int) ((time_now - time_ptt) * 1000.), duration);
+	dw_printf ("xmit_thread: t=%.3f, Turn off PTT now. Actual time on was %d mS, vs. %d desired\n", dtime_now()-time_ptt, (int) ((time_now - time_ptt) * 1000.), duration);
 #endif
 		
 	ptt_set (OCTYPE_PTT, chan, 0);
@@ -1147,9 +1157,9 @@ static void xmit_speech (int c, packet_t pp)
 int xmit_speak_it (char *script, int c, char *orig_msg)
 {
 	int err;
-	char cmd[2000];	
-	char *p;
 	char msg[2000];
+	char cmd[sizeof(msg) + 16];
+	char *p;
 
 /* Remove any quotes because it will mess up command line argument parsing. */
 
