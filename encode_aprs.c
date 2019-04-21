@@ -790,7 +790,7 @@ typedef struct aprs_message_s {
 
 int encode_message (char *addressee, char *text, char *id, char *presult, size_t result_size)
 {
-	aprs_message_t *p = (aprs_object_t *) presult;
+	aprs_message_t *p = (aprs_message_t *) presult;
 	int n;
 
 	p->dti = ':';
