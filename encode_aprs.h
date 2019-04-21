@@ -14,3 +14,4 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 		float freq, float tone, float offset, char *comment,
 		char *presult, size_t result_size);
 
+int encode_message (char *addressee, char *text, char *id, char *presult, size_t result_size);

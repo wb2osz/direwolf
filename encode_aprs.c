@@ -759,6 +759,63 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
 } /* end encode_object */
 
 
+
+/*------------------------------------------------------------------
+ *
+ * Name:        encode_message
+ *
+ * Purpose:     Construct info part for APRS "message" format.
+ *
+ * Inputs:      addressee	- Addressed to, up to 9 characters.
+ *		text		- Text part of the message.
+ *		id		- Identifier, 0 to 5 characters.
+ *		result_size 	- Ammount of space for result, provided by
+ *				  caller, to avoid buffer overflow.
+ *
+ * Outputs:	presult	- Stored here.
+ *
+ * Returns:     Number of characters in result.
+ *
+ * Description:	
+ *
+ *----------------------------------------------------------------*/
+
+
+typedef struct aprs_message_s {
+	    char dti;			/* : Data Type Indicator */					
+	    char addressee[9];		/*   Fixed width 9 characters. */
+	    char sep;			/* : separator */	
+	    char text;
+	} aprs_message_t;
+
+int encode_message (char *addressee, char *text, char *id, char *presult, size_t result_size)
+{
+	aprs_message_t *p = (aprs_object_t *) presult;
+	int n;
+
+	p->dti = ':';
+
+	memset (p->addressee, ' ', sizeof(p->addressee));
+	n = strlen(addressee);
+	if (n > (int)(sizeof(p->addressee))) n = sizeof(p->addressee);
+	memcpy (p->addressee, addressee, n);
+
+	p->sep = ':';
+	p->text = '\0';
+
+	strlcat (presult, text, result_size);
+	if (strlen(id) > 0) {
+	  strlcat (presult, "{", result_size);
+	  strlcat (presult, id, result_size);
+	}
+
+	return (strlen(presult));
+
+} /* end encode_message */
+
+
+
+
 /*------------------------------------------------------------------
  *
  * Name:        main
@@ -767,7 +824,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
  *
  * Description:	Just a smattering, not an organized test.
  *
- * 		$ rm a.exe ; gcc -DEN_MAIN encode_aprs.c latlong.c textcolor.c ; ./a.exe
+ * 		$ rm a.exe ; gcc -DEN_MAIN encode_aprs.c latlong.c textcolor.c misc.a ; ./a.exe
  *
  *----------------------------------------------------------------*/
 
@@ -881,9 +938,35 @@ int main (int argc, char *argv[])
 	  exit (EXIT_FAILURE);
 	}
 
+
+/*********** Message. ***********/
+
+
+	encode_message ("N2GH", "some stuff", "", result, sizeof(result));
+	dw_printf ("%s\n", result);
+	if (strcmp(result, ":N2GH     :some stuff") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
+
+
+	encode_message ("N2GH", "other stuff", "12345", result, sizeof(result));
+	dw_printf ("%s\n", result);
+	if (strcmp(result, ":N2GH     :other stuff{12345") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
+
+
+	encode_message ("WB2OSZ-123", "other stuff", "12345", result, sizeof(result));
+	dw_printf ("%s\n", result);
+	if (strcmp(result, ":WB2OSZ-12:other stuff{12345") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
+
+
+	if (errors != 0) {
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("Encode APRS test FAILED with %d errors.\n", errors);
+	  exit (EXIT_FAILURE);
+	}
+
 	text_color_set (DW_COLOR_REC);
 	dw_printf ("Encode APRS test PASSED with no errors.\n");
 	exit (EXIT_SUCCESS);
+	
 
 }  /* end main */
 
