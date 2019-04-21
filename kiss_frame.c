@@ -539,8 +539,6 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	      kissnet_copy (kiss_msg, kiss_len, port, cmd, client);
 	    }
 
-	    /* Special hack - Discard apparently bad data from Linux AX25. */
-
 	    /* Note July 2017: There is a variant of of KISS, called SMACK, that assumes */
 	    /* a TNC can never have more than 8 ports.  http://symek.de/g/smack.html */
 	    /* It uses the MSB to indicate that a checksum is added.  I wonder if this */
@@ -580,27 +578,24 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 //	This workaround seems sound to me, though, so perhaps this is just a documentation issue.
 
 
-	    if (kiss_len > 16 &&
-	        (port == 2 || port == 8) &&
-		 kiss_msg[1] == 'Q' << 1 &&
-		 kiss_msg[2] == 'S' << 1 &&
-		 kiss_msg[3] == 'T' << 1 &&
-		 kiss_msg[4] == ' ' << 1 &&
-		 kiss_msg[15] == 3 &&
-		 kiss_msg[16] == 0xcd) {
-	        
-	      if (debug) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Special case - Drop packets which appear to be in error.\n");
-	      }
-	      return;
-	    }
-	
+// Would it make sense to implement SMACK?  I don't think so.
+// Adding a checksum to the KISS data offers no benefit because it is very reliable.
+// It violates the original protocol specification which states that 16 ports (radio channels) are possible.
+// SMACK imposes a limit of 8.  That limit might have been OK back in 1991 but not now.
+// There are people using more than 8 radio channels (using SDR not traditional radios) with direwolf.
+
+
 	    /* Verify that the port (channel) number is valid. */
 
 	    if (port < 0 || port >= MAX_CHANS || ! save_audio_config_p->achan[port].valid) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", port);
+	      dw_printf ("\n");
+	      dw_printf ("Are you using AX.25 for Linux?  It might be trying to use a modified\n");
+	      dw_printf ("version of KISS which uses the port field differently than the\n");
+	      dw_printf ("original KISS protocol specification.  The solution might be to use\n");
+	      dw_printf ("a command like \"kissparms -c 1 -p radio\" to set CRC none mode.\n");
+	      dw_printf ("\n");
               text_color_set(DW_COLOR_DEBUG);
 	      kiss_debug_print (FROM_CLIENT, NULL, kiss_msg, kiss_len);
 	      return;
