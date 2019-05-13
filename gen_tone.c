@@ -164,7 +164,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 
 	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	  if (audio_config_p->achan[chan].valid) {
+	  if (audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
 
 	    int a = ACHAN2ADEV(chan);
 
@@ -291,8 +291,12 @@ void tone_gen_put_bit (int chan, int dat)
 	int a = ACHAN2ADEV(chan);	/* device for channel. */
 
 	assert (save_audio_config_p != NULL);
-	assert (save_audio_config_p->achan[chan].valid);
 
+	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid channel %d for tone generation.\n", chan);
+	  return;
+	}
 
         if (dat < 0) { 
 	  /* Hack to test receive PLL recovery. */

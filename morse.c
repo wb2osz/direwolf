@@ -312,7 +312,12 @@ static void morse_tone (int chan, int tu, int wpm) {
 
 	int f1_change_per_sample;  // How much to advance phase for each audio sample.
 
-	assert (save_audio_config_p->achan[chan].valid);
+
+	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid channel %d for sending Morse Code.\n", chan);
+	  return;
+	}
 
 	tone_phase = 0;
 
@@ -360,7 +365,11 @@ static void morse_quiet (int chan, int tu, int wpm) {
 	int nsamples;
 	int j;
 
-	assert (save_audio_config_p->achan[chan].valid);
+	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid channel %d for sending Morse Code.\n", chan);
+	  return;
+	}
 
 	nsamples = (int) ((TIME_UNITS_TO_MS(tu,wpm) * (float)save_audio_config_p->adev[a].samples_per_sec / 1000.) + 0.5);
 
@@ -395,7 +404,11 @@ static void morse_quiet_ms (int chan, int ms) {
 	int nsamples;
 	int j;
 
-	assert (save_audio_config_p->achan[chan].valid);
+	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Invalid channel %d for sending Morse Code.\n", chan);
+	  return;
+	}
 
 	nsamples = (int) ((ms * (float)save_audio_config_p->adev[a].samples_per_sec / 1000.) + 0.5);
 

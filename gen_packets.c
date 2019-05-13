@@ -183,7 +183,7 @@ int main(int argc, char **argv)
           modem.achan[chan].baud = DEFAULT_BAUD;                        /* -b option */
 	}
 
-	modem.achan[0].valid = 1;
+	modem.achan[0].medium = MEDIUM_RADIO;
 
 
 /*
@@ -402,7 +402,7 @@ int main(int argc, char **argv)
             case '2':				/* -2 for 2 channels of sound */
   
               modem.adev[0].num_channels = 2;
-	      modem.achan[1].valid = 1;
+	      modem.achan[1].medium = MEDIUM_RADIO;
               text_color_set(DW_COLOR_INFO); 
               dw_printf("2 channels of sound rather than 1.\n");
               break;

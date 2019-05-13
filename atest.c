@@ -564,8 +564,10 @@ int main (int argc, char *argv[])
 	my_audio_config.adev[0].bits_per_sample = format.wbitspersample;
  	my_audio_config.adev[0].num_channels = format.nchannels;
 
-	my_audio_config.achan[0].valid = 1;
-	if (format.nchannels == 2) my_audio_config.achan[1].valid = 1;
+	my_audio_config.achan[0].medium = MEDIUM_RADIO;
+	if (format.nchannels == 2) {
+	  my_audio_config.achan[1].medium = MEDIUM_RADIO;
+	}
 
 	text_color_set(DW_COLOR_INFO);
 	dw_printf ("%d samples per second.  %d bits per sample.  %d audio channels.\n",

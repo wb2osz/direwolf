@@ -1422,47 +1422,72 @@ static THREAD_F cmd_listen_thread (void *arg)
 		// We can have gaps in the numbering.
 		// I wonder what applications will think about that.
 
-#if 1
 		// No other place cares about total number.
 
 		count = 0;
 		for (j=0; j<MAX_CHANS; j++) {
-	 	  if (save_audio_config_p->achan[j].valid) {
+	          if (save_audio_config_p->achan[j].medium == MEDIUM_RADIO ||
+	              save_audio_config_p->achan[j].medium == MEDIUM_IGATE ||
+	              save_audio_config_p->achan[j].medium == MEDIUM_NETTNC) {
 		    count++;
 		  }
 		}
 		snprintf (reply.info, sizeof(reply.info), "%d;", count);
 
 		for (j=0; j<MAX_CHANS; j++) {
-	 	  if (save_audio_config_p->achan[j].valid) {
-		    char stemp[100];
-		    int a = ACHAN2ADEV(j);
-		    // If I was really ambitious, some description could be provided.
-		    static const char *names[8] = { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth" };
 
-		    if (save_audio_config_p->adev[a].num_channels == 1) {
-		      snprintf (stemp, sizeof(stemp), "Port%d %s soundcard mono;", j+1, names[a]);
-		      strlcat (reply.info, stemp, sizeof(reply.info));
-		    }
-		    else {
-		      snprintf (stemp, sizeof(stemp), "Port%d %s soundcard %s;", j+1, names[a], j&1 ? "right" : "left");
-		      strlcat (reply.info, stemp, sizeof(reply.info));
-		    }
-		  }
-		}
+	          switch (save_audio_config_p->achan[j].medium) {
 
-#else
-		if (num_channels == 1) {
-		  snprintf (reply.info, sizeof(reply.info), "1;Port1 Single channel;");
-		}
-		else {
-		  snprintf (reply.info, sizeof(reply.info), "2;Port1 Left channel;Port2 Right Channel;");
-		}
-#endif
+	            case MEDIUM_RADIO:
+	              {
+		        char stemp[100];
+		        int a = ACHAN2ADEV(j);
+		        // If I was really ambitious, some description could be provided.
+		        static const char *names[8] = { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth" };
+
+		        if (save_audio_config_p->adev[a].num_channels == 1) {
+		          snprintf (stemp, sizeof(stemp), "Port%d %s soundcard mono;", j+1, names[a]);
+		          strlcat (reply.info, stemp, sizeof(reply.info));
+		        }
+		        else {
+		          snprintf (stemp, sizeof(stemp), "Port%d %s soundcard %s;", j+1, names[a], j&1 ? "right" : "left");
+		          strlcat (reply.info, stemp, sizeof(reply.info));
+		        }
+	              }
+	              break;
+
+	            case MEDIUM_IGATE:
+	              {
+		        char stemp[100];
+		        snprintf (stemp, sizeof(stemp), "Port%d Internet Gateway;", j+1);
+		        strlcat (reply.info, stemp, sizeof(reply.info));
+	              }
+		      break;
+
+	            case MEDIUM_NETTNC:
+	              {
+	                // could elaborate with hostname, etc.
+		        char stemp[100];
+		        snprintf (stemp, sizeof(stemp), "Port%d Network TNC;", j+1);
+		        strlcat (reply.info, stemp, sizeof(reply.info));
+	              }
+	              break;
+
+	            default:
+	              {
+	                // could elaborate with hostname, etc.
+		        char stemp[100];
+		        snprintf (stemp, sizeof(stemp), "Port%d INVALID CHANNEL;", j+1);
+		        strlcat (reply.info, stemp, sizeof(reply.info));
+	              }
+	              break;
+
+		  }  // switch
+		}  // for each channel
+
 	        reply.hdr.data_len_NETLE = host2netle(strlen(reply.info) + 1);
 
 	        send_to_client (client, &reply);
-
 	      }
 	      break;
 
@@ -1688,7 +1713,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int chan = cmd.hdr.portx;
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].valid) {
+	        // Connected mode can only be used with internal modems.
+
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
 		  ok = 1;
 	          dlq_register_callsign (cmd.hdr.call_from, chan, client);
 	        }
@@ -1715,7 +1742,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        int chan = cmd.hdr.portx;
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].valid) {
+	        // Connected mode can only be used with internal modems.
+
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
 	          dlq_unregister_callsign (cmd.hdr.call_from, chan, client);
 	        }
 		else {

@@ -586,8 +586,9 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 
 
 	    /* Verify that the port (channel) number is valid. */
+	    /* Any sort of medium should be OK here. */
 
-	    if (port < 0 || port >= MAX_CHANS || ! save_audio_config_p->achan[port].valid) {
+	    if (port < 0 || port >= MAX_CHANS || save_audio_config_p->achan[port].medium == MEDIUM_NONE) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", port);
 	      dw_printf ("\n");

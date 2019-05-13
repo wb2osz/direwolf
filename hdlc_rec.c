@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <string.h>
 
+//#include "tune.h"
 #include "demod.h"
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
@@ -46,7 +47,6 @@
 
 
 //#define TEST 1				/* Define for unit testing. */
-
 
 //#define DEBUG3 1				/* monitor the data detect signal. */
 
@@ -142,7 +142,7 @@ void hdlc_rec_init (struct audio_s *pa)
 	for (ch = 0; ch < MAX_CHANS; ch++)
 	{
 
-	  if (pa->achan[ch].valid) {
+	  if (pa->achan[ch].medium == MEDIUM_RADIO) {
 
 	    num_subchan[ch] = pa->achan[ch].num_subchan;
 
@@ -230,12 +230,15 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 
 	  dbit = (descram == H->prev_descram);
 	  H->prev_descram = descram;			
-	  H->prev_raw = raw;	}
+	  H->prev_raw = raw;
+	}
 	else {
 
 	  dbit = (raw == H->prev_raw);
+
 	  H->prev_raw = raw;
 	}
+
 
 /*
  * Octets are sent LSB first.
@@ -289,9 +292,9 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 
 
 	//if (H->flag4_det == 0x7e7e7e7e) {
-	if ((H->flag4_det & 0xffffff00) == 0x7e7e7e00) {	
-	//if ((H->flag4_det & 0xffff0000) == 0x7e7e0000) {	
-
+	if ((H->flag4_det & 0xffffff00) == 0x7e7e7e00) {		// three seems good
+	//if ((H->flag4_det & 0xffff0000) == 0x7e7e0000) {		// two in a row
+	//if ((H->flag4_det & 0xff000000) == 0x7e000000) {		// single flag
 	  if ( ! H->data_detect) {
 	    H->data_detect = 1;
 	    dcd_change (chan, subchan, slice, 1);

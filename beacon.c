@@ -183,7 +183,8 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 
 	  if (chan < 0) chan = 0;	/* For IGate, use channel 0 call. */
 
-	  if (g_modem_config_p->achan[chan].valid) {
+	  if (g_modem_config_p->achan[chan].medium == MEDIUM_RADIO ||
+	      g_modem_config_p->achan[chan].medium == MEDIUM_NETTNC) {
 
 	    if (strlen(g_modem_config_p->achan[chan].mycall) > 0 &&
 			 strcasecmp(g_modem_config_p->achan[chan].mycall, "N0CALL") != 0 &&

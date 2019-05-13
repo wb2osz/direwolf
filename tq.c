@@ -148,7 +148,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	for (c = 0; c < MAX_CHANS; c++) {
 
-	  if (audio_config_p->achan[c].valid) {
+	  if (audio_config_p->achan[c].medium == MEDIUM_RADIO) {
 
 	    wake_up_event[c] = CreateEvent (NULL, 0, 0, NULL);
 
@@ -167,7 +167,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	  xmit_thread_is_waiting[c] = 0;
 
-	  if (audio_config_p->achan[c].valid) {
+	  if (audio_config_p->achan[c].medium == MEDIUM_RADIO) {
 	    err = pthread_cond_init (&(wake_up_cond[c]), NULL);
 	    if (err != 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -247,11 +247,15 @@ void tq_append (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium == MEDIUM_NONE) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
 	  dw_printf ("This is probably a client application error, not a problem with direwolf.\n");
-	  dw_printf ("AX.25 for Linux is known to transmit on channels 2 & 8 sometimes when it shouldn't.\n");
+	  dw_printf ("Are you using AX.25 for Linux?  It might be trying to use a modified\n");
+	  dw_printf ("version of KISS which uses the port field differently than the\n");
+	  dw_printf ("original KISS protocol specification.  The solution might be to use\n");
+	  dw_printf ("a command like \"kissparms -c 1 -p radio\" to set CRC none mode.\n");
+	  dw_printf ("\n");
 	  ax25_delete(pp);
 	  return;
 	}
@@ -447,9 +451,13 @@ void lm_data_request (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
+	  dw_printf ("Connected packet mode is allowed only with internal modems.\n");
+	  dw_printf ("Why aren't external KISS modems allowed?  See\n");
+	  dw_printf ("Why-is-9600-only-twice-as-fast-as-1200.pdf for explanation.\n");
 	  ax25_delete(pp);
 	  return;
 	}
@@ -600,9 +608,14 @@ void lm_seize_request (int chan)
 	dw_printf ("lm_seize_request (chan=%d)\n", chan);
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || ! save_audio_config_p->achan[chan].valid) {
+
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
+	  dw_printf ("Connected packet mode is allowed only with internal modems.\n");
+	  dw_printf ("Why aren't external KISS modems allowed?  See\n");
+	  dw_printf ("Why-is-9600-only-twice-as-fast-as-1200.pdf for explanation.\n");
 	  return;
 	}
 

@@ -53,6 +53,13 @@ typedef enum retry_e {
 		RETRY_INVERT_TWO_SEP=4,
 		RETRY_MAX = 5}  retry_t;
 
+// Type of communication medium associated with the channel.
+
+enum medium_e { MEDIUM_NONE = 0,	// Channel is not valid for use.
+		MEDIUM_RADIO,		// Internal modem for radio.
+		MEDIUM_IGATE,		// Access IGate as ordinary channel.
+		MEDIUM_NETTNC };	// Remote network TNC.  (possible future)
+
 
 typedef enum sanity_e { SANITY_APRS, SANITY_AX25, SANITY_NONE } sanity_t;
 			 
@@ -102,19 +109,31 @@ struct audio_s {
 					/* Command line option uses "strftime" format string. */
 
 
-	/* Properties for each audio channel, common to receive and transmit. */
+	/* Properties for each channel, common to receive and transmit. */
 	/* Can be different for each radio channel. */
+
+	/* originally a "channel" was always connected to an internal modem. */
+	/* In version 1.6, this is generalized so that a channel (as seen by client application) */
+	/* can be connected to something else.  Initially, this will allow application */
+	/* access to the IGate.  Later we might have network TNCs or other internal functions. */
 
 
 	struct achan_param_s {
 
-	    int valid;			/* Is this channel valid?  */
+	    // Originally there was a boolean, called "valid", to indicate that the
+	    // channel is valid.  This has been replaced with the new "medium" which
+	    // will allow channels to correspond to things other than internal modems.
+
+	    enum medium_e medium;	// MEDIUM_NONE for invalid.
+					// MEDIUM_RADIO for internal modem.  (only possibility earlier)
+					// MEDIUM_IGATE allows application access to IGate.
+
 
 	    char mycall[AX25_MAX_ADDR_LEN];      /* Call associated with this radio channel. */
                                 	/* Could all be the same or different. */
 
 
-	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_QPSK, MODEM_8PSK, MODEM_OFF } modem_type;
+	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_QPSK, MODEM_8PSK, MODEM_OFF, MODEM_16_QAM, MODEM_64_QAM } modem_type;
 
 					/* Usual AFSK. */
 					/* Baseband signal. Not used yet. */

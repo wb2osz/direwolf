@@ -24,13 +24,14 @@
  *
  * Purpose:   	Main program for "Dire Wolf" which includes:
  *			
- *			AFSK modem using the "sound card."
+ *			Various DSP modems using the "sound card."
  *			AX.25 encoder/decoder.
  *			APRS data encoder / decoder.
  *			APRS digipeater.
  *			KISS TNC emulator.
  *			APRStt (touch tone input) gateway
  *			Internet Gateway (IGate)
+ *			Ham Radio of Things - IoT with Ham Radio
  *		
  *
  *---------------------------------------------------------------*/
@@ -630,7 +631,7 @@ int main (int argc, char *argv[])
 	if (n_opt != 0) {
 	  audio_config.adev[0].num_channels = n_opt;
 	  if (n_opt == 2) {
-	    audio_config.achan[1].valid = 1;
+	    audio_config.achan[1].medium = MEDIUM_RADIO;
 	  }
 	}
 
