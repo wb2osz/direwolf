@@ -280,6 +280,8 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
  *		This avoids overshoot, ringing, and adding more jitter.
  *		Alternating bits come out has sine wave of baud/2 Hz.
  *
+ * Version 1.6:	MFJ-2400 compatibility for V.26.
+ *
  *--------------------------------------------------------------------*/
 
 static const int gray2phase_v26[4] = {0, 1, 3, 2};
@@ -304,6 +306,8 @@ void tone_gen_put_bit (int chan, int dat)
 	  dat = 0; 
 	} 
 
+// TODO: change to switch instead of if if if
+
 	if (save_audio_config_p->achan[chan].modem_type == MODEM_QPSK) {
 
 	  int dibit;
@@ -324,7 +328,9 @@ void tone_gen_put_bit (int chan, int dat)
 
 	  symbol = gray2phase_v26[dibit];
 	  tone_phase[chan] += symbol * PHASE_SHIFT_90;
-
+	  if (save_audio_config_p->achan[chan].v26_alternative == V26_B) {
+	    tone_phase[chan] += PHASE_SHIFT_45;
+	  }
 	  bit_count[chan]++;
 	}
 

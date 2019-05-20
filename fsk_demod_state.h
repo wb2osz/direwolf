@@ -28,6 +28,8 @@ struct demodulator_state_s
  */
 	enum modem_t modem_type;		// MODEM_AFSK, MODEM_8PSK, etc.
 
+	enum v26_e v26_alt;			// Which alternative when V.26.
+
 	char profile;			// 'A', 'B', etc.	Upper case.
 					// Only needed to see if we are using 'F' to take fast path.
 
@@ -145,6 +147,7 @@ struct demodulator_state_s
 
 	float pre_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
+
 /*
  * Kernel for the mark and space detection filters.
  */
@@ -226,6 +229,7 @@ struct demodulator_state_s
 	float m_peak, s_peak;
 	float m_valley, s_valley;
 	float m_amp_prev, s_amp_prev;
+
 
 /*
  * For the PLL and data bit timing.

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -164,6 +164,9 @@ int main(int argc, char **argv)
 	int chan;
 	int experiment = 0;
 
+	int g_opt = 0;
+	int j_opt = 0;
+	int J_opt = 0;
 
 /*
  * Set up default values for the modem.
@@ -215,7 +218,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gm:s:a:b:B:r:n:o:z:82M:X",
+          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:o:z:82M:X",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -310,11 +313,17 @@ int main(int argc, char **argv)
 
             case 'g':				/* -g for g3ruh scrambling */
 
-	      // FIXME:  order dependent.  -g must come after -B.
+	      g_opt = 1;
+              break;
 
-              modem.achan[0].modem_type = MODEM_SCRAMBLE;
-              text_color_set(DW_COLOR_INFO); 
-              dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
+            case 'j':				/* -j V.26 compatible with earlier direwolf. */
+
+	      j_opt = 1;
+              break;
+
+            case 'J':				/* -J V.26 compatible with MFJ-2400. */
+
+	      J_opt = 1;
               break;
 
             case 'm':				/* -m for Mark freq */
@@ -449,6 +458,41 @@ int main(int argc, char **argv)
           }
 	}
 
+// These must be processed after -B option.
+
+	if (g_opt) {			/* -g for g3ruh scrambling */
+
+              modem.achan[0].modem_type = MODEM_SCRAMBLE;
+              text_color_set(DW_COLOR_INFO);
+              dw_printf ("Using G3RUH mode regardless of bit rate.\n");
+	}
+
+	if (j_opt) {			/* -j V.26 compatible with earlier direwolf. */
+
+	      modem.achan[0].v26_alternative = V26_A;
+              modem.achan[0].modem_type = MODEM_QPSK;
+              modem.achan[0].mark_freq = 0;
+              modem.achan[0].space_freq = 0;
+	      modem.achan[0].baud = 2400;
+	}
+
+	if (J_opt) {			/* -J V.26 compatible with MFJ-2400. */
+
+	      modem.achan[0].v26_alternative = V26_B;
+              modem.achan[0].modem_type = MODEM_QPSK;
+              modem.achan[0].mark_freq = 0;
+              modem.achan[0].space_freq = 0;
+	      modem.achan[0].baud = 2400;
+	}
+
+	if (modem.achan[0].modem_type == MODEM_QPSK &&
+	    modem.achan[0].v26_alternative == V26_UNSPECIFIED) {
+
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("ERROR: Either -j or -J must be specified when using 2400 bps QPSK.\n");
+          usage (argv);
+          exit (1);
+	}
 
 /*
  * Open the output file.
@@ -689,6 +733,8 @@ static void usage (char **argv)
 	dw_printf ("  -b <number>   Bits / second for data.  Default is %d.\n", DEFAULT_BAUD);
 	dw_printf ("  -B <number>   Bits / second for data.  Proper modem selected for 300, 1200, 2400, 4800, 9600.\n");
 	dw_printf ("  -g            Scrambled baseband rather than AFSK.\n");
+	dw_printf ("  -j            2400 bps QPSK compatible with direwolf <= 1.5.\n");
+	dw_printf ("  -J            2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("  -m <number>   Mark frequency.  Default is %d.\n", DEFAULT_MARK_FREQ);
 	dw_printf ("  -s <number>   Space frequency.  Default is %d.\n", DEFAULT_SPACE_FREQ);
 	dw_printf ("  -r <number>   Audio sample Rate.  Default is %d.\n", DEFAULT_SAMPLES_PER_SEC);

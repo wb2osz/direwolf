@@ -18,7 +18,7 @@
 
 #include "direwolf.h"		/* for MAX_CHANS used throughout the application. */
 #include "ax25_pad.h"		/* for AX25_MAX_ADDR_LEN */
-
+#include "version.h"
 				
 
 /*
@@ -141,6 +141,20 @@ struct audio_s {
 					/* Might try MFJ-2400 / CCITT v.26 / Bell 201 someday. */
 					/* No modem.  Might want this for DTMF only channel. */
 
+	    enum v26_e { V26_UNSPECIFIED=0, V26_A, V26_B } v26_alternative;
+
+					// Original implementaion used alternative A for 2400 bbps PSK.
+					// Years later, we discover that MFJ-2400 used alternative B.
+					// It's likely the others did too.
+					// For release 1.6, default to original style but print warning.
+					// Later default to MFJ compatible and still print warning if
+					// if user did not pick one explicitly.
+
+#if (MAJOR_VERSION > 1) || (MINOR_VERSION > 6)
+#define V26_DEFAULT V26_B
+#else
+#define V26_DEFAULT V26_A
+#endif
 
 	    enum dtmf_decode_t { DTMF_DECODE_OFF, DTMF_DECODE_ON } dtmf_decode; 
 

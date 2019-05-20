@@ -32,12 +32,36 @@ Signal amplitude in range of 0-200%.  Default 50.  Note that 100% is corresponds
 Bits / second for data.  Default is 1200.
 
 .TP
-.BI  "-B " "n"
-Bits / second for data.  Proper modem selected for 300, 1200, 9600.
+.BI "-B " "n"
+Data rate in bits/sec for first channel.  Standard values are 300, 1200, 2400, 4800, 9600.
+.PD 0
+.RS
+.RS
+300 bps defaults to AFSK tones of 1600 & 1800.
+.P
+1200 bps uses AFSK tones of 1200 & 2200.
+.P
+2400 bps uses QPSK based on V.26 standard.
+.P
+4800 bps uses 8PSK based on V.27 standard.
+.P
+9600 bps and up uses K9NG/G3RUH standard.
+.RE
+.RE
+.PD
 
 .TP
-.BI  "-g"
-Scrambled baseband rather than AFSK.
+.BI "-g " 
+Force G3RUH modem regardless of data rate.
+
+.TP
+.BI "-j " 
+2400 bps QPSK compatible with Dire Wolf <= 1.5.
+
+.TP
+.BI "-J " 
+2400 bps QPSK compatible with MFJ-2400.
+
 
 .TP
 .BI  "-m " "n"
@@ -112,5 +136,5 @@ Read message from stdin and put quarter volume sound into the file x.wav.  Decod
 .SH SEE ALSO
 More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
 
-Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+Applications in this package: aclients, atest, cm108, decode_aprs, direwolf, gen_packets, kissutil, ll2utm, log2gpx, text2tt, tt2text, utm2ll
 

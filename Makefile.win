@@ -277,7 +277,7 @@ strlcat.o : misc/strlcat.c
 
 # Combine some unit tests into a single regression sanity check.
 
-check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400 check-modem2400-g check-modem4800
+check : dtest ttest tttexttest pftest tlmtest lltest enctest kisstest pad2test xidtest dtmftest check-modem1200 check-modem300 check-modem9600 check-modem19200 check-modem2400-a check-modem2400-b check-modem2400-g check-modem4800
 
 # Can we encode and decode at popular data rates?
 # Verify that single bit fixup increases the count.
@@ -324,13 +324,21 @@ check-modem19200 : gen_packets atest
 	sleep 1
 	rm test19.wav
 
-check-modem2400 : gen_packets atest
-	gen_packets -B2400 -n 100 -o test24.wav
+check-modem2400-a : gen_packets atest
+	gen_packets -B2400 -j -n 100 -o test24-a.wav
 	sleep 1
-	atest -B2400 -F0 -L70 -G78 test24.wav
-	atest -B2400 -F1 -L80 -G87 test24.wav
+	atest -B2400 -j -F0 -L76 -G80 test24-a.wav
+	atest -B2400 -j -F1 -L84 -G88 test24-a.wav
 	sleep 1
-	rm test24.wav
+	rm test24-a.wav
+
+check-modem2400-b : gen_packets atest
+	gen_packets -B2400 -J -n 100 -o test24-b.wav
+	sleep 1
+	atest -B2400 -J -F0 -L79 -G83 test24-b.wav
+	atest -B2400 -J -F1 -L87 -G91 test24-b.wav
+	sleep 1
+	rm test24-b.wav
 
 check-modem2400-g : gen_packets atest
 	gen_packets -B2400 -g -n 100 -o test24-g.wav
@@ -518,8 +526,8 @@ testagc96 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c de
 		misc.a regex.a
 	rm -f atest96.exe
 	$(CC) $(CFLAGS) -o atest96 $^
-	./atest96 -B 9600 ../walkabout9600c.wav | grep "packets decoded in" >atest.out
-	#./atest96 -B 9600 ../walkabout9600c.wav noisy96.wav zzz16.wav zzz16.wav zzz16.wav zzz8.wav zzz8.wav zzz8.wav | grep "packets decoded in" >atest.out
+	./atest96 -B 9600 ../walkabout9600c.wav noisy96.wav zzz16.wav zzz16.wav zzz16.wav zzz8.wav zzz8.wav zzz8.wav | grep "packets decoded in" >atest.out
+	#./atest96 -B 9600 ../walkabout9600c.wav | grep "packets decoded in" >atest.out
 	#./atest96 -B 9600 zzz16.wav zzz8.wav | grep "packets decoded in" >atest.out
 	#./atest96 -B 9600 noisy96.wav | grep "packets decoded in" >atest.out
 	#./atest96 -B 9600 19990303_0225_9600_8bis_22kHz.wav | grep "packets decoded in" >atest.out
@@ -536,8 +544,20 @@ testagc24 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c de
 		misc.a regex.a
 	rm -f atest24.exe
 	sleep 1
-	$(CC) $(CFLAGS) -o atest24 $^
+	$(CC) $(CFLAGS) -o atest24mfj $^
 	./atest24 -B 2400 test2400.wav | grep "packets decoded in" >atest.out
+	echo " " > tune.h
+
+testagc24mfj : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \
+		dsp.o hdlc_rec.o hdlc_rec2.o multi_modem.o \
+		rrbb.o fcs_calc.o ax25_pad.o decode_aprs.o \
+		dwgpsnmea.o dwgps.o serial_port.o latlong.o \
+		symbols.o tt_text.o textcolor.o telemetry.o dtime_now.o \
+		misc.a regex.a
+	rm -f atest24mfj.exe
+	sleep 1
+	$(CC) $(CFLAGS) -o atest24mfj $^
+	./atest24mfj -F 1 -B 2400 ../ref-doc/MFJ-2400-PSK/2k4_short.wav
 	echo " " > tune.h
 
 testagc48 : atest.c fsk_fast_filter.h tune.h demod.c demod_afsk.c demod_psk.c demod_9600.c \

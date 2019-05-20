@@ -15,6 +15,8 @@
 
 - "-g" option to force G3RUH mode for lower speeds where a different modem type may be the default.
 
+- 2400 bps compatibility with MFJ-2400.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** for details
+
 - "atest -h" will display the frame in hexadecimal for closer inspection.
 
 - Add support for Multi-GNSS NMEA sentences.

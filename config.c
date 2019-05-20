@@ -761,6 +761,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 								/* set to radio when corresponding */
 								/* audio device is defined. */
 	  p_audio_config->achan[channel].modem_type = MODEM_AFSK;			
+	  p_audio_config->achan[channel].v26_alternative = V26_UNSPECIFIED;
 	  p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;		/* -m option */
 	  p_audio_config->achan[channel].space_freq = DEFAULT_SPACE_FREQ;		/* -s option */
 	  p_audio_config->achan[channel].baud = DEFAULT_BAUD;			/* -b option */
@@ -1264,6 +1265,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *	*9		- Upsample ratio for G3RUH.
  *	[A-Z+-]+	- Letters, plus, minus for the demodulator "profile."
  *	g3ruh		- This modem type regardless of default for speed.
+ *	v26a or v26b	- V.26 alternative.  a=original, b=MFJ compatible
  */
 
 	  else if (strcasecmp(t, "MODEM") == 0) {
@@ -1538,6 +1540,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
                   p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
                   p_audio_config->achan[channel].mark_freq = 0;
                   p_audio_config->achan[channel].space_freq = 0;
+		}
+
+		else if (strcasecmp(t, "V26A") == 0 || 		/* Compatible with direwolf versions <= 1.5.  New in 1.6. */
+			 strcasecmp(t, "V26B") == 0) {		/* Compatible with MFJ-2400.  New in 1.6. */
+
+                  if (p_audio_config->achan[channel].modem_type != MODEM_QPSK ||
+		      p_audio_config->achan[channel].baud != 2400) {
+
+	            text_color_set(DW_COLOR_ERROR);
+                    dw_printf ("Line %d: %s option can only be used with 2400 bps PSK.\n", line, t);
+	            continue;
+		  }
+                  p_audio_config->achan[channel].v26_alternative = (strcasecmp(t, "V26A") == 0) ? V26_A : V26_B;
 		}
 
 		else {

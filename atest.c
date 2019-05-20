@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -182,7 +182,10 @@ static int sample_number = -1;		/* Sample number from the file. */
 
 static int B_opt = DEFAULT_BAUD;	// Bits per second.  Need to change all baud references to bps.
 static int g_opt = 0;			// G3RUH modem regardless of speed.
+static int j_opt = 0;			/* 2400 bps PSK compatible with direwolf <= 1.5 */
+static int J_opt = 0;			/* 2400 bps PSK compatible MFJ-2400 and maybe others. */
 static int h_opt = 0;			// Hexadecimal display of received packet.
+static char P_opt[16] = "";		// Demodulator profiles.
 
 
 int main (int argc, char *argv[])
@@ -218,49 +221,6 @@ int main (int argc, char *argv[])
 	my_audio_config.adev[0].num_channels = DEFAULT_NUM_CHANNELS;		
 	my_audio_config.adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	
 	my_audio_config.adev[0].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	
-
-	// Results v0.9: 
-	//
-	// fix_bits = 0 	971 packets, 69 sec
-	// fix_bits = SINGLE	990          64
-	// fix_bits = DOUBLE    992          65
-	// fix_bits = TRIPLE    992          67
-	// fix_bits = TWO_SEP   1004        476 
-
-	// Essentially no difference in time for those with order N time.
-	// Time increases greatly for the one with order N^2 time.
-
-
-	// Results: version 1.1, decoder C, my_audio_config.fix_bits = RETRY_MAX - 1
-	//
-	// 971 NONE
-	// +19 SINGLE
-	// +2  DOUBLE
-	// +12 TWO_SEP
-	// +3  REMOVE_MANY
-	// ----
-	// 1007 Total in 1008 sec.   More than twice as long as earlier version.
-
-	// Results: version 1.1, decoders ABC, my_audio_config.fix_bits = RETRY_MAX - 1
-	//
-	// 976 NONE
-	// +21  SINGLE
-	// +1   DOUBLE
-	// +22  TWO_SEP
-	// +1   MANY
-	// +3   REMOVE_MANY
-	// ----
-	// 1024 Total in 2042 sec.
-	// About 34 minutes of CPU time for a roughly 40 minute CD.
-	// Many computers wouldn't be able to keep up.
-
-	// The SINGLE and TWO_SEP techniques are the most effective.
-	// Should we reorder the enum values so that TWO_SEP
-	// comes after SINGLE?   That way "FIX_BITS 2" would 
-	// use the two most productive techniques and not waste
-	// time on the others.  People with plenty of CPU power
-	// to spare can still specify larger numbers for the other
-	// techniques with less return on investment.
 
 
 	for (channel=0; channel<MAX_CHANS; channel++) {
@@ -299,7 +259,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "B:P:D:U:gF:L:G:012h",
+          c = getopt_long(argc, argv, "B:P:D:U:gjJF:L:G:012h",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -316,10 +276,20 @@ int main (int argc, char *argv[])
 	      g_opt = 1;
               break;
 
+            case 'j':				/* -j V.26 compatible with earlier direwolf. */
+
+	      j_opt = 1;
+              break;
+
+            case 'J':				/* -J V.26 compatible with MFJ-2400. */
+
+	      J_opt = 1;
+              break;
+
 	    case 'P':				/* -P for modem profile. */
 
-	      dw_printf ("Demodulator profile set to \"%s\"\n", optarg);
-	      strlcpy (my_audio_config.achan[0].profiles, optarg, sizeof(my_audio_config.achan[0].profiles)); 
+	      // Wait until after other options processed.
+	      strlcpy (P_opt, optarg, sizeof(P_opt));
 	      break;	
 
 	    case 'D':				/* -D reduce sampling rate for lower CPU usage. */
@@ -353,7 +323,7 @@ int main (int argc, char *argv[])
 	      my_audio_config.achan[0].upsample = upsample;
 	      break;
 
-	    case 'F':				/* -D set "fix bits" level. */
+	    case 'F':				/* -F set "fix bits" level. */
 
 	      my_audio_config.achan[0].fix_bits = atoi(optarg);
 
@@ -411,7 +381,7 @@ int main (int argc, char *argv[])
     
 /*
  * Set modem type based on data rate.
- * (Could be overridden by -g later.)
+ * (Could be overridden by -g, -j, or -J later.)
  */
 	/*    300 implies 1600/1800 AFSK. */
 	/*    1200 implies 1200/2200 AFSK. */
@@ -476,6 +446,40 @@ int main (int argc, char *argv[])
           my_audio_config.achan[0].mark_freq = 0;
           my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
+	}
+
+/*
+ * We have two different incompatible flavors of V.26.
+ */
+	if (j_opt) {
+
+	  // V.26 compatible with earlier versions of direwolf.
+	  //   Example:   -B 2400 -j    or simply   -j
+
+	  my_audio_config.achan[0].v26_alternative = V26_A;
+          my_audio_config.achan[0].modem_type = MODEM_QPSK;
+          my_audio_config.achan[0].mark_freq = 0;
+          my_audio_config.achan[0].space_freq = 0;
+	  my_audio_config.achan[0].baud = 2400;
+	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
+	}
+	if (J_opt) {
+
+	  // V.26 compatible with MFJ and maybe others.
+	  //   Example:   -B 2400 -J     or simply   -J
+
+	  my_audio_config.achan[0].v26_alternative = V26_B;
+          my_audio_config.achan[0].modem_type = MODEM_QPSK;
+          my_audio_config.achan[0].mark_freq = 0;
+          my_audio_config.achan[0].space_freq = 0;
+	  my_audio_config.achan[0].baud = 2400;
+	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
+	}
+
+	// Needs to be after -B, -j, -J.
+	if (strlen(P_opt) > 0) {
+	  dw_printf ("Demodulator profile set to \"%s\"\n", P_opt);
+	  strlcpy (my_audio_config.achan[0].profiles, P_opt, sizeof(my_audio_config.achan[0].profiles));
 	}
 
 	memcpy (&my_audio_config.achan[1], &my_audio_config.achan[0], sizeof(my_audio_config.achan[0]));
@@ -879,11 +883,15 @@ static void usage (void) {
 	dw_printf ("        atest [ options ] wav-file-in\n");
 	dw_printf ("\n");
 	dw_printf ("        -B n   Bits/second  for data.  Proper modem automatically selected for speed.\n");
-	dw_printf ("               300 baud uses 1600/1800 Hz AFSK.\n");
-	dw_printf ("               1200 (default) baud uses 1200/2200 Hz AFSK.\n");
-	dw_printf ("               9600 baud uses K9NG/G2RUH standard.\n");
+	dw_printf ("               300 bps defaults to AFSK tones of 1600 & 1800.\n");
+	dw_printf ("               1200 bps uses AFSK tones of 1200 & 2200.\n");
+	dw_printf ("               2400 bps uses QPSK based on V.26 standard.\n");
+	dw_printf ("               4800 bps uses 8PSK based on V.27 standard.\n");
+	dw_printf ("               9600 bps and up uses K9NG/G3RUH standard.\n");
 	dw_printf ("\n");
-	dw_printf ("        -g     Force G3RUH modem rather rather than default for data rate.\n");
+	dw_printf ("        -g     Use G3RUH modem rather rather than default for data rate.\n");
+	dw_printf ("        -j     2400 bps QPSK compatible with direwolf <= 1.5.\n");
+	dw_printf ("        -J     2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("\n");
 	dw_printf ("        -D n   Divide audio sample rate by n.\n");
 	dw_printf ("\n");
@@ -894,8 +902,12 @@ static void usage (void) {
 	dw_printf ("               1 = Try to fix only a single bit.  \n");
 	dw_printf ("               more = Try modifying more bits to get a good CRC.\n");
 	dw_printf ("\n");
-	dw_printf ("        -P m   Select  the  demodulator  type such as A, B, C, D (default for 300 baud),\n");
-	dw_printf ("               E (default for 1200 baud), F, A+, B+, C+, D+, E+, F+.\n");
+	dw_printf ("        -L     Error if less than this number decoded.\n");
+	dw_printf ("\n");
+	dw_printf ("        -G     Error if greater than this number decoded.\n");
+	dw_printf ("\n");
+	dw_printf ("        -P m   Select  the  demodulator  type such as D (default for 300 bps),\n");
+	dw_printf ("               E+ (default for 1200 bps), PQRS for 2400 bps, etc.\n");
 	dw_printf ("\n");
 	dw_printf ("        -0     Use channel 0 (left) of stereo audio (default).\n");
 	dw_printf ("        -1     use channel 1 (right) of stereo audio.\n");
@@ -918,11 +930,11 @@ static void usage (void) {
 	dw_printf ("              bits per second.\n");
 	dw_printf ("\n");
 	dw_printf ("        atest 02_Track_2.wav\n");
-	dw_printf ("        atest -P C+ 02_Track_2.wav\n");
+	dw_printf ("        atest -P E- 02_Track_2.wav\n");
 	dw_printf ("        atest -F 1 02_Track_2.wav\n");
-	dw_printf ("        atest -P C+ -F 1 02_Track_2.wav\n");
+	dw_printf ("        atest -P E- -F 1 02_Track_2.wav\n");
 	dw_printf ("\n");
-	dw_printf ("              Try  different combinations of options to find the best decoding\n");
+	dw_printf ("              Try  different combinations of options to compare decoding\n");
 	dw_printf ("              performance.\n");
 
 	exit (1);

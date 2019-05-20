@@ -21,16 +21,45 @@ atest \- Decode AX.25 frames from an audio file.
 
 .SH OPTIONS
 
+
 .TP
-.BI  "-B " "n"
-Bits / second for data.  Proper modem selected for 300, 1200, 9600.
-300 baud uses 1600/1800 Hz AFSK.
-1200 (default) baud uses 1200/2200 Hz AFSK.
-9600 baud uses K9NG/G2RUH standard.
+.BI "-B " "n"
+Data rate in bits/sec.  Standard values are 300, 1200, 2400, 4800, 9600.
+.PD 0
+.RS
+.RS
+300 bps defaults to AFSK tones of 1600 & 1800.
+.P
+1200 bps uses AFSK tones of 1200 & 2200.
+.P
+2400 bps uses QPSK based on V.26 standard.
+.P
+4800 bps uses 8PSK based on V.27 standard.
+.P
+9600 bps and up uses K9NG/G3RUH standard.
+.RE
+.RE
+.PD
+
+.TP
+.BI "-g " 
+Force G3RUH modem regardless of data rate.
+
+.TP
+.BI "-j " 
+2400 bps QPSK compatible with Dire Wolf <= 1.5.
+
+.TP
+.BI "-J " 
+2400 bps QPSK compatible with MFJ-2400.
 
 .TP
 .BI  "-D " "n"
 Divide audio sample rate by n.
+
+.TP
+.BI  "-h " 
+Print frame contents as hexadecimal bytes.
 
 .TP
 .BI  "-F " "n"
@@ -40,8 +69,16 @@ Amount of effort to try fixing frames with an invalid CRC.
 more = Try modifying more bits to get a good CRC.
 
 .TP
+.BI  "-L " 
+Error if Less than this number decoded.
+
+.TP
+.BI  "-G " 
+Error if Greater than this number decoded.
+
+.TP
 .BI  "-P " "m"
-Select the demodulator type such as A, B, C, D (default for 300 baud), E (default for 1200 baud), F, A+, B+, C+, D+, E+, F+.
+Select the demodulator type such as D (default for 300 bps), E+ (default for 1200 bps), PQRS for 2400 bps, etc.
 
 
 
@@ -72,20 +109,20 @@ This generates and decodes 3 test files with 1200, 300, and 9600 bits per second
 .PD 0
 .B atest 02_Track_2.wav
 .P
-.B atest -P C+ 02_Track_2.wav
+.B atest -P E- 02_Track_2.wav
 .P
 .B atest -F 1 02_Track_2.wav
 .P
-.B atest -P C+ -F 1 02_Track_2.wav
+.B atest -P E- -F 1 02_Track_2.wav
 .PD
 .P
 .RS
-Try different combinations of options to find the best decoding performance.
+Try different combinations of options to compare decoding performance.
 .RE
 .P
 
 .SH SEE ALSO
 More detailed information is in the pdf files in /usr/local/share/doc/direwolf, or possibly /usr/share/doc/direwolf, depending on installation location.
 
-Applications in this package: aclients, atest, decode_aprs, direwolf, gen_packets, kissutil, ll2utm, log2gpx, text2tt, tt2text, utm2ll
+Applications in this package: aclients, atest, cm108, decode_aprs, direwolf, gen_packets, kissutil, ll2utm, log2gpx, text2tt, tt2text, utm2ll
 

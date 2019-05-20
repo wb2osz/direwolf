@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -201,6 +201,8 @@ int main (int argc, char *argv[])
 	int t_opt = 1;		/* Text color option. */				
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
 	int g_opt = 0;		/* G3RUH mode, ignoring default for speed. */				
+	int j_opt = 0;		/* 2400 bps PSK compatible with direwolf <= 1.5 */
+	int J_opt = 0;		/* 2400 bps PSK compatible MFJ-2400 and maybe others. */
 
 	int d_k_opt = 0;	/* "-d k" option for serial port KISS.  Can be repeated for more detail. */					
 	int d_n_opt = 0;	/* "-d n" option for Network KISS.  Can be repeated for more detail. */	
@@ -354,7 +356,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:gD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:",
+          c = getopt_long(argc, argv, "P:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -409,6 +411,16 @@ int main (int argc, char *argv[])
           case 'g':				/* -g G3RUH modem, overriding default mode for speed. */
 	 
 	    g_opt = 1;
+            break;
+
+          case 'j':				/* -j V.26 compatible with earlier direwolf. */
+
+	    j_opt = 1;
+            break;
+
+          case 'J':				/* -J V.26 compatible with MFJ-2400. */
+
+	    J_opt = 1;
             break;
 
 	  case 'P':				/* -P for modem profile. */
@@ -691,11 +703,34 @@ int main (int argc, char *argv[])
           audio_config.achan[0].space_freq = 0;
 	}
 
+	if (j_opt) {
+
+	  // V.26 compatible with earlier versions of direwolf.
+	  //   Example:   -B 2400 -j    or simply   -j
+
+	  audio_config.achan[0].v26_alternative = V26_A;
+          audio_config.achan[0].modem_type = MODEM_QPSK;
+          audio_config.achan[0].mark_freq = 0;
+          audio_config.achan[0].space_freq = 0;
+	  audio_config.achan[0].baud = 2400;
+	}
+	if (J_opt) {
+
+	  // V.26 compatible with MFJ and maybe others.
+	  //   Example:   -B 2400 -J     or simply   -J
+
+	  audio_config.achan[0].v26_alternative = V26_B;
+          audio_config.achan[0].modem_type = MODEM_QPSK;
+          audio_config.achan[0].mark_freq = 0;
+          audio_config.achan[0].space_freq = 0;
+	  audio_config.achan[0].baud = 2400;
+	}
+
+
 	audio_config.statistics_interval = a_opt;
 
 	if (strlen(P_opt) > 0) { 
 	  /* -P for modem profile. */
-	  /* TODO: Not yet documented.  Should probably since it is consistent with atest. */
 	  strlcpy (audio_config.achan[0].profiles, P_opt, sizeof(audio_config.achan[0].profiles)); 
 	}	
 
@@ -1293,6 +1328,9 @@ static void usage (char **argv)
 	dw_printf ("                     4800 bps uses 8PSK based on V.27 standard.\n");
 	dw_printf ("                     9600 bps and up uses K9NG/G3RUH standard.\n");
 	dw_printf ("    -g             Force G3RUH modem regardless of speed.\n");
+	dw_printf ("    -j             2400 bps QPSK compatible with direwolf <= 1.5.\n");
+	dw_printf ("    -J             2400 bps QPSK compatible with MFJ-2400.\n");
+	dw_printf ("    -P xxx         Modem Profiles.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2016  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 
 //#define DEBUG4 1	/* capture PSK demodulator output to log files */
 
+//#define DEBUG5 1	/* Print bit stream */
 
 
 /*------------------------------------------------------------------
@@ -63,8 +64,7 @@
  *			http://www.brazoriacountyares.org/winlink-collection/TNC%20manuals/Kantronics/2400_modem_operators_guide@rgf.pdf
  *
  *
- *		The MFJ and AEA both use the EXAR XR-2123 PSK modem chip.
- *		The Kantronics has a P423 ???
+ *		From what I'm able to gather, they all used the EXAR XR-2123 PSK modem chip.
  *
  *		Can't find the chip specs on the EXAR website so Google it.
  *
@@ -79,8 +79,8 @@
  *		"bis" and "ter" are from Latin for second and third.
  *		I used the "ter" version which has phase shifts of 0, 90, 180, and 270 degrees.
  *
- *		There are other references to an alternative B which uses other multiples of 45.
- *		The XR-2123 data sheet mentions only multiples of 90.  That's what I went with.
+ *		There are ealier references to an alternative B which uses other phase shifts offset
+ *		by another 45 degrees.
  *
  *		The XR-2123 does not perform the scrambling as specified in V.26 so I wonder if
  *		the vendors implemented it in software or just left it out.
@@ -161,6 +161,8 @@ static inline float my_atan2f (float y, float x)
  *
  * Inputs:   	modem_type	- MODEM_QPSK or MODEM_8PSK.
  *
+ *		v26_alt		- V26_A (classic) or V25_B (MFJ compatible)
+ *
  *		samples_per_sec	- Audio sample rate.
  *
  *		bps		- Bits per second.  
@@ -189,7 +191,7 @@ static inline float my_atan2f (float y, float x)
  *
  *----------------------------------------------------------------*/
 
-void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char profile, struct demodulator_state_s *D)
+void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_per_sec, int bps, char profile, struct demodulator_state_s *D)
 {
 	int correct_baud;	// baud is not same as bits/sec here!
 	int carrier_freq;
@@ -199,6 +201,8 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
 	memset (D, 0, sizeof(struct demodulator_state_s));
 
 	D->modem_type = modem_type;
+	D->v26_alt = v26_alt;
+
 	D->num_slicers = 1;		// Haven't thought about this yet.  Is it even applicable?
 	
 
@@ -209,6 +213,8 @@ void demod_psk_init (enum modem_t modem_type, int samples_per_sec, int bps, char
 #endif
 
 	if (modem_type == MODEM_QPSK) {
+
+	  assert (D->v26_alt != V26_UNSPECIFIED);
 
 	  correct_baud = bps / 2;
 	  // Originally I thought of scaling it to the data rate,
@@ -645,7 +651,16 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 	  id = ((int)((delta / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
 	  
 	  if (D->modem_type == MODEM_QPSK) {
-	    demod_phase_shift = ((id + 32) >> 6) & 0x3;
+#ifdef TUNE_PSKOFFSET
+	    demod_phase_shift = ((id + TUNE_PSKOFFSET) >> 6) & 0x3;
+#else
+	    if (D->v26_alt == V26_B) {
+	      demod_phase_shift = ((id + 2) >> 6) & 0x3;	// MFJ compatible
+	    }
+	    else {
+	      demod_phase_shift = ((id + 32) >> 6) & 0x3;	// Classic
+	    }
+#endif
 	  }
 	  else {
 	    demod_phase_shift = ((id + 16) >> 5) & 0x7;
@@ -671,25 +686,20 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 
 	  if (D->modem_type == MODEM_QPSK) {
 
-#if 1				// Speed up special case.		
-	    if (I > 0) {
-	      if (Q > 0)
-	        demod_phase_shift = 0;	/* 0 to 90 degrees, etc. */
-	      else
-	        demod_phase_shift = 1;
-	    }
-	    else {
-	      if (Q > 0)
-	        demod_phase_shift = 3;
-	      else
-	        demod_phase_shift = 2;
-	    }
-#else
-	    a = my_atan2f(I,Q);
+	    float a = my_atan2f(I,Q);
 	    int id = ((int)((a / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
 	    // 128 compensates for 180 degree phase shift due
 	    // to 1 1/2 carrier cycles per symbol period.
-	    demod_phase_shift = ((id + 128) >> 6) & 0x3;
+
+#ifdef TUNE_PSKOFFSET
+	    demod_phase_shift = ((id + TUNE_PSKOFFSET) >> 6) & 0x3;
+#else
+	    if (D->v26_alt == V26_B) {
+	      demod_phase_shift = ((id + 98) >> 6) & 0x3;	// MFJ compatible
+	    }
+	    else {
+	      demod_phase_shift = ((id + 128) >> 6) & 0x3;	// Classic
+	    }
 #endif
 	  }
 	  else {
@@ -752,7 +762,13 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 
 } /* end demod_psk_process_sample */
 
+
+#ifdef TUNE_GRAY
+TUNE_GRAY
+#else
 static const int phase_to_gray_v26[4] = {0, 1, 3, 2};	
+#endif
+
 static const int phase_to_gray_v27[8] = {1, 0, 2, 3, 7, 6, 4, 5};	
 
 
@@ -813,6 +829,9 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, 
 		a * 360 / (2*M_PI), delta * 360 / (2*M_PI), demod_bits, (gray >> 1) & 1, gray & 1);
 
 	    //dw_printf ("phaseshift=%d, bits= %d %d \n", demod_bits, (gray >> 1) & 1, gray & 1);
+#endif
+#if DEBUG5
+	    dw_printf ("%d\n%d\n", (gray >> 1) & 1, gray & 1);
 #endif
 	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, -1);
 	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, -1);

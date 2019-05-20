@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -94,7 +94,6 @@ static int sample_count[MAX_CHANS][MAX_SUBCHANS];
 
 int demod_init (struct audio_s *pa)
 {
-	//int j;
 	int chan;		/* Loop index over number of radio channels. */
 	char profile;
 	
@@ -520,6 +519,31 @@ int demod_init (struct audio_s *pa)
 
 	    case MODEM_QPSK:		// New for 1.4
 
+	      // In versions 1.4 and 1.5, V.26 "Alternative A" was used.
+	      // years later, I discover that the MFJ-2400 used "Alternative B."
+	      // It looks like the other two manufacturers use the same but we
+              // can't be sure until we find one for compatbility testing.
+
+	      // In version 1.6 we add a choice for the user.
+	      // If neither one was explicitly specified, print a message and take
+	      // a default.  My current thinking is that we default to direwolf <= 1.5
+	      // compatible for version 1.6 and MFJ compatible after that.
+
+	      if (save_audio_config_p->achan[chan].v26_alternative == V26_UNSPECIFIED) {
+
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Two incompatible versions of 2400 bps QPSK are now available.\n");
+	        dw_printf ("For compatbility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
+	        dw_printf ("For compatbility MFJ-2400 use 'V26B' modem option in config file.\n");
+	        dw_printf ("Command line options -j and -J can be used for channel 0.\n");
+	        dw_printf ("For more information, read the Dire Wolf User Guide and\n");
+	        dw_printf ("2400-4800-PSK-for-APRS-Packet-Radio.pdf.\n");
+	        dw_printf ("The default in this release could be different in a later release.\n");
+
+	        save_audio_config_p->achan[chan].v26_alternative = V26_DEFAULT;
+	      }
+
+
 // TODO: See how much CPU this takes on ARM and decide if we should have different defaults.
 
 	      if (strlen(save_audio_config_p->achan[chan].profiles) == 0) {
@@ -539,6 +563,12 @@ int demod_init (struct audio_s *pa)
 		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec);
 	      if (save_audio_config_p->achan[chan].decimate != 1)
 	        dw_printf (" / %d", save_audio_config_p->achan[chan].decimate);
+
+	      if (save_audio_config_p->achan[chan].v26_alternative == V26_B)
+	        dw_printf (", compatible with MFJ-2400");
+	      else
+	        dw_printf (", compatible with earlier direwolf");
+
 	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF)
 	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");
@@ -556,6 +586,7 @@ int demod_init (struct audio_s *pa)
 		//	save_audio_config_p->achan[chan].modem_type, profile);
 
 	        demod_psk_init (save_audio_config_p->achan[chan].modem_type,
+			save_audio_config_p->achan[chan].v26_alternative,
 			save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
 			save_audio_config_p->achan[chan].baud,
 			profile,
@@ -610,6 +641,7 @@ int demod_init (struct audio_s *pa)
 		//	save_audio_config_p->achan[chan].modem_type, profile);
 
 	        demod_psk_init (save_audio_config_p->achan[chan].modem_type,
+			save_audio_config_p->achan[chan].v26_alternative,
 			save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate,
 			save_audio_config_p->achan[chan].baud,
 			profile,
