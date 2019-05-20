@@ -676,6 +676,7 @@ dist-win : direwolf.exe decode_aprs.exe text2tt.exe tt2text.exe ll2utm.exe utm2l
 		doc/Successful-APRS-IGate-Operation.pdf \
 		doc/User-Guide.pdf \
 		doc/WA8LMF-TNC-Test-CD-Results.pdf \
+		doc/Why-is-9600-only-twice-as-fast-as-1200.pdf \
 		LICENSE* \
 		direwolf.conf \
 		direwolf.exe \

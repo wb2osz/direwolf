@@ -650,6 +650,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 	$(INSTALL) -D --mode=644 doc/Successful-APRS-IGate-Operation.pdf $(DESTDIR)/share/doc/direwolf/Successful-APRS-IGate-Operation.pdf
 	$(INSTALL) -D --mode=644 doc/User-Guide.pdf $(DESTDIR)/share/doc/direwolf/User-Guide.pdf
 	$(INSTALL) -D --mode=644 doc/WA8LMF-TNC-Test-CD-Results.pdf $(DESTDIR)/share/doc/direwolf/WA8LMF-TNC-Test-CD-Results.pdf
+	$(INSTALL) -D --mode=644 doc/Why-is-9600-only-twice-as-fast-as-1200.pdf $(DESTDIR)/share/doc/direwolf/Why-is-9600-only-twice-as-fast-as-1200.pdf
 #
 # Various sample config and other files go into examples under the doc directory.
 # When building from source, these can be put in home directory with "make install-conf".
@@ -765,14 +766,14 @@ check-modem19200 : gen_packets atest
 
 check-modem2400-a : gen_packets atest
 	./gen_packets -B2400 -j -n 100 -o /tmp/test24-a.wav
-	./atest -B2400 -j -F0 -L76 -G80 test24-a.wav
-	./atest -B2400 -j -F1 -L84 -G88 test24-a.wav
+	./atest -B2400 -j -F0 -L76 -G80 /tmp/test24-a.wav
+	./atest -B2400 -j -F1 -L84 -G88 /tmp/test24-a.wav
 	rm /tmp/test24-a.wav
 
 check-modem2400-b : gen_packets atest
 	./gen_packets -B2400 -J -n 100 -o /tmp/test24-b.wav
-	./atest -B2400 -J -F0 -L79 -G83 test24-b.wav
-	./atest -B2400 -J -F1 -L87 -G91 test24-b.wav
+	./atest -B2400 -J -F0 -L79 -G83 /tmp/test24-b.wav
+	./atest -B2400 -J -F1 -L87 -G91 /tmp/test24-b.wav
 	rm /tmp/test24-b.wav
 
 check-modem2400-g : gen_packets atest
