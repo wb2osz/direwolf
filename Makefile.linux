@@ -782,9 +782,9 @@ check-modem2400-g : gen_packets atest
 	rm /tmp/test24-g.wav
 
 check-modem4800 : gen_packets atest
-	./gen_packets -B2400 -n 100 -o /tmp/test48.wav
-	./atest -B2400 -F0 -L70 -G79 /tmp/test48.wav
-	./atest -B2400 -F1 -L80 -G90 /tmp/test48.wav
+	./gen_packets -B4800 -n 100 -o /tmp/test48.wav
+	./atest -B4800 -F0 -L70 -G74 /tmp/test48.wav
+	./atest -B4800 -F1 -L79 -G84 /tmp/test48.wav
 	rm /tmp/test48.wav
 
 
