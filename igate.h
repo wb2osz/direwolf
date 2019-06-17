@@ -101,7 +101,7 @@ struct igate_config_s {
 
 /* Call this once at startup */
 
-void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config, int debug_level);
+void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config, int debug_level, int quiet);
 
 /* Call this with each packet received from the radio. */
 

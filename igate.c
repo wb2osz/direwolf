@@ -291,6 +291,7 @@ static struct audio_s		*save_audio_config_p;
 static struct igate_config_s	*save_igate_config_p;
 static struct digi_config_s 	*save_digi_config_p;
 static int 			s_debug;
+static int 			s_quiet;
 
 
 /*
@@ -388,6 +389,7 @@ int igate_get_dnl_cnt (void) {
  *				  1  plus packets sent TO server or why not.
  *				  2  plus duplicate detection overview.
  *				  3  plus duplicate detection details.
+ *		quiet		- Silence iGate Traffic from Logs
  *
  * Description:	This starts two threads:
  *
@@ -397,7 +399,7 @@ int igate_get_dnl_cnt (void) {
  *--------------------------------------------------------------------*/
 
 
-void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config, int debug_level)
+void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_config, struct digi_config_s *p_digi_config, int debug_level, int quiet)
 {
 #if __WIN32__
 	HANDLE connnect_th;
@@ -410,6 +412,7 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	int e;
 #endif
 	s_debug = debug_level;
+	s_quiet = quiet;
 	dp_queue_head = NULL;
 
 #if DEBUGx
@@ -1469,22 +1472,24 @@ static void * igate_recv_thread (void *arg)
  * channels, each with own client side filtering and via path.
  * Loop here over all configured channels.
  */
-	    text_color_set(DW_COLOR_REC);
-	    dw_printf ("\n[ig>tx] ");		// formerly just [ig]
-	    ax25_safe_print ((char *)message, len, 0);
-	    dw_printf ("\n");
+            if (s_quiet == 0) {
+	      text_color_set(DW_COLOR_REC);
+	      dw_printf ("\n[ig>tx] ");		// formerly just [ig]
+	      ax25_safe_print ((char *)message, len, 0);
+	      dw_printf ("\n");
 
-	    if ((int)strlen((char*)message) != len) {
+	      if ((int)strlen((char*)message) != len) {
 
-	      // Invalid.  Either drop it or pass it along as-is.  Don't change.
+	        // Invalid.  Either drop it or pass it along as-is.  Don't change.
 
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("'nul' character found in packet from IS.  This should never happen.\n");
-	      dw_printf("The source station is probably transmitting with defective software.\n");
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("'nul' character found in packet from IS.  This should never happen.\n");
+	        dw_printf("The source station is probably transmitting with defective software.\n");
 
-	      //if (strcmp((char*)pinfo, "4P") == 0) {
-	      //  dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");
-	      //}
+	        //if (strcmp((char*)pinfo, "4P") == 0) {
+	        //  dw_printf("The TM-D710 will do this intermittently.  A firmware upgrade is needed to fix it.\n");
+	        //}
+              }
 	    }
 
 /*
