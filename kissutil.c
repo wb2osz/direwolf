@@ -774,7 +774,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	       printf ("ERROR - Invalid KISS data frame from TNC.\n");
 	    }
 	    else {
-	      char prefix[100];		// Channel and optional timestamp.
+	      char prefix[120];		// Channel and optional timestamp.
 					// Like [0] or [2 12:34:56]
 
 	      char addrs[AX25_MAX_ADDRS*AX25_MAX_ADDR_LEN];	// Like source>dest,digi,...,digi:

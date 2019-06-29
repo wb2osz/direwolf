@@ -400,7 +400,7 @@ long Make_MGRS_String (char* MGRS,
   if (Zone)
     i = sprintf (MGRS+i,"%2.2ld",Zone);
   else
-    strncpy(MGRS, "  ", 2);  // 2 spaces
+    strcpy(MGRS, "  ");  // 2 spaces - Should i be set to 2?
 
   for (j=0;j<3;j++)
     MGRS[i++] = alphabet[Letters[j]];

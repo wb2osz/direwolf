@@ -367,7 +367,7 @@ long Make_USNG_String (char* USNG,
   if (Zone)
     i = sprintf (USNG+i,"%2.2ld",Zone);
   else
-    strncpy(USNG, "  ", 2);  // 2 spaces
+    strcpy(USNG, "  ");  // 2 spaces - Should i be set to 2?
 
   for (j=0;j<3;j++)
     USNG[i++] = alphabet[Letters[j]];

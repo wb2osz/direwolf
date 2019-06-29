@@ -325,10 +325,10 @@ static void read_csv(FILE *fp)
 	    things[num_things].speed = speed;
 	    things[num_things].course = course;
 	    things[num_things].alt = alt;
-	    strncpy (things[num_things].time, pisotime, sizeof(things[num_things].time));
-	    strncpy (things[num_things].name, pname, sizeof(things[num_things].name));
-	    strncpy (things[num_things].desc, desc, sizeof(things[num_things].desc));
-	    strncpy (things[num_things].comment, comment, sizeof(things[num_things].comment));
+	    strlcpy (things[num_things].time, pisotime, sizeof(things[num_things].time));
+	    strlcpy (things[num_things].name, pname, sizeof(things[num_things].name));
+	    strlcpy (things[num_things].desc, desc, sizeof(things[num_things].desc));
+	    strlcpy (things[num_things].comment, comment, sizeof(things[num_things].comment));
 
 	    num_things++;
 	  }

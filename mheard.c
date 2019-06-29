@@ -243,9 +243,9 @@ static void mheard_dump (void)
 	int i;
 	mheard_t *mptr;
 	time_t now = time(NULL);
-	char stuff[80];
-	char rf[16];		// hours:minutes
-	char is[16];
+	char stuff[120];
+	char rf[20];		// hours:minutes
+	char is[20];
 	char position[40];
 	mheard_t *station[MAXDUMP];
 	int num_stations = 0;

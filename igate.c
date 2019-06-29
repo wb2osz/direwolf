@@ -1863,7 +1863,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  *	-> Raise the rate limiting value.
  */
 	if (ig_to_tx_allow (pp3, to_chan)) {
-	  char radio [500];
+	  char radio [2400];
 	  packet_t pradio;
 
 	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
