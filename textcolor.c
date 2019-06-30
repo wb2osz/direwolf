@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -58,18 +58,23 @@
  *		very hard to read against a light background.  The current
  *		implementation does not allow easy user customization of colors.
  *		
- *		Currently, the only option is to put "-t 0" on the command
+ *		Previously, the only option was to put "-t 0" on the command
  *		line to disable all text color.  This is more readable but
  *		makes it harder to distinguish different types of
  *		information, e.g. received packets vs. error messages.
  *
- *		A few people have suggested ncurses.  This needs to 
- *		be investigated for a future version.   The foundation has
- *		already been put in place.  All of the printf's should have been
- *		replaced by dw_printf, defined in this file.   All of the
- *		text output is now being funneled thru this one function
- *		so it should be easy to send it to the user by some
- *		other means.
+ *		A few people have suggested ncurses.
+ *		I looked at ncurses, and it doesn't seem to be the solution.
+ *		It always sends the same color control codes rather than
+ *		detecting the terminal type and adjusting its behavior.
+ *
+ *		For a long time, there was a compile time distinction between
+ *		ARM (e.g. Raspberry Pi) and other platforms.  With the arrival
+ *		of Raspbian Buster, we get flashing and the general Linux settings
+ *		work better.
+ *
+ *		Since there doesn't seem to be a single universal solution,
+ *		the text color option will now be allowed to have multiple values.
  *
  *--------------------------------------------------------------------*/
 
@@ -85,100 +90,49 @@
 
 #define BACKGROUND_WHITE (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY)
 
+#else 	/* Linux, BSD, Mac OSX */
 
 
-#elif __CYGWIN__	/* Cygwin */
+// Alternative 1:
 
-/* For Cygwin we need "blink" (5) rather than the */
-/* expected bright/bold (1) to get bright white background. */
-/* Makes no sense but I stumbled across that somewhere. */
+// Was new in version 1.2, as suggested by IW2DHW.
+// Tested with gnome-terminal and xterm.
+// Raspbian Buster LXTerminal also likes this.
+// (Should go back and check earlier versions - at one time I intentionally made ARM different.)
 
-static const char background_white[] = "\e[5;47m";
-
-/* Whenever a dark color is used, the */
-/* background is reset and needs to be set again. */
-
-static const char black[]	= "\e[0;30m" "\e[5;47m";
-static const char red[] 	= "\e[1;31m";
-static const char green[] 	= "\e[1;32m";
-static const char yellow[] 	= "\e[1;33m";
-static const char blue[] 	= "\e[1;34m";
-static const char magenta[] 	= "\e[1;35m";
-static const char cyan[] 	= "\e[1;36m";
-static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
-
-/* Clear from cursor to end of screen. */
-
-static const char clear_eos[]	= "\e[0J";
+// Here we are using the RGB color format to set the background.
+// Alas, PuTTY doesn't recognize the RGB format so the background is not set.
 
 
-#elif __arm__ 	/* Linux on Raspberry Pi or similar */
+// Alternative 2:
 
-/* We need "blink" (5) rather than the */
-/* expected bright/bold (1) to get bright white background. */
-/* Makes no sense but I stumbled across that somewhere. */
+// We need "blink" (5) rather than the expected bright/bold (1)
+// attribute to get bright white background on some terminals.
+// Makes no sense but I stumbled across that somewhere.
 
-/* If you do get blinking, remove all references to "\e[5;47m" */
-
-static const char background_white[] = "\e[5;47m";
-
-/* Whenever a dark color is used, the */
-/* background is reset and needs to be set again. */
-
-static const char black[]	= "\e[0;30m" "\e[5;47m";
-static const char red[] 	= "\e[1;31m" "\e[5;47m";
-static const char green[] 	= "\e[1;32m" "\e[5;47m";
-//static const char yellow[] 	= "\e[1;33m" "\e[5;47m";
-static const char blue[] 	= "\e[1;34m" "\e[5;47m";
-static const char magenta[] 	= "\e[1;35m" "\e[5;47m";
-//static const char cyan[] 	= "\e[1;36m" "\e[5;47m";
-static const char dark_green[]	= "\e[0;32m" "\e[5;47m";
-
-/* Clear from cursor to end of screen. */
-
-static const char clear_eos[]	= "\e[0J";
+// This is your best choice for PuTTY.  Background (around text but not rest of line) is set to white.
+// On GNOME Terminal and LXTerminal, this produces blinking text with a gray background.
 
 
-#else 	/* Other Linux */
+// Alternative 3:
 
-#if 1		/* new in version 1.2, as suggested by IW2DHW */
-		/* Test done using gnome-terminal and xterm */
-
-static const char background_white[] = "\e[48;2;255;255;255m";
-
-/* Whenever a dark color is used, the */
-/* background is reset and needs to be set again. */
+// This is using the bright/bold attribute, as you would expect from the documentation.
+// Whenever a dark color is used, the background is reset and needs to be set again.
+// In recent tests, background is always gray, not white like it should be.
 
 
-static const char black[]	= "\e[0;30m" "\e[48;2;255;255;255m";
-static const char red[] 	= "\e[0;31m" "\e[48;2;255;255;255m";
-static const char green[] 	= "\e[0;32m" "\e[48;2;255;255;255m";
-//static const char yellow[] 	= "\e[0;33m" "\e[48;2;255;255;255m";
-static const char blue[] 	= "\e[0;34m" "\e[48;2;255;255;255m";
-static const char magenta[] 	= "\e[0;35m" "\e[48;2;255;255;255m";
-//static const char cyan[] 	= "\e[0;36m" "\e[48;2;255;255;255m";
-static const char dark_green[]	= "\e[0;32m" "\e[48;2;255;255;255m";
+#define MAX_T 3
 
+static const char *t_background_white[MAX_T+1] = { "", 	"\e[48;2;255;255;255m",			"\e[5;47m",		"\e[1;47m" };
 
-#else 		/* from version 1.1 */
-
-
-static const char background_white[] = "\e[47;1m";
-
-/* Whenever a dark color is used, the */
-/* background is reset and needs to be set again. */
-
-static const char black[]	= "\e[0;30m" "\e[1;47m";
-static const char red[] 	= "\e[1;31m" "\e[1;47m";
-static const char green[] 	= "\e[1;32m" "\e[1;47m"; 
-//static const char yellow[] 	= "\e[1;33m" "\e[1;47m";
-static const char blue[] 	= "\e[1;34m" "\e[1;47m";
-static const char magenta[] 	= "\e[1;35m" "\e[1;47m";
-//static const char cyan[] 	= "\e[1;36m" "\e[1;47m";
-static const char dark_green[]	= "\e[0;32m" "\e[1;47m";
-
-
-#endif
+static const char *t_black[MAX_T+1]	= { "", "\e[0;30m" "\e[48;2;255;255;255m",	"\e[0;30m" "\e[5;47m",	"\e[0;30m" "\e[1;47m" };
+static const char *t_red[MAX_T+1] 	= { "", "\e[1;31m" "\e[48;2;255;255;255m",	"\e[1;31m" "\e[5;47m",	"\e[1;31m" "\e[1;47m" };
+static const char *t_green[MAX_T+1] 	= { "", "\e[1;32m" "\e[48;2;255;255;255m",	"\e[1;32m" "\e[5;47m",	"\e[1;32m" "\e[1;47m" };
+static const char *t_dark_green[MAX_T+1]= { "", "\e[0;32m" "\e[48;2;255;255;255m",	"\e[0;32m" "\e[5;47m",	"\e[0;32m" "\e[1;47m" };
+static const char *t_yellow[MAX_T+1] 	= { "", "\e[1;33m" "\e[48;2;255;255;255m",	"\e[1;33m" "\e[5;47m",	"\e[1;33m" "\e[1;47m" };
+static const char *t_blue[MAX_T+1] 	= { "", "\e[1;34m" "\e[48;2;255;255;255m",	"\e[1;34m" "\e[5;47m",	"\e[1;34m" "\e[1;47m" };
+static const char *t_magenta[MAX_T+1] 	= { "", "\e[1;35m" "\e[48;2;255;255;255m",	"\e[1;35m" "\e[5;47m",	"\e[1;35m" "\e[1;47m" };
+static const char *t_cyan[MAX_T+1] 	= { "", "\e[0;36m" "\e[48;2;255;255;255m",	"\e[0;36m" "\e[5;47m",	"\e[0;36m" "\e[1;47m" };
 
 
 /* Clear from cursor to end of screen. */
@@ -194,7 +148,9 @@ static const char clear_eos[]	= "\e[0J";
 /*
  * g_enable_color:
  *	0 = disable text colors.
- *	1 = normal.
+ *	1 = default, should be good for LXTerminal, GNOME Terminal, xterm.
+ *	2 = alternative, best choice for PuTTY  (i.e. remote login from Windows PC to Linux).
+ *	3 = another alternative.  Additional suggestions are welcome.
  *	others... future possibility.
  */
 
@@ -204,13 +160,11 @@ static int g_enable_color = 1;
 void text_color_init (int enable_color)
 {
 
-	g_enable_color = enable_color;
-
 
 #if __WIN32__
 
 
-	if (g_enable_color) {
+	if (g_enable_color != 0) {
 
 	  HANDLE h;
 	  CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -232,11 +186,39 @@ void text_color_init (int enable_color)
 	}
 
 #else
-	if (g_enable_color) {
-	  //printf ("%s", clear_eos);
-	  printf ("%s", background_white);
+
+// Run a test if outside of acceptable range.
+
+	if (enable_color < 0 || enable_color > MAX_T) {
+	  int t;
+	  for (t = 0; t <= MAX_T; t++) {
+	    text_color_init (t);
+	    printf ("-t %d", t);
+	    if (t) printf ("   [white background]   ");
+	    printf ("\n");
+	    printf ("%sBlack ", t_black[t]);
+	    printf ("%sRed ", t_red[t]);
+	    printf ("%sGreen ", t_green[t]);
+	    printf ("%sDark-Green ", t_dark_green[t]);
+	    printf ("%sYellow ", t_yellow[t]);
+	    printf ("%sBlue ", t_blue[t]);
+	    printf ("%sMagenta ", t_magenta[t]);
+	    printf ("%sCyan   \n", t_cyan[t]);
+	   }
+	   exit (EXIT_SUCCESS);
+	}
+
+	g_enable_color = enable_color;
+
+	if (g_enable_color != 0) {
+	  int t = g_enable_color;
+
+	  if (t < 0) t = 0;
+	  if (t > MAX_T) t = MAX_T;
+
+	  printf ("%s", t_background_white[t]);
 	  printf ("%s", clear_eos);
-	  printf ("%s", black);
+	  printf ("%s", t_black[t]);
 	}
 #endif
 }
@@ -268,7 +250,10 @@ void text_color_set ( enum dw_color_e c )
 	    break;
 
 	  case DW_COLOR_REC:
-	    attr = FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_WHITE;
+	    // Release 1.6.   Dark green, same as for debug.
+	    // Bright green is too hard to see with white background,
+	    // attr = FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_WHITE;
+	    attr = FOREGROUND_GREEN | BACKGROUND_WHITE;
 	    break;
 
 	  case DW_COLOR_DECODED:
@@ -300,31 +285,39 @@ void text_color_set ( enum dw_color_e c )
 	  return;
 	}
 
+	int t = g_enable_color;
+
+	if (t < 0) t = 0;
+	if (t > MAX_T) t = MAX_T;
+
 	switch (c) {
 
 	  default:
 	  case DW_COLOR_INFO:
-	    printf ("%s", black);
+	    printf ("%s", t_black[t]);
 	    break;
 
 	  case DW_COLOR_ERROR:
-	    printf ("%s", red);
+	    printf ("%s", t_red[t]);
 	    break;
 
 	  case DW_COLOR_REC:
-	    printf ("%s", green);
+	    // Bright green is very difficult to read against a while background.
+	    // Let's use dark green instead.   release 1.6.
+	    //printf ("%s", t_green[t]);
+	    printf ("%s", t_dark_green[t]);
 	    break;
 
 	  case DW_COLOR_DECODED:
-	    printf ("%s", blue);
+	    printf ("%s", t_blue[t]);
 	    break;
 
 	  case DW_COLOR_XMIT:
-	    printf ("%s", magenta);
+	    printf ("%s", t_magenta[t]);
 	    break;
 
 	  case DW_COLOR_DEBUG:
-	    printf ("%s", dark_green);
+	    printf ("%s", t_dark_green[t]);
 	    break;
 	}
 }

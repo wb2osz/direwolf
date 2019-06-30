@@ -251,6 +251,7 @@ int main (int argc, char *argv[])
  */
 
 	t_opt = 1;		/* 1 = normal, 0 = no text colors. */
+				/* 2, 3, ... alternate escape sequences for different terminals. */
 	for (j=1; j<argc-1; j++) {
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
@@ -267,7 +268,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -1351,7 +1352,8 @@ static void usage (char **argv)
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
-	dw_printf ("    -t n           Text colors.  1=normal, 0=disabled.\n");
+	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2 is good for PuTTY.\n");
+	dw_printf ("                     Use 9 to test compatibility with your terminal.\n");
 	dw_printf ("    -a n           Audio statistics interval in seconds.  0 to disable.\n");
 #if __WIN32__
 #else
