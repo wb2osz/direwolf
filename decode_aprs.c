@@ -4634,6 +4634,9 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * Outputs:	stdout
  *
  * Description:	Compile like this to make a standalone test program.
+ *		Just run "make" and this will be built along with everything else.
+ *		The point I'm trying to make is that DECAMAIN must be defined
+ *		to enable the main program here for a standalone application.
  *
  *		gcc -o decode_aprs -DDECAMAIN decode_aprs.c ax25_pad.c ...
  *
@@ -4752,6 +4755,7 @@ int main (int argc, char *argv[])
 	  }
 	}
 
+	// If you don't like the text colors, use 0 instead of 1 here.
 	text_color_init(1);
 	text_color_set(DW_COLOR_INFO);
 
