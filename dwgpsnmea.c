@@ -36,7 +36,7 @@
  *		We can now see NMEA sentences with other "Talker IDs."
  *
  *			$GPxxx = GPS
- *			$GLxxx = GLONAS
+ *			$GLxxx = GLONASS
  *			$GAxxx = Galileo
  *			$GBxxx = BeiDou
  *			$GNxxx = Any combination
