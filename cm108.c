@@ -148,6 +148,7 @@ static int cm108_write (char *name, int iomask, int iodata);
 #define CMEDIA_PID1_MAX 0x000f
 
 #define CMEDIA_PID_CM108AH	0x0139		// CM108AH
+#define CMEDIA_PID_CM108AH_alt	0x013c		// CM108AH? - see issue 210
 #define CMEDIA_PID_CM108B	0x0012		// CM108B
 #define CMEDIA_PID_CM119A	0x013a		// CM119A
 #define CMEDIA_PID_CM119B	0x0013		// CM119B
@@ -172,7 +173,8 @@ static int cm108_write (char *name, int iomask, int iodata);
 //	CM119		0d8c	0008-000f *	8
 //	CM119A		0d8c	013a *		8
 //	CM119B		0d8c	0013		8
-//	HS100		0d8c	013c		0
+//	HS100		0d8c	013c		0		(issue 210 reported 013c
+//								 being seen for CM108AH)
 //
 //	SSS1621		0c76	1605		2 	per ZL3AME, Can't find data sheet
 //	SSS1623		0c76	1607,160b	2	per ZL3AME, Not in data sheet.
@@ -195,6 +197,7 @@ static int cm108_write (char *name, int iomask, int iodata);
 
 #define GOOD_DEVICE(v,p) 	( (v == CMEDIA_VID && ((p >= CMEDIA_PID1_MIN && p <= CMEDIA_PID1_MAX) \
 							|| p == CMEDIA_PID_CM108AH \
+							|| p == CMEDIA_PID_CM108AH_alt \
 							|| p == CMEDIA_PID_CM108B \
 							|| p == CMEDIA_PID_CM119A \
 							|| p == CMEDIA_PID_CM119B )) \
@@ -548,6 +551,45 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
  *
  *------------------------------------------------------------------*/
 
+#if TESTCM
+
+// Switch pin between input, output-low, and output-high.
+
+// gcc -DTESTCM=1 -DUSE_CM108 cm108.c textcolor.c misc.a -ludev
+
+int main (int argc, char *argv[])
+{
+#define MODE_IN 0
+#define MODE_OUT 0x04		// GPIO 3 = bit 2
+#define OUT_LOW 0
+#define OUT_HIGH 0x04
+
+	if (argc != 2) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Specify HID path on command line.\n");
+	  exit (1);
+	}
+
+	while (1) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Input-L\n");
+	  cm108_write (argv[1], MODE_IN, OUT_LOW);
+	  sleep(5);
+	  dw_printf ("Input-H\n");
+	  cm108_write (argv[1], MODE_IN, OUT_HIGH);
+	  sleep(5);
+	  dw_printf ("Out-LOW\n");
+	  cm108_write (argv[1], MODE_OUT, OUT_LOW);
+	  sleep(5);
+	  dw_printf ("out-HIGH\n");
+	  cm108_write (argv[1], MODE_OUT, OUT_HIGH);
+	  sleep(5);
+	}
+}
+
+#endif
+
+
 int cm108_set_gpio_pin (char *name, int num, int state)
 {
 	int iomask;
@@ -565,8 +607,8 @@ int cm108_set_gpio_pin (char *name, int num, int state)
 	  return (-1);
 	}
 
-	iomask = 1 << (num - 1);
-	iodata = state << (num - 1);
+	iomask = 1 << (num - 1);	// 0=input, 1=output
+	iodata = state << (num - 1);	// 0=low, 1=high
 
 	return (cm108_write (name, iomask, iodata));
 
@@ -671,8 +713,9 @@ static int cm108_write (char *name, int iomask, int iodata)
 
 	io[0] = 0;
 	io[1] = 0;
-	io[2] = iomask;
-	io[3] = iodata;
+// Issue 210 - These were reversed. Fixed in 1.6.
+	io[2] = iodata;
+	io[3] = iomask;
 	io[4] = 0;
 
 	// Writing 4 bytes fails with errno 32, EPIPE, "broken pipe."
