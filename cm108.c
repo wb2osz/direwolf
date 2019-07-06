@@ -234,7 +234,8 @@ struct thing_s {
 	int pid;		// product id
 	char product[32];	// product name (e.g. manufacturer, model)
 	char devnode_sound[22];	// e.g. /dev/snd/pcmC0D0p
-	char plughw[15];	// Above in more familiar format e.g. plughw:0,0
+	char plughw[72];	// Above in more familiar format e.g. plughw:0,0
+				// Oversized to silence a compiler warning.
 	char devnode_hidraw[17]; // e.g. /dev/hidraw3
 	char devnode_usb[25];	// e.g. /dev/bus/usb/001/012
 };
