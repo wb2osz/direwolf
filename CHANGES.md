@@ -13,6 +13,10 @@
 
 ### New Features: ###
 
+
+- "-t" option now accepts more values to accommodate inconsistent handling of text color control codes by different terminal emulators.  The default, 1, should work with most modern terminal types.  If the colors are not right, try "-t 9" to see the result of the different choices and pick the best one.  If none of them look right, file a bug report and specify: operating system version (e.g. Raspbian Buster), terminal emulator type and version (e.g.  LXTerminal 0.3.2).   Include a screen capture.
+
+
 - "-g" option to force G3RUH mode for lower speeds where a different modem type may be the default.
 
 - 2400 bps compatibility with MFJ-2400.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** for details

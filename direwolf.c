@@ -248,10 +248,14 @@ int main (int argc, char *argv[])
 /*
  * Pre-scan the command line options for the text color option.
  * We need to set this before any text output.
+ * Default will be no colors if stdout is not a terminal (i.e. piped into
+ * something else such as "tee") but command line can override this.
  */
 
-	t_opt = 1;		/* 1 = normal, 0 = no text colors. */
+	t_opt = isatty(fileno(stdout));
+				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
+
 	for (j=1; j<argc-1; j++) {
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
@@ -1352,7 +1356,7 @@ static void usage (char **argv)
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
-	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2 is good for PuTTY.\n");
+	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.\n");
 	dw_printf ("                     Use 9 to test compatibility with your terminal.\n");
 	dw_printf ("    -a n           Audio statistics interval in seconds.  0 to disable.\n");
 #if __WIN32__
