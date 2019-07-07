@@ -58,9 +58,9 @@
 // dwgps.c claims to only support GPSD_API_MAJOR_VERSION 5, but also builds successfully with
 // GPSD_API_MAJOR_VERSION 6 provided by libgps22 when the attached patch is applied.
 
-// Also compatible with API 7 with conditional compilation later.
+// Also compatible with API 7 & 8 with conditional compilation later.
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 7
+#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 8
 #error libgps API version might be incompatible.
 #endif
 
