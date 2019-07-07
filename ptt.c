@@ -458,6 +458,9 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	    exit (1);
 	  }
 	}
+	/* Wait for udev to adjust permissions after enabling GPIO. */
+	/* https://github.com/wb2osz/direwolf/issues/176 */
+	SLEEP_MS(250);
 	close (fd);
 
 /*
