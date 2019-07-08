@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# Why not simply "#!/bin/bash" ?
+
+# For OpenBSD, the bash location is /usr/local/bin/bash.
+# By using env here, bash is found based on the user's $PATH.
+# I hope this does not break some other operating system.
+
 
 # Run this from crontab periodically to start up
 # Dire Wolf automatically.

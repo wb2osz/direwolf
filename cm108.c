@@ -98,10 +98,14 @@
 int main (void)
 {
 	text_color_init (0);    // Turn off text color.
+#if defined(__OpenBSD__) || defined(__FreeBSD__)
+	dw_printf ("CM108 PTT support is not available for BSD.\n");
+#else
 	dw_printf ("CM108 PTT support was disabled in Makefile.linux.\n");
 	dw_printf ("It was excluded because /usr/include/libudev.h was missing.\n");
 	dw_printf ("Install it with \"sudo apt-get install libudev-dev\" or\n");
 	dw_printf ("\"sudo yum install libudev-devel\" then rebuild.\n");
+#endif
 	return (0);
 }
 

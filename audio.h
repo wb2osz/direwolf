@@ -335,15 +335,18 @@ struct audio_s {
 };
 
 
-#if __WIN32__ || __APPLE__
+#if __WIN32__
 #define DEFAULT_ADEVICE	""		/* Windows: Empty string = default audio device. */
-#else
-#if USE_ALSA
+#elif __APPLE__
+#define DEFAULT_ADEVICE	""		/* Mac OSX: Empty string = default audio device. */
+#elif USE_ALSA
 #define DEFAULT_ADEVICE	"default"	/* Use default device for ALSA. */
+#elif __OpenBSD__
+#define DEFAULT_ADEVICE	"default"	/* Use default device for OpenBSD-portaudio. */
 #else
-#define DEFAULT_ADEVICE	"/dev/dsp"	/* First audio device for OSS. */
+#define DEFAULT_ADEVICE	"/dev/dsp"	/* First audio device for OSS.  (FreeBSD) */
 #endif					
-#endif
+
 
 
 /*
