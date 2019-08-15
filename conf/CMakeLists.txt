@@ -1,0 +1,48 @@
+# generate conf per platform
+file(READ "${CUSTOM_CONF_DIR}/generic.conf" file_content)
+
+if(LINUX)
+  string(REGEX REPLACE "\n%W%[^\n]*" "" file_content "${file_content}")
+  string(REGEX REPLACE "\n%M%[^\n]*" "" file_content "${file_content}")
+  string(REGEX REPLACE "\n%L%([^\n]*)" "\n\\1" file_content "${file_content}")
+elseif(WIN32)
+  string(REGEX REPLACE "\n%M%[^\n]*" "" file_content "${file_content}")
+  string(REGEX REPLACE "\n%L%[^\n]*" "" file_content "${file_content}")
+  string(REGEX REPLACE "\n%W%([^\n]*)" "\n\\1" file_content "${file_content}")
+else() # macOS FreeBSD OpenBSD
+  string(REGEX REPLACE "\n%W%[^\n]*" "" file_content "${file_content}")
+  string(REGEX REPLACE "\n%L%[^\n]*" "" file_content "${file_content}")
+  string(REGEX REPLACE "\n%M%([^\n]*)" "\n\\1" file_content "${file_content}")
+endif()
+
+# remove remark
+string(REGEX REPLACE "\n%R%[^\n]*" "" file_content "${file_content}")
+
+# clear common lines
+string(REGEX REPLACE "\n%C%([^\n]*)" "\n\\1" file_content "${file_content}")
+string(REGEX REPLACE "^%C%([^\n]*)" "\\1" file_content "${file_content}")
+
+file(WRITE "${CMAKE_BINARY_DIR}/direwolf.conf" "${file_content}")
+
+
+# install udev rules for CM108
+if(LINUX)
+  install(FILES "${CUSTOM_CONF_DIR}/99-direwolf-cmedia.rules" DESTINATION etc/udev/rules.d/)
+endif()
+
+install(FILES "${CMAKE_BINARY_DIR}/direwolf.conf" DESTINATION share/doc/${CMAKE_PROJECT_NAME}/examples)
+install(FILES "${CUSTOM_CONF_DIR}/sdr.conf" DESTINATION share/doc/${CMAKE_PROJECT_NAME}/examples)
+
+# Put sample configuration & startup files in home directory.
+# This step would be done as ordinary user.
+# Some people like to put the direwolf config file in /etc/ax25.
+# Note that all of these are also in $(DESTDIR)/share/doc/direwolf/examples/.
+add_custom_target(install-conf-conf
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/direwolf.conf" ~
+  COMMAND ${CMAKE_COMMAND} -E copy "${CUSTOM_CONF_DIR}/sdr.conf" ~
+  )
+
+if(LINUX)
+  add_custom_target(install-conf)
+  add_dependencies(install-conf install-conf-conf install-conf-scripts install-conf-telemetry)
+endif()
