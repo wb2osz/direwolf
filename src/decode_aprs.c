@@ -3751,6 +3751,7 @@ static int num_tocalls = 0;
 
 static const char *search_locations[] = {
 	(const char *) "tocalls.txt",
+	(const char *) "../data/tocalls.txt",
 #ifndef __WIN32__
 	(const char *) "/usr/local/share/direwolf/tocalls.txt",
 	(const char *) "/usr/share/direwolf/tocalls.txt",
