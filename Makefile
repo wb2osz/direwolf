@@ -12,9 +12,9 @@ endif
 dar := $(shell uname | grep Darwin)
 
 ifneq ($(win),)
-   include Makefile.win
+   include Makefile-win.mk
 else ifeq ($(dar),Darwin)
-   include Makefile.macosx
+   include Makefile-macosx.mk
 else
-   include Makefile.linux
+   include Makefile-linux.mk
 endif
