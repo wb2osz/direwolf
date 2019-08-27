@@ -26,6 +26,8 @@ set(SYMBOLSX_TXT_BKP "symbolsX.txt.old")
 set(SYMBOLSX_URL "http://www.aprs.org/symbols/symbolsX.txt")
 set(CUSTOM_BINARY_DATA_DIR "${CMAKE_BINARY_DIR}/data")
 
+# we can also move to a separate cmake file and use file(download)
+# see conf/install_conf.cmake as example
 file(COPY "${CUSTOM_DATA_DIR}/${TOCALLS_TXT}" DESTINATION "${CUSTOM_BINARY_DATA_DIR}")
 file(COPY "${CUSTOM_DATA_DIR}/${SYMBOLS-NEW_TXT}" DESTINATION "${CUSTOM_BINARY_DATA_DIR}")
 file(COPY "${CUSTOM_DATA_DIR}/${SYMBOLSX_TXT}" DESTINATION "${CUSTOM_BINARY_DATA_DIR}")
