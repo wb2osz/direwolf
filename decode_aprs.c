@@ -1381,10 +1381,14 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '%')  { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ')')  { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '(')  { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '0')  { strlcpy (A->g_mfr, "Yaesu FT3D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '(' && *plast == '5')  { strlcpy (A->g_mfr, "Anytone D578UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '`'                                       )  { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; }
+
+	  else if (*pfirst == '\'' && *(plast-1) == '(' && *plast == '8')  { strlcpy (A->g_mfr, "Anytone D878UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3')  { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4')  { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
