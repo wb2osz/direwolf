@@ -42,7 +42,7 @@ add_custom_target(install-conf-conf
   COMMAND ${CMAKE_COMMAND} -E copy "${CUSTOM_CONF_DIR}/sdr.conf" ~
   )
 
-if(LINUX)
+if(NOT WIN32)
   add_custom_target(install-conf)
   add_dependencies(install-conf install-conf-conf install-conf-scripts install-conf-telemetry)
 endif()
