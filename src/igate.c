@@ -209,7 +209,7 @@ int main (int argc, char *argv[])
 	packet_t pp;
 
 	memset (&audio_config, 0, sizeof(audio_config));
-	audio_config.adev[0].num_chans = 2;
+	audio_config.adev[0].num_channels = 2;
 	strlcpy (audio_config.achan[0].mycall, "WB2OSZ-1", sizeof(audio_config.achan[0].mycall));
 	strlcpy (audio_config.achan[1].mycall, "WB2OSZ-2", sizeof(audio_config.achan[0].mycall));
 
@@ -228,7 +228,7 @@ int main (int argc, char *argv[])
 
 	memset (&digi_config, 0, sizeof(digi_config));
 
-	igate_init(&igate_config, &digi_config);
+	igate_init(&audio_config, &igate_config, &digi_config, 0);
 
 	while (igate_sock == -1) {
 	  SLEEP_SEC(1);
@@ -269,7 +269,7 @@ int main (int argc, char *argv[])
 	  SLEEP_SEC (20);
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Send received packet\n");
-	  send_msg_to_server ("W1ABC>APRS:?", strlen("W1ABC>APRS:?");
+	  send_msg_to_server ("W1ABC>APRS:?", strlen("W1ABC>APRS:?"));
 	}
 #endif
 	return 0;
