@@ -86,7 +86,7 @@ int main (int argc, char *argv[])
 	// USB GPS happens to be COM22
 
 	memset (&config, 0, sizeof(config));
-	strlcpy (config.gpsnmea_port, "COM22", sizeof(config.nmea_port));
+	strlcpy (config.gpsnmea_port, "COM22", sizeof(config.gpsnmea_port));
 
 	dwgps_init (&config, debug_gps);
 
@@ -152,7 +152,7 @@ static void walk96 (int fix, double lat, double lon, float knots, float course, 
 
 
 	info_len = encode_position (messaging, compressed,
-		lat, lon, (int)(DW_METERS_TO_FEET(alt)), 
+		lat, lon, 0, (int)(DW_METERS_TO_FEET(alt)), 
 		'/', '=',
 		G_UNKNOWN, G_UNKNOWN, G_UNKNOWN, "",	// PHGd
 		(int)roundf(course), (int)roundf(knots),
