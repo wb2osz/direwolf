@@ -1,0 +1,5 @@
+@CUSTOM_SHELL_SHABANG@
+
+@GEN_PACKETS_BIN@ -B300 -n 100 -o test3.wav
+@ATEST_BIN@ -B300 -F0 -L68 -G69 test3.wav
+@ATEST_BIN@ -B300 -F1 -L71 -G75 test3.wav

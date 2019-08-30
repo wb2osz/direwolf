@@ -1,5 +1,6 @@
 # global includes
 # not ideal but not so slow
+# otherwise use target_include_directories
 include_directories(
   ${GPSD_INCLUDE_DIRS}
   ${HAMLIB_INCLUDE_DIRS}
@@ -11,8 +12,7 @@ include_directories(
 
 # build gen_fff to create fsk_fast_filter.h
 # optimization for slow processors
-set(gen_fff_SOURCES
-  ${gen_fff_SOURCES}
+list(APPEND gen_fff_SOURCES
   demod_afsk.c
   dsp.c
   textcolor.c
@@ -32,9 +32,9 @@ add_custom_command(TARGET gen_fff
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
+
 # direwolf
-set(direwolf_SOURCES
-  ${direwolf_SOURCES}
+list(APPEND direwolf_SOURCES
   direwolf.c
   aprs_tt.c
   audio_stats.c
@@ -97,29 +97,25 @@ set(direwolf_SOURCES
   )
 
 if(LINUX)
-  set(direwolf_SOURCES
-    ${direwolf_SOURCES}
+  list(APPEND direwolf_SOURCES
     audio.c
     )
   if(UDEV_FOUND)
-    set(direwolf_SOURCES
-      ${direwolf_SOURCES}
+    list(APPEND direwolf_SOURCES
       cm108.c
       )
   endif()
   elseif(WIN32) # windows
-      set(direwolf_SOURCES
-        ${direwolf_SOURCES}
-        audio_win.c
+    list(APPEND direwolf_SOURCES
+      audio_win.c
 
-        # icon
-        ${CMAKE_SOURCE_DIR}/cmake/cpack/direwolf.rc
-        )
+      # icon
+      ${CMAKE_SOURCE_DIR}/cmake/cpack/direwolf.rc
+      )
     else() # macOS freebsd openbsd
-  set(direwolf_SOURCES
-    ${direwolf_SOURCES}
-    audio_portaudio.c
-    )
+      list(APPEND direwolf_SOURCES
+        audio_portaudio.c
+        )
 endif()
 
 add_executable(direwolf
@@ -141,8 +137,7 @@ target_link_libraries(direwolf
   )
 
 # decode_aprs
-set(decode_aprs_SOURCES
-  ${decode_aprs_SOURCES}
+list(APPEND decode_aprs_SOURCES
   decode_aprs.c
   kiss_frame.c
   ax25_pad.c
@@ -178,8 +173,7 @@ target_link_libraries(decode_aprs
 
 # Convert between text and touch tone representation.
 # text2tt
-set(text2tt_SOURCES
-  ${text2tt_SOURCES}
+list(APPEND text2tt_SOURCES
   tt_text.c
   )
 
@@ -196,8 +190,7 @@ target_link_libraries(text2tt
   )
 
 # tt2text
-set(tt2text_SOURCES
-  ${tt2text_SOURCES}
+list(APPEND tt2text_SOURCES
   tt_text.c
   )
 
@@ -216,8 +209,7 @@ target_link_libraries(tt2text
 
 # Convert between Latitude/Longitude and UTM coordinates.
 # ll2utm
-set(ll2utm_SOURCES
-  ${ll2utm_SOURCES}
+list(APPEND ll2utm_SOURCES
   ll2utm.c
   textcolor.c
   )
@@ -232,8 +224,7 @@ target_link_libraries(ll2utm
   )
 
 # utm2ll
-set(utm2ll_SOURCES
-  ${utm2ll_SOURCES}
+list(APPEND utm2ll_SOURCES
   utm2ll.c
   textcolor.c
   )
@@ -250,8 +241,7 @@ target_link_libraries(utm2ll
 
 # Convert from log file to GPX.
 # log2gpx
-set(log2gpx_SOURCES
-  ${log2gpx_SOURCES}
+list(APPEND log2gpx_SOURCES
   log2gpx.c
   textcolor.c
   )
@@ -267,8 +257,7 @@ target_link_libraries(log2gpx
 
 # Test application to generate sound.
 # gen_packets
-set(gen_packets_SOURCES
-  ${gen_packets_SOURCES}
+list(APPEND gen_packets_SOURCES
   gen_packets.c
   ax25_pad.c
   hdlc_send.c
@@ -291,8 +280,7 @@ target_link_libraries(gen_packets
 
 # Unit test for AFSK demodulator
 # atest
-set(atest_SOURCES
-  ${atest_SOURCES}
+list(APPEND atest_SOURCES
   atest.c
   demod.c
   demod_afsk.c
@@ -333,8 +321,7 @@ target_link_libraries(atest
 
 # Multiple AGWPE network or serial port clients to test TNCs side by side.
 # aclients
-set(aclients_SOURCES
-  ${aclients_SOURCES}
+list(APPEND aclients_SOURCES
   aclients.c
   ax25_pad.c
   fcs_calc.c
@@ -354,8 +341,7 @@ target_link_libraries(aclients
 # Talk to a KISS TNC.
 # Note:  kiss_frame.c has conditional compilation on KISSUTIL.
 # kissutil
-set(kissutil_SOURCES
-  ${kissutil_SOURCES}
+list(APPEND kissutil_SOURCES
   kissutil.c
   kiss_frame.c
   ax25_pad.c
@@ -383,8 +369,7 @@ target_link_libraries(kissutil
 # List USB audio adapters than can use GPIO for PTT.
 # cm108
 if(UDEV_FOUND)
-  set(cm108_SOURCES
-    ${cm108_SOURCES}
+  list(APPEND cm108_SOURCES
     cm108.c
     textcolor.c
     )
@@ -406,8 +391,7 @@ endif()
 
 # Touch Tone to Speech sample application.
 # ttcalc
-set(ttcalc_SOURCES
-  ${ttcalc_SOURCES}
+list(APPEND ttcalc_SOURCES
   ttcalc.c
   ax25_pad.c
   fcs_calc.c
@@ -437,19 +421,4 @@ install(TARGETS ttcalc DESTINATION bin)
 install(TARGETS kissutil DESTINATION bin)
 if(UDEV_FOUND)
   install(TARGETS cm108 DESTINATION bin)
-endif()
-
-
-
-## TESTS
-# Note CMake will generate tests only if the enable_testing() command
-# has been invoked. The CTest module invokes the command automatically
-# when the BUILD_TESTING option is ON.
-include(CTest)
-if(BUILD_TESTING)
-  #  add_test(NAME <name> COMMAND <command> [<arg>...]
-  #  [CONFIGURATIONS <config>...]
-#  [WORKING_DIRECTORY <dir>])
-
-
 endif()

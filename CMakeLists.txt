@@ -1,8 +1,3 @@
-# TODO:
-#  - check which MSVC are compatible
-#  - cpack
-#  - ctest
-
 cmake_minimum_required(VERSION 3.1.0)
 
 project(direwolf)
@@ -17,6 +12,7 @@ set(direwolf_VERSION_SUFFIX "")
 option(FORCE_SSE "Compile with SSE instruction only" OFF)
 option(FORCE_SSSE3 "Compile with SSSE3 instruction only" OFF)
 option(FORCE_SSE41 "Compile with SSE4.1 instruction only" OFF)
+option(OPTIONAL_TEST "Compile optional test (might be broken)" OFF)
 
 # where cmake find custom modules
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
@@ -70,6 +66,7 @@ if(direwolf_VERSION_COMMIT)
   add_definitions("-DEXTRA_VERSION=${direwolf_VERSION_COMMIT}")
 endif()
 
+set(CUSTOM_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(CUSTOM_EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
 set(CUSTOM_MISC_DIR "${CUSTOM_EXTERNAL_DIR}/misc")
 set(CUSTOM_REGEX_DIR "${CUSTOM_EXTERNAL_DIR}/regex")
@@ -80,6 +77,9 @@ set(CUSTOM_TELEMETRY_DIR "${CUSTOM_SCRIPTS_DIR}/telemetry-toolkit")
 set(CUSTOM_CONF_DIR "${CMAKE_SOURCE_DIR}/conf")
 set(CUSTOM_DOC_DIR "${CMAKE_SOURCE_DIR}/doc")
 set(CUSTOM_MAN_DIR "${CMAKE_SOURCE_DIR}/man")
+set(CUSTOM_TEST_DIR "${CMAKE_SOURCE_DIR}/test")
+set(CUSTOM_TEST_SCRIPTS_DIR "${CUSTOM_TEST_DIR}/scripts")
+set(CUSTOM_SHELL_SHABANG "#!/bin/sh -e")
 
 # if we don't set build_type
 if(NOT DEFINED CMAKE_BUILD_TYPE OR "${CMAKE_BUILD_TYPE}" STREQUAL "")
@@ -124,6 +124,8 @@ elseif (WIN32)
   # compile with full multicore
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+
+  set(CUSTOM_SHELL_BIN "")
 endif()
 
 if (C_CLANG OR C_GCC)
@@ -190,6 +192,15 @@ add_subdirectory(${CUSTOM_MISC_DIR})
 
 # direwolf source code and utilities
 add_subdirectory(src)
+
+# ctest
+# Note CMake will generate tests only if the enable_testing() command
+# has been invoked. The CTest module invokes the command automatically
+# when the BUILD_TESTING option is ON.
+include(CTest)
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()
 
 # manage scripts
 add_subdirectory(scripts)
