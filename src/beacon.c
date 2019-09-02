@@ -59,7 +59,6 @@
 #include "mheard.h"
 
 
-
 /*
  * Save pointers to configuration settings.
  */

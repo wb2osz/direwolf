@@ -5,7 +5,7 @@ if(LINUX)
   string(REGEX REPLACE "\n%W%[^\n]*" "" file_content "${file_content}")
   string(REGEX REPLACE "\n%M%[^\n]*" "" file_content "${file_content}")
   string(REGEX REPLACE "\n%L%([^\n]*)" "\n\\1" file_content "${file_content}")
-elseif(WIN32)
+elseif(WIN32 OR CYGWIN)
   string(REGEX REPLACE "\n%M%[^\n]*" "" file_content "${file_content}")
   string(REGEX REPLACE "\n%L%[^\n]*" "" file_content "${file_content}")
   string(REGEX REPLACE "\n%W%([^\n]*)" "\n\\1" file_content "${file_content}")
@@ -36,7 +36,7 @@ install(FILES "${CUSTOM_CONF_DIR}/sdr.conf" DESTINATION share/doc/${CMAKE_PROJEC
 # This step would be done as ordinary user.
 # Some people like to put the direwolf config file in /etc/ax25.
 # Note that all of these are also in $(DESTDIR)/share/doc/direwolf/examples/.
-if(NOT WIN32)
+if(NOT (WIN32 OR CYGWIN))
   add_custom_target(install-conf
     COMMAND ${CMAKE_COMMAND}
     -DCUSTOM_BINARY_DIR="${CMAKE_BINARY_DIR}"

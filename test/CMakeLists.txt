@@ -1,4 +1,4 @@
-# this is a trick to avoid to more complication
+# this is a trick to avoid more complication
 # because configure_file() is done a configuration time
 set(CUSTOM_TEST_BINARY_DIR "${CMAKE_BINARY_DIR}/test")
 set(GEN_PACKETS_BIN "${CMAKE_BINARY_DIR}/src/gen_packets${CMAKE_EXECUTABLE_SUFFIX}")
@@ -83,6 +83,12 @@ include_directories(
   ${CMAKE_BINARY_DIR}/src
   )
 
+if(WIN32 OR CYGWIN)
+  include_directories(
+    ${CUSTOM_REGEX_DIR}
+  )
+endif()
+
 
 # Unit test for demodulators
 list(APPEND atest9_SOURCES
@@ -111,6 +117,12 @@ list(APPEND atest9_SOURCES
   ${CUSTOM_SRC_DIR}/tt_text.c
   )
 
+if(WIN32 OR CYGWIN)
+  list(REMOVE_ITEM atest9_SOURCES
+    ${CUSTOM_SRC_DIR}/dwgpsd.c
+    )
+endif()
+
 add_executable(atest9
   ${atest9_SOURCES}
   )
@@ -119,9 +131,17 @@ add_dependencies(atest9 gen_fff)
 
 target_link_libraries(atest9
   ${MISC_LIBRARIES}
+  ${REGEX_LIBRARIES}
   ${GPSD_LIBRARIES}
   Threads::Threads
   )
+
+if(WIN32 OR CYGWIN)
+  set_target_properties(atest9
+    PROPERTIES COMPILE_FLAGS "-DUSE_REGEX_STATIC"
+    )
+  target_link_libraries(atest9 ws2_32)
+endif()
 
 
 # Unit test for inner digipeater algorithm
@@ -144,12 +164,18 @@ list(APPEND dtest_SOURCES
   ${CUSTOM_SRC_DIR}/tt_text.c
   )
 
+if(WIN32 OR CYGWIN)
+  list(REMOVE_ITEM dtest_SOURCES
+    ${CUSTOM_SRC_DIR}/dwgpsd.c
+    )
+endif()
+
 add_executable(dtest
   ${dtest_SOURCES}
   )
 
 set_target_properties(dtest
-  PROPERTIES COMPILE_FLAGS "-DDIGITEST"
+  PROPERTIES COMPILE_FLAGS "-DDIGITEST -DUSE_REGEX_STATIC"
   )
 
 target_link_libraries(dtest
@@ -158,6 +184,10 @@ target_link_libraries(dtest
   ${GPSD_LIBRARIES}
   Threads::Threads
   )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(dtest ws2_32)
+endif()
 
 
 # Unit test for APRStt tone seqence parsing.
@@ -218,12 +248,18 @@ list(APPEND pftest_SOURCES
   ${CUSTOM_SRC_DIR}/tt_text.c
   )
 
+if(WIN32 OR CYGWIN)
+  list(REMOVE_ITEM pftest_SOURCES
+    ${CUSTOM_SRC_DIR}/dwgpsd.c
+    )
+endif()
+
 add_executable(pftest
   ${pftest_SOURCES}
   )
 
 set_target_properties(pftest
-  PROPERTIES COMPILE_FLAGS "-DPFTEST"
+  PROPERTIES COMPILE_FLAGS "-DPFTEST -DUSE_REGEX_STATIC"
   )
 
 target_link_libraries(pftest
@@ -233,6 +269,9 @@ target_link_libraries(pftest
   Threads::Threads
   )
 
+if(WIN32 OR CYGWIN)
+  target_link_libraries(pftest ws2_32)
+endif()
 
 # Unit test for telemetry decoding.
 list(APPEND tlmtest_SOURCES
@@ -242,18 +281,28 @@ list(APPEND tlmtest_SOURCES
   ${CUSTOM_SRC_DIR}/textcolor.c
   )
 
+if(WIN32 OR CYGWIN)
+  list(REMOVE_ITEM tlmtest_SOURCES
+    ${CUSTOM_SRC_DIR}/dwgpsd.c
+    )
+endif()
+
 add_executable(tlmtest
   ${tlmtest_SOURCES}
   )
 
 set_target_properties(tlmtest
-  PROPERTIES COMPILE_FLAGS "-DTEST"
+  PROPERTIES COMPILE_FLAGS "-DTEST -DUSE_REGEX_STATIC"
   )
 
 target_link_libraries(tlmtest
   ${MISC_LIBRARIES}
   ${REGEX_LIBRARIES}
   )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(tlmtest ws2_32)
+endif()
 
 
 # Unit test for location coordinate conversion.
@@ -322,13 +371,17 @@ add_executable(pad2test
   )
 
 set_target_properties(pad2test
-  PROPERTIES COMPILE_FLAGS "-DPAD2TEST"
+  PROPERTIES COMPILE_FLAGS "-DPAD2TEST -DUSE_REGEX_STATIC"
   )
 
 target_link_libraries(pad2test
   ${MISC_LIBRARIES}
   ${REGEX_LIBRARIES}
   )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(pad2test ws2_32)
+endif()
 
 
 # Unit Test for XID frame encode/decode.
@@ -414,6 +467,12 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/symbols.c
     )
 
+  if(WIN32 OR CYGWIN)
+    list(REMOVE_ITEM itest_SOURCES
+      ${CUSTOM_SRC_DIR}/dwgpsd.c
+      )
+  endif()
+
   add_executable(itest
     ${itest_SOURCES}
     )
@@ -427,6 +486,10 @@ if(OPTIONAL_TEST)
     ${GPSD_LIBRARIES}
     Threads::Threads
     )
+
+  if(WIN32 OR CYGWIN)
+    target_link_libraries(itest ws2_32)
+  endif()
 
 
   # For demodulator tweaking experiments.
@@ -456,6 +519,12 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/textcolor.c
     )
 
+  if(WIN32 OR CYGWIN)
+    list(REMOVE_ITEM testagc_SOURCES
+      ${CUSTOM_SRC_DIR}/dwgpsd.c
+      )
+  endif()
+
   add_executable(testagc
     ${testagc_SOURCES}
     )
@@ -467,6 +536,10 @@ if(OPTIONAL_TEST)
     ${GPSD_LIBRARIES}
     Threads::Threads
     )
+
+  if(WIN32 OR CYGWIN)
+    target_link_libraries(testagc ws2_32)
+  endif()
 
 
   # Send GPS location to KISS TNC each second.
@@ -515,9 +588,12 @@ if(OPTIONAL_TEST)
         ${CUSTOM_SRC_DIR}/cm108.c
         )
     endif()
-  elseif(WIN32) # windows
+  elseif(WIN32 OR CYGWIN) # windows
     list(APPEND walk96_SOURCES
       ${CUSTOM_SRC_DIR}/audio_win.c
+      )
+    list(REMOVE_ITEM walk96_SOURCES
+      ${CUSTOM_SRC_DIR}/dwgpsd.c
       )
   else() # macOS freebsd openbsd
     list(APPEND walk96_SOURCES
@@ -530,7 +606,7 @@ if(OPTIONAL_TEST)
     )
 
   set_target_properties(walk96
-    PROPERTIES COMPILE_FLAGS "-DWALK96"
+    PROPERTIES COMPILE_FLAGS "-DWALK96 -DUSE_REGEX_STATIC"
     )
 
   target_link_libraries(walk96
@@ -543,6 +619,10 @@ if(OPTIONAL_TEST)
     ${UDEV_LIBRARIES}
     Threads::Threads
     )
+
+  if(WIN32 OR CYGWIN)
+    target_link_libraries(walk96 ws2_32)
+  endif()
 
 
   # TODO  miss the audio file

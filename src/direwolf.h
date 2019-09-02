@@ -113,7 +113,6 @@
 #define SLEEP_MS(n) usleep((n)*1000)
 #endif
 
-
 #if __WIN32__
 
 #define PTW32_STATIC_LIB
@@ -124,7 +123,7 @@
 #define _POSIX_C_SOURCE 1
 
 #else
-#include <pthread.h>
+ #include <pthread.h>
 #endif
 
 

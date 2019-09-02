@@ -31,7 +31,7 @@ add_definitions("-DCOPYRIGHT=\"${COPYRIGHT}\"")
 set(IDENTIFIER "com.${COMPANY}.${APPLICATION_NAME}")
 add_definitions("-DIDENTIFIER=\"${IDENTIFIER}\"")
 # raspberry as only lxterminal not xterm
-if(NOT WIN32)
+if(NOT (WIN32 OR CYGWIN))
   find_program(BINARY_TERMINAL_BIN lxterminal)
   if(BINARY_TERMINAL_BIN)
     set(APPLICATION_DESKTOP_EXEC "${BINARY_TERMINAL_BIN} -e ${CMAKE_PROJECT_NAME}")
@@ -86,6 +86,7 @@ if(NOT DEFINED CMAKE_BUILD_TYPE OR "${CMAKE_BUILD_TYPE}" STREQUAL "")
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 message(STATUS "Build type set to: ${CMAKE_BUILD_TYPE}")
+message("CMake system: ${CMAKE_SYSTEM_NAME}")
 
 # set compiler
 include(FindCompiler)
@@ -174,12 +175,19 @@ if(LINUX)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CM108")
   endif()
 
-elseif (NOT WIN32)
+elseif (NOT WIN32 AND NOT CYGWIN)
   find_package(portaudio REQUIRED)
   if(PORTAUDIO_FOUND)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_PORTAUDIO")
   endif()
 
+else()
+  set(ALSA_INCLUDE_DIRS "")
+  set(ALSA_LIBRARIES "")
+  set(UDEV_INCLUDE_DIRS "")
+  set(UDEV_LIBRARIES "")
+  set(PORTAUDIO_INCLUDE_DIRS "")
+  set(PORTAUDIO_LIBRARIES "")
 endif()
 
 # manage and fetch new data
@@ -194,13 +202,9 @@ add_subdirectory(${CUSTOM_MISC_DIR})
 add_subdirectory(src)
 
 # ctest
-# Note CMake will generate tests only if the enable_testing() command
-# has been invoked. The CTest module invokes the command automatically
-# when the BUILD_TESTING option is ON.
 include(CTest)
-if(BUILD_TESTING)
-  add_subdirectory(test)
-endif()
+enable_testing()
+add_subdirectory(test)
 
 # manage scripts
 add_subdirectory(scripts)

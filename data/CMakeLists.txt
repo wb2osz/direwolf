@@ -86,8 +86,8 @@ ExternalProject_Add(download_symbolsx
   TEST_COMMAND ""
   )
 
-add_custom_target(data-update)
-add_dependencies(data-update data_rename download_tocalls download_symbols-new download_symbolsx)
+add_custom_target(update-data)
+add_dependencies(update-data data_rename download_tocalls download_symbols-new download_symbolsx)
 
 install(FILES "${CUSTOM_BINARY_DATA_DIR}/${TOCALLS_TXT}" DESTINATION share/${PROJECT_NAME})
 install(FILES "${CUSTOM_BINARY_DATA_DIR}/${SYMBOLS-NEW_TXT}" DESTINATION share/${PROJECT_NAME})

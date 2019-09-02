@@ -10,6 +10,12 @@ include_directories(
   ${CUSTOM_GEOTRANZ_DIR}
   )
 
+if(WIN32 OR CYGWIN)
+  include_directories(
+    ${CUSTOM_REGEX_DIR}
+  )
+endif()
+
 # build gen_fff to create fsk_fast_filter.h
 # optimization for slow processors
 list(APPEND gen_fff_SOURCES
@@ -105,17 +111,21 @@ if(LINUX)
       cm108.c
       )
   endif()
-  elseif(WIN32) # windows
+  elseif(WIN32 OR CYGWIN) # windows
     list(APPEND direwolf_SOURCES
       audio_win.c
 
       # icon
-      ${CMAKE_SOURCE_DIR}/cmake/cpack/direwolf.rc
+      # require plain gcc binary or link
+      #${CMAKE_SOURCE_DIR}/cmake/cpack/direwolf.rc
       )
-    else() # macOS freebsd openbsd
-      list(APPEND direwolf_SOURCES
-        audio_portaudio.c
-        )
+    list(REMOVE_ITEM direwolf_SOURCES
+      dwgpsd.c
+      )
+  else() # macOS freebsd openbsd
+    list(APPEND direwolf_SOURCES
+      audio_portaudio.c
+      )
 endif()
 
 add_executable(direwolf
@@ -136,6 +146,13 @@ target_link_libraries(direwolf
   ${PORTAUDIO_LIBRARIES}
   )
 
+if(WIN32 OR CYGWIN)
+  set_target_properties(direwolf
+    PROPERTIES COMPILE_FLAGS "-DUSE_REGEX_STATIC"
+    )
+  target_link_libraries(direwolf winmm ws2_32)
+endif()
+
 # decode_aprs
 list(APPEND decode_aprs_SOURCES
   decode_aprs.c
@@ -154,6 +171,12 @@ list(APPEND decode_aprs_SOURCES
   tt_text.c
   )
 
+if(WIN32 OR CYGWIN)
+  list(REMOVE_ITEM decode_aprs_SOURCES
+    dwgpsd.c
+    )
+endif()
+
 add_executable(decode_aprs
   ${decode_aprs_SOURCES}
   )
@@ -161,11 +184,12 @@ add_executable(decode_aprs
 add_dependencies(decode_aprs gen_fff)
 
 set_target_properties(decode_aprs
-  PROPERTIES COMPILE_FLAGS "-DDECAMAIN"
+  PROPERTIES COMPILE_FLAGS "-DDECAMAIN -DUSE_REGEX_STATIC"
   )
 
 target_link_libraries(decode_aprs
   ${MISC_LIBRARIES}
+  ${REGEX_LIBRARIES}
   Threads::Threads
   ${GPSD_LIBRARIES}
   )
@@ -306,6 +330,12 @@ list(APPEND atest_SOURCES
   textcolor.c
   )
 
+if(WIN32 OR CYGWIN)
+  list(REMOVE_ITEM atest_SOURCES
+    dwgpsd.c
+    )
+endif()
+
 add_executable(atest
   ${atest_SOURCES}
   )
@@ -315,8 +345,15 @@ add_dependencies(atest gen_fff)
 target_link_libraries(atest
   ${MISC_LIBRARIES}
   ${GPSD_LIBRARIES}
+  ${REGEX_LIBRARIES}
   Threads::Threads
   )
+
+if(WIN32 OR CYGWIN)
+  set_target_properties(atest
+    PROPERTIES COMPILE_FLAGS "-DUSE_REGEX_STATIC"
+    )
+endif()
 
 
 # Multiple AGWPE network or serial port clients to test TNCs side by side.
@@ -336,6 +373,10 @@ target_link_libraries(aclients
   ${MISC_LIBRARIES}
   Threads::Threads
   )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(aclients ws2_32)
+endif()
 
 
 # Talk to a KISS TNC.
@@ -364,6 +405,10 @@ target_link_libraries(kissutil
   ${MISC_LIBRARIES}
   Threads::Threads
   )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(kissutil ws2_32)
+endif()
 
 
 # List USB audio adapters than can use GPIO for PTT.
@@ -406,6 +451,9 @@ target_link_libraries(ttcalc
   ${MISC_LIBRARIES}
   )
 
+if(WIN32 OR CYGWIN)
+  target_link_libraries(ttcalc ws2_32)
+endif()
 
 install(TARGETS direwolf DESTINATION bin)
 install(TARGETS decode_aprs DESTINATION bin)
