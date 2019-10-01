@@ -59,6 +59,8 @@
 #endif
 
 #if __WIN32__
+#include <stdio.h>
+#include <io.h>
 #else
 #include <unistd.h>
 #include <fcntl.h>
@@ -252,7 +254,11 @@ int main (int argc, char *argv[])
  * something else such as "tee") but command line can override this.
  */
 
+#if __WIN32__
+	t_opt = _isatty(_fileno(stdout)) > 0;
+#else
 	t_opt = isatty(fileno(stdout));
+#endif
 				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
 
