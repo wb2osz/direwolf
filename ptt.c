@@ -984,7 +984,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	            if (audio_config_p->achan[ch].octrl[ot].ptt_model == RIG_MODEL_NONE) {
 	              text_color_set(DW_COLOR_ERROR);
-	              dw_printf ("Couldn't guess rig model number for AUTO option.  Run \"rigctl --list\" for a list of model numbers.\n");
+	              dw_printf ("Hamlib Error: Couldn't guess rig model number for AUTO option.  Run \"rigctl --list\" for a list of model numbers.\n");
 	              continue;
 	            }
 
@@ -996,7 +996,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	          rig[ch][ot] = rig_init(audio_config_p->achan[ch].octrl[ot].ptt_model);
 	          if (rig[ch][ot] == NULL) {
 	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Unknown rig model %d for hamlib.  Run \"rigctl --list\" for a list of model numbers.\n", 
+	            dw_printf ("Hamlib error: Unknown rig model %d.  Run \"rigctl --list\" for a list of model numbers.\n",
 	                          audio_config_p->achan[ch].octrl[ot].ptt_model);
 	            continue;
 	          }
@@ -1270,13 +1270,13 @@ void ptt_set (int ot, int chan, int ptt_signal)
 
 	    if (retcode != RIG_OK) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Error sending rig_set_ptt command for channel %d %s\n", chan, otnames[ot]);
+	      dw_printf ("Hamlib Error: rig_set_ptt command for channel %d %s\n", chan, otnames[ot]);
 	      dw_printf ("%s\n", rigerror(retcode));
 	    }
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Can't use rig_set_ptt for channel %d %s because rig_open failed.\n", chan, otnames[ot]);
+	    dw_printf ("Hamlib: Can't use rig_set_ptt for channel %d %s because rig_open failed.\n", chan, otnames[ot]);
 	  }
 	}
 #endif
