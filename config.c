@@ -79,8 +79,6 @@
 
 
 
-//#include "tq.h"
-
 /* 
  * Conversions from various units to meters.
  * There is some disagreement about the exact values for some of these. 
@@ -902,7 +900,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	p_misc_config->maxframe_extended = AX25_K_MAXFRAME_EXTENDED_DEFAULT;	/* Max frames to send before ACK.  mod 128 "Window" size. */
 
-	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 2;	/* Max SABME before falling back to SABM. */
+	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 3;	/* Max SABME before falling back to SABM. */
 	p_misc_config->v20_addrs = NULL;			/* Go directly to v2.0 for stations listed. */
 	p_misc_config->v20_count = 0;
 	p_misc_config->noxid_addrs = NULL;			/* Don't send XID to these stations. */
@@ -1592,7 +1590,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 /*
  * FIX_BITS  n  [ APRS | AX25 | NONE ] [ PASSALL ]
  *
- *	- Attempt to fix frames with bad FCS. 
+ *	- Attempt to fix frames with bad FCS.
+ *	- n is maximum number of bits to attempt fixing.
+ *	- Optional sanity check & allow everything even with bad FCS.
  */
 
 	  else if (strcasecmp(t, "FIX_BITS") == 0) {
@@ -1614,16 +1614,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 			line, n, p_audio_config->achan[channel].fix_bits);
 	    }
 
-	    if (p_audio_config->achan[channel].fix_bits > RETRY_INVERT_SINGLE) {
+	    if (p_audio_config->achan[channel].fix_bits > DEFAULT_FIX_BITS) {
 	      text_color_set(DW_COLOR_INFO);
               dw_printf ("Line %d: Using a FIX_BITS value greater than %d is not recommended for normal operation.\n",
-			line, RETRY_INVERT_SINGLE);
-	    }
-
-	    if (p_audio_config->achan[channel].fix_bits >= RETRY_INVERT_TWO_SEP) {
-	      text_color_set(DW_COLOR_INFO);
-              dw_printf ("Line %d: Using a FIX_BITS value of %d will waste a lot of CPU power and produce wrong results.\n",
-			line, RETRY_INVERT_TWO_SEP);
+			line, DEFAULT_FIX_BITS);
 	    }
 
 	    t = split(NULL,0);
@@ -2209,6 +2203,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
 	      continue;
 	    }
+	    if ( ! alldigits(t)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: '%s' is not allowed for FROM-channel.  It must be a number.\n",
+							 line, t);
+	      continue;
+	    }
 	    from_chan = atoi(t);
 	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2231,6 +2231,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+	    if ( ! alldigits(t)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: '%s' is not allowed for TO-channel.  It must be a number.\n",
+							 line, t);
 	      continue;
 	    }
 	    to_chan = atoi(t);
@@ -2317,7 +2323,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * DEDUPE 		- Time to suppress digipeating of duplicate packets.
+ * DEDUPE 		- Time to suppress digipeating of duplicate APRS packets.
  */
 
 	  else if (strcasecmp(t, "DEDUPE") == 0) {
@@ -2354,6 +2360,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
 	      continue;
 	    }
+	    if ( ! alldigits(t)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: '%s' is not allowed for FROM-channel.  It must be a number.\n",
+							 line, t);
+	      continue;
+	    }
 	    from_chan = atoi(t);
 	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2375,6 +2387,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+	    if ( ! alldigits(t)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: '%s' is not allowed for TO-channel.  It must be a number.\n",
+							 line, t);
 	      continue;
 	    }
 	    to_chan = atoi(t);
@@ -2416,6 +2434,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: Missing FROM-channel on line %d.\n", line);
 	      continue;
 	    }
+	    if ( ! alldigits(t)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: '%s' is not allowed for FROM-channel.  It must be a number.\n",
+							 line, t);
+	      continue;
+	    }
 	    from_chan = atoi(t);
 	    if (from_chan < 0 || from_chan >= MAX_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2441,6 +2465,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing TO-channel on line %d.\n", line);
+	      continue;
+	    }
+	    if ( ! alldigits(t)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: '%s' is not allowed for TO-channel.  It must be a number.\n",
+							 line, t);
 	      continue;
 	    }
 	    to_chan = atoi(t);
