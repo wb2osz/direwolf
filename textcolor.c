@@ -35,9 +35,8 @@
  *		could interpret this but it doesn't seem to be available
  *		anymore so we use a different interface.
  *
- * References:
+ * Reference:
  *		http://en.wikipedia.org/wiki/ANSI_escape_code
- *		http://academic.evergreen.edu/projects/biophysics/technotes/program/ansi_esc.htm
  *
  *
 
@@ -45,7 +44,9 @@
 
  *
  * 
- * Problem:	The ANSI escape sequences, used on Linux, allow 8 basic colors.
+ * Problem:	Years ago, when I started on this...
+ *
+ *		The ANSI escape sequences, used for text colors, allowed 8 basic colors.
  *		Unfortunately, white is not one of them.  We only have dark
  *		white, also known as light gray.  To get brighter colors, 
  *		we need to apply an attribute.  On some systems, the bold 
@@ -53,10 +54,6 @@
  *		On other systems, we need to use the blink attribute to get 
  *		bright colors, including white.  However on others, blink
  *		does actually produce blinking characters.
- *
- *		Several people have also complained that bright green is
- *		very hard to read against a light background.  The current
- *		implementation does not allow easy user customization of colors.
  *		
  *		Previously, the only option was to put "-t 0" on the command
  *		line to disable all text color.  This is more readable but
@@ -68,6 +65,8 @@
  *		It always sends the same color control codes rather than
  *		detecting the terminal type and adjusting its behavior.
  *
+ * Version 1.6:
+ *
  *		For a long time, there was a compile time distinction between
  *		ARM (e.g. Raspberry Pi) and other platforms.  With the arrival
  *		of Raspbian Buster, we get flashing and the general Linux settings
@@ -75,6 +74,8 @@
  *
  *		Since there doesn't seem to be a single universal solution,
  *		the text color option will now be allowed to have multiple values.
+ *		Several people have also complained that bright green is
+ *		very hard to read against a light background so only dark green will be used.
  *
  *--------------------------------------------------------------------*/
 
@@ -92,47 +93,58 @@
 
 #else 	/* Linux, BSD, Mac OSX */
 
-
 // Alternative 1:
 
-// Was new in version 1.2, as suggested by IW2DHW.
-// Tested with gnome-terminal and xterm.
-// Raspbian Buster LXTerminal also likes this.
-// (Should go back and check earlier versions - at one time I intentionally made ARM different.)
-
-// Here we are using the RGB color format to set the background.
-// Alas, PuTTY doesn't recognize the RGB format so the background is not set.
+// Using RGB colors - New in version 1.6.
+// Since version 1.2, we've been using RGB to set the background to white.
+// From this we can deduce that pretty much everyone recognizes RGB colors by now.
+// The only known exception was PuTTY 0.70 and this has been rectified in 0.71.
+// Instead of picking 1 of 8 colors, and using some attribute to get bright, just specify it directly.
+// This should eliminate the need to reset the background after messing with the bright/bold/blink
+// attributes to get more than 8 colors.
 
 
 // Alternative 2:
 
-// We need "blink" (5) rather than the expected bright/bold (1)
-// attribute to get bright white background on some terminals.
-// Makes no sense but I stumbled across that somewhere.
+// Was new in version 1.2, as suggested by IW2DHW.
+// Tested with gnome-terminal and xterm.
+// Raspbian Buster LXTerminal also likes this.
+// There was probably an issue with an earlier release because I intentionally made ARM different at one time.
 
-// This is your best choice for PuTTY.  Background (around text but not rest of line) is set to white.
-// On GNOME Terminal and LXTerminal, this produces blinking text with a gray background.
+// Here we are using the RGB color format to set the background.
+// PuTTY 0.70 doesn't recognize the RGB format so the background is not set.
+// Instead of complaining about it, just upgrade to PuTTY 0.71.
 
 
 // Alternative 3:
+
+// For some terminals we needed "blink" (5) rather than the expected bright/bold (1)
+// attribute to get bright white background.
+// Makes no sense but I stumbled across that somewhere.
+
+// In some cases, you might find background (around text but not rest of line) is set to white.
+// On GNOME Terminal and LXTerminal, this produces blinking text with a gray background.
+
+
+// Alternative 4:
 
 // This is using the bright/bold attribute, as you would expect from the documentation.
 // Whenever a dark color is used, the background is reset and needs to be set again.
 // In recent tests, background is always gray, not white like it should be.
 
 
-#define MAX_T 3
+#define MAX_T 4
 
-static const char *t_background_white[MAX_T+1] = { "", 	"\e[48;2;255;255;255m",			"\e[5;47m",		"\e[1;47m" };
+static const char *t_background_white[MAX_T+1] = { "", "\e[48;2;255;255;255m",	    	   "\e[48;2;255;255;255m",		    "\e[5;47m",		   "\e[1;47m" };
 
-static const char *t_black[MAX_T+1]	= { "", "\e[0;30m" "\e[48;2;255;255;255m",	"\e[0;30m" "\e[5;47m",	"\e[0;30m" "\e[1;47m" };
-static const char *t_red[MAX_T+1] 	= { "", "\e[1;31m" "\e[48;2;255;255;255m",	"\e[1;31m" "\e[5;47m",	"\e[1;31m" "\e[1;47m" };
-static const char *t_green[MAX_T+1] 	= { "", "\e[1;32m" "\e[48;2;255;255;255m",	"\e[1;32m" "\e[5;47m",	"\e[1;32m" "\e[1;47m" };
-static const char *t_dark_green[MAX_T+1]= { "", "\e[0;32m" "\e[48;2;255;255;255m",	"\e[0;32m" "\e[5;47m",	"\e[0;32m" "\e[1;47m" };
-static const char *t_yellow[MAX_T+1] 	= { "", "\e[1;33m" "\e[48;2;255;255;255m",	"\e[1;33m" "\e[5;47m",	"\e[1;33m" "\e[1;47m" };
-static const char *t_blue[MAX_T+1] 	= { "", "\e[1;34m" "\e[48;2;255;255;255m",	"\e[1;34m" "\e[5;47m",	"\e[1;34m" "\e[1;47m" };
-static const char *t_magenta[MAX_T+1] 	= { "", "\e[1;35m" "\e[48;2;255;255;255m",	"\e[1;35m" "\e[5;47m",	"\e[1;35m" "\e[1;47m" };
-static const char *t_cyan[MAX_T+1] 	= { "", "\e[0;36m" "\e[48;2;255;255;255m",	"\e[0;36m" "\e[5;47m",	"\e[0;36m" "\e[1;47m" };
+static const char *t_black[MAX_T+1]	= 	{ "", "\e[38;2;0;0;0m",		"\e[0;30m" "\e[48;2;255;255;255m",	"\e[0;30m" "\e[5;47m",	"\e[0;30m" "\e[1;47m" };
+static const char *t_red[MAX_T+1] 	= 	{ "", "\e[38;2;255;0;0m",	"\e[1;31m" "\e[48;2;255;255;255m",	"\e[1;31m" "\e[5;47m",	"\e[1;31m" "\e[1;47m" };
+static const char *t_green[MAX_T+1] 	= 	{ "", "\e[38;2;0;255;0m",	"\e[1;32m" "\e[48;2;255;255;255m",	"\e[1;32m" "\e[5;47m",	"\e[1;32m" "\e[1;47m" };
+static const char *t_dark_green[MAX_T+1]= 	{ "", "\e[38;2;0;192;0m",	"\e[0;32m" "\e[48;2;255;255;255m",	"\e[0;32m" "\e[5;47m",	"\e[0;32m" "\e[1;47m" };
+static const char *t_yellow[MAX_T+1] 	= 	{ "", "\e[38;2;255;255;0m",	"\e[1;33m" "\e[48;2;255;255;255m",	"\e[1;33m" "\e[5;47m",	"\e[1;33m" "\e[1;47m" };
+static const char *t_blue[MAX_T+1] 	= 	{ "", "\e[38;2;0;0;255m",	"\e[1;34m" "\e[48;2;255;255;255m",	"\e[1;34m" "\e[5;47m",	"\e[1;34m" "\e[1;47m" };
+static const char *t_magenta[MAX_T+1] 	= 	{ "", "\e[38;2;255;0;255m",	"\e[1;35m" "\e[48;2;255;255;255m",	"\e[1;35m" "\e[5;47m",	"\e[1;35m" "\e[1;47m" };
+static const char *t_cyan[MAX_T+1] 	= 	{ "", "\e[38;2;0;255;255m",	"\e[0;36m" "\e[48;2;255;255;255m",	"\e[0;36m" "\e[5;47m",	"\e[0;36m" "\e[1;47m" };
 
 
 /* Clear from cursor to end of screen. */
@@ -148,10 +160,14 @@ static const char clear_eos[]	= "\e[0J";
 /*
  * g_enable_color:
  *	0 = disable text colors.
- *	1 = default, should be good for LXTerminal, GNOME Terminal, xterm.
- *	2 = alternative, best choice for PuTTY  (i.e. remote login from Windows PC to Linux).
- *	3 = another alternative.  Additional suggestions are welcome.
- *	others... future possibility.
+ *	1 = default, should be good for LXTerminal >= 0.3.2, GNOME Terminal, xterm, PuTTY >= 0.71.
+ *	2 = what we had for a few earlier versions.  Should be good for LXTerminal, GNOME Terminal, xterm.
+ *	3 = use 8 basic colors, blinking attribute to get brighter color.  Best for older PuTTY.
+ *	4 = use 8 basic colors, bold attribute to get brighter color.
+ *
+ *	others... future possibility - tell me if none of these work properly for your terminal type.
+ *
+ *	9 (more accurately any invalid value) = try all of them and exit.
  */
 
 static int g_enable_color = 1;
