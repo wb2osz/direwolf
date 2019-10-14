@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011 , 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011 , 2013, 2014, 2015, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -87,18 +87,18 @@
  *		http://www.aprs.org/aprs12/preemptive-digipeating.txt
  *		http://www.aprs.org/aprs12/RR-bits.txt
  *
- *		I don't recall why I originally intended to set the source/destination C bits both to 1.
+ *		I don't recall why I originally set the source & destination C bits both to 1.
  *		Reviewing this 5 years later, after spending more time delving into the
  *		AX.25 spec, I think it should be 1 for destination and 0 for source.
  *		In practice you see all four combinations being used by APRS stations
- *		and no one really cares about these two bits.
+ *		and everyone apparently ignores them for APRS.  They do make a big
+ *		difference for connected mode.
  *
  *	The final octet of the Source has the form:
  *
  *		C R R SSID 0, where,
  *
- *			C = command/response = 1    (originally, now I think it should be 0 for source.)
- *						(Haven't gone back to check to see what code actually does.)
+ *			C = command/response = 0
  *			R R = Reserved = 1 1
  *			SSID = substation ID
  *			0 = zero (or 1 if no repeaters)
@@ -373,16 +373,17 @@ packet_t ax25_from_text (char *monitor, int strict)
  * Tearing it apart is destructive so make our own copy first.
  */
 	char stuff[512];
-
 	char *pinfo;
-	char *pa;
-	char *saveptr;		/* Used with strtok_r because strtok is not thread safe. */
 
 	int ssid_temp, heard_temp;
 	char atemp[AX25_MAX_ADDR_LEN];
 
 	char info_part[AX25_MAX_INFO_LEN+1];
 	int info_len;
+
+	// text_color_set(DW_COLOR_DEBUG);
+	// dw_printf ("DEBUG: ax25_from_text ('%s', %d)\n", monitor, strict);
+	// fflush(stdout); sleep(1);
 
 	packet_t this_p = ax25_new ();
 
@@ -410,7 +411,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 	this_p->frame_data[AX25_DESTINATION*7+6] = SSID_H_MASK | SSID_RR_MASK;
  
 	memset (this_p->frame_data + AX25_SOURCE*7, ' ' << 1, 6);
-	this_p->frame_data[AX25_SOURCE*7+6] = SSID_H_MASK | SSID_RR_MASK | SSID_LAST_MASK;
+	this_p->frame_data[AX25_SOURCE*7+6] = SSID_RR_MASK | SSID_LAST_MASK;
 
 	this_p->frame_data[14] = AX25_UI_FRAME;
 	this_p->frame_data[15] = AX25_PID_NO_LAYER_3;
@@ -440,9 +441,10 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 /*
  * Source address.
- * Don't use traditional strtok because it is not thread safe.
  */
-	pa = strtok_r (stuff, ">", &saveptr);
+
+	char *pnxt = stuff;
+	char *pa = strsep (&pnxt, ">");
 	if (pa == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Failed to create packet from text.  No source address\n");
@@ -465,7 +467,7 @@ packet_t ax25_from_text (char *monitor, int strict)
  * Destination address.
  */
  
-	pa = strtok_r (NULL, ",", &saveptr);
+	pa = strsep (&pnxt, ",");
 	if (pa == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Failed to create packet from text.  No destination address\n");
@@ -487,11 +489,26 @@ packet_t ax25_from_text (char *monitor, int strict)
 /*
  * VIA path.
  */
-	while (( pa = strtok_r (NULL, ",", &saveptr)) != NULL && this_p->num_addr < AX25_MAX_ADDRS ) {
 
-	  int k;
+// Originally this used strtok_r.
+// strtok considers all adjacent delimiters to be a single delimiter.
+// This is handy for varying amounts of whitespace.
+// It will never return a zero length string.
+// All was good until this bizarre case came along:
 
-	  k = this_p->num_addr;
+//	AISAT-1>CQ,,::CQ-0     :From  AMSAT INDIA & Exseed Space |114304|48|45|42{962
+
+// Apparently there are two digipeater fields but they are empty.
+// When we parsed this text representation, the extra commas were ignored rather
+// than pointed out as being invalid.
+
+// Use strsep instead.  This does not collapse adjacent delimiters.
+
+	while (( pa = strsep (&pnxt, ",")) != NULL && this_p->num_addr < AX25_MAX_ADDRS ) {
+
+	  int k = this_p->num_addr;
+
+	  // printf ("DEBUG: get digi loop, num addr = %d, address = '%s'\n", k, pa);// FIXME
 
 	  if ( ! ax25_parse_addr (k, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	    text_color_set(DW_COLOR_ERROR);
@@ -726,7 +743,7 @@ packet_t ax25_dup (packet_t copy_from)
  *		out_heard	- True if "*" found.
  *
  * Returns:	True (1) if OK, false (0) if any error.
- *		When 0, out_addr, out_ssid, and out_heard are unpredictable.
+ *		When 0, out_addr, out_ssid, and out_heard are undefined.
  *
  *
  *------------------------------------------------------------------------------*/
@@ -747,10 +764,17 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	*out_ssid = 0;
 	*out_heard = 0;
 
+	// dw_printf ("ax25_parse_addr in: position=%d, '%s', strict=%d\n", position, in_addr, strict);
+
 	if (position < -1) position = -1;
 	if (position > AX25_REPEATER_8) position = AX25_REPEATER_8;
 	position++;	/* Adjust for position_name above. */
 
+	if (strlen(in_addr) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("%sAddress \"%s\" is empty.\n", position_name[position], in_addr);
+	  return 0;
+	}
 
 	if (strict && strlen(in_addr) >= 2 && strncmp(in_addr, "qA", 2) == 0) {
 
@@ -759,8 +783,7 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	  dw_printf ("APRS Internet Servers.  It should never appear when going over the radio.\n");
 	}
 
-	//dw_printf ("ax25_parse_addr in: %s\n", in_addr);
-
+	// dw_printf ("ax25_parse_addr in: %s\n", in_addr);
 
 	maxlen = strict ? 6 : (AX25_MAX_ADDR_LEN-1);
 	p = in_addr;
@@ -838,7 +861,7 @@ int ax25_parse_addr (int position, char *in_addr, int strict, char *out_addr, in
 	  return 0;
 	}
 
-	//dw_printf ("ax25_parse_addr out: %s %d %d\n", out_addr, *out_ssid, *out_heard);
+	// dw_printf ("ax25_parse_addr out: '%s' %d %d\n", out_addr, *out_ssid, *out_heard);
 
 	return (1);
 
@@ -984,6 +1007,11 @@ void ax25_set_addr (packet_t this_p, int n, char *ad)
 
 	//dw_printf ("ax25_set_addr (%d, %s) num_addr=%d\n", n, ad, this_p->num_addr);
 
+	if (strlen(ad) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Set address error!  Station address for position %d is empty!\n", n);
+	}
+
 	if (n >= 0 && n < this_p->num_addr) {
 
 	  //dw_printf ("ax25_set_addr , existing case\n");
@@ -1064,6 +1092,11 @@ void ax25_insert_addr (packet_t this_p, int n, char *ad)
 	assert (n >= AX25_REPEATER_1 && n < AX25_MAX_ADDRS);
 
 	//dw_printf ("ax25_insert_addr (%d, %s)\n", n, ad);
+
+	if (strlen(ad) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Set address error!  Station address for position %d is empty!\n", n);
+	}
 
 	/* Don't do it if we already have the maximum number. */
 	/* Should probably return success/fail code but currently the caller doesn't care. */
@@ -1305,6 +1338,11 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	    break;
 	}
 
+	if (strlen(station) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Station address, in position %d, is empty!  This is not a valid AX.25 frame.\n", n);
+	}
+
 	ssid = ax25_get_ssid (this_p, n);
 	if (ssid != 0) {
 	  snprintf (sstr, sizeof(sstr), "-%d", ssid);
@@ -1377,6 +1415,11 @@ void ax25_get_addr_no_ssid (packet_t this_p, int n, char *station)
 	    station[i] = '\0';
 	  else
 	    break;
+	}
+
+	if (strlen(station) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Station address, in position %d, is empty!  This is not a valid AX.25 frame.\n", n);
 	}
 
 } /* end ax25_get_addr_no_ssid */
@@ -1918,6 +1961,8 @@ void ax25_format_addrs (packet_t this_p, char *result)
 	}
 	
 	strcat (result, ":");
+
+	// dw_printf ("DEBUG ax25_format_addrs, num_addr = %d, result = '%s'\n", this_p->num_addr, result);
 }
 
 
