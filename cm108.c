@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2017  John Langner, WB2OSZ
+//    Copyright (C) 2017,2019  John Langner, WB2OSZ
 //
 //    Parts of this were adapted from "hamlib" which contains the notice:
 //
@@ -31,10 +31,11 @@
  * Description:
  *
  *	There is an incresing demand for using the GPIO pins of USB audio devices for PTT.
- *	We have a couple commercial products:
+ *	We have a few commercial products:
  *
- *		DMK URI			http://www.dmkeng.com/URI_Order_Page.htm
- *		RB-USB RIM		http://www.repeater-builder.com/products/usb-rim-lite.html
+ *		DMK URI		http://www.dmkeng.com/URI_Order_Page.htm
+ *		RB-USB RIM	http://www.repeater-builder.com/products/usb-rim-lite.html
+ *		RA-35		http://www.masterscommunications.com/products/radio-adapter/ra35.html
  *
  *	and homebrew projects which are all very similar.
  *
@@ -47,7 +48,7 @@
  *	
  *	Soundmodem and hamlib paved the way but didn't get too far.
  *	Dire Wolf 1.3 added HAMLIB support (Linux only) which theoretically allows this in a
- *	roundabout way.  This is documented in the User Guide, section called,
+ *	painful roundabout way.  This is documented in the User Guide, section called,
  *		 "Hamlib PTT Example 2: Use GPIO of USB audio adapter.  (e.g. DMK URI)"
  *
  *	It's rather involved and the explantion doesn't cover the case of multiple
@@ -215,7 +216,7 @@ static int cm108_write (char *name, int iomask, int iodata);
 
 // Used to process regular expression matching results.
 
-static void inline substr_se (char *dest, const char *src, int start, int endp1)
+static void substr_se (char *dest, const char *src, int start, int endp1)
 {
 	int len = endp1 - start;
 
@@ -234,14 +235,19 @@ static void inline substr_se (char *dest, const char *src, int start, int endp1)
  */
 
 struct thing_s {
-	int vid;		// vendor id
-	int pid;		// product id
+	int vid;		// vendor id, displayed as four hexadecimal digits.
+	int pid;		// product id, displayed as four hexadecimal digits.
+	char card_number[8];	// Number.  e.g.  2 for plughw:2,0
+	char card_name[32];	// Name, assigned by system (e.g. Device_1) or by udev rule.
 	char product[32];	// product name (e.g. manufacturer, model)
 	char devnode_sound[22];	// e.g. /dev/snd/pcmC0D0p
 	char plughw[72];	// Above in more familiar format e.g. plughw:0,0
 				// Oversized to silence a compiler warning.
+	char plughw2[72];	// With name rather than number.
+	char devpath[128];	// Kernel dev path.  Does not include /sys mount point.
 	char devnode_hidraw[17]; // e.g. /dev/hidraw3
 	char devnode_usb[25];	// e.g. /dev/bus/usb/001/012
+				// This is what we use to match up audio and HID.
 };
 
 int cm108_inventory (struct thing_s *things, int max_things);
@@ -251,12 +257,11 @@ int cm108_inventory (struct thing_s *things, int max_things);
  *
  * Name:	main
  *
- * Purpose:	Test program to list USB audio and HID devices.
- *
- *		sudo apt-get install libudev-dev
- *		gcc -DCM108_MAIN textcolor.c -l udev
+ * Purpose:	Useful utility to list USB audio and HID devices.
  *
  *------------------------------------------------------------------*/
+
+//#define EXTRA 1
 
 #define MAXX_THINGS 60
 
@@ -270,28 +275,32 @@ int main (void)
 
 	text_color_init (0);    // Turn off text color.
 
+// Take inventory of USB Audio adapters and other HID devices.
+
 	num_things = cm108_inventory (things, MAXX_THINGS);
 
-	dw_printf ("    VID  PID   %-*s %-*s %-*s %-*s"
+	dw_printf ("    VID  PID   %-*s %-*s %-*s %-*s %-*s"
 #if EXTRA
 						" %-*s"
 #endif
 						"\n", 	(int)sizeof(things[0].product),	"Product",
 							(int)sizeof(things[0].devnode_sound), "Sound",
-							(int)sizeof(things[0].plughw), "ADEVICE",
+							(int)sizeof(things[0].plughw)/5, "ADEVICE",
+							(int)sizeof(things[0].plughw2)/4, "ADEVICE",
 							(int)sizeof(things[0].devnode_hidraw), "HID [ptt]"
 #if EXTRA
 							, (int)sizeof(things[0].devnode_usb), "USB"
 #endif
 							);
 
-	dw_printf ("    ---  ---   %-*s %-*s %-*s %-*s"
+	dw_printf ("    ---  ---   %-*s %-*s %-*s %-*s %-*s"
 #if EXTRA
 						" %-*s"
 #endif
 						"\n", 	(int)sizeof(things[0].product),	"-------",
 							(int)sizeof(things[0].devnode_sound), "-----",
-							(int)sizeof(things[0].plughw), "-------",
+							(int)sizeof(things[0].plughw)/5, "-------",
+							(int)sizeof(things[0].plughw2)/4, "-------",
 							(int)sizeof(things[0].devnode_hidraw), "---------"
 #if EXTRA
 							, (int)sizeof(things[0].devnode_usb), "---"
@@ -299,7 +308,7 @@ int main (void)
 							);
 	for (i = 0; i < num_things; i++) {
 
-	  dw_printf ("%2s  %04x %04x  %-*s %-*s %-*s %-*s"
+	  dw_printf ("%2s  %04x %04x  %-*s %-*s %-*s %-*s %-*s"
 #if EXTRA
 						" %-*s"
 #endif
@@ -308,13 +317,61 @@ int main (void)
 							things[i].vid, things[i].pid,
 							(int)sizeof(things[i].product),	things[i].product,
 							(int)sizeof(things[i].devnode_sound), things[i].devnode_sound,
-							(int)sizeof(things[0].plughw), things[i].plughw,
+							(int)sizeof(things[0].plughw)/5, things[i].plughw,
+							(int)sizeof(things[0].plughw2)/4, things[i].plughw2,
 							(int)sizeof(things[i].devnode_hidraw), things[i].devnode_hidraw
 #if EXTRA
 							, (int)sizeof(things[i].devnode_usb), things[i].devnode_usb
 #endif
 							);
+	  //dw_printf ("             %-*s\n", (int)sizeof(things[i].devpath), things[i].devpath);
 	}
+
+	static const char *suggested_names[] = {"Fred", "Wilma", "Pebbles", "Dino", "Barney", "Betty", "Bamm_Bamm" };
+	int iname = 0;
+
+	// From example in https://alsa.opensrc.org/Udev
+
+	dw_printf ("\n");
+	dw_printf ("** = Can use Audio Adapter GPIO for PTT.\n");
+	dw_printf ("\n");
+	dw_printf ("Notice that each USB Audio adapter is assigned a number and a name.  These are not predictable so you could\n");
+	dw_printf ("end up using the wrong adapter after adding or removing other USB devices or after rebooting.  You can assign a\n");
+	dw_printf ("name to each USB adapter so you can refer to the same one each time.  This can be based on any characteristics\n");
+	dw_printf ("that makes them unique such as product id or serial number.  Unfortunately these devices don't have unique serial\n");
+	dw_printf ("numbers so how can we tell them apart?  A name can also be assigned based on the physical USB socket.\n");
+	dw_printf ("Create a file like \"/etc/udev/rules.d/85-my-usb-audio.rules\" with the following contents and then reboot.\n");
+	dw_printf ("\n");
+	dw_printf ("SUBSYSTEM!=\"sound\", GOTO=\"my_usb_audio_end\"\n");
+	dw_printf ("ACTION!=\"add\", GOTO=\"my_usb_audio_end\"\n");
+
+// Consider only the 'devnode' paths that end with "card" and a number.
+// Replace the number with a question mark.
+
+	regex_t devpath_re;
+	char emsg[100];
+	// Drop any "/sys" at the beginning.
+	int e = regcomp (&devpath_re, "(/devices/.+/card)[0-9]$", REG_EXTENDED);
+	if (e) {
+	  regerror (e, &devpath_re, emsg, sizeof(emsg));
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("INTERNAL ERROR:  %s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  return (-1);
+	}
+
+	for (i = 0; i < num_things; i++) {
+	  if (i == 0 || strcmp(things[i].devpath,things[i-1].devpath) != 0) {
+	    regmatch_t devpath_match[2];
+	    if (regexec (&devpath_re, things[i].devpath, 2, devpath_match, 0) == 0) {
+	      char without_number[256];
+	      substr_se (without_number, things[i].devpath, devpath_match[1].rm_so, devpath_match[1].rm_eo);
+	      dw_printf ("DEVPATH==\"%s?\", ATTR{id}=\"%s\"\n", without_number, suggested_names[iname]);
+	      if (iname < 6) iname++;
+	    }
+	  }
+	}
+	dw_printf ("LABEL=\"my_usb_audio_end\"\n");
+	dw_printf ("\n");
 
 	return (0);
 }
@@ -349,6 +406,10 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	struct udev_device *dev;
 	struct udev_device *parentdev;
 
+	char const *pattrs_id = NULL;
+	char const *pattrs_number = NULL;
+	char card_devpath[128] = "";
+
 	int num_things = 0;
 	memset (things, 0, sizeof(struct thing_s) * max_things);
 
@@ -368,11 +429,21 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	udev_enumerate_scan_devices(enumerate);
 	devices = udev_enumerate_get_list_entry(enumerate);
 	udev_list_entry_foreach(dev_list_entry, devices) {
-	  const char *path;
-	  path = udev_list_entry_get_name(dev_list_entry);
+	  const char *path = udev_list_entry_get_name(dev_list_entry);
 	  dev = udev_device_new_from_syspath(udev, path);
 	  char const *devnode = udev_device_get_devnode(dev);
-	  if (devnode != NULL) {
+
+	  if (devnode == NULL ) {
+	    // I'm not happy with this but couldn't figure out how
+	    // to get attributes from one level up from the pcmC?D?? node.
+	    strlcpy (card_devpath, path, sizeof(card_devpath));
+	    pattrs_id = udev_device_get_sysattr_value(dev,"id");
+	    pattrs_number = udev_device_get_sysattr_value(dev,"number");
+	    //dw_printf (" >card_devpath = %s\n", card_devpath);
+	    //dw_printf (" >>pattrs_id = %s\n", pattrs_id);
+	    //dw_printf (" >>pattrs_number = %s\n", pattrs_number);
+	  }
+	  else {
 	    parentdev = udev_device_get_parent_with_subsystem_devtype( dev, "usb", "usb_device"); 
 	    if (parentdev != NULL) {
 	      char const *p;
@@ -387,9 +458,12 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	      if (num_things < max_things) {
 	        things[num_things].vid = vid;
 	        things[num_things].pid = pid;
+	        SAFE_STRCPY (things[num_things].card_name, pattrs_id);
+	        SAFE_STRCPY (things[num_things].card_number, pattrs_number);
 	        SAFE_STRCPY (things[num_things].product, udev_device_get_sysattr_value(parentdev,"product"));
 	        SAFE_STRCPY (things[num_things].devnode_sound, devnode);
 	        SAFE_STRCPY (things[num_things].devnode_usb, udev_device_get_devnode(parentdev));
+	        strlcpy (things[num_things].devpath, card_devpath, sizeof(things[num_things].devpath));
 	        num_things++;
 	      }
 	      udev_device_unref(parentdev);
@@ -414,8 +488,7 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	udev_enumerate_scan_devices(enumerate);
 	devices = udev_enumerate_get_list_entry(enumerate);
 	udev_list_entry_foreach(dev_list_entry, devices) {
-	  const char *path;
-	  path = udev_list_entry_get_name(dev_list_entry);
+	  const char *path = udev_list_entry_get_name(dev_list_entry);
 	  dev = udev_device_new_from_syspath(udev, path);
 	  char const *devnode = udev_device_get_devnode(dev);
 	  if (devnode != NULL) {
@@ -448,6 +521,7 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	        SAFE_STRCPY (things[num_things].product, udev_device_get_sysattr_value(parentdev,"product"));
 	        SAFE_STRCPY (things[num_things].devnode_hidraw, devnode);
 	        SAFE_STRCPY (things[num_things].devnode_usb, usb);
+	        SAFE_STRCPY (things[num_things].devpath, udev_device_get_devpath(dev));
 	        num_things++;
 	      }
 	      udev_device_unref(parentdev);
@@ -461,6 +535,8 @@ int cm108_inventory (struct thing_s *things, int max_things)
  * Seeing the form /dev/snd/pcmC4D0p will be confusing to many because we
  * would generally something like plughw:4,0 for in the direwolf configuration file.
  * Construct the more familiar form.
+ * Previously we only used the numeric form.  In version 1.6, the name is listed as well
+ * and we describe how to assign names based on the physical USB socket for repeatability.
  */
 	int i;
 	regex_t pcm_re;
@@ -481,6 +557,7 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	    substr_se (c, things[i].devnode_sound, match[1].rm_so, match[1].rm_eo);
 	    substr_se (d, things[i].devnode_sound, match[2].rm_so, match[2].rm_eo);
 	    snprintf (things[i].plughw, sizeof(things[i].plughw), "plughw:%s,%s", c, d);
+	    snprintf (things[i].plughw2, sizeof(things[i].plughw), "plughw:%s,%s", things[i].card_name, d);
 	  }
 	}
 
@@ -493,11 +570,16 @@ int cm108_inventory (struct thing_s *things, int max_things)
  *
  * Name:	cm108_find_ptt
  *
- * Purpose:	Try to find /dev/hidraw corresponding to plughw:n,n
+ * Purpose:	Try to find /dev/hidraw corresponding to a USB audio "card."
  *
  * Inputs:	output_audio_device
- *				- Device name used in the ADEVICE configuration.
- *				  This would generally be something like plughw:1,0
+ *				- Used in the ADEVICE configuration.
+ *				  This can take many forms such as:
+ *					surround41:CARD=Fred,DEV=0
+ *					surround41:Fred,0
+ *					surround41:Fred
+ *					plughw:2,3
+ *				  In our case we just need to extract the card number or name.
  *
  *		ptt_device_size	- Size of result area to avoid buffer overflow.
  *
@@ -514,15 +596,46 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
 	int num_things;
 	int i;
 
+	//dw_printf ("DEBUG: cm108_find_ptt('%s')\n", output_audio_device);
+
 	strlcpy (ptt_device, "", ptt_device_size);
 	num_things = cm108_inventory (things, MAXX_THINGS);
 
-	for (i = 0; i < num_things; i++) {
+	regex_t sound_re;
+	char emsg[100];
+	int e = regcomp (&sound_re, ".+:(CARD=)?([A-Za-z0-9_]+)(,.*)?", REG_EXTENDED);
+	if (e) {
+	  regerror (e, &sound_re, emsg, sizeof(emsg));
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("INTERNAL ERROR:  %s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  return;
+	}
 
-	  if (GOOD_DEVICE(things[i].vid,things[i].pid) ) {
-	    if (strcmp(output_audio_device, things[i].plughw) == 0) {
-	      strlcpy (ptt_device, things[i].devnode_hidraw, ptt_device_size);
+	char num_or_name[64];
+	strcpy (num_or_name, "");
+	regmatch_t sound_match[4];
+	if (regexec (&sound_re, output_audio_device, 4, sound_match, 0) == 0) {
+	  substr_se (num_or_name, output_audio_device, sound_match[2].rm_so, sound_match[2].rm_eo);
+	  //dw_printf ("DEBUG: Got '%s' from '%s'\n", num_or_name, output_audio_device);
+	}
+	if (strlen(num_or_name) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Could not extract card number or name from %s\n", output_audio_device);
+	  dw_printf ("Can't automatically find matching HID for PTT.\n");
+	  return;
+	}
+
+	for (i = 0; i < num_things; i++) {
+	  //dw_printf ("DEBUG: i=%d, card_name='%s', card_number='%s'\n", i, things[i].card_name, things[i].card_number);
+	  if (strcmp(num_or_name,things[i].card_name) == 0 || strcmp(num_or_name,things[i].card_number) == 0) {
+	    //dw_printf ("DEBUG: success! returning '%s'\n", things[i].devnode_hidraw);
+	    strlcpy (ptt_device, things[i].devnode_hidraw, ptt_device_size);
+	    if ( ! GOOD_DEVICE(things[i].vid,things[i].pid) ) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Warning: USB audio card %s (%s) is not a device known to work with GPIO PTT.\n",
+				things[i].card_number, things[i].card_name);
 	    }
+	    return;
 	  }
 	}
 	
