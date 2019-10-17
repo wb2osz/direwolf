@@ -172,7 +172,7 @@ If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.ya
  
 Here are some good places to ask questions and share your experience:
 
-- [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) 
+- [Dire Wolf Software TNC](https://groups.io/g/direwolf) 
 
 - [Raspberry Pi 4 Ham Radio](https://groups.io/g/RaspberryPi-4-HamRadio)
 
