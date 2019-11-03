@@ -84,25 +84,6 @@ double dtime_now (void)
 }
 
 
-#if __WIN32__
-
-/* 
- * Windows doesn't have localtime_r.
- * It should have the equivalent localtime_s, with opposite parameter
- * order,  but I get undefined reference when trying to use it.
- */
-
-static struct tm *localtime_r(time_t *clock, struct tm *res)
-{
-	struct tm *tm;
-
-	tm = localtime (clock);
-	memcpy (res, tm, sizeof(struct tm));
-	return (res);
-}
-
-#endif
-
 
 /*------------------------------------------------------------------
  *

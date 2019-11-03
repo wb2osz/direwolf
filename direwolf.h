@@ -27,6 +27,7 @@
 #define _WIN32_WINNT 0x0501     /* Minimum OS version is XP. */
 #define WINVER       0x0501     /* Minimum OS version is XP. */
 
+#include <winsock2.h>
 #include <windows.h>
 
 #endif
@@ -109,11 +110,14 @@
 
 
 #if __WIN32__
+
 #define PTW32_STATIC_LIB
 //#include "pthreads/pthread.h"
-#define gmtime_r( _clock, _result ) \
-        ( *(_result) = *gmtime( (_clock) ), \
-          (_result) )
+
+// This enables definitions of localtime_r and gmtime_r in system time.h.
+//#define _POSIX_THREAD_SAFE_FUNCTIONS 1
+#define _POSIX_C_SOURCE 1
+
 #else
 #include <pthread.h>
 #endif

@@ -222,8 +222,8 @@ static struct adev_s {
  *----------------------------------------------------------------*/
 
 
-static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD instance, DWORD param1, DWORD param2);
-static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD instance, DWORD param1, DWORD param2);
+static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD_PTR instance, DWORD_PTR param1, DWORD_PTR param2);
+static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD_PTR instance, DWORD_PTR param1, DWORD_PTR param2);
 
 int audio_open (struct audio_s *pa)
 {
@@ -684,23 +684,24 @@ int audio_open (struct audio_s *pa)
  * Called when input audio block is ready.
  */
 
-static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD instance, DWORD param1, DWORD param2)
+static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD_PTR instance, DWORD_PTR param1, DWORD_PTR param2)
 {
 
+	//dw_printf ("in_callback, handle = %p, msg = %d, instance = %I64d\n", handle, msg, instance);
+
 	int a = instance;
-
-//dw_printf ("in_callback, handle = %d, a = %d\n", (int)handle, a);
-
 	assert (a >= 0 && a < MAX_ADEVS);
 	struct adev_s *A = &(adev[a]);
-
 
 	if (msg == WIM_DATA) {
 	
 	  WAVEHDR *p = (WAVEHDR*)param1;
 	  
-	  p->dwUser = -1;		/* needs to be unprepared. */
+	  p->dwUser = 0x5a5a5a5a;	/* needs to be unprepared. */
+					/* dwUser can be 32 or 64 bit unsigned int. */
 	  p->lpNext = NULL;
+
+	  // dw_printf ("dwBytesRecorded = %ld\n", p->dwBytesRecorded);
 
 	  EnterCriticalSection (&(A->in_cs));
 
@@ -726,7 +727,7 @@ static void CALLBACK in_callback (HWAVEIN handle, UINT msg, DWORD instance, DWOR
  */
 
 
-static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD instance, DWORD param1, DWORD param2)
+static void CALLBACK out_callback (HWAVEOUT handle, UINT msg, DWORD_PTR instance, DWORD_PTR param1, DWORD_PTR param2)
 {
 	if (msg == WOM_DONE) {   
 
@@ -807,7 +808,7 @@ int audio_get (int a)
 
 	      p = (WAVEHDR*)(A->in_headp);		/* no need to be volatile at this point */
 
-	      if (p->dwUser == (DWORD)(-1)) {
+	      if (p->dwUser == 0x5a5a5a5a) {		// dwUser can be 32 or bit unsigned.
 	        waveInUnprepareHeader(A->audio_in_handle, p, sizeof(WAVEHDR));
 	        p->dwUser = 0;	/* Index for next byte. */
 
