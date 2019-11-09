@@ -164,7 +164,12 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 	A->g_quiet = quiet;
 
-	snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
+	if (isprint(*pinfo)) {
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
+	}
+	else {
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "ERROR!!! Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
+	}
 
 	A->g_symbol_table = '/';	/* Default to primary table. */
 	A->g_symbol_code = ' ';		/* What should we have for default symbol? */
