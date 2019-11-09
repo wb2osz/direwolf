@@ -665,6 +665,9 @@ int main (int argc, char *argv[]) {
 
 	text_color_set (DW_COLOR_ERROR);
 
+#ifdef NDEBUG
+#error	"This won't work properly if NDEBUG is defined.  It should be undefined in direwolf.h"
+#endif
 	assert (n==1);
 	assert (param.full_duplex == 0);
 	assert (param.srej == srej_single);

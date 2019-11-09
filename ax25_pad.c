@@ -418,7 +418,8 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 	this_p->frame_len = 7 + 7 + 1 + 1;
 	this_p->num_addr = (-1);
-	assert (ax25_get_num_addr(this_p) == 2);
+	(void) ax25_get_num_addr(this_p);  // when num_addr is -1, this sets it properly.
+	assert (this_p->num_addr == 2);
 
 
 /*

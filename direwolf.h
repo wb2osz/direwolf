@@ -4,6 +4,11 @@
 // TODO:   include this file first before anything else in each .c file.
 
 
+#ifdef NDEBUG
+#undef NDEBUG		// Because it would disable assert().
+#endif
+
+
 #ifndef DIREWOLF_H
 #define DIREWOLF_H 1
 
