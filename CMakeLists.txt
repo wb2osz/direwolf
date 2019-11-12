@@ -13,6 +13,7 @@ option(FORCE_SSE "Compile with SSE instruction only" OFF)
 option(FORCE_SSSE3 "Compile with SSSE3 instruction only" OFF)
 option(FORCE_SSE41 "Compile with SSE4.1 instruction only" OFF)
 option(OPTIONAL_TEST "Compile optional test (might be broken)" OFF)
+# UNITTEST option must be after CMAKE_BUILT_TYPE
 
 # where cmake find custom modules
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
@@ -87,6 +88,13 @@ if(NOT DEFINED CMAKE_BUILD_TYPE OR "${CMAKE_BUILD_TYPE}" STREQUAL "")
 endif()
 message(STATUS "Build type set to: ${CMAKE_BUILD_TYPE}")
 message("CMake system: ${CMAKE_SYSTEM_NAME}")
+
+# Unittest should be on for dev builds and off for releases.
+if(CMAKE_BUILD_TYPE MATCHES "Release")
+  option(UNITTEST "Build unittest binaries." OFF)
+else()
+  option(UNITTEST "Build unittest binaries." ON)
+endif()
 
 # set compiler
 include(FindCompiler)
@@ -202,9 +210,12 @@ add_subdirectory(${CUSTOM_MISC_DIR})
 add_subdirectory(src)
 
 # ctest
-include(CTest)
-enable_testing()
-add_subdirectory(test)
+if(UNITTEST)
+  message(STATUS "Build unit test binaries")
+  include(CTest)
+  enable_testing()
+  add_subdirectory(test)
+endif(UNITTEST)
 
 # manage scripts
 add_subdirectory(scripts)
