@@ -213,7 +213,7 @@ if(LINUX)
   endif()
 
 elseif (NOT WIN32 AND NOT CYGWIN)
-  find_package(portaudio REQUIRED)
+  find_package(Portaudio REQUIRED)
   if(PORTAUDIO_FOUND)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_PORTAUDIO")
   endif()
