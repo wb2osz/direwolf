@@ -82,6 +82,18 @@ set(CUSTOM_TEST_DIR "${CMAKE_SOURCE_DIR}/test")
 set(CUSTOM_TEST_SCRIPTS_DIR "${CUSTOM_TEST_DIR}/scripts")
 set(CUSTOM_SHELL_SHABANG "#!/bin/sh -e")
 
+# cpack variables
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_STRIP_FILES true)
+set(CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
+set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_PACKAGE_CONTACT "https://github.com/wb2osz/direwolf")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Dire Wolf is a software soundcard AX.25 packet modem/TNC and APRS encoder/decoder")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_SOURCE_DIR}/README.md")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_SOURCE_IGNORE_FILES "${PROJECT_BINARY_DIR};/.git/;.gitignore;menu.yml;.travis.yml;.appveyor.yml;default.nix;.envrc;TODOs.org;/.scripts/")
+
 # if we don't set build_type
 if(NOT DEFINED CMAKE_BUILD_TYPE OR "${CMAKE_BUILD_TYPE}" STREQUAL "")
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -151,6 +163,23 @@ if (C_CLANG)
 elseif (C_GCC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fmax-errors=1")
 endif()
+
+# set installation directories
+if (WIN32 OR CYGWIN)
+  set(INSTALL_BIN_DIR ".")
+  set(INSTALL_DOC_DIR "doc")
+  set(INSTALL_CONF_DIR ".")
+  set(INSTALL_SCRIPTS_DIR "scripts")
+  set(INSTALL_MAN_DIR "man")
+  set(INSTALL_DATA_DIR "data")
+else()
+  set(INSTALL_BIN_DIR "bin")
+  set(INSTALL_DOC_DIR "share/doc/${CMAKE_PROJECT_NAME}")
+  set(INSTALL_CONF_DIR "${INSTALL_DOC_DIR}/conf")
+  set(INSTALL_SCRIPTS_DIR "${INSTALL_DOC_DIR}/scripts")
+  set(INSTALL_MAN_DIR "share/man/man1")
+  set(INSTALL_DATA_DIR "share/${PROJECT_NAME}")
+endif(WIN32 OR CYGWIN)
 
 # requirements
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -224,9 +253,9 @@ add_subdirectory(scripts)
 add_subdirectory(conf)
 
 # install basic docs
-install(FILES ${CMAKE_SOURCE_DIR}/CHANGES.md DESTINATION share/doc/${CMAKE_PROJECT_NAME})
-install(FILES ${CMAKE_SOURCE_DIR}/LICENSE DESTINATION share/doc/${CMAKE_PROJECT_NAME})
-install(FILES ${CMAKE_SOURCE_DIR}/external/LICENSE DESTINATION share/doc/${CMAKE_PROJECT_NAME}/external)
+install(FILES ${CMAKE_SOURCE_DIR}/CHANGES.md DESTINATION ${INSTALL_DOC_DIR})
+install(FILES ${CMAKE_SOURCE_DIR}/LICENSE DESTINATION ${INSTALL_DOC_DIR})
+install(FILES ${CMAKE_SOURCE_DIR}/external/LICENSE DESTINATION ${INSTALL_DOC_DIR}/external)
 add_subdirectory(doc)
 add_subdirectory(man)
 

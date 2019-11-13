@@ -265,6 +265,7 @@ static const struct {
 
 static const char *search_locations[] = {
 	(const char *) "symbols-new.txt",
+	(const char *) "data/symbols-new.txt",
 	(const char *) "../data/symbols-new.txt",
 #ifndef __WIN32__
 	(const char *) "/usr/local/share/direwolf/symbols-new.txt",

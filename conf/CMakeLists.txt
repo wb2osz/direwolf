@@ -29,8 +29,8 @@ if(LINUX)
   install(FILES "${CUSTOM_CONF_DIR}/99-direwolf-cmedia.rules" DESTINATION /etc/udev/rules.d/)
 endif()
 
-install(FILES "${CMAKE_BINARY_DIR}/direwolf.conf" DESTINATION share/doc/${CMAKE_PROJECT_NAME}/examples)
-install(FILES "${CUSTOM_CONF_DIR}/sdr.conf" DESTINATION share/doc/${CMAKE_PROJECT_NAME}/examples)
+install(FILES "${CMAKE_BINARY_DIR}/direwolf.conf" DESTINATION ${INSTALL_CONF_DIR})
+install(FILES "${CUSTOM_CONF_DIR}/sdr.conf" DESTINATION ${INSTALL_CONF_DIR})
 
 # Put sample configuration & startup files in home directory.
 # This step would be done as ordinary user.

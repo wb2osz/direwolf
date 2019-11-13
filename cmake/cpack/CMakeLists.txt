@@ -1,1 +1,1 @@
-# empty for the moment
+include(CPack)
