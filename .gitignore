@@ -107,3 +107,7 @@ $RECYCLE.BIN/
 *.lnk
 /use_this_sdk
 *.dSYM
+
+# cmake
+build/
+tmp/

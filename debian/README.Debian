@@ -1,0 +1,5 @@
+In order to start direwolf as a service the configuration file
+/etc/direwolf.conf needs to exist. Otherwise attempting to start the service
+returns an 'Assertion failed' error. An example configuration file which may be
+used as a model can be found in
+/usr/share/doc/direwolf/examples/direwolf.conf.gz
