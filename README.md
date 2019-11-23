@@ -107,26 +107,40 @@ For more details see the **User Guide** in the [**doc** directory](https://githu
 
 ### Linux - Using git clone (recommended) ###
 
-You will probably need to install one of these packages first:
+***Note that this has changed for version 1.6.  There are now a couple extra steps.***
+
+A standard operating system install will probably include these already:
+
+- git
+- gcc or clang compiler
+- make
+
+You will probably need to install additional packages:
 
 On Debian / Ubuntu / Raspbian:
 
+    sudo apt-get install cmake
     sudo apt-get install libasound2-dev
+    sudo apt-get install libudev-dev
 
 Or on Red Hat / Fedora / Centos:
 
+    sudo yum install cmake
     sudo yum install alsa-lib-devel
+    sudo yum install libudev-devel
 
 Then on any flavor of Linux:
 
 	cd ~
 	git clone https://www.github.com/wb2osz/direwolf
 	cd direwolf
-	make
+	mkdir build && cd build
+	cmake ..
+	make –j4
 	sudo make install
 	make install-conf
 
-This should give you the most recent stable release.  If you want the latest (possibly unstable) development version, use "git checkout dev" before the first "make" command.
+This should give you the most recent stable release.  If you want the latest (possibly unstable) development version, use "git checkout dev" after the "cd direwolf" command.
 
 For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
@@ -136,7 +150,7 @@ For more details see the **User Guide** in the [**doc** directory](https://githu
 Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging.  
 
 	sudo apt-get update
-    apt-cache showpkg direwolf
+	apt-cache showpkg direwolf
 	sudo apt-get install direwolf
 
 
@@ -145,7 +159,7 @@ Results will vary depending on your hardware platform and operating system versi
 Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging.  
 
 	sudo yum check-update
-    sudo yum list direwolf
+	sudo yum list direwolf
 	sudo yum install direwolf
 
 ### Linux - Download source in tar or zip file ###
@@ -153,7 +167,9 @@ Results will vary depending on your hardware platform and operating system versi
 Go to the [releases page](https://github.com/wb2osz/direwolf/releases).  Chose desired release and download the source as zip or compressed tar file.  Unpack the files, with "unzip" or "tar xfz," and then:
 
 	cd direwolf-*
-	make
+	mkdir build && cd build
+	cmake ..
+	make –j4
 	sudo make install
 	make install-conf
 
