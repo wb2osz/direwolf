@@ -125,7 +125,16 @@ On Debian / Ubuntu / Raspbian:
 
 Or on Red Hat / Fedora / Centos:
 
-    sudo yum install cmake
+CentOS 6 & 7 currently have cmake 2.8 but we need 3.1 or later.
+First you need to enable the EPEL repository.  Add a symlink if you want to type cmake rather than cmake3.
+
+	sudo yum install epel-release
+	sudo rpm -e cmake
+	sudo yum install cmake3
+	sudo ln -s /usr/bin/cmake3 /usr/bin/cmake
+
+Continue with the other required packages:
+
     sudo yum install alsa-lib-devel
     sudo yum install libudev-devel
 

@@ -62,8 +62,8 @@
  *---------------------------------------------------------------*/
 
 /*
-	A growing number of people have been asking about support for the DMK URI
-	or the similar RB-USB RIM.
+	A growing number of people have been asking about support for the DMK URI,
+	RB-USB RIM, etc.
 
 	These use a C-Media CM108/CM119 with an interesting addition, a GPIO
 	pin is used to drive PTT.  Here is some related information.
@@ -77,6 +77,15 @@
 
 		http://www.repeater-builder.com/products/usb-rim-lite.html
 		http://www.repeater-builder.com/voip/pdf/cm119-datasheet.pdf
+
+	RA-35:
+
+		http://www.masterscommunications.com/products/radio-adapter/ra35.html
+
+	DINAH:
+
+		https://hamprojects.info/dinah/
+
 
 	Homebrew versions of the same idea:
 
@@ -147,6 +156,11 @@
 #include <unistd.h>
 #include <errno.h>
 #include <grp.h>
+
+#ifndef __USE_BSD
+#define __USE_BSD	// Needed for gcc 4.8.5 to find definitions for scandir
+			// and alphasort.  Newer compilers don't have this issue.
+#endif
 #include <dirent.h>
 
 #ifdef USE_HAMLIB
