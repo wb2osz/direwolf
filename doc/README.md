@@ -128,11 +128,11 @@ and a couple things that can be done about it.
  
 Here are some good places to ask questions and share your experiences:
 
-- [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) 
+- [Dire Wolf Software TNC](https://groups.io/g/direwolf)
 
-- [Raspberry Pi 4 Ham Radio](https://groups.yahoo.com/neo/groups/Raspberry_Pi_4-Ham_RADIO/info)
+- [Raspberry Pi 4 Ham Radio](https://groups.io/g/RaspberryPi-4-HamRadio)
 
-- [linuxham](https://groups.yahoo.com/neo/groups/linuxham/info)
+- [linuxham](https://groups.io/g/linuxham)
 
 - [TAPR aprssig](http://www.tapr.org/pipermail/aprssig/)
  
