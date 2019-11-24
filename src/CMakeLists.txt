@@ -84,7 +84,6 @@ list(APPEND direwolf_SOURCES
   serial_port.c
   pfilter.c
   ptt.c
-  rdq.c
   recv.c
   rrbb.c
   server.c

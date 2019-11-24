@@ -570,7 +570,6 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/demod_afsk.c
     ${CUSTOM_SRC_DIR}/demod_psk.c
     ${CUSTOM_SRC_DIR}/demod_9600.c
-    ${CUSTOM_SRC_DIR}/rdq.c
     ${CUSTOM_SRC_DIR}/server.c
     ${CUSTOM_SRC_DIR}/morse.c
     ${CUSTOM_SRC_DIR}/dtmf.c

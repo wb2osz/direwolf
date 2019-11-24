@@ -98,7 +98,6 @@
 #include "textcolor.h"
 #include "ax25_pad.h"
 #include "rrbb.h"
-#include "rdq.h"
 #include "multi_modem.h"
 #include "dtime_now.h"
 #include "demod_9600.h"		/* for descramble() */

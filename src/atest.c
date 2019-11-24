@@ -698,27 +698,6 @@ int audio_get (int a)
 
 
 /*
- * Rather than queuing up frames with bad FCS, 
- * try to fix them immediately.
- */
-
-void rdq_append (rrbb_t rrbb)
-{
-	int chan, subchan, slice;
-	alevel_t alevel;
-
-
-	chan = rrbb_get_chan(rrbb);
-	subchan = rrbb_get_subchan(rrbb);
-	slice = rrbb_get_slice(rrbb);
-	alevel = rrbb_get_audio_level(rrbb);
-
-	hdlc_rec2_try_to_fix_later (rrbb, chan, subchan, slice, alevel);
-	rrbb_delete (rrbb);
-}
-
-
-/*
  * This is called when we have a good frame.
  */
 
