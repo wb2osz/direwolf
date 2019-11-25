@@ -187,6 +187,9 @@ else()
   set(INSTALL_SCRIPTS_DIR "${INSTALL_DOC_DIR}/scripts")
   set(INSTALL_MAN_DIR "share/man/man1")
   set(INSTALL_DATA_DIR "share/${PROJECT_NAME}")
+  if (NOT DEFINED UDEV_RULES_DIR OR "${UDEV_RULES_DIR}" STREQUAL "")
+    set(UDEV_RULES_DIR "/etc/udev/rules.d")
+  endif()
 endif(WIN32 OR CYGWIN)
 
 # requirements
