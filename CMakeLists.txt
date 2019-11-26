@@ -150,8 +150,16 @@ elseif (WIN32)
 endif()
 
 if (C_CLANG OR C_GCC)
-  # _BSD_SOURCE is deprecated we need to use _DEFAULT_SOURCE
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
+  # _BSD_SOURCE is deprecated we need to use _DEFAULT_SOURCE.
+  # That might be the case for a more modern compiler but it is still needed
+  # for CentOS 6 & 7.  Without -D_BSD_SOURCE, we get Warning: Implicit declaration of
+  # functions alloca, cfmakeraw, scandir, setlinebuf, strcasecmp, strncasecmp, and strsep.
+  # When a function (like strsep) returns a pointer, the compiler instead assumes a 32 bit
+  # int and sign extends it out to be a 64 bit pointer.  Use the pointer and Kaboom!
+  #
+  ### Wextra spews out so much noise a serious problem was not noticed.
+  ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE -D_BSD_SOURCE ${EXTRA_FLAGS}")
   # for math.h
   link_libraries("-lm")
 elseif (C_MSVC)

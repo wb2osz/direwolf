@@ -156,11 +156,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <grp.h>
-
-#ifndef __USE_BSD
-#define __USE_BSD	// Needed for gcc 4.8.5 to find definitions for scandir
-			// and alphasort.  Newer compilers don't have this issue.
-#endif
 #include <dirent.h>
 
 #ifdef USE_HAMLIB
