@@ -173,9 +173,6 @@ struct audio_s {
 
 	    int upsample;		/* Upsample by this factor for G3RUH. */
 
-	    int interleave;		/* If > 1, interleave samples among multiple decoders. */
-					/* Quick hack for experiment. */
-
             int mark_freq;		/* Two tones for AFSK modulation, in Hz. */
 	    int space_freq;		/* Standard tones are 1200 and 2200 for 1200 baud. */
 

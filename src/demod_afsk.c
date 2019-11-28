@@ -197,79 +197,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	switch (profile) {
 
-	  case 'A':
-
-		/* Original.  52 taps, truncated bandpass, IIR lowpass */
-		/* 'F' is the fast version for low end processors. */
-		/* It is a special case that works only for a particular */
-		/* baud rate, tone pair, and sampling rate. */
-
-	    D->use_prefilter = 0;		
-
-	    D->ms_filter_len_bits = 1.415;		/* 52 @ 44100, 1200 */
-	    D->ms_window = BP_WINDOW_TRUNCATED;
-
-	    //D->bp_window = BP_WINDOW_TRUNCATED;
-
-	    D->lpf_use_fir = 0;
-	    D->lpf_iir = 0.195;
-
-	    D->agc_fast_attack = 0.250;		
-	    D->agc_slow_decay = 0.00012;
-	    D->hysteresis = 0.005;
-
-	    D->pll_locked_inertia = 0.700;
-	    D->pll_searching_inertia = 0.580;
-	    break;
-
-	  case 'B':
-
-		/* Original bandpass.  Use FIR lowpass instead. */
-
-	    D->use_prefilter = 0;		
-
-	    D->ms_filter_len_bits = 1.415;		/* 52 @ 44100, 1200 */
-	    D->ms_window = BP_WINDOW_TRUNCATED;
-
-	    //D->bp_window = BP_WINDOW_TRUNCATED;
-
-	    D->lpf_use_fir = 1;
-	    D->lpf_baud = 1.09;
-	    D->lp_filter_len_bits = D->ms_filter_len_bits;		
-	    D->lp_window = BP_WINDOW_TRUNCATED;
-
-	    D->agc_fast_attack = 0.370;		
-	    D->agc_slow_decay = 0.00014;
-	    D->hysteresis = 0.003;
-
-	    D->pll_locked_inertia = 0.620;
-	    D->pll_searching_inertia = 0.350;
-	    break;
-
-	  case 'C':
-
-		/* Cosine window, 76 taps for bandpass, FIR lowpass. */
-
-	    D->use_prefilter = 0;		
-
-	    D->ms_filter_len_bits = 2.068;		/* 76 @ 44100, 1200 */
-	    D->ms_window = BP_WINDOW_COSINE;
-
-	    //D->bp_window = BP_WINDOW_COSINE;
-
-	    D->lpf_use_fir = 1;
-	    D->lpf_baud = 1.09;
-	    D->lp_filter_len_bits = D->ms_filter_len_bits;		
-	    D->lp_window = BP_WINDOW_TRUNCATED;
-
-	    D->agc_fast_attack = 0.495;		
-	    D->agc_slow_decay = 0.00022;
-	    D->hysteresis = 0.005;
-
-	    D->pll_locked_inertia = 0.620;
-	    D->pll_searching_inertia = 0.350;
-	    break;
-
 	  case 'D':
 
 		/* Prefilter, Cosine window, FIR lowpass. Tweeked for 300 baud. */
@@ -335,73 +262,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    D->pll_searching_inertia = 0.50;
 	    break;
 
-	  case 'G':
-
-		/* 1200 baud - Started out same as E but add 3 way interleave. */
-		/* Version 1.3 - EXPERIMENTAL - Needs more fine tuning. */
-
-	    //D->bp_window = BP_WINDOW_COSINE;	/* The name says BP but it is used for all of them. */
-
-	    D->use_prefilter = 1;		/* first, a bandpass filter. */
-	    D->prefilter_baud = 0.15;
-	    D->pre_filter_len_bits = 128 * 1200. / (44100. / 3.);
-	    D->pre_window = BP_WINDOW_TRUNCATED;
-
-	    D->ms_filter_len_bits = 25 * 1200. / (44100. / 3.);
-	    D->ms_window = BP_WINDOW_COSINE;
-
-	    D->lpf_use_fir = 1;
-	    D->lpf_baud = 1.16;
-	    D->lp_filter_len_bits = 21 * 1200. / (44100. / 3.);
-	    D->lp_window = BP_WINDOW_TRUNCATED;
-
-	    D->agc_fast_attack = 0.130;
-	    D->agc_slow_decay = 0.00013;
-	    D->hysteresis = 0.01;
-
-	    D->pll_locked_inertia = 0.73;
-	    D->pll_searching_inertia = 0.64;
-	    break;
-
-	  case 'H':
-
-		/* Experiment in Version 1.6 			*/
-		/* 1200 baud - Started out as a copy of E but	*/
-		/* will probably have little tweaks after the	*/
-		/* major experiment.				*/
-		/* Enhancements: 				*/
-		/*  + Look back and sample the bit position.	*/
-		/*  + Avoid smearing by long filter and low pass. */
-
-	    D->use_prefilter = 1;		/* first, a bandpass filter. */
-	    D->prefilter_baud = 0.21;
-	    D->pre_filter_len_bits = 184 * 1200. / 44100.;
-	    D->pre_filter_len_bits = 235 * 1200. / 44100.;
-	    D->pre_window = BP_WINDOW_TRUNCATED;
-
-	    D->ms_filter_len_bits = 65 * 1200. / 44100.;	// Just over 2 bit times.
-	    D->ms_window = BP_WINDOW_COSINE;
-
-	    /* New for synchronous re-demod in 1.6. */
-	    D->play_it_again_sample = 1;
-	    D->m2_filter_len_bits = 44 * 1200. / 44100.;	// a little more than 1 bit time.
-	    D->s2_filter_len_bits = 48 * 1200. / 44100.;	// a little more than 1 bit time.
-	    D->ms2_window = BP_WINDOW_TRUNCATED;
-	    D->lp_delay_fract = 0.53;		// FIXME:  This is backwards.
-
-	    D->lpf_use_fir = 1;
-	    D->lpf_baud = 1.10;
-	    D->lp_filter_len_bits = 64 * 1200. / 44100.;
-	    D->lp_window = BP_WINDOW_TRUNCATED;
-
-	    D->agc_fast_attack = 0.820;
-	    D->agc_slow_decay = 0.000214;
-	    D->hysteresis = 0.001;
-
-	    D->pll_locked_inertia = 0.765;
-	    D->pll_searching_inertia = 0.44;
-	    break;
-
 	  default:
 
 	    text_color_set(DW_COLOR_ERROR);
@@ -457,8 +317,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	D->pre_filter_size = (int) round( D->pre_filter_len_bits * (float)samples_per_sec / (float)baud );
 	D->ms_filter_size = (int) round( D->ms_filter_len_bits * (float)samples_per_sec / (float)baud );
-	D->m2_filter_size = (int) round( D->m2_filter_len_bits * (float)samples_per_sec / (float)baud );
-	D->s2_filter_size = (int) round( D->s2_filter_len_bits * (float)samples_per_sec / (float)baud );
 	D->lp_filter_size = (int) round( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud );
 	  	 
 /* Experiment with other sizes. */
@@ -468,12 +326,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 #endif
 #ifdef TUNE_MS_FILTER_SIZE
 	D->ms_filter_size = TUNE_MS_FILTER_SIZE;
-#endif
-#ifdef TUNE_M2_FILTER_SIZE
-	D->m2_filter_size = TUNE_M2_FILTER_SIZE;
-#endif
-#ifdef TUNE_S2_FILTER_SIZE
-	D->s2_filter_size = TUNE_S2_FILTER_SIZE;
 #endif
 #ifdef TUNE_LP_FILTER_SIZE
 	D->lp_filter_size = TUNE_LP_FILTER_SIZE;
@@ -503,24 +355,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  exit (1);
 	}
 
-	if (D->m2_filter_size * 2 > MAX_FILTER_SIZE)
-	{
-	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("Calculated filter size of %d is too large.\n", D->m2_filter_size);
-	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
-	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
-							MAX_FILTER_SIZE);
-	  exit (1);
-	}
-	if (D->s2_filter_size * 2 > MAX_FILTER_SIZE)
-	{
-	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("Calculated filter size of %d is too large.\n", D->s2_filter_size);
-	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
-	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
-							MAX_FILTER_SIZE);
-	  exit (1);
-	}
+
 
 	if (D->lp_filter_size > MAX_FILTER_SIZE) 
 	{
@@ -584,13 +419,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 #endif
 
 	  gen_ms (space_freq, samples_per_sec, D->s_sin_table, D->s_cos_table, D->ms_filter_size, D->ms_window);
-
-	  // Note that these are twice as long so we can try matching different phases.
-
-	  if (D->play_it_again_sample) {
-	    gen_ms (mark_freq, samples_per_sec, D->m2_sin_table, D->m2_cos_table, D->m2_filter_size * 2, D->ms2_window);
-	    gen_ms (space_freq, samples_per_sec, D->s2_sin_table, D->s2_cos_table, D->s2_filter_size * 2, D->ms2_window);
-	  }
 
 /*
  * Now the lowpass filter.
@@ -764,9 +592,6 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 // FIXME:  calculate how much we really need.
 
 	int extra = 0;
-	if (D->play_it_again_sample) {
-	  extra = D->lp_filter_size;
-	}
 
 	if (D->use_prefilter) {
 	  float cleaner;
@@ -1015,76 +840,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, 
 	if (D->slicer[slice].data_clock_pll < 0 && D->slicer[slice].prev_d_c_pll > 0) {
 
 	  /* Overflow. */
-
-// In version 1.6 we will try a new experiment.
-// The tone filters are about 2 bit times wide so this smears the signal.
-// I originally expected this to be about 1 bit time but 2 turned out
-// to give the best results after extensive experimentation.
-// We are looking at half of each adjacent bit, not just the one we want.
-// The low pass filter also smears the signal.
-//
-// We will try to look back in time and re-demodulate only the time period of the bit.
-//
-
-	  if (D->play_it_again_sample) {	// New in 1.6.  Currently 'H' demod profile.
-
-// FIXME: double check position and draw picture.
-
-#if 0
-	    // This provided a slight benefit.
-
-	    int offset = ( D->ms_filter_size - D->m2_filter_size ) / 2 + D->lp_filter_delay;
-
-	    float m_sum1 = convolve (D->ms_in_cb + offset, D->m2_sin_table, D->m2_filter_size);
-	    float m_sum2 = convolve (D->ms_in_cb + offset, D->m2_cos_table, D->m2_filter_size);
-	    float m_amp = sqrtf(m_sum1 * m_sum1 + m_sum2 * m_sum2);
-
-	    offset = ( D->ms_filter_size - D->s2_filter_size ) / 2 + D->lp_filter_delay;
-
-	    float s_sum1 = convolve (D->ms_in_cb + offset, D->s2_sin_table, D->s2_filter_size);
-	    float s_sum2 = convolve (D->ms_in_cb + offset, D->s2_cos_table, D->s2_filter_size);
-	    float s_amp = sqrtf(s_sum1 * s_sum1 + s_sum2 * s_sum2);
-#else
-	    // Here we try something completely new.
-	    // Rather than taking the vector magnitude of the I+Q components,
-	    // correlate it with only a sine wave.  We don't know the phase so
-	    // we will try matching with a bunch of different phases and take the best match.
-
-	    // Trying match with cosine as well could be beneficial for lower sample rates.
-
-	    int j;
-	    float m_amp = 0;
-	    float s_amp = 0;
-
-	    int offset = ( D->ms_filter_size - D->m2_filter_size ) / 2 + D->lp_filter_delay;
-
-	    for (j = 0; j <= D->m2_filter_size; j++) {
-	      float match = fabsf(convolve (D->ms_in_cb + offset, D->m2_sin_table + j, D->m2_filter_size));
-	      if (match > m_amp) m_amp = match;
-	    }
-
-	    offset = ( D->ms_filter_size - D->s2_filter_size ) / 2 + D->lp_filter_delay;
-
-	    for (j = 0; j <= D->s2_filter_size; j++) {
-	      float match = fabsf(convolve (D->ms_in_cb + offset, D->s2_sin_table + j, D->s2_filter_size));
-	      if (match > s_amp) s_amp = match;
-	    }
-#endif
-
-	    int resampled;
-	    if (D->num_slicers > 1) {
-	      resampled = m_amp > s_amp * space_gain[slice];
-	    }
-	    else {
-	      resampled = m_amp > s_amp;
-	    }
-
-	    hdlc_rec_bit (chan, subchan, slice, resampled, 0, -1);
-	  }
-	  else {
-	    // Traditional way, after the low pass filter.
-	    hdlc_rec_bit (chan, subchan, slice, demod_data, 0, -1);
-	  }
+	  hdlc_rec_bit (chan, subchan, slice, demod_data, 0, -1);
 	}
 
 	// Even if we used alternative method to extract the data bit,

@@ -120,7 +120,6 @@ int demod_init (struct audio_s *pa)
 	   * This can be increased by:
 	   *	Multiple frequencies.
 	   *	Multiple letters (not sure if I will continue this).
-	   *	New interleaved decoders.
 	   *
 	   * num_slicers is set to max by the "+" option.
 	   */
@@ -313,48 +312,6 @@ int demod_init (struct audio_s *pa)
 
 	        save_audio_config_p->achan[chan].num_subchan = num_letters;
 		
-/*
- * Quick hack with special case for another experiment.
- * Do this in a more general way if it turns out to be useful.
- */
-	        save_audio_config_p->achan[chan].interleave = 1;
-	        if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EE") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 2;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EEE") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 3;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EEEE") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 4;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "EEEEE") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 5;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GG") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 2;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGG") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 3;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGG+") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 3;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGGG") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 4;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-	        else if (strcasecmp(save_audio_config_p->achan[chan].profiles, "GGGGG") == 0) {
-	          save_audio_config_p->achan[chan].interleave = 5;
-	          save_audio_config_p->achan[chan].decimate = 1;
-	        }
-
 		if (save_audio_config_p->achan[chan].num_subchan != num_letters) {
 		  text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("INTERNAL ERROR, %s:%d, chan=%d, num_subchan(%d) != strlen(\"%s\")\n",
@@ -383,7 +340,7 @@ int demod_init (struct audio_s *pa)
 	            dw_printf ("        %d.%d: %c %d & %d\n", chan, d, profile, mark, space);
 	          }
 
-	          demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / (save_audio_config_p->achan[chan].decimate * save_audio_config_p->achan[chan].interleave), 
+	          demod_afsk_init (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec / save_audio_config_p->achan[chan].decimate, 
 			    save_audio_config_p->achan[chan].baud,
 		            mark, 
 	                    space,

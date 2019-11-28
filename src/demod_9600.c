@@ -159,12 +159,6 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 	    D->pll_locked_inertia = 0.89;
 	    D->pll_searching_inertia = 0.67;
 
-	    D->play_it_again_sample = 0;		// TODO: 1.6 experiment.
-							// assuming lp_filter_size > lp2_filter_size
-
-	    D->lp2_filter_size =  samples_per_sec / baud;	// samples for 1 bit
-
-
 //	    break;
 //	}
 
@@ -215,12 +209,6 @@ void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s 
 	//dw_printf ("demod_9600_init: call gen_lowpass(fc=%.2f, , size=%d, )\n", fc, D->lp_filter_size);
 
 	(void)gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, 0);
-
-// Go back and resample where bit is expected.
-
-	fc = (float)baud * 1 / (float)samples_per_sec;
-
-	(void)gen_lowpass (fc, D->lp2_filter, D->lp2_filter_size, D->lp_window, 0);
 
 	/* Version 1.2: Experiment with different slicing levels. */
 
@@ -524,31 +512,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 
 	  /* Overflow.  Was large positive, wrapped around, now large negative. */
 
-
-	  if (D->play_it_again_sample) {	// New experiment in 1.6.
-
-// FIXME: double check position and draw picture.
-
-	    int offset = ( D->lp_filter_size - D->lp2_filter_size ) / 2;
-
-	    float amp = convolve (D->raw_cb + offset, D->lp2_filter, D->lp2_filter_size);
-
-	    int resampled;
-
-	    if (D->num_slicers > 1) {
-	      resampled = amp - slice_point[slice] > 0;;
-	    }
-	    else {
-	      resampled = amp > 0;
-	    }
-
-	    hdlc_rec_bit (chan, subchan, slice, resampled, 1, D->slicer[slice].lfsr);
-	  }
-	  else {
-
-// traditional
-	    hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, 1, D->slicer[slice].lfsr);
-	  }
+	  hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, 1, D->slicer[slice].lfsr);
 	}
 
 /*

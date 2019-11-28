@@ -306,7 +306,6 @@ void multi_modem_process_sample (int chan, int audio_sample)
 {
 	int d;
 	int subchan;
-	static int i = 0;	/* for interleaving among multiple demodulators. */
 
 // Accumulate an average DC bias level.
 // Shouldn't happen with a soundcard but could with mistuned SDR.
@@ -334,21 +333,9 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	/* Formerly one loop. */
 	/* 1.2: We can feed one demodulator but end up with multiple outputs. */
 
-
-	if (save_audio_config_p->achan[chan].interleave > 1) {
-
-// TODO: temp debug, remove this.
-
-	  assert (save_audio_config_p->achan[chan].interleave == save_audio_config_p->achan[chan].num_subchan);
-	  demod_process_sample(chan, i, audio_sample);
-	  i++;
-	  if (i >= save_audio_config_p->achan[chan].interleave) i = 0;
-	}
-	else {
-	  /* Send same thing to all. */
-	  for (d = 0; d < save_audio_config_p->achan[chan].num_subchan; d++) {
-	    demod_process_sample(chan, d, audio_sample);
-	  }
+	/* Send same thing to all. */
+	for (d = 0; d < save_audio_config_p->achan[chan].num_subchan; d++) {
+	  demod_process_sample(chan, d, audio_sample);
 	}
 
 	for (subchan = 0; subchan < save_audio_config_p->achan[chan].num_subchan; subchan++) {
