@@ -127,8 +127,6 @@ add_executable(atest9
   ${atest9_SOURCES}
   )
 
-add_dependencies(atest9 gen_fff)
-
 target_link_libraries(atest9
   ${MISC_LIBRARIES}
   ${REGEX_LIBRARIES}
@@ -528,8 +526,6 @@ if(OPTIONAL_TEST)
   add_executable(testagc
     ${testagc_SOURCES}
     )
-
-  add_dependencies(testagc gen_fff)
 
   target_link_libraries(testagc
     ${MISC_LIBRARIES}

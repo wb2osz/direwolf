@@ -16,28 +16,6 @@ if(WIN32 OR CYGWIN)
   )
 endif()
 
-# build gen_fff to create fsk_fast_filter.h
-# optimization for slow processors
-list(APPEND gen_fff_SOURCES
-  demod_afsk.c
-  dsp.c
-  textcolor.c
-  )
-
-add_executable(gen_fff
-  ${gen_fff_SOURCES}
-  )
-
-set_target_properties(gen_fff
-  PROPERTIES COMPILE_FLAGS "-DGEN_FFF"
-  )
-
-add_custom_command(TARGET gen_fff
-  POST_BUILD
-  COMMAND gen_fff > fsk_fast_filter.h
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-
 
 # direwolf
 list(APPEND direwolf_SOURCES
@@ -131,8 +109,6 @@ add_executable(direwolf
   ${direwolf_SOURCES}
   )
 
-add_dependencies(direwolf gen_fff)
-
 target_link_libraries(direwolf
   ${GEOTRANZ_LIBRARIES}
   ${MISC_LIBRARIES}
@@ -179,8 +155,6 @@ endif()
 add_executable(decode_aprs
   ${decode_aprs_SOURCES}
   )
-
-add_dependencies(decode_aprs gen_fff)
 
 set_target_properties(decode_aprs
   PROPERTIES COMPILE_FLAGS "-DDECAMAIN -DUSE_REGEX_STATIC"
@@ -338,8 +312,6 @@ endif()
 add_executable(atest
   ${atest_SOURCES}
   )
-
-add_dependencies(atest gen_fff)
 
 target_link_libraries(atest
   ${MISC_LIBRARIES}

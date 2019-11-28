@@ -63,8 +63,6 @@
 #define MAX(a,b) ((a)>(b)?(a):(b))
 
 
-#ifndef GEN_FFF
-
 /* Quick approximation to sqrt(x*x+y*y) */
 /* No benefit for regular PC. */
 /* Should help with microcomputer platform. */
@@ -137,8 +135,6 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
 	return (0.0f);
 }
 
-#endif	// ifndef GEN_FFF
-
 
 /*
  * for multi-slicer experiment.
@@ -197,27 +193,11 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 #endif
 
 
-	if (profile == 'F') {
-
-	  if (baud != DEFAULT_BAUD ||
-	      mark_freq != DEFAULT_MARK_FREQ ||
-	      space_freq!= DEFAULT_SPACE_FREQ ||
-	      samples_per_sec != DEFAULT_SAMPLES_PER_SEC) {
-
-	    	text_color_set(DW_COLOR_INFO);
-		dw_printf ("Note: Decoder 'F' works only for %d baud, %d/%d tones, %d samples/sec.\n",
-			DEFAULT_BAUD, DEFAULT_MARK_FREQ, DEFAULT_SPACE_FREQ, DEFAULT_SAMPLES_PER_SEC);
-		dw_printf ("Using Decoder 'A' instead.\n");
-		profile = 'A';
-	  }
-	}
-
 	D->profile = profile;		// so we know whether to take fast path later.
 
 	switch (profile) {
 
 	  case 'A':
-	  case 'F':
 
 		/* Original.  52 taps, truncated bandpass, IIR lowpass */
 		/* 'F' is the fast version for low end processors. */
@@ -317,6 +297,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    D->pll_searching_inertia = 0.350;
 	    break;
 
+	  case 'F':	// removed obsolete. treat as E for now.
 	  case 'E':
 
 		/* 1200 baud - Started out similar to C but add prefilter. */
@@ -686,7 +667,6 @@ failed experiment
 	  space_gain[j] = space_gain[j-1] * step;
 	}
 
-#ifndef GEN_FFF
 #if 0
 	text_color_set(DW_COLOR_DEBUG);
 	for (j=0; j<MAX_SUBCHANS; j++) {
@@ -694,88 +674,8 @@ failed experiment
 	  dw_printf ("G = %.3f, %+.1f dB\n", space_gain[j], db);
 	}
 #endif
-#endif
 
 }  /* fsk_gen_filter */
-
-
-#if GEN_FFF
-
-
-
-// Properties of the radio channels.
-
-static struct audio_s modem;
-
-
-// Filters will be stored here. 
-
-static struct demodulator_state_s ds;
-
-
-#define SPARSE 3
-
-
-static void emit_macro (char *name, int size, float *coeff)
-{
-	int i;
-
-	dw_printf ("#define %s(x) \\\n", name);
-
-	for (i=SPARSE/2; i<size; i+=SPARSE) {
-	  dw_printf ("\t%c (%.6ff * x[%d]) \\\n", (i==0 ? ' ' : '+'), coeff[i], i);
-	}
-	dw_printf ("\n");
-}
-
-int main (void)
-{
-	//int n;
-	char fff_profile;
-
-	fff_profile = 'F';		
-
-	memset (&modem, 0, sizeof(modem));
-	memset (&ds, 0, sizeof(ds));
-
-	modem.adev[0].num_channels = 1;
-	modem.adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;
-	modem.achan[0].mark_freq = DEFAULT_MARK_FREQ;
-	modem.achan[0].space_freq = DEFAULT_SPACE_FREQ;
-	modem.achan[0].baud = DEFAULT_BAUD;
- 	modem.achan[0].num_subchan = 1;
- 	modem.achan[0].num_slicers = 1;
-
-
-	demod_afsk_init (modem.adev[0].samples_per_sec, modem.achan[0].baud,
-			modem.achan[0].mark_freq, modem.achan[0].space_freq, fff_profile, &ds);
-	
-	printf ("/* This is an automatically generated file.  Do not edit. */\n");
-	printf ("\n");
-	printf ("#define FFF_SAMPLES_PER_SEC %d\n", modem.adev[0].samples_per_sec);
-	printf ("#define FFF_BAUD %d\n", modem.achan[0].baud);
-	printf ("#define FFF_MARK_FREQ %d\n", modem.achan[0].mark_freq);
-	printf ("#define FFF_SPACE_FREQ %d\n", modem.achan[0].space_freq);
-	printf ("#define FFF_PROFILE '%c'\n", fff_profile);
-	printf ("\n");
-
-	emit_macro ("CALC_M_SUM1", ds.ms_filter_size, ds.m_sin_table);
-	emit_macro ("CALC_M_SUM2", ds.ms_filter_size, ds.m_cos_table);
-	emit_macro ("CALC_S_SUM1", ds.ms_filter_size, ds.s_sin_table);
-	emit_macro ("CALC_S_SUM2", ds.ms_filter_size, ds.s_cos_table);
-
-	exit(EXIT_SUCCESS);
-}
-
-#endif
-
-
-
-#ifndef GEN_FFF
-
-/* Optimization for slow processors. */
-
-#include "fsk_fast_filter.h"
 
 
 
@@ -881,37 +781,8 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 /*
  * Next we have bandpass filters for the mark and space tones.
- *
- * This takes a lot of computation.
- * It's not a problem on a typical (Intel x86 based) PC.
- * Dire Wolf takes only about 2 or 3% of the CPU time.
- *
- * It might be too much for a little microcomputer to handle.
- *
- * Here we have an optimized case for the default values.
  */
 
-
-
-// TODO1.2:   is this right or do we need to store profile in the modulator info?
-
-	
-	if (D->profile == toupper(FFF_PROFILE)) {
-
-				/* ========== Faster for default values on slower processors. ========== */
-
-	  m_sum1 = CALC_M_SUM1(D->ms_in_cb);
-	  m_sum2 = CALC_M_SUM2(D->ms_in_cb);
-	  m_amp = z(m_sum1,m_sum2);
-
-	  s_sum1 = CALC_S_SUM1(D->ms_in_cb);
-	  s_sum2 = CALC_S_SUM2(D->ms_in_cb);
-	  s_amp = z(s_sum1,s_sum2);
-	}
-	else {
-
-				/* ========== General case to handle all situations. ========== */
-	
 /*
  * find amplitude of "Mark" tone.
  */
@@ -928,9 +799,6 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 
 	  s_amp = sqrtf(s_sum1 * s_sum1 + s_sum2 * s_sum2);
 
-				/* ========== End of general case. ========== */
-	}
-		
 
 /* 
  * Apply some low pass filtering BEFORE the AGC to remove
@@ -1238,9 +1106,6 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, 
 	D->slicer[slice].prev_demod_data = demod_data;
 
 } /* end nudge_pll */
-
-
-#endif   /* GEN_FFF */
 
 
 /* end demod_afsk.c */
