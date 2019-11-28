@@ -796,7 +796,7 @@ int main ()
 
 	  for (pf = 0; pf <= 1; pf++) {
 
- 	    int cmin, cmax;
+ 	    int cmin = 0, cmax = 1;
 
 	    switch (ftype) {
 					// 0 = response, 1 = command
@@ -867,7 +867,7 @@ int main ()
 
 /* SREJ is only S frame which can have information part. */
 
-	static char srej_info[] = { 1<<1, 2<<1, 3<<1, 4<<1 };
+	static unsigned char srej_info[] = { 1<<1, 2<<1, 3<<1, 4<<1 };
 
 	ftype = frame_type_S_SREJ;
 	for (pf = 0; pf <= 1; pf++) {
