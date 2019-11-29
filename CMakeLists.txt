@@ -180,8 +180,17 @@ if (C_CLANG OR C_GCC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
   #
   #
-  # for math.h
-  link_libraries("-lm")
+  # -lm is needed for functins in math.h
+  if (LINUX)
+    # We have another problem with CentOS 6.  clock_gettime() is in librt so we need -lrt.
+    # The clock_* functions were moved into gnu libc for version 2.17.
+    #   https://sourceware.org/ml/libc-announce/2012/msg00001.html
+    # If using gnu libc 2.17, or later, the -lrt is no longer needed but doesn't hurt.
+    # I'm making this conditional on LINUX because it is not needed for BSD and MacOSX.
+    link_libraries("-lrt -lm")
+  else()
+    link_libraries("-lm")
+  endif()
 elseif (C_MSVC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -W3 -MP ${EXTRA_FLAGS}")
 endif()
