@@ -28,7 +28,7 @@ struct demodulator_state_s
  */
 	enum modem_t modem_type;		// MODEM_AFSK, MODEM_8PSK, etc.
 
-	enum v26_e v26_alt;			// Which alternative when V.26.
+//	enum v26_e v26_alt;			// Which alternative when V.26.
 
 	char profile;			// 'A', 'B', etc.	Upper case.
 					// Only needed to see if we are using 'F' to take fast path.
@@ -148,21 +148,6 @@ struct demodulator_state_s
 
 
 /*
- * These are for PSK only.
- * They are number of delay line taps into previous symbol.
- * They are one symbol period and + or - 45 degrees of the carrier frequency.
- */
-	int boffs;		/* symbol length based on sample rate and baud. */
-	int coffs;		/* to get cos component of previous symbol. */
-	int soffs;		/* to get sin component of previous symbol. */
-
-	unsigned int lo_step;	/* How much to advance the local oscillator */
-				/* phase for each audio sample. */
-
-	int psk_use_lo;		/* Use local oscillator rather than self correlation. */
-
-
-/*
  * The rest are continuously updated.
  */
 
@@ -255,48 +240,99 @@ struct demodulator_state_s
 
 	} slicer [MAX_SLICERS];				// Actual number in use is num_slicers.
 							// Should be in range 1 .. MAX_SLICERS,
-
-/* 
- * Special for Rino decoder only.
- * One for each possible signal polarity.
- * The project showed promise but fell by the wayside.
+/*
+ * Version 1.6:
+ *
+ *	This has become quite disorganized and messy with different combinations of
+ *	fields used for different demodulator types.  Start to reorganize it into a common
+ *	part (with things like the DPLL for clock recovery), and separate sections
+ *	for each of the demodulator types.
+ *	Still a lot to do here.
  */
 
-#if 0
+	union {
 
-	struct gr_state_s {
+//////////////////////////////////////////////////////////////////////////////////
+//										//
+//					PSK only.				//
+//										//
+//////////////////////////////////////////////////////////////////////////////////
 
-	  signed int data_clock_pll;		// PLL for data clock recovery.
-						// It is incremented by pll_step_per_sample
-						// for each audio sample.
-  
-	  signed int prev_d_c_pll;		// Previous value of above, before
-						// incrementing, to detect overflows.
 
-	  float gr_minus_peak;	// For automatic gain control.
-	  float gr_plus_peak;
+	  struct psk_only_s {
 
-	  int gr_sync;		// Is sync pulse present?
-	  int gr_prev_sync;	// Previous state to detect leading edge.
+		enum v26_e v26_alt;		// Which alternative when V.26.
 
-	  int gr_first_sample;	// Index of starting sample index for debugging.
+		float sin_table256[256];	// Precomputed sin table for speed.
 
-	  int gr_dcd;		// Data carrier detect.  i.e. are we 
-				// currently decoding a message.
+		
+	// Optional band pass pre-filter before phase detector.
 
-	  float gr_early_sum;	// For averaging bit values in two regions.
-	  int gr_early_count;
-	  float gr_late_sum;
-	  int gr_late_count;
-	  float gr_sync_sum;
-	  int gr_sync_count;
+// TODO? put back into common section?
+// TODO? Why was I thinking that?
 
-	  int gr_bit_count;	// Bit index into message.
+		int use_prefilter;	// True to enable it.
 
-	  struct rpack_s rpack;	// Collection of bits.
+		float prefilter_baud;	// Cutoff frequencies, as fraction of baud rate, beyond tones used.
+					// In the case of PSK, we use only a single tone of 1800 Hz.
+					// If we were using 2400 bps (= 1200 baud), this would be
+					// the fraction of 1200 for the cutoff below and above 1800.
 
-	} gr_state[2];
-#endif
+
+		float pre_filter_width_sym;  /* Length in number of symbol times. */
+
+		int pre_filter_taps;	/* Size of pre filter, in audio samples. */									
+
+		bp_window_t pre_window;
+
+		float audio_in[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float pre_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	// Use local oscillator or correlate with previous sample.
+
+		int psk_use_lo;		/* Use local oscillator rather than self correlation. */
+
+		unsigned int lo_step;	/* How much to advance the local oscillator */
+					/* phase for each audio sample. */
+
+		unsigned int lo_phase;	/* Local oscillator phase accumulator for PSK. */
+	
+		// After mixing with LO before low pass filter.
+
+		float I_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// signal * LO cos.
+		float Q_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// signal * LO sin.
+
+		// Number of delay line taps into previous symbol.
+		// They are one symbol period and + or - 45 degrees of the carrier frequency.
+
+		int boffs;		/* symbol length based on sample rate and baud. */
+		int coffs;		/* to get cos component of previous symbol. */
+		int soffs;		/* to get sin component of previous symbol. */
+
+		float delay_line_width_sym;
+		int delay_line_taps;	// In audio samples.
+
+		float delay_line[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	// Low pass filter Second is frequency as ratio to baud rate for FIR.
+
+// TODO? put back into common section?
+// TODO? What are the tradeoffs?
+		float lpf_baud;			/* Cutoff frequency as fraction of baud. */
+						/* Intuitively we'd expect this to be somewhere */
+						/* in the range of 0.5 to 1. */
+
+		float lp_filter_width_sym;  	/* Length in number of symbol times. */
+
+		int lp_filter_taps;		/* Size of Low Pass filter, in audio samples (i.e. filter taps). */
+
+		bp_window_t lp_window;
+
+		float lp_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	  } psk;
+
+	} u;	// end of union for different demodulator types.
 
 };
 

@@ -1,6 +1,6 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
-// 
+//
 //    Copyright (C) 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
@@ -20,35 +20,16 @@
 
 //#define DEBUG1 1	/* display debugging info */
 
-//#define DEBUG3 1	/* print carrier detect changes. */
-
-//#define DEBUG4 1	/* capture PSK demodulator output to log files */
-
-//#define DEBUG5 1	/* Print bit stream */
-
 
 /*------------------------------------------------------------------
  *
  * Module:      demod_psk.c
  *
- * Purpose:   	Demodulator for Phase Shift Keying (PSK).
+ * Purpose:   	Demodulator for 2400 and 4800 bits per second Phase Shift Keying (PSK).
  *
- *		This is my initial attempt at implementing a 2400 bps mode.
- *		The MFJ-2400 & AEA PK232-2400 used V.26 / Bell 201 so I will follow that precedent.
- *
- *		
  * Input:	Audio samples from either a file or the "sound card."
  *
  * Outputs:	Calls hdlc_rec_bit() for each bit demodulated.
- *
- * Current Status:	New for Version 1.4.
- *
- *		Don't know if this is correct and/or compatible with
- *		other implementations.
- *		There is a lot of stuff going on here with phase
- *		shifting, gray code, bit order for the dibit, NRZI and
- *		bit-stuffing for HDLC.  Plenty of opportunity for
- *		misinterpreting a protocol spec or just stupid mistakes.
  *
  * References:	MFJ-2400 Product description and manual:
  *
@@ -82,16 +63,16 @@
  *		There are ealier references to an alternative B which uses other phase shifts offset
  *		by another 45 degrees.
  *
- *		The XR-2123 does not perform the scrambling as specified in V.26 so I wonder if
- *		the vendors implemented it in software or just left it out.
- *		I left out scrambling for now.  Eventually, I'd like to get my hands on an old
- *		2400 bps TNC for compatibility testing.
- *
  *		After getting QPSK working, it was not much more effort to add V.27 with 8 phases.
  *
  *			https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-V.27bis-198811-I!!PDF-E&type=items
  *			https://www.itu.int/rec/dologin_pub.asp?lang=e&id=T-REC-V.27ter-198811-I!!PDF-E&type=items
  *
+ * Compatibility:
+ *		V.26 has two variations, A and B.  Initially I implemented the A alternative.
+ *		It later turned out that the MFJ-2400 used the B alternative.  In version 1.6 you have a
+ *		choice between compatibility with MFJ (and probably the others) or the original implementation.
+ *		
  *---------------------------------------------------------------*/
 
 #include "direwolf.h"
@@ -115,6 +96,11 @@
 #include "demod_psk.h"
 #include "dsp.h"
 
+static const int phase_to_gray_v26[4] = {0, 1, 3, 2};	
+static const int phase_to_gray_v27[8] = {1, 0, 2, 3, 7, 6, 4, 5};	
+
+
+static int phase_shift_to_symbol (float phase_shift, int bits_per_symbol, int *bit_quality);
 
 /* Add sample to buffer and shift the rest down. */
 
@@ -134,6 +120,7 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	float sum = 0.0;
 	int j;
 
+#pragma GCC ivdep
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}
@@ -142,7 +129,7 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 }
 
 
-/* Might replace this with faster, lower precision version someday. */
+/* Might replace this with faster, lower precision, approximation someday if it does not harm results. */
 
 static inline float my_atan2f (float y, float x)
 {
@@ -156,7 +143,7 @@ static inline float my_atan2f (float y, float x)
  *
  * Name:        demod_psk_init
  *
- * Purpose:     Initialization for an psk demodulator.
+ * Purpose:     Initialization for a PSK demodulator.
  *		Select appropriate parameters and set up filters.
  *
  * Inputs:   	modem_type	- MODEM_QPSK or MODEM_8PSK.
@@ -166,8 +153,7 @@ static inline float my_atan2f (float y, float x)
  *		samples_per_sec	- Audio sample rate.
  *
  *		bps		- Bits per second.  
- *				  Should be 2400 for V.26 but we don't enforce it.
- *				  The carrier frequency will be proportional.
+ *				  Should be 2400 for V.26 or 4800 for V.27.
  *
  *		profile		- Select different variations.  For QPSK:
  *
@@ -201,11 +187,9 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	memset (D, 0, sizeof(struct demodulator_state_s));
 
 	D->modem_type = modem_type;
-	D->v26_alt = v26_alt;
+	D->u.psk.v26_alt = v26_alt;
 
 	D->num_slicers = 1;		// Haven't thought about this yet.  Is it even applicable?
-	
-
 
 
 #ifdef TUNE_PROFILE
@@ -214,12 +198,9 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	if (modem_type == MODEM_QPSK) {
 
-	  assert (D->v26_alt != V26_UNSPECIFIED);
+	  assert (D->u.psk.v26_alt != V26_UNSPECIFIED);
 
 	  correct_baud = bps / 2;
-	  // Originally I thought of scaling it to the data rate,
-	  // e.g. 2400 bps -> 1800 Hz, but decided to make it a
-	  // constant since it is the same for V.26 and V.27.
 	  carrier_freq = 1800;
 
 #if DEBUG1
@@ -231,11 +212,11 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'P':				/* Self correlation technique. */
 
-	      D->use_prefilter = 0;		/* No bandpass filter. */
+	      D->u.psk.use_prefilter = 0;		/* No bandpass filter. */
 
-	      D->lpf_baud = 0.60;
-	      D->lp_filter_len_bits = 39. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 0.60;
+	      D->u.psk.lp_filter_width_sym = 1.061;  // 39. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.95;
 	      D->pll_searching_inertia = 0.50;
@@ -244,14 +225,14 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'Q':				/* Self correlation technique. */
 
-	      D->use_prefilter = 1;		/* Add a bandpass filter. */
-	      D->prefilter_baud = 1.3;		
-	      D->pre_filter_len_bits = 55. * 1200. / 44100.;	
-	      D->pre_window = BP_WINDOW_COSINE;
+	      D->u.psk.use_prefilter = 1;		/* Add a bandpass filter. */
+	      D->u.psk.prefilter_baud = 1.3;		
+	      D->u.psk.pre_filter_width_sym = 1.497;  // 55. * 1200. / 44100.;	
+	      D->u.psk.pre_window = BP_WINDOW_COSINE;
 
-	      D->lpf_baud = 0.60;
-	      D->lp_filter_len_bits = 39. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 0.60;
+	      D->u.psk.lp_filter_width_sym = 1.061;  // 39. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.87;
 	      D->pll_searching_inertia = 0.50;
@@ -265,13 +246,13 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'R':				/* Mix with local oscillator. */
 
-	      D->psk_use_lo = 1;
+	      D->u.psk.psk_use_lo = 1;
 
-	      D->use_prefilter = 0;		/* No bandpass filter. */
+	      D->u.psk.use_prefilter = 0;		/* No bandpass filter. */
 
-	      D->lpf_baud = 0.70;
-	      D->lp_filter_len_bits = 37. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_TRUNCATED;
+	      D->u.psk.lpf_baud = 0.70;
+	      D->u.psk.lp_filter_width_sym = 1.007;  // 37. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_TRUNCATED;
 
 	      D->pll_locked_inertia = 0.925;
 	      D->pll_searching_inertia = 0.50;
@@ -280,16 +261,16 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'S':				/* Mix with local oscillator. */
 
-	      D->psk_use_lo = 1;
+	      D->u.psk.psk_use_lo = 1;
 
-	      D->use_prefilter = 1;		/* Add a bandpass filter. */
-	      D->prefilter_baud = 0.55;		
-	      D->pre_filter_len_bits = 74. * 1200. / 44100.;	
-	      D->pre_window = BP_WINDOW_FLATTOP;
+	      D->u.psk.use_prefilter = 1;		/* Add a bandpass filter. */
+	      D->u.psk.prefilter_baud = 0.55;		
+	      D->u.psk.pre_filter_width_sym = 2.014;  // 74. * 1200. / 44100.;	
+	      D->u.psk.pre_window = BP_WINDOW_FLATTOP;
 
-	      D->lpf_baud = 0.60;
-	      D->lp_filter_len_bits = 39. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 0.60;
+	      D->u.psk.lp_filter_width_sym = 1.061;  // 39. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.925;
 	      D->pll_searching_inertia = 0.50;
@@ -297,11 +278,11 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	      break;
 	  }
 
-	  D->ms_filter_len_bits = 1.25;		// Delay line > 13/12 * symbol period		
+	  D->u.psk.delay_line_width_sym = 1.25;		// Delay line > 13/12 * symbol period		
 
-	  D->coffs = (int) round( (11.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
-	  D->boffs = (int) round(               (float)samples_per_sec / (float)correct_baud );
-	  D->soffs = (int) round( (13.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
+	  D->u.psk.coffs = (int) round( (11.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
+	  D->u.psk.boffs = (int) round(                 (float)samples_per_sec / (float)correct_baud );
+	  D->u.psk.soffs = (int) round( (13.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
 	}
 	else {
 
@@ -318,11 +299,11 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'T':				/* Self correlation technique. */
 
-	      D->use_prefilter = 0;		/* No bandpass filter. */
+	      D->u.psk.use_prefilter = 0;		/* No bandpass filter. */
 
-	      D->lpf_baud = 1.15;
-	      D->lp_filter_len_bits = 32. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 1.15;
+	      D->u.psk.lp_filter_width_sym = 0.871;  // 32. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.95;
 	      D->pll_searching_inertia = 0.50;
@@ -331,14 +312,14 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'U':				/* Self correlation technique. */
 
-	      D->use_prefilter = 1;		/* Add a bandpass filter. */
-	      D->prefilter_baud = 0.9;		
-	      D->pre_filter_len_bits = 21. * 1200. / 44100.;	
-	      D->pre_window = BP_WINDOW_FLATTOP;
+	      D->u.psk.use_prefilter = 1;		/* Add a bandpass filter. */
+	      D->u.psk.prefilter_baud = 0.9;		
+	      D->u.psk.pre_filter_width_sym = 0.571;  // 21. * 1200. / 44100.;	
+	      D->u.psk.pre_window = BP_WINDOW_FLATTOP;
 
-	      D->lpf_baud = 1.15;
-	      D->lp_filter_len_bits = 32. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 1.15;
+	      D->u.psk.lp_filter_width_sym = 0.871;  // 32. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.87;
 	      D->pll_searching_inertia = 0.50;
@@ -352,13 +333,13 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'V':				/* Mix with local oscillator. */
 
-	      D->psk_use_lo = 1;
+	      D->u.psk.psk_use_lo = 1;
 
-	      D->use_prefilter = 0;		/* No bandpass filter. */
+	      D->u.psk.use_prefilter = 0;		/* No bandpass filter. */
 
-	      D->lpf_baud = 0.85;
-	      D->lp_filter_len_bits = 31. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 0.85;
+	      D->u.psk.lp_filter_width_sym = 0.844;  // 31. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.925;
 	      D->pll_searching_inertia = 0.50;
@@ -367,16 +348,16 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	    case 'W':				/* Mix with local oscillator. */
 
-	      D->psk_use_lo = 1;
+	      D->u.psk.psk_use_lo = 1;
 
-	      D->use_prefilter = 1;		/* Add a bandpass filter. */
-	      D->prefilter_baud = 0.85;		
-	      D->pre_filter_len_bits = 31. * 1200. / 44100.;	
-	      D->pre_window = BP_WINDOW_COSINE;
+	      D->u.psk.use_prefilter = 1;		/* Add a bandpass filter. */
+	      D->u.psk.prefilter_baud = 0.85;		
+	      D->u.psk.pre_filter_width_sym = 0.844;  // 31. * 1200. / 44100.;	
+	      D->u.psk.pre_window = BP_WINDOW_COSINE;
 
-	      D->lpf_baud = 0.85;
-	      D->lp_filter_len_bits = 31. * 1200. / 44100.;
-	      D->lp_window = BP_WINDOW_COSINE;
+	      D->u.psk.lpf_baud = 0.85;
+	      D->u.psk.lp_filter_width_sym = 0.844;  // 31. * 1200. / 44100.;
+	      D->u.psk.lp_window = BP_WINDOW_COSINE;
 
 	      D->pll_locked_inertia = 0.925;
 	      D->pll_searching_inertia = 0.50;
@@ -384,42 +365,36 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	      break;
 	  }
 
-	  D->ms_filter_len_bits = 1.25;		// Delay line > 10/9 * symbol period		
+	  D->u.psk.delay_line_width_sym = 1.25;		// Delay line > 10/9 * symbol period		
 
-	  D->coffs = (int) round( (8.f / 9.f)  * (float)samples_per_sec / (float)correct_baud );
-	  D->boffs = (int) round(              (float)samples_per_sec / (float)correct_baud );
-	  D->soffs = (int) round( (10.f / 9.f) * (float)samples_per_sec / (float)correct_baud );
+	  D->u.psk.coffs = (int) round( (8.f / 9.f)  * (float)samples_per_sec / (float)correct_baud );
+	  D->u.psk.boffs = (int) round(              (float)samples_per_sec / (float)correct_baud );
+	  D->u.psk.soffs = (int) round( (10.f / 9.f) * (float)samples_per_sec / (float)correct_baud );
 	}
 
 
-	if (D->psk_use_lo) {
-	  D->lo_step = (int) round( 256. * 256. * 256. * 256. * carrier_freq / (double)samples_per_sec);
+	if (D->u.psk.psk_use_lo) {
+	  D->u.psk.lo_step = (int) round( 256. * 256. * 256. * 256. * carrier_freq / (double)samples_per_sec);
 
-	  assert (MAX_FILTER_SIZE >= 256);
+// Our own sin table for speed later.
+
 	  for (j = 0; j < 256; j++) {
-	    D->m_sin_table[j] = sinf(2.f * (float)M_PI * j / 256.f);
+	    D->u.psk.sin_table256[j] = sinf(2.f * (float)M_PI * j / 256.f);
 	  }
 	}
 
 #ifdef TUNE_PRE_BAUD
-	D->prefilter_baud = TUNE_PRE_BAUD;
+	D->u.psk.prefilter_baud = TUNE_PRE_BAUD;
 #endif
 #ifdef TUNE_PRE_WINDOW
-	D->pre_window = TUNE_PRE_WINDOW;
+	D->u.psk.pre_window = TUNE_PRE_WINDOW;
 #endif
-
-
 
 #ifdef TUNE_LPF_BAUD
-	D->lpf_baud = TUNE_LPF_BAUD;
+	D->u.psk.lpf_baud = TUNE_LPF_BAUD;
 #endif
 #ifdef TUNE_LP_WINDOW
-	D->lp_window = TUNE_LP_WINDOW;
-#endif
-
-
-#ifdef TUNE_HYST
-	D->hysteresis = TUNE_HYST;
+	D->u.psk.lp_window = TUNE_LP_WINDOW;
 #endif
 
 #if defined(TUNE_PLL_SEARCHING)
@@ -441,44 +416,41 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
  * Convert number of symbol times to number of taps.
  */
 
-	D->pre_filter_size = (int) round( D->pre_filter_len_bits * (float)samples_per_sec / (float)correct_baud );
-	D->ms_filter_size  = (int) round( D->ms_filter_len_bits * (float)samples_per_sec / (float)correct_baud );
-	D->lp_filter_size =  (int) round( D->lp_filter_len_bits * (float)samples_per_sec / (float)correct_baud );
+	D->u.psk.pre_filter_taps = (int) round( D->u.psk.pre_filter_width_sym * (float)samples_per_sec / (float)correct_baud );
+	D->u.psk.delay_line_taps  = (int) round( D->u.psk.delay_line_width_sym * (float)samples_per_sec / (float)correct_baud );
+	D->u.psk.lp_filter_taps =  (int) round( D->u.psk.lp_filter_width_sym * (float)samples_per_sec / (float)correct_baud );
 
 
-#ifdef TUNE_PRE_FILTER_SIZE
-	D->pre_filter_size = TUNE_PRE_FILTER_SIZE;
+#ifdef TUNE_PRE_FILTER_TAPS
+	D->u.psk.pre_filter_taps = TUNE_PRE_FILTER_TAPS;
 #endif
 
-#ifdef TUNE_LP_FILTER_SIZE
-	D->lp_filter_size = TUNE_LP_FILTER_SIZE;
+#ifdef TUNE_lp_filter_taps
+	D->u.psk.lp_filter_taps = TUNE_lp_filter_taps;
 #endif
 
 
-	if (D->pre_filter_size > MAX_FILTER_SIZE) 
-	{
+	if (D->u.psk.pre_filter_taps > MAX_FILTER_SIZE) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("Calculated filter size of %d is too large.\n", D->pre_filter_size);
+	  dw_printf ("Calculated pre filter size of %d is too large.\n", D->u.psk.pre_filter_taps);
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
 	  exit (1);
 	}
 
-	if (D->ms_filter_size > MAX_FILTER_SIZE) 
-	{
+	if (D->u.psk.delay_line_taps > MAX_FILTER_SIZE) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("Calculated filter size of %d is too large.\n", D->ms_filter_size);
+	  dw_printf ("Calculated delay line size of %d is too large.\n", D->u.psk.delay_line_taps);
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
 	  exit (1);
 	}
 
-	if (D->lp_filter_size > MAX_FILTER_SIZE) 
-	{
+	if (D->u.psk.lp_filter_taps > MAX_FILTER_SIZE) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("Calculated filter size of %d is too large.\n", D->pre_filter_size);
+	  dw_printf ("Calculated low pass filter size of %d is too large.\n", D->u.psk.lp_filter_taps);
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
@@ -488,14 +460,17 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 /* 
  * Optionally apply a bandpass ("pre") filter to attenuate
  * frequencies outside the range of interest.
+ * It's a tradeoff.  Attenuate frequencies outside the the range of interest
+ * but also distort the signal.  This demodulator is not compuationally
+ * intensive so we can usually run both in parallel.
  */
 
-	if (D->use_prefilter) {
+	if (D->u.psk.use_prefilter) {
 	  float f1, f2;
 
-	  f1 = carrier_freq - D->prefilter_baud * correct_baud;
-	  f2 = carrier_freq + D->prefilter_baud * correct_baud;
-#if 0
+	  f1 = carrier_freq - D->u.psk.prefilter_baud * correct_baud;
+	  f2 = carrier_freq + D->u.psk.prefilter_baud * correct_baud;
+#if DEBUG1
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("Generating prefilter %.0f to %.0f Hz.\n", (double)f1, (double)f2);
 #endif
@@ -508,15 +483,15 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	  f1 = f1 / (float)samples_per_sec;
 	  f2 = f2 / (float)samples_per_sec;
 	  
-	  gen_bandpass (f1, f2, D->pre_filter, D->pre_filter_size, D->pre_window);
+	  gen_bandpass (f1, f2, D->u.psk.pre_filter, D->u.psk.pre_filter_taps, D->u.psk.pre_window);
 	}
 
 /*
  * Now the lowpass filter.
  */
 
-	float fc = correct_baud * D->lpf_baud / (float)samples_per_sec;
-	(void)gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, 0);
+	float fc = correct_baud * D->u.psk.lpf_baud / (float)samples_per_sec;
+	gen_lowpass (fc, D->u.psk.lp_filter, D->u.psk.lp_filter_taps, D->u.psk.lp_window, 0);
 
 /*
  * No point in having multiple numbers for signal level.
@@ -525,8 +500,96 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	D->alevel_mark_peak = -1;
 	D->alevel_space_peak = -1;
 
+#if 0
+	// QPSK - CSV format to make plot.
+
+	printf ("Phase shift degrees, bit 0, quality 0, bit 1, quality 1\n");
+	for (int degrees = 0; degrees <= 360; degrees++) {
+	  float a = degrees * M_PI * 2./ 360.;
+	  int bit_quality[3];
+
+	  int new_gray = phase_shift_to_symbol (a, 2, bit_quality);
+
+	  float offset = 3 * 1.5;
+	  printf ("%d, ", degrees);
+	  printf ("%.3f, ", offset + (new_gray & 1)); offset -= 1.5;
+	  printf ("%.3f, ", offset + (bit_quality[0] / 100.)); offset -= 1.5;
+	  printf ("%.3f, ", offset + ((new_gray >> 1) & 1)); offset -= 1.5;
+	  printf ("%.3f\n", offset + (bit_quality[1] / 100.));
+	}
+#endif
+
+#if 0
+	// 8-PSK - CSV format to make plot.
+
+	printf ("Phase shift degrees,  bit 0, quality 0, bit 1, quality 1, bit 2, quality 2\n");
+	for (int degrees = 0; degrees <= 360; degrees++) {
+	  float a = degrees * M_PI * 2./ 360.;
+	  int bit_quality[3];
+
+	  int new_gray = phase_shift_to_symbol (a, 3, bit_quality);
+
+	  float offset = 5 * 1.5;
+	  printf ("%d, ", degrees);
+	  printf ("%.3f, ", offset + (new_gray & 1)); offset -= 1.5;
+	  printf ("%.3f, ", offset + (bit_quality[0] / 100.)); offset -= 1.5;
+	  printf ("%.3f, ", offset + ((new_gray >> 1) & 1)); offset -= 1.5;
+	  printf ("%.3f, ", offset + (bit_quality[1] / 100.)); offset -= 1.5;
+	  printf ("%.3f, ", offset + ((new_gray >> 2) & 1)); offset -= 1.5;
+	  printf ("%.3f\n", offset + (bit_quality[2] / 100.));
+	}
+#endif	
 }  /* demod_psk_init */
 
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        phase_shift_to_symbol
+ *
+ * Purpose:     Translate phase shift, between two symbols, into 2 or 3 bits.
+ *
+ * Inputs:	phase_shift	- in radians.
+ *
+ *		bits_per_symbol	- 2 for QPSK, 3 for 8PSK.
+ *
+ * Outputs:	bit_quality[]	- Value of 0 (at threshold) to 100 (perfect) for each bit.
+ *
+ * Returns:	2 or 3 bit symbol value in Gray code.
+ *
+ *--------------------------------------------------------------------*/
+
+__attribute__((hot)) __attribute__((always_inline))
+static inline int phase_shift_to_symbol (float phase_shift, int bits_per_symbol, int * __restrict__ bit_quality)
+{
+// Number of different symbol states.
+	assert (bits_per_symbol == 2 || bits_per_symbol == 3);
+	int N = 1 << bits_per_symbol;
+	assert (N == 4 || N == 8);
+
+// Scale angle to 1 per symbol then separate into integer and fractional parts.
+	float a = phase_shift * (float)N / (M_PI * 2.0f);
+	while (a >= (float)N) a -= (float)N;
+	while (a < 0.) a += (float)N;
+	int i = (int)a;
+	if (i == N) i = N-1;	// Should be < N. Watch out for possible roundoff errors.
+	float f = a - (float)i;
+	assert (i >= 0 && i < N);
+	assert (f >= -0.001f && f <= 1.001f);
+
+// Interpolate between the ideal angles to get a level of certainty.
+	int result = 0;
+	for (int b = 0; b < bits_per_symbol; b++) {
+	  float demod = bits_per_symbol == 2 ?
+		((phase_to_gray_v26[i] >> b) & 1) * (1.0f - f) + ((phase_to_gray_v26[(i+1)&3] >> b) & 1) * f :
+		((phase_to_gray_v27[i] >> b) & 1) * (1.0f - f) + ((phase_to_gray_v27[(i+1)&7] >> b) & 1) * f;
+// Slice to get boolean value and quality measurement.
+	  if (demod >= 0.5f) result |= 1<<b;
+	  bit_quality[b] = lrintf (100.0f * 2.0f * fabsf(demod - 0.5f));
+	}
+	return (result);
+
+}  // end phase_shift_to_symbol
 
 
 
@@ -545,7 +608,7 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
  *
  * Outputs:	For each recovered data bit, we call:
  *
- *			  hdlc_rec (channel, demodulated_bit);
+ *			  hdlc_rec (channel etc., demodulated_bit, quality);
  *
  *		to decode HDLC frames from the stream of bits.
  *
@@ -585,203 +648,112 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 
 
-inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D);
+inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D, int *bit_quality);
 
 __attribute__((hot))
 void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulator_state_s *D)
 {
-	float fsam;
-	float sam_x_cos, sam_x_sin;
-	float I, Q;
-	int demod_phase_shift;		// Phase shift relative to previous symbol.
-					// range 0-3, 1 unit for each 90 degrees.
-	int slice = 0;
-
-#if DEBUG4
-	static FILE *demod_log_fp = NULL;
-	static int log_file_seq = 0;		/* Part of log file name */
-#endif
-
+	int slice = 0;		// Would it make sense to have more than one?
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
-
 	/* Scale to nice number for plotting during debug. */
 
-	fsam = sam / 16384.0f;
-
+	float fsam = sam / 16384.0f;
 
 /*
  * Optional bandpass filter before the phase detector.
  */
 
-	if (D->use_prefilter) {
-	  push_sample (fsam, D->raw_cb, D->pre_filter_size);
-	  fsam = convolve (D->raw_cb, D->pre_filter, D->pre_filter_size);
+	if (D->u.psk.use_prefilter) {
+	  push_sample (fsam, D->u.psk.audio_in, D->u.psk.pre_filter_taps);
+	  fsam = convolve (D->u.psk.audio_in, D->u.psk.pre_filter, D->u.psk.pre_filter_taps);
 	}
 
-	if (D->psk_use_lo) {
-	  float a, delta;
-	  int id;
+	if (D->u.psk.psk_use_lo) {
 /*
  * Mix with local oscillator to obtain phase.
  * The absolute phase doesn't matter.  
  * We are just concerned with the change since the previous symbol.
  */
 
-	  sam_x_cos = fsam * D->m_sin_table[((D->lo_phase >> 24) + 64) & 0xff];
+	  float sam_x_cos = fsam * D->u.psk.sin_table256[((D->u.psk.lo_phase >> 24) + 64) & 0xff];
+	  push_sample (sam_x_cos, D->u.psk.I_raw, D->u.psk.lp_filter_taps);
+	  float I = convolve (D->u.psk.I_raw, D->u.psk.lp_filter, D->u.psk.lp_filter_taps);
 
-	  sam_x_sin = fsam * D->m_sin_table[(D->lo_phase >> 24) & 0xff];
+	  float sam_x_sin = fsam * D->u.psk.sin_table256[(D->u.psk.lo_phase >> 24) & 0xff];
+	  push_sample (sam_x_sin, D->u.psk.Q_raw, D->u.psk.lp_filter_taps);
+	  float Q = convolve (D->u.psk.Q_raw, D->u.psk.lp_filter, D->u.psk.lp_filter_taps);
 
-	  push_sample (sam_x_cos, D->m_amp_cb, D->lp_filter_size);
-	  I = convolve (D->m_amp_cb, D->lp_filter, D->lp_filter_size);
+	  float a = my_atan2f(I,Q);
 
-	  push_sample (sam_x_sin, D->s_amp_cb, D->lp_filter_size);
-	  Q = convolve (D->s_amp_cb, D->lp_filter, D->lp_filter_size);
+	  // This is just a delay line of one symbol time.
 
-	  a = my_atan2f(I,Q);
-	  push_sample (a, D->ms_in_cb, D->ms_filter_size);
+	  push_sample (a, D->u.psk.delay_line, D->u.psk.delay_line_taps);
+	  float delta = a - D->u.psk.delay_line[D->u.psk.boffs];
 
-	  delta = a - D->ms_in_cb[D->boffs];
-
-	  /* 256 units/cycle makes modulo processing easier. */
-	  /* Make sure it is positive before truncating to integer. */
-
-	  id = ((int)((delta / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
-	  
+	  int gray;
+	  int bit_quality[3];
 	  if (D->modem_type == MODEM_QPSK) {
-#ifdef TUNE_PSKOFFSET
-	    demod_phase_shift = ((id + TUNE_PSKOFFSET) >> 6) & 0x3;
-#else
-	    if (D->v26_alt == V26_B) {
-	      demod_phase_shift = ((id + 2) >> 6) & 0x3;	// MFJ compatible
+	    if (D->u.psk.v26_alt == V26_B) {
+	      gray = phase_shift_to_symbol (delta + (float)(-M_PI/4), 2, bit_quality);;	// MFJ compatible
 	    }
 	    else {
-	      demod_phase_shift = ((id + 32) >> 6) & 0x3;	// Classic
+	      gray = phase_shift_to_symbol (delta, 2, bit_quality);	// Classic
 	    }
-#endif
 	  }
 	  else {
-	    demod_phase_shift = ((id + 16) >> 5) & 0x7;
+	      gray = phase_shift_to_symbol (delta, 3, bit_quality);;	// 8-PSK
 	  }
-	  nudge_pll (chan, subchan, slice, demod_phase_shift, D);
+	  nudge_pll (chan, subchan, slice, gray, D, bit_quality);
 
-	  D->lo_phase += D->lo_step;
+	  D->u.psk.lo_phase += D->u.psk.lo_step;
 	}
 	else {
 /*
  * Correlate with previous symbol.  We are looking for the phase shift.
  */
-	  push_sample (fsam, D->ms_in_cb, D->ms_filter_size);
+	  push_sample (fsam, D->u.psk.delay_line, D->u.psk.delay_line_taps);
 
-	  sam_x_cos = fsam *  D->ms_in_cb[D->coffs];
-	  sam_x_sin = fsam *  D->ms_in_cb[D->soffs];
+	  float sam_x_cos = fsam *  D->u.psk.delay_line[D->u.psk.coffs];
+	  push_sample (sam_x_cos, D->u.psk.I_raw, D->u.psk.lp_filter_taps);
+	  float I = convolve (D->u.psk.I_raw, D->u.psk.lp_filter, D->u.psk.lp_filter_taps);
 
-	  push_sample (sam_x_cos, D->m_amp_cb, D->lp_filter_size);
-	  I = convolve (D->m_amp_cb, D->lp_filter, D->lp_filter_size);
+	  float sam_x_sin = fsam *  D->u.psk.delay_line[D->u.psk.soffs];
+	  push_sample (sam_x_sin, D->u.psk.Q_raw, D->u.psk.lp_filter_taps);
+	  float Q = convolve (D->u.psk.Q_raw, D->u.psk.lp_filter, D->u.psk.lp_filter_taps);
 
-	  push_sample (sam_x_sin, D->s_amp_cb, D->lp_filter_size);
-	  Q = convolve (D->s_amp_cb, D->lp_filter, D->lp_filter_size);
+	  int gray;
+	  int bit_quality[3];
+	  float delta = my_atan2f(I,Q);
 
 	  if (D->modem_type == MODEM_QPSK) {
-
-	    float a = my_atan2f(I,Q);
-	    int id = ((int)((a / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
-	    // 128 compensates for 180 degree phase shift due
-	    // to 1 1/2 carrier cycles per symbol period.
-
-#ifdef TUNE_PSKOFFSET
-	    demod_phase_shift = ((id + TUNE_PSKOFFSET) >> 6) & 0x3;
-#else
-	    if (D->v26_alt == V26_B) {
-	      demod_phase_shift = ((id + 98) >> 6) & 0x3;	// MFJ compatible
+	    if (D->u.psk.v26_alt == V26_B) {
+	      gray = phase_shift_to_symbol (delta + (float)(M_PI/2), 2, bit_quality);	// MFJ compatible
 	    }
 	    else {
-	      demod_phase_shift = ((id + 128) >> 6) & 0x3;	// Classic
+	      gray = phase_shift_to_symbol (delta + (float)(3*M_PI/4), 2, bit_quality);	// Classic
 	    }
-#endif
 	  }
 	  else {
-	    float a;
-	    int idelta;
-
-	    a = my_atan2f(I,Q);
-	    idelta = ((int)((a / (2.f * (float)M_PI) + 1.f) * 256.f)) & 0xff;
-	    // 32 (90 degrees) compensates for 1800 carrier vs. 1800 baud.
-	    // 16 is to set threshold between constellation points.
-	    demod_phase_shift = ((idelta - 32 - 16) >> 5) & 0x7;
+	    gray = phase_shift_to_symbol (delta + (float)(3*M_PI/2), 3, bit_quality);
 	  }
-
-	  nudge_pll (chan, subchan, slice, demod_phase_shift, D);
+	  nudge_pll (chan, subchan, slice, gray, D, bit_quality);
 	}
-
-#if DEBUG4
-
-	if (chan == 0) {
-
-	  if (1) {
-	  //if (hdlc_rec_gathering (chan, subchan, slice)) {
-	    char fname[30];
-
-	  
-	    if (demod_log_fp == NULL) {
-	      log_file_seq++;
-	      snprintf (fname, sizeof(fname), "demod/%04d.csv", log_file_seq);
-	      //if (log_file_seq == 1) mkdir ("demod", 0777);
-	      if (log_file_seq == 1) mkdir ("demod");
-
-	      demod_log_fp = fopen (fname, "w");
-	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("Starting demodulator log file %s\n", fname);
-	      fprintf (demod_log_fp, "Audio, sin,  cos,  *cos, *sin,   I,    Q, phase, Clock\n");
-	    }
-
-	    fprintf (demod_log_fp, "%.3f, %.3f, %.3f, %.3f, %.3f, %.3f, %.2f, %.2f, %.2f\n", 
-			fsam + 2,
-			- D->ms_in_cb[D->soffs] + 6,
-			- D->ms_in_cb[D->coffs] + 6,
-			sam_x_cos + 8,
-			sam_x_sin + 10, 
-			2 * I + 12,
-			2 * Q + 12,
-			demod_phase_shift * 2. / 3. + 14.,
-			(D->slicer[slice].data_clock_pll & 0x80000000) ? .5 : .0);
-
-	    fflush (demod_log_fp);
-	  }
-	  else {
-	    if (demod_log_fp != NULL) {
-	      fclose (demod_log_fp);
-	      demod_log_fp = NULL;
-	    }
-	  }
-	}
-#endif
-
 
 } /* end demod_psk_process_sample */
 
 
-#ifdef TUNE_GRAY
-TUNE_GRAY
-#else
-static const int phase_to_gray_v26[4] = {0, 1, 3, 2};	
-#endif
-
-static const int phase_to_gray_v27[8] = {1, 0, 2, 3, 7, 6, 4, 5};	
-
-
 
 __attribute__((hot))
-inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D)
+static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct demodulator_state_s *D, int *bit_quality)
 {
 
 /*
  * Finally, a PLL is used to sample near the centers of the data bits.
  *
- * D points to a demodulator for a channel/subchannel pair so we don't
- * have to keep recalculating it.
+ * D points to a demodulator for a channel/subchannel pair.
  *
  * D->data_clock_pll is a SIGNED 32 bit variable.
  * When it overflows from a large positive value to a negative value, we 
@@ -802,11 +774,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, 
  * Be a little more agressive about adjusting the PLL
  * phase when searching for a signal.
  * Don't change it as much when locked on to a signal.
- *
- * I don't think the optimal value will depend on the audio sample rate
- * because this happens for each transition from the demodulator.
  */
-
 
 	D->slicer[slice].prev_d_c_pll = D->slicer[slice].data_clock_pll;
 
@@ -820,28 +788,17 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_bits, 
 
 	  if (D->modem_type == MODEM_QPSK) {
 
-	    int gray = phase_to_gray_v26[ demod_bits ];
+	    int gray = demod_bits;
 
-#if DEBUG4
-	    text_color_set(DW_COLOR_DEBUG);
-
-	    dw_printf ("a=%.2f deg, delta=%.2f deg, phaseshift=%d, bits= %d %d \n", 
-		a * 360 / (2*M_PI), delta * 360 / (2*M_PI), demod_bits, (gray >> 1) & 1, gray & 1);
-
-	    //dw_printf ("phaseshift=%d, bits= %d %d \n", demod_bits, (gray >> 1) & 1, gray & 1);
-#endif
-#if DEBUG5
-	    dw_printf ("%d\n%d\n", (gray >> 1) & 1, gray & 1);
-#endif
-	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, -1);
-	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, -1);
+	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1]);
+	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, bit_quality[0]);
 	  }
 	  else {
-	    int gray = phase_to_gray_v27[ demod_bits ];
+	    int gray = demod_bits;
 
-	    hdlc_rec_bit (chan, subchan, slice, (gray >> 2) & 1, 0, -1);
-	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, -1);
-	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, -1);
+	    hdlc_rec_bit (chan, subchan, slice, (gray >> 2) & 1, 0, bit_quality[2]);
+	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1]);
+	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, bit_quality[0]);
 	  }
 	}
 

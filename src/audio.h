@@ -145,16 +145,11 @@ struct audio_s {
 
 					// Original implementaion used alternative A for 2400 bbps PSK.
 					// Years later, we discover that MFJ-2400 used alternative B.
-					// It's likely the others did too.
-					// For release 1.6, default to original style but print warning.
-					// Later default to MFJ compatible and still print warning if
-					// if user did not pick one explicitly.
+					// It's likely the others did too.  it also works a little better.
+					// Default to MFJ compatible and print warning if user did not
+					// pick one explicitly.
 
-#if (MAJOR_VERSION > 1) || (MINOR_VERSION > 6)
 #define V26_DEFAULT V26_B
-#else
-#define V26_DEFAULT V26_A
-#endif
 
 	    enum dtmf_decode_t { DTMF_DECODE_OFF, DTMF_DECODE_ON } dtmf_decode; 
 

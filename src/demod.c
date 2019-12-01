@@ -494,7 +494,7 @@ int demod_init (struct audio_s *pa)
 	        dw_printf ("Command line options -j and -J can be used for channel 0.\n");
 	        dw_printf ("For more information, read the Dire Wolf User Guide and\n");
 	        dw_printf ("2400-4800-PSK-for-APRS-Packet-Radio.pdf.\n");
-	        dw_printf ("The default in this release could be different in a later release.\n");
+	        dw_printf ("The default is now MFJ-2400 compatibility mode.\n");
 
 	        save_audio_config_p->achan[chan].v26_alternative = V26_DEFAULT;
 	      }
