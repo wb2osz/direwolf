@@ -283,10 +283,10 @@ int main (int argc, char *argv[])
 
 #if __WIN32__
 	  if (isdigit(port[j][0])) {
-	    client_th[j] = (HANDLE)_beginthreadex (NULL, 0, client_thread_net, (void *)j, 0, NULL);
+	    client_th[j] = (HANDLE)_beginthreadex (NULL, 0, client_thread_net, (void *)(ptrdiff_t)j, 0, NULL);
 	  }
 	  else {
-	    client_th[j] = (HANDLE)_beginthreadex (NULL, 0, client_thread_serial, (void *)j, 0, NULL);
+	    client_th[j] = (HANDLE)_beginthreadex (NULL, 0, client_thread_serial, (void *)(ptrdiff_t)j, 0, NULL);
 	  }
 	  if (client_th[j] == NULL) {
 	    printf ("Internal error: Could not create client thread %d.\n", j);
@@ -294,10 +294,10 @@ int main (int argc, char *argv[])
 	  }
 #else
 	  if (isdigit(port[j][0])) {
-	    e = pthread_create (&client_tid[j], NULL, client_thread_net, (void *)(long)j);
+	    e = pthread_create (&client_tid[j], NULL, client_thread_net, (void *)(ptrdiff_t)j);
 	  }
 	  else {
-	    e = pthread_create (&client_tid[j], NULL, client_thread_serial, (void *)(long)j);
+	    e = pthread_create (&client_tid[j], NULL, client_thread_serial, (void *)(ptrdiff_t)j);
 	  }
 	  if (e != 0) {
 	    perror("Internal error: Could not create client thread.");
@@ -394,7 +394,7 @@ static void * client_thread_net (void *arg)
 	int use_chan = -1;
 
 
-	my_index = (int)(long)arg;
+	my_index = (int)(ptrdiff_t)arg;
 
 #if DEBUGx
         printf ("DEBUG: client_thread_net %d start, port = '%s'\n", my_index, port[my_index]);
@@ -664,7 +664,7 @@ static unsigned __stdcall client_thread_serial (void *arg)
 static void * client_thread_serial (void *arg)	
 #endif	
 {
-	int my_index = (int)(long)arg;
+	int my_index = (int)(ptrdiff_t)arg;
 
 #if __WIN32__
 

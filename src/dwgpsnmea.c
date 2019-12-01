@@ -151,7 +151,7 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 
 	if (s_gpsnmea_port_fd != MYFDERROR) {
 #if __WIN32__
-	  read_gps_th = (HANDLE)_beginthreadex (NULL, 0, read_gpsnmea_thread, (void*)(long)s_gpsnmea_port_fd, 0, NULL);
+	  read_gps_th = (HANDLE)_beginthreadex (NULL, 0, read_gpsnmea_thread, (void*)(ptrdiff_t)s_gpsnmea_port_fd, 0, NULL);
 	  if (read_gps_th == NULL) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Could not create GPS NMEA listening thread.\n");
@@ -159,7 +159,7 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 	  }
 #else
 	  int e;
-	  e = pthread_create (&read_gps_tid, NULL, read_gpsnmea_thread, (void*)(long)s_gpsnmea_port_fd);
+	  e = pthread_create (&read_gps_tid, NULL, read_gpsnmea_thread, (void*)(ptrdiff_t)s_gpsnmea_port_fd);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    perror("Could not create GPS NMEA listening thread.");
@@ -216,7 +216,7 @@ static unsigned __stdcall read_gpsnmea_thread (void *arg)
 static void * read_gpsnmea_thread (void *arg)
 #endif
 {
-	MYFDTYPE fd = (MYFDTYPE)(long)arg;
+	MYFDTYPE fd = (MYFDTYPE)(ptrdiff_t)arg;
 
 // Maximum length of message from GPS receiver is 82 according to some people.  
 // Make buffer considerably larger to be safe.
@@ -230,7 +230,7 @@ static void * read_gpsnmea_thread (void *arg)
 
 	if (s_debug >= 2) {
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("read_gpsnmea_thread (%d)\n", (int)(long)arg);
+	  dw_printf ("read_gpsnmea_thread (%d)\n", (int)(ptrdiff_t)arg);
 	}
 
 	dwgps_clear (&info);

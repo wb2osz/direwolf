@@ -160,7 +160,7 @@ void recv_init (struct audio_s *pa)
 #endif
 
 #if __WIN32__
-	    xmit_th[a] = (HANDLE)_beginthreadex (NULL, 0, recv_adev_thread, (void*)(long)a, 0, NULL);
+	    xmit_th[a] = (HANDLE)_beginthreadex (NULL, 0, recv_adev_thread, (void*)(ptrdiff_t)a, 0, NULL);
 	    if (xmit_th[a] == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("FATAL: Could not create audio receive thread for device %d.\n", a);
@@ -168,7 +168,7 @@ void recv_init (struct audio_s *pa)
 	    }
 #else
 	    int e;
-	    e = pthread_create (&xmit_tid[a], NULL, recv_adev_thread, (void *)(long)a);
+	    e = pthread_create (&xmit_tid[a], NULL, recv_adev_thread, (void *)(ptrdiff_t)a);
 
 	    if (e != 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -203,7 +203,7 @@ static unsigned __stdcall recv_adev_thread (void *arg)
 static void * recv_adev_thread (void *arg)
 #endif
 {
-	int a = (int)(long)arg;	// audio device number.
+	int a = (int)(ptrdiff_t)arg;	// audio device number.
 	int eof;
 	
 	/* This audio device can have one (mono) or two (stereo) channels. */

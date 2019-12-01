@@ -193,7 +193,7 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 
 	gps_stream(&gpsdata, WATCH_ENABLE | WATCH_JSON, NULL);
 
-	e = pthread_create (&read_gps_tid, NULL, read_gpsd_thread, (void *)(long)arg);
+	e = pthread_create (&read_gps_tid, NULL, read_gpsd_thread, (void *)(ptrdiff_t)arg);
 	if (e != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  perror("Could not create GPS reader thread");

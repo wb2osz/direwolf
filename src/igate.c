@@ -466,7 +466,7 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	  return;
 	}
 #else
-	e = pthread_create (&connect_listen_tid, NULL, connnect_thread, (void *)NULL);
+	e = pthread_create (&connect_listen_tid, NULL, connnect_thread, NULL);
 	if (e != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  perror("Internal error: Could not create IGate connection thread");

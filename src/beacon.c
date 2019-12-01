@@ -383,7 +383,7 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 #else
 	  int e;
 
-	  e = pthread_create (&beacon_tid, NULL, beacon_thread, (void *)0);
+	  e = pthread_create (&beacon_tid, NULL, beacon_thread, NULL);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    perror("Could not create beacon thread");

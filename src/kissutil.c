@@ -285,7 +285,7 @@ int main (int argc, char *argv[])
 
 #if __WIN32__
 	if (using_tcp) {
-	  tnc_th = (HANDLE)_beginthreadex (NULL, 0, tnc_listen_net, (void *)99, 0, NULL);
+	  tnc_th = (HANDLE)_beginthreadex (NULL, 0, tnc_listen_net, (void *)(ptrdiff_t)99, 0, NULL);
 	}
 	else {
 	  tnc_th = (HANDLE)_beginthreadex (NULL, 0, tnc_listen_serial, (void *)99, 0, NULL);
@@ -296,10 +296,10 @@ int main (int argc, char *argv[])
 	}
 #else
 	if (using_tcp) {
-	  e = pthread_create (&tnc_tid, NULL, tnc_listen_net, (void *)(long)99);
+	  e = pthread_create (&tnc_tid, NULL, tnc_listen_net, (void *)(ptrdiff_t)99);
 	}
 	else {
-	  e = pthread_create (&tnc_tid, NULL, tnc_listen_serial, (void *)(long)99);
+	  e = pthread_create (&tnc_tid, NULL, tnc_listen_serial, (void *)(ptrdiff_t)99);
 	}
 	if (e != 0) {
 	  perror("Internal error: Could not create TNC listen thread.");

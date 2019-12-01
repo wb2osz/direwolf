@@ -231,14 +231,14 @@ void kissnet_init (struct misc_config_s *mc)
  * This waits for a client to connect and sets client_sock[n].
  */
 #if __WIN32__
-	connect_listen_th = (HANDLE)_beginthreadex (NULL, 0, connect_listen_thread, (void *)kiss_port, 0, NULL);
+	connect_listen_th = (HANDLE)_beginthreadex (NULL, 0, connect_listen_thread, (void *)(ptrdiff_t)kiss_port, 0, NULL);
 	if (connect_listen_th == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not create KISS socket connect listening thread\n");
 	  return;
 	}
 #else
-	e = pthread_create (&connect_listen_tid, NULL, connect_listen_thread, (void *)(long)kiss_port);
+	e = pthread_create (&connect_listen_tid, NULL, connect_listen_thread, (void *)(ptrdiff_t)kiss_port);
 	if (e != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  perror("Could not create KISS socket connect listening thread");
@@ -254,14 +254,14 @@ void kissnet_init (struct misc_config_s *mc)
 	for (client = 0; client < MAX_NET_CLIENTS; client++) {
 
 #if __WIN32__
-	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, kissnet_listen_thread, (void*)client, 0, NULL);
+	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, kissnet_listen_thread, (void*)(ptrdiff_t)client, 0, NULL);
 	  if (cmd_listen_th[client] == NULL) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Could not create KISS command listening thread for client %d\n", client);
 	    return;
 	  }
 #else
-	  e = pthread_create (&(cmd_listen_tid[client]), NULL, kissnet_listen_thread, (void *)(long)client);
+	  e = pthread_create (&(cmd_listen_tid[client]), NULL, kissnet_listen_thread, (void *)(ptrdiff_t)client);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Could not create KISS command listening thread for client %d\n", client);
@@ -305,10 +305,10 @@ static THREAD_F connect_listen_thread (void *arg)
 	SOCKET listen_sock;  
 	WSADATA wsadata;
 
-	snprintf (kiss_port_str, sizeof(kiss_port_str), "%d", (int)(long)arg);
+	snprintf (kiss_port_str, sizeof(kiss_port_str), "%d", (int)(ptrdiff_t)arg);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-        dw_printf ("DEBUG: kissnet port = %d = '%s'\n", (int)(long)arg, kiss_port_str);
+        dw_printf ("DEBUG: kissnet port = %d = '%s'\n", (int)(ptrdiff_t)arg, kiss_port_str);
 #endif
 	err = WSAStartup (MAKEWORD(2,2), &wsadata);
 	if (err != 0) {
@@ -425,7 +425,7 @@ static THREAD_F connect_listen_thread (void *arg)
 
     	struct sockaddr_in sockaddr; /* Internet socket address stuct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
-	int kiss_port = (int)(long)arg;
+	int kiss_port = (int)(ptrdiff_t)arg;
 	int listen_sock;  
 	int bcopt = 1;
 
@@ -808,7 +808,7 @@ static THREAD_F kissnet_listen_thread (void *arg)
 	unsigned char ch;
 			
 
-	int client = (int)(long)arg;
+	int client = (int)(ptrdiff_t)arg;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);

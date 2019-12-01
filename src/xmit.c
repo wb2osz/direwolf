@@ -279,7 +279,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 
 	  if (p_modem->achan[j].medium == MEDIUM_RADIO) {
 #if __WIN32__
-	    xmit_th[j] = (HANDLE)_beginthreadex (NULL, 0, xmit_thread, (void*)(long)j, 0, NULL);
+	    xmit_th[j] = (HANDLE)_beginthreadex (NULL, 0, xmit_thread, (void*)(ptrdiff_t)j, 0, NULL);
 	    if (xmit_th[j] == NULL) {
 	       text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Could not create xmit thread %d\n", j);
@@ -310,10 +310,10 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 	      perror("pthread_attr_setschedparam");
 	    }
 	
-	    e = pthread_create (&(xmit_tid[j]), &attr, xmit_thread, (void *)(long)j);
+	    e = pthread_create (&(xmit_tid[j]), &attr, xmit_thread, (void *)(ptrdiff_t)j);
 	    pthread_attr_destroy (&attr);
 #else
-	    e = pthread_create (&(xmit_tid[j]), NULL, xmit_thread, (void *)(long)j);
+	    e = pthread_create (&(xmit_tid[j]), NULL, xmit_thread, (void *)(ptrdiff_t)j);
 #endif
 	    if (e != 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -510,7 +510,7 @@ static unsigned __stdcall xmit_thread (void *arg)
 static void * xmit_thread (void *arg)
 #endif
 {
-	int chan = (int)(long)arg; // channel number.
+	int chan = (int)(ptrdiff_t)arg; // channel number.
 	packet_t pp;
 	int prio;
 	int ok;

@@ -51,6 +51,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+#if __WIN32__
+#include <direct.h> 	// for _mkdir()
+#endif
+
 #include "ax25_pad.h"
 #include "textcolor.h"
 #include "decode_aprs.h"
