@@ -37,6 +37,7 @@
 
 #endif
 
+#include <stddef.h>
 
 /*
  * Previously, we could handle only a single audio device.
