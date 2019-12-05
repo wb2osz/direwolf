@@ -56,6 +56,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <ctype.h>
+#include <stddef.h>
 #include <string.h>
 #include <getopt.h>
 #include <dirent.h>

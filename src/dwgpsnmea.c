@@ -54,6 +54,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <stddef.h>
 
 
 #include "textcolor.h"
