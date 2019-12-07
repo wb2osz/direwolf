@@ -60,6 +60,7 @@
 #include <string.h>
 #include <math.h>
 #include <errno.h>
+#include <stddef.h>
 
 #include "direwolf.h"
 #include "ax25_pad.h"
