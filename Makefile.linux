@@ -680,7 +680,7 @@ install : $(APPS) direwolf.conf tocalls.txt symbols-new.txt symbolsX.txt dw-icon
 # Set group and mode of HID devices corresponding to C-Media USB Audio adapters.
 # This will allow us to use the CM108/CM119 GPIO pins for PTT.
 #
-	$(INSTALL) -D --mode=644 99-direwolf-cmedia.rules /etc/udev/rules.d/99-direwolf-cmedia.rules
+	$(INSTALL) -D --mode=644 99-direwolf-cmedia.rules $(DESTDIR)/etc/udev/rules.d/99-direwolf-cmedia.rules
 #
 	@echo " "
 	@echo "If this is your first install, not an upgrade, type this to put a copy"
