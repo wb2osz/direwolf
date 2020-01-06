@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -69,9 +69,20 @@
  *		different fixup attempts.
  *		Set limit on number of packets in fix up later queue.
  *
+ * New in version 1.6:
+ *
+ *		FX.25.  Previously a delay of a couple bits (or more accurately
+ *		symbols) was fine because the decoders took about the same amount of time.
+ *		Now, we can have an additional delay of up to 64 check bytes and
+ *		some filler in the data portion.  We can't simply wait that long.
+ *		With normal AX.25 a couple frames can come and go during that time.	
+ *		We want to delay the duplicate removal while FX.25 block reception
+ *		is going on.
+ *		
  *------------------------------------------------------------------*/
 
 //#define DEBUG 1
+
 #define DIGIPEATER_C
 
 #include "direwolf.h"
@@ -89,6 +100,7 @@
 #include "hdlc_rec.h"
 #include "hdlc_rec2.h"
 #include "dlq.h"
+#include "fx25.h"
 
 
 // Properties of the radio channels.
@@ -101,7 +113,12 @@ static struct audio_s          *save_audio_config_p;
 static struct {
 	packet_t packet_p;
 	alevel_t alevel;
-	retry_t retries;
+	int is_fx25;		// 1 for FX.25, 0 for regular AX.25.
+	retry_t retries;	// For the old "fix bits" strategy, this is the
+				// number of bits that were modified to get a good CRC.
+				// It would be 0 to something around 4.
+				// For FX.25, it is the number of corrected.
+				// This could be from 0 thru 32.
 	int age;
 	unsigned int crc;
 	int score;
@@ -169,97 +186,6 @@ void multi_modem_init (struct audio_s *pa)
 
 }
 
-#if 0
-
-//Add a crc to the end of the queue and returns the numbers of CRC stored in the queue
-int crc_queue_append (unsigned int crc, unsigned int chan) {
-	crc_t plast;
-//	crc_t plast1;
-	crc_t pnext;
-	crc_t new_crc;
-	
-	unsigned int nb_crc = 1;
-	if (chan>=MAX_CHANS) {
-	  return -1;
-	}
-	new_crc = (crc_t) malloc (10*sizeof(struct crc_s));
-	if (!new_crc)
-	  return -1;
-	new_crc->crc = crc;
-	new_crc->nextp = NULL;
-	if (crc_queue_of_last_to_app[chan] == NULL) {
-	  crc_queue_of_last_to_app[chan] = new_crc;
-	  nb_crc = 1;
-	}
-	else {
-	  nb_crc = 2;
-	  plast = crc_queue_of_last_to_app[chan];
-	  pnext = plast->nextp;
-	  while (pnext != NULL) {
-	    nb_crc++;
-	    plast = pnext;
-	    pnext = pnext->nextp;
-	  }
-	  plast->nextp = new_crc;
-	}
-#if DEBUG 
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf("Out crc_queue_append nb_crc = %d\n", nb_crc);
-#endif
-	return nb_crc;
-
-
-}
-
-//Remove the crc from the top of the queue
-unsigned int crc_queue_remove (unsigned int chan) {
-
-	unsigned int res;
-//	crc_t plast;
-//	crc_t pnext;
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf("In crc_queue_remove\n");
-#endif
-	crc_t removed_crc;
-	if (chan>=MAX_CHANS) {
-	  return 0;
-	}
-	removed_crc = crc_queue_of_last_to_app[chan];
-	if (removed_crc == NULL) {
-	  return 0;
-	}
-	else {
-
-	  crc_queue_of_last_to_app[chan] = removed_crc->nextp;
-	  res = removed_crc->crc;
-	  free(removed_crc);
-	  
-	}
-	return res;
-
-}
-
-unsigned char is_crc_in_queue(unsigned int chan, unsigned int crc) { 
-	crc_t plast;
-	crc_t pnext;
-
-	if (crc_queue_of_last_to_app[chan] == NULL) {
-	  return 0;
-	}
-	else {
-	  plast = crc_queue_of_last_to_app[chan];
-	  do {
-	    pnext = plast->nextp;
-	    if (plast->crc == crc) {
-	      return 1;
-	    }
-	    plast = pnext;
-	  } while (pnext != NULL);
-	}
-	return 0;
-}
-#endif /* if 0 */
 
 /*------------------------------------------------------------------------------
  *
@@ -346,7 +272,12 @@ void multi_modem_process_sample (int chan, int audio_sample)
 	    if (candidate[chan][subchan][slice].packet_p != NULL) {
 	      candidate[chan][subchan][slice].age++;
 	      if (candidate[chan][subchan][slice].age > process_age[chan]) {
-	        pick_best_candidate (chan);
+	        if (fx25_rec_busy(chan)) {
+		  candidate[chan][subchan][slice].age = 0;
+	        }
+	        else {
+	          pick_best_candidate (chan);
+	        }
 	      }
 	    }
 	  }
@@ -371,94 +302,15 @@ void multi_modem_process_sample (int chan, int audio_sample)
  *				(Special case, use negative to skip
  *				 display of audio level line.
  *				 Use -2 to indicate DTMF message.)
- *		retries	- Level of bit correction used.
- *
+ *		retries	- Level of correction used.
+ *		is_fx25	- 1 for FX.25, 0 for normal AX.25.
  *
  * Description:	Add to list of candidates.  Best one will be picked later.
  *
  *--------------------------------------------------------------------*/
 
-/*
- 
-	It gets a little more complicated when we try fixing frames
-	with imperfect CRCs.   
 
-	Changing of adjacent bits is quick and done immediately.  These
-	all come in at nearly the same time.  The processing of two 
-	separated bits can take a long time and is handled in the 
-	background by another thread.  These could come in seconds later.
-
-	We need a way to remove duplicates.  I think these are the
-	two cases we need to consider.
-
-	(1) Same result as earlier no error or adjacent bit errors.
-
-		____||||_
-		0.0: ptr=00000000
-		0.1: ptr=00000000
-		0.2: ptr=00000000
-		0.3: ptr=00000000
-		0.4: ptr=009E5540, retry=0, age=295, crc=9458, score=5024
-		0.5: ptr=0082F008, retry=0, age=294, crc=9458, score=5026  ***
-		0.6: ptr=009CE560, retry=0, age=293, crc=9458, score=5026
-		0.7: ptr=009CEE08, retry=0, age=293, crc=9458, score=5024
-		0.8: ptr=00000000
-
-		___._____
-		0.0: ptr=00000000
-		0.1: ptr=00000000
-		0.2: ptr=00000000
-		0.3: ptr=009E5540, retry=4, age=295, crc=9458, score=1000  ***
-		0.4: ptr=00000000
-		0.5: ptr=00000000
-		0.6: ptr=00000000
-		0.7: ptr=00000000
-		0.8: ptr=00000000
-
-	(2) Only results from adjusting two non-adjacent bits.
-
-
-		||||||||_
-		0.0: ptr=022EBA08, retry=0, age=289, crc=5acd, score=5042
-		0.1: ptr=022EA8B8, retry=0, age=290, crc=5acd, score=5048
-		0.2: ptr=022EB160, retry=0, age=290, crc=5acd, score=5052
-		0.3: ptr=05BD0048, retry=0, age=291, crc=5acd, score=5054  ***
-		0.4: ptr=04FE0048, retry=0, age=292, crc=5acd, score=5054
-		0.5: ptr=05E10048, retry=0, age=294, crc=5acd, score=5052
-		0.6: ptr=053D0048, retry=0, age=294, crc=5acd, score=5048
-		0.7: ptr=02375558, retry=0, age=295, crc=5acd, score=5042
-		0.8: ptr=00000000
-
-		_______._
-		0.0: ptr=00000000
-		0.1: ptr=00000000
-		0.2: ptr=00000000
-		0.3: ptr=00000000
-		0.4: ptr=00000000
-		0.5: ptr=00000000
-		0.6: ptr=00000000
-		0.7: ptr=02375558, retry=4, age=295, crc=5fc5, score=1000  ***
-		0.8: ptr=00000000
-
-		________.
-		0.0: ptr=00000000
-		0.1: ptr=00000000
-		0.2: ptr=00000000
-		0.3: ptr=00000000
-		0.4: ptr=00000000
-		0.5: ptr=00000000
-		0.6: ptr=00000000
-		0.7: ptr=00000000
-		0.8: ptr=02375558, retry=4, age=295, crc=5fc5, score=1000  ***
-
-
-	These can both be covered by keepin the last CRC and dropping 
-	duplicates.  In theory we could get another frame in between with
-	a slow computer so the complete solution would be to remember more
-	than one.
-*/
-
-void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries)
+void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries, int is_fx25)
 {
 	packet_t pp;
 
@@ -477,10 +329,12 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 
 
 /*
- * If only one demodulator/slicer, push it thru and forget about all this foolishness.
+ * If only one demodulator/slicer, and no FX.25 in progress,
+ * push it thru and forget about all this foolishness.
  */
 	if (save_audio_config_p->achan[chan].num_subchan == 1 &&
-	    save_audio_config_p->achan[chan].num_slicers == 1) {
+	    save_audio_config_p->achan[chan].num_slicers == 1 &&
+	    ! fx25_rec_busy(chan)) {
 
 
 	  int drop_it = 0;
@@ -501,7 +355,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	    ax25_delete (pp);
 	  }
 	  else {
-	    dlq_rec_frame (chan, subchan, slice, pp, alevel, retries, "");
+	    dlq_rec_frame (chan, subchan, slice, pp, alevel, is_fx25, retries, "");
 	  }
 	  return;
 	}
@@ -511,13 +365,17 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
  * Otherwise, save them up for a few bit times so we can pick the best.
  */
 	if (candidate[chan][subchan][slice].packet_p != NULL) {
-	  /* Oops!  Didn't expect it to be there. */
+	  /* Plain old AX.25: Oops!  Didn't expect it to be there. */
+	  /* FX.25: Quietly replace anything already there.  It will have priority. */
 	  ax25_delete (candidate[chan][subchan][slice].packet_p);
 	  candidate[chan][subchan][slice].packet_p = NULL;
 	}
 
+	assert (pp != NULL);
+
 	candidate[chan][subchan][slice].packet_p = pp;
 	candidate[chan][subchan][slice].alevel = alevel;
+	candidate[chan][subchan][slice].is_fx25 = is_fx25;
 	candidate[chan][subchan][slice].retries = retries;
 	candidate[chan][subchan][slice].age = 0;
 	candidate[chan][subchan][slice].crc = ax25_m_m_crc(pp);
@@ -567,6 +425,15 @@ static void pick_best_candidate (int chan)
 	  if (candidate[chan][j][k].packet_p == NULL) {
 	    spectrum[n] = '_';
 	  }
+	  else if (candidate[chan][j][k].is_fx25) {
+	    // FIXME: using retries both as an enum and later int too.
+	    if ((int)(candidate[chan][j][k].retries) <= 9) {
+	      spectrum[n] = '0' + candidate[chan][j][k].retries;
+	    }
+	    else {
+	      spectrum[n] = '+';
+	    }
+	  }
 	  else if (candidate[chan][j][k].retries == RETRY_NONE) {
 	    spectrum[n] = '|';
 	  }
@@ -583,12 +450,17 @@ static void pick_best_candidate (int chan)
 	    candidate[chan][j][k].score = 0;
 	  }
 	  else {
-	    /* Originally, this produced 0 for the PASSALL case. */
-	    /* This didn't work so well when looking for the best score. */
-	    /* Around 1.3 dev H, we add an extra 1 in here so the minimum */
-	    /* score should now be 1 for anything received.  */
+	    if (candidate[chan][j][k].is_fx25) {
+	      candidate[chan][j][k].score = 9000 - 100 * candidate[chan][j][k].retries;
+	    }
+	    else {
+	      /* Originally, this produced 0 for the PASSALL case. */
+	      /* This didn't work so well when looking for the best score. */
+	      /* Around 1.3 dev H, we add an extra 1 in here so the minimum */
+	      /* score should now be 1 for anything received.  */
 
-	    candidate[chan][j][k].score = RETRY_MAX * 1000 - ((int)candidate[chan][j][k].retries * 1000) + 1;
+	      candidate[chan][j][k].score = RETRY_MAX * 1000 - ((int)candidate[chan][j][k].retries * 1000) + 1;
+	    }
 	  }
 	}
 
@@ -644,8 +516,9 @@ static void pick_best_candidate (int chan)
 		candidate[chan][j][k].packet_p);
 	  }
 	  else {
-	    dw_printf ("%d.%d.%d: ptr=%p, retry=%d, age=%3d, crc=%04x, score=%d  %s\n", chan, j, k,
+	    dw_printf ("%d.%d.%d: ptr=%p, is_fx25=%d, retry=%d, age=%3d, crc=%04x, score=%d  %s\n", chan, j, k,
 		candidate[chan][j][k].packet_p,
+		candidate[chan][j][k].is_fx25,
 		(int)(candidate[chan][j][k].retries),
 		candidate[chan][j][k].age,
 		candidate[chan][j][k].crc,
@@ -700,9 +573,11 @@ static void pick_best_candidate (int chan)
 	  candidate[chan][j][k].packet_p = NULL;
 	}
 	else {
+	  assert (candidate[chan][j][k].packet_p != NULL);
 	  dlq_rec_frame (chan, j, k,
 		candidate[chan][j][k].packet_p,
 		candidate[chan][j][k].alevel,
+		candidate[chan][j][k].is_fx25,
 		(int)(candidate[chan][j][k].retries),
 		spectrum);
 

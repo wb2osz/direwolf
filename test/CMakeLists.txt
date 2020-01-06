@@ -1,8 +1,11 @@
-# this is a trick to avoid more complication
-# because configure_file() is done a configuration time
+# This is a trick to avoid more complication
+# because configure_file() is done at configuration time
+
 set(CUSTOM_TEST_BINARY_DIR "${CMAKE_BINARY_DIR}/test")
 set(GEN_PACKETS_BIN "${CMAKE_BINARY_DIR}/src/gen_packets${CMAKE_EXECUTABLE_SUFFIX}")
 set(ATEST_BIN "${CMAKE_BINARY_DIR}/src/atest${CMAKE_EXECUTABLE_SUFFIX}")
+set(FXSEND_BIN "${CMAKE_BINARY_DIR}/test/fxsend${CMAKE_EXECUTABLE_SUFFIX}")
+set(FXREC_BIN "${CMAKE_BINARY_DIR}/test/fxrec${CMAKE_EXECUTABLE_SUFFIX}")
 
 if(WIN32)
   set(CUSTOM_SCRIPT_SUFFIX ".bat")
@@ -10,6 +13,7 @@ else()
   set(CUSTOM_SCRIPT_SUFFIX "")
 endif()
 
+set(TEST_CHECK-FX25_FILE "check-fx25")
 set(TEST_CHECK-MODEM1200_FILE "check-modem1200")
 set(TEST_CHECK-MODEM300_FILE "check-modem300")
 set(TEST_CHECK-MODEM9600_FILE "check-modem9600")
@@ -20,6 +24,13 @@ set(TEST_CHECK-MODEM2400-g_FILE "check-modem2400-g")
 set(TEST_CHECK-MODEM4800_FILE "check-modem4800")
 
 # generate the scripts that run the tests
+
+configure_file(
+  "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-FX25_FILE}"
+  "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-FX25_FILE}${CUSTOM_SCRIPT_SUFFIX}"
+  @ONLY
+  )
+
 configure_file(
   "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-MODEM1200_FILE}"
   "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM1200_FILE}${CUSTOM_SCRIPT_SUFFIX}"
@@ -89,6 +100,7 @@ if(WIN32 OR CYGWIN)
   )
 endif()
 
+# Why is there a special atest9 instead of using the normal one?
 
 # Unit test for demodulators
 list(APPEND atest9_SOURCES
@@ -98,6 +110,9 @@ list(APPEND atest9_SOURCES
   ${CUSTOM_SRC_DIR}/demod_afsk.c
   ${CUSTOM_SRC_DIR}/demod_psk.c
   ${CUSTOM_SRC_DIR}/demod_9600.c
+  ${CUSTOM_SRC_DIR}/fx25_extract.c
+  ${CUSTOM_SRC_DIR}/fx25_init.c
+  ${CUSTOM_SRC_DIR}/fx25_rec.c
   ${CUSTOM_SRC_DIR}/hdlc_rec.c
   ${CUSTOM_SRC_DIR}/hdlc_rec2.c
   ${CUSTOM_SRC_DIR}/multi_modem.c
@@ -415,8 +430,43 @@ set_target_properties(dtmftest
   PROPERTIES COMPILE_FLAGS "-DDTMF_TEST"
   )
 
+# Unit Test FX.25 algorithm.
+
+list(APPEND fxsend_SOURCES
+  ${CUSTOM_SRC_DIR}/fx25_send.c
+  ${CUSTOM_SRC_DIR}/fx25_encode.c
+  ${CUSTOM_SRC_DIR}/fx25_init.c
+  ${CUSTOM_SRC_DIR}/fcs_calc.c
+  ${CUSTOM_SRC_DIR}/textcolor.c
+  )
+
+add_executable(fxsend
+  ${fxsend_SOURCES}
+  )
+
+set_target_properties(fxsend
+  PROPERTIES COMPILE_FLAGS "-DFXTEST"
+  )
+
+list(APPEND fxrec_SOURCES
+  ${CUSTOM_SRC_DIR}/fx25_rec.c
+  ${CUSTOM_SRC_DIR}/fx25_extract.c
+  ${CUSTOM_SRC_DIR}/fx25_init.c
+  ${CUSTOM_SRC_DIR}/fcs_calc.c
+  ${CUSTOM_SRC_DIR}/textcolor.c
+  )
+
+add_executable(fxrec
+  ${fxrec_SOURCES}
+  )
+
+set_target_properties(fxrec
+  PROPERTIES COMPILE_FLAGS "-DFXTEST"
+  )
+
 
 # doing ctest on previous programs
+
 add_test(dtest dtest)
 add_test(ttest ttest)
 add_test(tttexttest tttexttest)
@@ -429,6 +479,7 @@ add_test(pad2test pad2test)
 add_test(xidtest xidtest)
 add_test(dtmftest dtmftest)
 
+add_test(check-fx25 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-FX25_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem1200 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM1200_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem300 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM300_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem9600 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM9600_FILE}${CUSTOM_SCRIPT_SUFFIX}")

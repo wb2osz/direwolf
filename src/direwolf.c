@@ -32,6 +32,7 @@
  *			APRStt (touch tone input) gateway
  *			Internet Gateway (IGate)
  *			Ham Radio of Things - IoT with Ham Radio
+ *			FX.25 Forward Error Correction.
  *		
  *
  *---------------------------------------------------------------*/
@@ -121,6 +122,7 @@
 #include "mheard.h"
 #include "ax25_link.h"
 #include "dtime_now.h"
+#include "fx25.h"
 
 
 //static int idx_decoded = 0;
@@ -181,7 +183,6 @@ static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio 
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
 
 
-
 int main (int argc, char *argv[])
 {
 	int err;
@@ -217,8 +218,13 @@ int main (int argc, char *argv[])
 #if USE_HAMLIB
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
+	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
+
 	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering trasmit frames. */
 	int E_rx_opt = 0;		/* "-E Rn" Error rate % for clobbering receive frames. */
+
+	float e_recv_ber = 0.0;		/* Receive Bit Error Rate (BER). */
+	int X_fx25_xmit_enable = 0;	/* FX.25 transmit enable. */
 
 	strlcpy(l_opt_logdir, "", sizeof(l_opt_logdir));
 	strlcpy(L_opt_logfile, "", sizeof(L_opt_logfile));
@@ -278,7 +284,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -367,7 +373,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:",
+          c = getopt_long(argc, argv, "P:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:e:X:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -535,6 +541,7 @@ int main (int argc, char *argv[])
 #if USE_HAMLIB
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
+	      case 'x':  d_x_opt++; break;			// FX.25
 	      default: break;
 	     }
 	    }
@@ -549,6 +556,7 @@ int main (int argc, char *argv[])
 	     switch (*p) {
 	      case 'h':  q_h_opt = 1; break;
 	      case 'd':  q_d_opt = 1; break;
+	      case 'x':  d_x_opt = 0; break;	// Defaults to minimal info.  This silences.
 	      default: break;
 	     }
 	    }
@@ -609,6 +617,16 @@ int main (int argc, char *argv[])
 
           case 'T':				/* -T for receive timestamp. */
 	    strlcpy (T_opt_timestamp, optarg, sizeof(T_opt_timestamp));
+            break;
+
+	  case 'e':				/* -e Receive Bit Error Rate (BER). */
+
+	    e_recv_ber = atof(optarg);
+	    break;
+
+          case 'X':
+
+	    X_fx25_xmit_enable = atoi(optarg);
             break;
 
           default:
@@ -788,6 +806,10 @@ int main (int argc, char *argv[])
 
 	}
 
+	audio_config.recv_ber = e_recv_ber;
+
+	audio_config.fx25_xmit_enable = X_fx25_xmit_enable;
+
 
 /*
  * Open the audio source 
@@ -810,6 +832,7 @@ int main (int argc, char *argv[])
  * Initialize the demodulator(s) and HDLC decoder.
  */
 	multi_modem_init (&audio_config);
+	fx25_init (d_x_opt);
 
 /*
  * Initialize the touch tone decoder & APRStt gateway.
@@ -940,7 +963,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -957,7 +980,12 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	assert (pp != NULL);	// 1.1J+
      
 	strlcpy (display_retries, "", sizeof(display_retries));
-	if (audio_config.achan[chan].fix_bits != RETRY_NONE || audio_config.achan[chan].passall) {
+
+	if (is_fx25) {
+	  ;
+	}
+	else if (audio_config.achan[chan].fix_bits != RETRY_NONE || audio_config.achan[chan].passall) {
+	  assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
 	  snprintf (display_retries, sizeof(display_retries), " [%s] ", retry_text[(int)retries]);
 	}
 
@@ -1343,6 +1371,7 @@ static void usage (char **argv)
 	dw_printf ("    -J             2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("    -P xxx         Modem Profiles.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
+	dw_printf ("    -X n           Enable FX.25 transmit. Specify number of check bytes: 16, 32, or 64.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");
 	dw_printf ("       k             k = KISS serial port or pseudo terminal client.\n");
@@ -1359,9 +1388,11 @@ static void usage (char **argv)
 #if USE_HAMLIB
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif
+	dw_printf ("       x             x = FX.25 increase verbose level.\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
+	dw_printf ("       x             x = Silence FX.25 information.\n");
 	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.\n");
 	dw_printf ("                     Use 9 to test compatibility with your terminal.\n");
 	dw_printf ("    -a n           Audio statistics interval in seconds.  0 to disable.\n");
@@ -1373,6 +1404,7 @@ static void usage (char **argv)
 	dw_printf ("    -u             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
 	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
+	dw_printf ("    -e ber         Receive Bit Error Rate (BER), e.g. 1e-5\n");
 	dw_printf ("\n");
 
 	dw_printf ("After any options, there can be a single command line argument for the source of\n");

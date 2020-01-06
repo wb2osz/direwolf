@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2019  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include "gen_tone.h"
 #include "textcolor.h"
 #include "fcs_calc.h"
+#include "fx25.h"
 
 static void send_control (int, int);
 static void send_data (int, int);
@@ -53,6 +54,9 @@ static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdl
  *		flen	- Frame length, not including the FCS.
  *
  *		bad_fcs	- Append an invalid FCS for testing purposes.
+ *			  Applies only to regular AX.25.
+ *
+ *		fx25_xmit_enable - Just like the name says.
  *
  * Outputs:	Bits are shipped out by calling tone_gen_put_bit().
  *
@@ -75,7 +79,26 @@ static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdl
  *
  *--------------------------------------------------------------*/
 
-int hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs)
+static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs);
+
+// New in 1.6: Option to encapsulate in FX.25.
+
+int hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs, int fx25_xmit_enable)
+{
+	if (fx25_xmit_enable) {
+	  int n = fx25_send_frame (chan, fbuf, flen, fx25_xmit_enable);
+	  if (n > 0) {
+	    return (n);
+	  }
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unable to send FX.25.  Falling back to regular AX.25.\n");
+	}
+
+	return (ax25_only_hdlc_send_frame (chan, fbuf, flen, bad_fcs));
+}
+
+
+static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs)
 {
 	int j, fcs;
 	

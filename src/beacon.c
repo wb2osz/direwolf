@@ -1041,7 +1041,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	            /* Simulated reception from radio. */
 
 		    memset (&alevel, 0xff, sizeof(alevel));
-	            dlq_rec_frame (bp->sendto_chan, 0, 0, pp, alevel, 0, "");
+	            dlq_rec_frame (bp->sendto_chan, 0, 0, pp, alevel, 0, 0, "");
 	            break; 
 		}
 	      }

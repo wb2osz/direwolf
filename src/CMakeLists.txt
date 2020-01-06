@@ -44,6 +44,11 @@ list(APPEND direwolf_SOURCES
   encode_aprs.c
   fcs_calc.c
   fcs_calc.c
+  fx25_encode.c
+  fx25_extract.c
+  fx25_init.c
+  fx25_rec.c
+  fx25_send.c
   gen_tone.c
   hdlc_rec.c
   hdlc_rec2.c
@@ -257,6 +262,9 @@ target_link_libraries(log2gpx
 list(APPEND gen_packets_SOURCES
   gen_packets.c
   ax25_pad.c
+  fx25_encode.c
+  fx25_init.c
+  fx25_send.c
   hdlc_send.c
   fcs_calc.c
   gen_tone.c
@@ -284,6 +292,9 @@ list(APPEND atest_SOURCES
   demod_psk.c
   demod_9600.c
   dsp.c
+  fx25_extract.c
+  fx25_init.c
+  fx25_rec.c
   hdlc_rec.c
   hdlc_rec2.c
   multi_modem.c
@@ -426,6 +437,33 @@ if(WIN32 OR CYGWIN)
   target_link_libraries(ttcalc ws2_32)
 endif()
 
+
+# Sample for packet radio server application.
+# appserver
+list(APPEND appserver_SOURCES
+  appserver.c
+  agwlib.c
+  dwsock.c
+  dtime_now.c
+  ax25_pad.c
+  fcs_calc.c
+  textcolor.c
+  )
+
+add_executable(appserver
+  ${appserver_SOURCES}
+  )
+
+target_link_libraries(appserver
+  ${MISC_LIBRARIES}
+  Threads::Threads
+  )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(appserver ws2_32)
+endif()
+
+
 install(TARGETS direwolf DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS decode_aprs DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS text2tt DESTINATION ${INSTALL_BIN_DIR})
@@ -438,6 +476,7 @@ install(TARGETS gen_packets DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS atest DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS ttcalc DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS kissutil DESTINATION ${INSTALL_BIN_DIR})
+install(TARGETS appserver DESTINATION ${INSTALL_BIN_DIR})
 if(UDEV_FOUND)
   install(TARGETS cm108 DESTINATION ${INSTALL_BIN_DIR})
 endif()

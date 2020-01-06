@@ -209,6 +209,9 @@ void dlq_init (void)
  *				 display of audio level line.
  *				 Use -2 to indicate DTMF message.)
  *
+ *		is_fx25 - Was it from FX.25?  Need to know because
+ *			  meaning of retries is different.
+ *
  *		retries	- Level of bit correction used.
  *
  *		spectrum - Display of how well multiple decoders did.
@@ -219,7 +222,7 @@ void dlq_init (void)
  *
  *--------------------------------------------------------------------*/
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
 {
 
 	struct dlq_item_s *pnew;
@@ -264,6 +267,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	pnew->subchan = subchan;
 	pnew->pp = pp;
 	pnew->alevel = alevel;
+	pnew->is_fx25 = is_fx25;
 	pnew->retries = retries;
 	if (spectrum == NULL) 
 	  strlcpy(pnew->spectrum, "", sizeof(pnew->spectrum));

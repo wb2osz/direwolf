@@ -104,6 +104,14 @@ struct audio_s {
 
 	int recv_error_rate;		/* Similar but the % probablity of dropping a received frame. */
 
+	float recv_ber;			/* Receive Bit Error Rate (BER). */
+					/* Probability of inverting a bit coming out of the modem. */
+
+	int fx25_xmit_enable;		/* Enable transmission of FX.25.  */
+					/* See fx25_init.c for explanation of values. */
+					/* Initially this applies to all channels. */
+					/* This should probably be per channel. One step at a time. */
+
 	char timestamp_format[40];	/* -T option */
 					/* Precede received & transmitted frames with timestamp. */
 					/* Command line option uses "strftime" format string. */

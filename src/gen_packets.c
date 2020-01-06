@@ -75,6 +75,7 @@
 #include "textcolor.h"
 #include "morse.h"
 #include "dtmf.h"
+#include "fx25.h"
 
 
 /* Own random number generator so we can get */
@@ -145,7 +146,7 @@ static void send_packet (char *str)
 	    }
 #endif
 	    hdlc_send_flags (c, 8, 0);
-	    hdlc_send_frame (c, fbuf, flen, 0);
+	    hdlc_send_frame (c, fbuf, flen, 0, modem.fx25_xmit_enable);
 	    hdlc_send_flags (c, 2, 1);
 	  }
 	  ax25_delete (pp);
@@ -162,7 +163,6 @@ int main(int argc, char **argv)
 	int packet_count = 0;
 	int i;
 	int chan;
-	int experiment = 0;
 
 	int g_opt = 0;
 	int j_opt = 0;
@@ -218,7 +218,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:o:z:82M:X",
+          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -353,9 +353,13 @@ int main(int argc, char **argv)
             case 'n':				/* -n number of packets with increasing noise. */
 
 	      packet_count = atoi(optarg);
-
 	      g_add_noise = 1;
+              break;
 
+            case 'N':				/* -N number of packets.  Don't add noise. */
+
+	      packet_count = atoi(optarg);
+	      g_add_noise = 0;
               break;
 
             case 'a':				/* -a for amplitude */
@@ -440,7 +444,7 @@ int main(int argc, char **argv)
 
             case 'X':
 
-              experiment = 1;
+	      modem.fx25_xmit_enable = atoi(optarg);
               break;
 
             case '?':
@@ -515,98 +519,19 @@ int main(int argc, char **argv)
         }
 
 
-	if (experiment) {
-          modem.achan[0].modem_type = MODEM_QPSK;
-	  modem.achan[0].baud = 2400;	// really bps not baud.
-	  amplitude = 100;
-	}
-
 	gen_tone_init (&modem, amplitude/2, 1);
 	morse_init (&modem, amplitude/2);
 	dtmf_init (&modem, amplitude/2);
 
+	// We don't have -d or -q options here.
+	// Just use the default of minimal information.
+
+	fx25_init (1);
 
         assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
         assert (modem.adev[0].num_channels == 1 || modem.adev[0].num_channels == 2);
         assert (modem.adev[0].samples_per_sec >= MIN_SAMPLES_PER_SEC && modem.adev[0].samples_per_sec <= MAX_SAMPLES_PER_SEC);
 
-
-	if (experiment) {
-	  int chan = 0;
-	  int n;
-
-	  // 6 cycles of 1800 Hz.
-	  for (n=0; n<8; n++) {
-	    tone_gen_put_bit (chan, 0);
-	  }
-
-	  // Shift 90
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 1);
-
-	  // Shift 90
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 1);
-
-	  // Shift 90
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 1);
-
-	  // Shift 90
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 1);
-
-	  // Shift 180
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-
-	  // Shift 270
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 0);
-
-	  // Shift 0
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 0);
-
-	  // Shift 0
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 0);
-
-
-	  // HDLC flag - six 1 in a row.
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 0);
-
-	  tone_gen_put_bit (chan, 0);	// reverse even/odd position
-
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 1);
-	  tone_gen_put_bit (chan, 0);
-
-	  tone_gen_put_bit (chan, 0);
-
-	  // Shift 0
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 0);
-
-	  // Shift 0
-	  tone_gen_put_bit (chan, 0);
-	  tone_gen_put_bit (chan, 0);
-
-	  audio_file_close ();
-	  return (EXIT_SUCCESS);
-	}
 
 /*
  * Get user packets(s) from file or stdin if specified.
@@ -735,6 +660,7 @@ static void usage (char **argv)
 	dw_printf ("  -g            Scrambled baseband rather than AFSK.\n");
 	dw_printf ("  -j            2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("  -J            2400 bps QPSK compatible with MFJ-2400.\n");
+	dw_printf ("  -X n          Generate FX.25 frames. Specify number of check bytes: 16, 32, or 64.\n");
 	dw_printf ("  -m <number>   Mark frequency.  Default is %d.\n", DEFAULT_MARK_FREQ);
 	dw_printf ("  -s <number>   Space frequency.  Default is %d.\n", DEFAULT_SPACE_FREQ);
 	dw_printf ("  -r <number>   Audio sample Rate.  Default is %d.\n", DEFAULT_SAMPLES_PER_SEC);

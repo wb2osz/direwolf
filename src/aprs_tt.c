@@ -1708,7 +1708,7 @@ static void raw_tt_data_to_app (int chan, char *msg)
 	  alevel.mark = -2;
 	  alevel.space = -2;
 
-	  dlq_rec_frame (chan, -1, 0, pp, alevel, RETRY_NONE, "tt");
+	  dlq_rec_frame (chan, -1, 0, pp, alevel, 0, RETRY_NONE, "tt");
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);

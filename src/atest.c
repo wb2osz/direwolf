@@ -81,6 +81,7 @@
 #include "dlq.h"
 #include "ptt.h"
 #include "dtime_now.h"
+#include "fx25.h"
 
 
 
@@ -186,6 +187,7 @@ static int j_opt = 0;			/* 2400 bps PSK compatible with direwolf <= 1.5 */
 static int J_opt = 0;			/* 2400 bps PSK compatible MFJ-2400 and maybe others. */
 static int h_opt = 0;			// Hexadecimal display of received packet.
 static char P_opt[16] = "";		// Demodulator profiles.
+static int d_x_opt = 1;			// FX.25 debug.
 
 
 int main (int argc, char *argv[])
@@ -259,7 +261,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "B:P:D:U:gjJF:L:G:012h",
+          c = getopt_long(argc, argv, "B:P:D:U:gjJF:L:G:012he:d:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -362,6 +364,21 @@ int main (int argc, char *argv[])
 	     case 'h':				/* Hexadecimal display. */
 
 	       h_opt = 1;
+	       break;
+
+	     case 'e':				/* Receive Bit Error Rate (BER). */
+
+	       my_audio_config.recv_ber = atof(optarg);
+	       break;
+
+	     case 'd':				/* Debug message options. */
+
+	       for (char *p=optarg; *p!='\0'; p++) {
+	        switch (*p) {
+	           case 'x':  d_x_opt++; break;			// FX.25
+	           default: break;
+	        }
+	       }
 	       break;
 
              case '?':
@@ -491,6 +508,7 @@ int main (int argc, char *argv[])
 	  usage ();
 	}
 
+	fx25_init (d_x_opt);
 
 	start_time = dtime_now();
 
@@ -589,6 +607,7 @@ int main (int argc, char *argv[])
 		
 /*
  * Initialize the AFSK demodulator and HDLC decoder.
+ * Needs to be done for each file because they could have different sample rates.
  */
 	multi_modem_init (&my_audio_config);
 	packets_decoded_one = 0;
@@ -701,7 +720,7 @@ int audio_get (int a)
  * This is called when we have a good frame.
  */
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum)
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -755,7 +774,11 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
 	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
 	}
+	else if (is_fx25) {
+	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
+	}
 	else {
+	  assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
 	  dw_printf ("%s audio level = %s   [%s]   %s\n", heard, alevel_text, retry_text[(int)retries], spectrum);
 	}
 
@@ -880,6 +903,8 @@ static void usage (void) {
 	dw_printf ("               0 (default) = consider only correct frames.  \n");
 	dw_printf ("               1 = Try to fix only a single bit.  \n");
 	dw_printf ("               more = Try modifying more bits to get a good CRC.\n");
+	dw_printf ("\n");
+	dw_printf ("        -d x   Debug information for FX.25.  Repeat for more detail.\n");
 	dw_printf ("\n");
 	dw_printf ("        -L     Error if less than this number decoded.\n");
 	dw_printf ("\n");

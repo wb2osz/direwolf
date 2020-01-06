@@ -772,7 +772,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 
 	      assert (rrbb_get_chan(block) == chan);
 	      assert (rrbb_get_subchan(block) == subchan);
-	      multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, retry_conf.retry);   /* len-2 to remove FCS. */
+	      multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, retry_conf.retry, 0);   /* len-2 to remove FCS. */
 	      return 1;		/* success */
 
 	  } else if (passall) {
@@ -781,7 +781,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	      //text_color_set(DW_COLOR_ERROR);
 	      //dw_printf ("ATTEMPTING PASSALL PROCESSING\n");
   
-	      multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, RETRY_MAX);   /* len-2 to remove FCS. */
+	      multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, RETRY_MAX, 0);   /* len-2 to remove FCS. */
 	      return 1;		/* success */
 	    }
 	    else {

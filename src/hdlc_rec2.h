@@ -62,6 +62,6 @@ int hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int slice, 
 
 /* Provided by the top level application to process a complete frame. */
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t level, retry_t retries, char *spectrum);
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t level, int is_fx25, retry_t retries, char *spectrum);
 
 #endif

@@ -44,6 +44,7 @@
 #include "multi_modem.h"
 #include "demod_9600.h"		/* for descramble() */
 #include "ptt.h"
+#include "fx25.h"
 
 
 //#define TEST 1				/* Define for unit testing. */
@@ -127,6 +128,8 @@ static int composite_dcd[MAX_CHANS][MAX_SUBCHANS+1];
 
 static int was_init = 0;
 
+static struct audio_s *g_audio_p;
+
 void hdlc_rec_init (struct audio_s *pa)
 {
 	int ch, sub, slice;
@@ -136,7 +139,8 @@ void hdlc_rec_init (struct audio_s *pa)
 	//dw_printf ("hdlc_rec_init (%p) \n", pa);
 
 	assert (pa != NULL);
-	
+	g_audio_p = pa;
+
 	memset (composite_dcd, 0, sizeof(composite_dcd));
 
 	for (ch = 0; ch < MAX_CHANS; ch++)
@@ -168,7 +172,18 @@ void hdlc_rec_init (struct audio_s *pa)
 	was_init = 1;
 }
 
+/* Own copy of random number generator so we can get */
+/* same predictable results on different operating systems. */
+/* TODO: Consolidate multiple copies somewhere. */
 
+#define MY_RAND_MAX 0x7fffffff
+static int seed = 1;
+
+static int my_rand (void) {
+	// Perform the calculation as unsigned to avoid signed overflow error.
+	seed = (int)(((unsigned)seed * 1103515245) + 12345) & MY_RAND_MAX;
+	return (seed);
+}
 
 /***********************************************************************************
  *
@@ -196,8 +211,6 @@ void hdlc_rec_init (struct audio_s *pa)
  *
  ***********************************************************************************/
 
-// TODO: int not_used_remove
-
 void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, int not_used_remove)
 {
 
@@ -211,6 +224,21 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
 	assert (slice >= 0 && slice < MAX_SLICERS);
+
+// -e option can be used to artificially introduce the desired
+// Bit Error Rate (BER) for testing.
+
+	if (g_audio_p->recv_ber != 0) {
+	  double r = (double)my_rand() / (double)MY_RAND_MAX;  // calculate as double to preserve all 31 bits.
+	  if (g_audio_p->recv_ber > r) {
+
+// FIXME
+//text_color_set(DW_COLOR_DEBUG);
+//dw_printf ("hdlc_rec_bit randomly clobber bit, ber = %.6f\n", g_audio_p->recv_ber);
+
+	    raw = ! raw;
+	  }
+	}
 
 /*
  * Different state information for each channel / subchannel / slice.
@@ -239,6 +267,9 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	  H->prev_raw = raw;
 	}
 
+// After BER insertion, NRZI, and any descrambling, feed into FX.25 decoder as well.
+
+	fx25_rec_bit (chan, subchan, slice, dbit);
 
 /*
  * Octets are sent LSB first.
@@ -394,7 +425,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	    if (actual_fcs == expected_fcs) {
 	      alevel_t alevel = demod_get_audio_level (chan, subchan);
 
-	      multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE);   /* len-2 to remove FCS. */
+	      multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE, 0);   /* len-2 to remove FCS. */
 	    }
 	    else {
 

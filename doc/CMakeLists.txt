@@ -8,6 +8,7 @@ install(FILES "${CUSTOM_DOC_DIR}/APRS-Telemetry-Toolkit.pdf" DESTINATION ${INSTA
 install(FILES "${CUSTOM_DOC_DIR}/APRStt-Implementation-Notes.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/APRStt-interface-for-SARTrack.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/APRStt-Listening-Example.pdf" DESTINATION ${INSTALL_DOC_DIR})
+install(FILES "${CUSTOM_DOC_DIR}/AX25_plus_FEC_equals_FX25.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/Bluetooth-KISS-TNC.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/Going-beyond-9600-baud.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/Raspberry-Pi-APRS.pdf" DESTINATION ${INSTALL_DOC_DIR})
@@ -16,3 +17,4 @@ install(FILES "${CUSTOM_DOC_DIR}/Raspberry-Pi-SDR-IGate.pdf" DESTINATION ${INSTA
 install(FILES "${CUSTOM_DOC_DIR}/Successful-APRS-IGate-Operation.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/User-Guide.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/WA8LMF-TNC-Test-CD-Results.pdf" DESTINATION ${INSTALL_DOC_DIR})
+install(FILES "${CUSTOM_DOC_DIR}/Why-is-9600-only-twice-as-fast-as-1200.pdf" DESTINATION ${INSTALL_DOC_DIR})

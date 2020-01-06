@@ -1067,7 +1067,7 @@ static int send_one_frame (int c, int p, packet_t pp)
 	  }
 	}
 
-	nb = hdlc_send_frame (c, fbuf, flen, send_invalid_fcs2);
+	nb = hdlc_send_frame (c, fbuf, flen, send_invalid_fcs2, save_audio_config_p->fx25_xmit_enable);
 	return (nb);
 
 } /* end send_one_frame */

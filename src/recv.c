@@ -338,7 +338,7 @@ void recv_process (void)
  *	- Digipeater.
  */
 
-		  app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->retries, pitem->spectrum);
+		  app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->is_fx25, pitem->retries, pitem->spectrum);
 
 
 /*

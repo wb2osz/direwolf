@@ -5,14 +5,18 @@
 ## Version 1.6  --  Under Development ##
 
 
-### Bugs Fixed: ###
+### New Build Procedure: ###
 
-- Proper counting of frames in transmit queue for AGW protocol 'Y' command.
+
+- Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.
+
 
 
 
 ### New Features: ###
 
+
+- "-X" option enables FX.25 transmission.  FX.25 reception is always enabled so you don't need to do anything special.
 
 - "-t" option now accepts more values to accommodate inconsistent handling of text color control codes by different terminal emulators.  The default, 1, should work with most modern terminal types.  If the colors are not right, try "-t 9" to see the result of the different choices and pick the best one.  If none of them look right, file a bug report and specify: operating system version (e.g. Raspbian Buster), terminal emulator type and version (e.g.  LXTerminal 0.3.2).   Include a screen capture.
 
@@ -27,9 +31,19 @@
 
 
 
+### Bugs Fixed: ###
+
+- Proper counting of frames in transmit queue for AGW protocol 'Y' command.
+
+
+
 ### New Documentation: ###
 
+- ***AX.25 + FEC = FX.25***
+
 - ***AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?***
+
+- [***Ham Radio of Things - IoT over Ham Radio***](https://github.com/wb2osz/hrot)
 
 - Power Point slide show in separate repository.  [https://github.com/wb2osz/direwolf-presentation ](https://github.com/wb2osz/direwolf-presentation)
 

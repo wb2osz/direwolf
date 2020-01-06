@@ -68,7 +68,11 @@ typedef struct dlq_item_s {
 
 	alevel_t alevel;		/* Audio level. */
 
+	int is_fx25;			/* Was it from FX.25? */
+
 	retry_t retries;		/* Effort expended to get a valid CRC. */
+					/* Bits changed for regular AX.25. */
+					/* Number of bytes fixed for FX.25. */
 
 	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];	/* "Spectrum" display for multi-decoders. */
 
@@ -102,7 +106,7 @@ void dlq_init (void);
 
 
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, char *spectrum);
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum);
 
 void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid);
 

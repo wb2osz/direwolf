@@ -27,6 +27,14 @@ Brief summary of packet radio / APRS history and the capbilities of Dire Wolf.
 These dive into more detail for specialized topics or typical usage scenarios.
 
 
+
+- [**AX.25 + FEC = FX.25**](AX25_plus_FEC_equals_FX25.pdf)  [ [*download*](../../../raw/dev/doc/AX25_plus_FEC_equals_FX25.pdf) ]
+
+	What can you do if your radio signal isn’t quite strong enough to get through reliably?  Move to higher ground?  Get a better antenna?  More power?  Use very narrow bandwidth and very slow data?
+
+    Sometimes those are not options.  Another way to improve communication reliability is to add redundant information so the message will still get through even if small parts are missing.  FX.25 adds forward error correction (FEC) which maintaining complete compatibility with older equipment.
+
+
 - [**AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?**](Why-is-9600-only-twice-as-fast-as-1200.pdf)  [ [*download*](../../../raw/dev/doc/Why-is-9600-only-twice-as-fast-as-1200.pdf) ]
 
 	Simply switching to a higher data rate will probably result in great disappointment.  You might expect it to be 8 times faster but it can turn out to be only twice as fast.

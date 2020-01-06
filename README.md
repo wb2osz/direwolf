@@ -9,7 +9,10 @@ Why settle for mediocre receive performance from a 1980's technology  TNC using 
 
 ![](tnc-test-cd-results.png)
 
- 
+Dire Wolf now includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction/) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless.
+
+![](fx25.png)
+
 Dire Wolf is a modern software replacement for the old 1980's style TNC built with special hardware.
 
 Without any additional software, it can perform as:
@@ -20,7 +23,7 @@ Without any additional software, it can perform as:
 - [APRStt](http://www.aprs.org/aprstt.html) gateway
 
 
-It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [UI-View32](http://www.ui-view.net/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), and many others.
+It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [UI-View32](http://www.ui-view.net/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), and many others.
  
  
 ## Features & Benefits ##
@@ -48,6 +51,11 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
     IGate stations allow communication between disjoint radio networks by allowing some content to flow between them over the Internet.
 
+- **Ham Radio of Things.**
+
+    There have been occasional mentions of merging Ham Radio with the Internet of Things but only ad hoc incompatible narrowly focused applications. Here is a proposal for a standardized more flexible method so different systems can communicate with each other.
+
+    [Ham Radio of Things - IoT over Ham Radio](https://github.com/wb2osz/hrot)
 
 - **AX.25 v2.2 Link Layer.**
 
@@ -63,7 +71,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
     Lower cost and better performance than specialized hardware. 
 
-    Compatible interfaces include [UDRC](https://nw-digital-radio.groups.io/g/udrc/wiki/UDRC%E2%84%A2-and-Direwolf-Packet-Modem), [SignaLink USB](http://www.tigertronics.com/slusbmain.htm), [DMK URI](http://www.dmkeng.com/URI_Order_Page.htm), [RB-USB RIM](http://www.repeater-builder.com/products/usb-rim-lite.html), [RA-35](http://www.masterscommunications.com/products/radio-adapter/ra35.html), and many others.
+    Compatible interfaces include [DRAWS](http://nwdigitalradio.com/draws/), [UDRC](https://nw-digital-radio.groups.io/g/udrc/wiki/UDRC%E2%84%A2-and-Direwolf-Packet-Modem), [SignaLink USB](http://www.tigertronics.com/slusbmain.htm), [DMK URI](http://www.dmkeng.com/URI_Order_Page.htm), [RB-USB RIM](http://www.repeater-builder.com/products/usb-rim-lite.html), [RA-35](http://www.masterscommunications.com/products/radio-adapter/ra35.html), [DINAH](https://hamprojects.info/dinah/), [SHARI](https://hamprojects.info/shari/), and many others.
 
 
 
