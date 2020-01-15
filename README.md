@@ -3,7 +3,7 @@
 
 ### Decoded Information from Radio Emissions for Windows Or Linux Fans ###
 
-In the early days of Amateur Packet Radio, it was necessary to use an expensive “Terminal Node Controller” (TNC) with specialized hardware.  Those days are gone.  You can now get better results at lower cost by connecting your radio to the “soundcard” interface of a computer and using software to decode the signals.
+In the early days of Amateur Packet Radio, it was necessary to use an expensive "Terminal Node Controller" (TNC) with specialized hardware.  Those days are gone.  You can now get better results at lower cost by connecting your radio to the "soundcard" interface of a computer and using software to decode the signals.
 
 Why settle for mediocre receive performance from a 1980's technology  TNC using an old modem chip?   Dire Wolf decodes over 1000 error-free frames from Track 2 of the [WA8LMF TNC Test CD](https://github.com/wb2osz/direwolf/tree/dev/doc/WA8LMF-TNC-Test-CD-Results.pdf), leaving all the hardware TNCs, and first generation "soundcard" modems, behind in the dust.
 
@@ -67,7 +67,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 ### Radio Interfaces:   ###
 
-- **Uses computer’s “soundcard” and digital signal processing.**
+- **Uses computer's "soundcard" and digital signal processing.**
 
     Lower cost and better performance than specialized hardware. 
 
@@ -77,7 +77,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 - **Standard 300, 1200 & 9600 bps modems and more.**
 
-- **DTMF (“Touch Tone”) Decoding and Encoding.**
+- **DTMF ("Touch Tone") Decoding and Encoding.**
  
 - **Speech Synthesizer & Morse code generator.**
 
@@ -153,7 +153,7 @@ Then on any flavor of Linux:
 	cd direwolf
 	mkdir build && cd build
 	cmake ..
-	make –j4
+	make -j4
 	sudo make install
 	make install-conf
 
@@ -186,7 +186,7 @@ Go to the [releases page](https://github.com/wb2osz/direwolf/releases).  Chose d
 	cd direwolf-*
 	mkdir build && cd build
 	cmake ..
-	make –j4
+	make -j4
 	sudo make install
 	make install-conf
 
