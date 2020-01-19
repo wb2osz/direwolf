@@ -1761,6 +1761,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        p_audio_config->achan[channel].octrl[ot].ptt_model = -1;
 	      }
 	      else {
+		if ( ! alldigits(t)) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: A rig number, not a name, is required here.\n", line);
+	          dw_printf ("For example, if you have a Yaesu FT-847, specify 101.\n");
+	          dw_printf ("See https://github.com/Hamlib/Hamlib/wiki/Supported-Radios for more details.\n");
+	          continue;
+	        }
 	        int n = atoi(t);
 		if (n < 1 || n > 9999) {
 	          text_color_set(DW_COLOR_ERROR);
