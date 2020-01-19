@@ -37,6 +37,9 @@ find_library(UDEV_LIBRARY
   PATHS
   ${PC_LIBUDEV_LIBRARY_DIRS}
   ${PC_LIBUDEV_LIBDIR}
+  /usr/lib64
+  /usr/lib
+  /usr/local/lib
   HINTS
   "${UDEV_ROOT_DIR}"
   PATH_SUFFIXES
@@ -49,6 +52,8 @@ find_path(UDEV_INCLUDE_DIR
   NAMES
   libudev.h
   PATHS
+  /usr/include
+  /usr/local/include
   ${PC_LIBUDEV_INCLUDE_DIRS}
   ${PC_LIBUDEV_INCLUDEDIR}
   HINTS
@@ -65,6 +70,10 @@ find_package_handle_standard_args(UDEV
   UDEV_LIBRARY
   UDEV_INCLUDE_DIR
   )
+
+if (UDEV_INCLUDE_DIR AND UDEV_LIBRARY)
+  set(UDEV_FOUND TRUE)
+endif (UDEV_INCLUDE_DIR AND UDEV_LIBRARY)
 
 if(UDEV_FOUND)
   list(APPEND UDEV_LIBRARIES ${UDEV_LIBRARY})
