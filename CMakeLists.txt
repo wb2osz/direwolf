@@ -124,6 +124,11 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   configure_file("${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}.desktop.in"
     "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop" @ONLY)
 
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+  set(FREEBSD TRUE)
+  configure_file("${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}.desktop.in"
+    "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop" @ONLY)
+
 elseif(APPLE)
   if("${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL "")
     message(STATUS "Build for macOS target: local version")
@@ -177,10 +182,14 @@ if (C_CLANG OR C_GCC)
   # It might go back in someday when I have more patience to clean up all the warnings.
   #
   ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
+  if(FREEBSD)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
+  else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
+  endif()
   #
   #
-  # -lm is needed for functins in math.h
+  # -lm is needed for functions in math.h
   if (LINUX)
     # We have another problem with CentOS 6.  clock_gettime() is in librt so we need -lrt.
     # The clock_* functions were moved into gnu libc for version 2.17.
@@ -214,7 +223,11 @@ else()
   set(INSTALL_DOC_DIR "share/doc/${CMAKE_PROJECT_NAME}")
   set(INSTALL_CONF_DIR "${INSTALL_DOC_DIR}/conf")
   set(INSTALL_SCRIPTS_DIR "${INSTALL_DOC_DIR}/scripts")
-  set(INSTALL_MAN_DIR "share/man/man1")
+  if(FREEBSD)
+    set(INSTALL_MAN_DIR "man/man1")
+  else()
+    set(INSTALL_MAN_DIR "share/man/man1")
+  endif()
   set(INSTALL_DATA_DIR "share/${PROJECT_NAME}")
 endif(WIN32 OR CYGWIN)
 
@@ -297,7 +310,7 @@ add_subdirectory(doc)
 add_subdirectory(man)
 
 # install desktop link
-if (LINUX)
+if (LINUX OR FREEBSD)
   install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop DESTINATION share/applications)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}_icon.png DESTINATION share/pixmaps)
 endif()
