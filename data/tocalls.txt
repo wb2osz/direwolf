@@ -1,39 +1,37 @@
-APRS TO-CALL VERSION NUMBERS                             3 Dec 2018
+<title>
+APRS TO-CALL VERSION NUMBERS                            20 Jan 2020
 -------------------------------------------------------------------
                                                              WB4APR
+</title>
+<version_notes>
+20 Jan 20 Added APBT62 for BTech DMR 6x2
+08 Jan 20 Added APCLUB for Brazil APRS network
+06 Jan 20 Added APMQxx for Ham Radio of Things WB2OSZ
+18 Dec 19 Added APTPNx: TARPN Packet Node Tracker by KN4ORB 
+02 Dec 19 added APJ8xx For Jordan / KN4CRD JS8Call application
+ 8 Sep 19 Added APBSDx for OpenBSD or HamBSD https://hambsd.org/
+19 Aug 19 Added APNKMX for KAM-XL
+   and    Added APAT51 for Anytone AT-D578UV APRS radio
+16 Jul 19 expanded APMGxx to cover PiCrumbs and MiniGate 
+24 Jun 19 Added APTCMA for CAPI tracker - PU1CMA Brazil
+ 4 Jun 19 added APATxx for Anytone
+ 8 May 19 added APQTHx for W8WJB's QTH.app
+12 Mar 19 added APLIGx for LightAPRS 
  3 Dec 18 added APRARX forVK5QI's radiosonde tracking 
  8 Nov 18 added APELKx for WB8ELK balloons
 24 Oct 18 added APGBLN for NW5W's GoBalloon
 18 Apr 18 added APBKxx for PY5BK Bravo Tracker in Brazil
  7 Mar 18 added APERSx  Runner tracking by Jason,KG7YKZ
  8 Jan 18 added APTCHE PU3IKE in Brazil TcheTracker/Tcheduino
-12 Dec 17 Added APHWxx for use in "HamWAN
-11 Dec 17 Added APDVxx for OE6PLD's SSTV with APRS status exchange
-20 Nov 17 added APPICO DB1NTO' PicoAPRS 
-18 Oct 17 Added APBMxx BrandMeister DMR Server for R3ABM 
-25 Sep 17 added APP6xx for APRSlib
-05 Sep 17 Chged APTAxx to APTBxx for TinyAPRS by BG5HHP
-17 Aug 17 Added APOCSG for POCSAG - N0AGI's APRS to Pagers
-21 Jun 17 Added APCSMS for Cosmos (used for sending commands @USNA
-08 Jun 17 Added APPMxx for DL1MX's RTL-SDR pytohon Igate
-01 Jun 17 added APOFF  digi off on PSAT,PSAT2
-          and   APDTMF digi off mode on QIKCOM2 and DTMF ON
-          and   APRSON digi ON for PSAT
-          and   APDIGI digi ON for PSAT2 and QIKCOM-2
-          and   APSAT  digi ON for QIKCOM-1
-20 Mar 17 added APTBxx for TinyAPRS by BG5HHP
-06 Feb 17 added APIExx for W7KMV's PiAPRS system
-25 Jan 17 added APSFxx F5OPV embedded devices - was APZ40
-16 Dec 16 added APYSxx for W2GMD's Python APRS
-14 Nov 16 Added APINxx for PinPoint by AB0WV
-09 Nov 16 added APNICx for SQ5EKU http://sq5eku.blogspot.com/
-24 Oct 16 added APTKPT TrackPoint N0LP, removed APZTKP
-24 Aug 16 added APK004 for Kenwood THD-74
-29 Apr 16 added APFPRS for FreeDV by Jeroen PE1RXQ
-25 Feb 16 Added APCDS0 for Leon Lessing ZS6LMG's cell tracker
-21 Jan 16 added APDNOx for APRSduino by DO3SWW
-In   2015 Added APSTPO,APAND1,APDRxx,APZ247,APHTxx,APMTxx,APZMAJ
+2017 Added APHWxx,APDVxx,APPICO,APBMxx,APP6xx,APTAxx,APOCSG,APCSMS,
+           APPMxx,APOFF,APDTMF,APRSON,APDIGI,APSAT,APTBxx,APIExx,
+           APSFxx
+2016 added APYSxx,APINxx,APNICx,APTKPT,APK004,APFPRS,APCDS0,APDNOx
+2015 Added APSTPO,APAND1,APDRxx,APZ247,APHTxx,APMTxx,APZMAJ
                 APB2MF,APR2MF,APAVT5
+
+</version_notes>
+<description>
 
 In APRS, the AX.25  Destination address is not used for packet 
 routing as is normally done in AX.25.  So APRS uses it for two 
@@ -43,6 +41,9 @@ applicaitons ignore all non APRS packets.  The remaining 4 xxxx
 bytes of the field are available to indicate the software version 
 number or application.  The following applications have requested 
 a TOCALL number series:
+
+</description>
+<tocalls>
 
  APn  3rd digit is a number
       AP1WWX  TAPR T-238+ WX station
@@ -58,6 +59,8 @@ a TOCALL number series:
       APAHxx  AHub
       APAND1  APRSdroid (pre-release) http://aprsdroid.org/
       APAMxx  Altus Metrum GPS trackers
+      APATxx  for Anytone. 81 for 878 HT 
+      APAT51  for Anytone AT-D578UV APRS mobile radio 
       APAVT5  SainSonic AP510 which is a 1watt tracker
       APAWxx  AGWPE 
  APB  APBxxx  Beacons or Rabbit TCPIP micros?
@@ -66,13 +69,16 @@ a TOCALL number series:
       APBLO   MOdel Rocketry K7RKT
       APBKxx  PY5BK Bravo Tracker in Brazil
       APBPQx  John G8BPQ Digipeater/IGate
-      APBMxx  BrandMeister DMR Server for R3ABM 
+      APBMxx  BrandMeister DMR Server for R3ABM
+      APBSDx  HamBSD https://hambsd.org/
+      APBT62  BTech DMR 6x2 
  APC  APCxxx  Cellular applications
       APCBBx  VE7UDP Blackberry Applications
       APCDS0  Leon Lessing ZS6LMG's cell tracker
       APCLEY  EYTraker GPRS/GSM tracker by ZS6EY
-      APCLWX  EYWeather GPRS/GSM WX station by ZS6EY
       APCLEZ  Telit EZ10 GSM application ZS6CEY
+      APCLUB  Brazil APRS network
+      APCLWX  EYWeather GPRS/GSM WX station by ZS6EY
       APCSMS  for Cosmos (used for sending commands @USNA)
       APCWP8  John GM7HHB, WinphoneAPRS
       APCYxx  Cybiko applications
@@ -115,7 +121,8 @@ a TOCALL number series:
       APICxx  HA9MCQ's Pic IGate
       APIExx  W7KMV's PiAPRS system
       APINxx  PinPoint by AB0WV
- APJ  APJAxx  JavAPRS
+ APJ  APJ8xx  Jordan / KN4CRD JS8Call application
+      APJAxx  JavAPRS
       APJExx  JeAPRS
       APJIxx  jAPRSIgate
       APJSxx  javAPRSSrvr
@@ -126,11 +133,13 @@ a TOCALL number series:
       APK1xx  Kenwood D700's
       APK102  Kenwood D710
       APKRAM  KRAMstuff.com - Mark. G7LEU
- APL  APLQRU  Charlie - QRU Server
+ APL  APLIGx  LightAPRS - TA2MUN and TA9OHC
+      APLQRU  Charlie - QRU Server
       APLMxx  WA0TQG transceiver controller
  APM  APMxxx  MacAPRS, 
-      APMGxx  MiniGate - Alex, AB0TJ
+      APMGxx  PiCrumbs and MiniGate - Alex, AB0TJ
       APMIxx  SQ3PLX http://microsat.com.pl/
+      APMQxx  Ham Radio of Things WB2OSZ
       APMTxx  LZ1PPL for tracker
  APN  APNxxx  Network nodes, digis, etc
       APN3xx  Kantronics KPC-3 rom versions
@@ -141,6 +150,7 @@ a TOCALL number series:
       APNK01  Kenwood D700 (APK101) type
       APNK80  KAM version 8.0
       APNKMP  KAM+
+      APNKMX  KAM-XL
       APNMxx  MJF TNC roms
       APNPxx  Paccom TNC roms
       APNTxx  SV2AGW's TNT tnc as a digi
@@ -161,6 +171,7 @@ a TOCALL number series:
       APPMxx  DL1MX's RTL-SDR pytohon Igate
       APPTxx  KetaiTracker by  JF6LZE, Takeki (msg capable)
  APQ  APQxxx  Earthquake data
+      APQTHx  W8WJB's QTH.app
  APR  APR8xx  APRSdos versions 800+
       APR2MF  DL2MF - MF2APRS Radiosonde WX reporting
       APRARX  VK5QI's radiosonde tracking
@@ -192,8 +203,10 @@ a TOCALL number series:
       APTAxx  K4ATM's tiny track
       APTBxx  TinyAPRS by BG5HHP Was APTAxx till Sep 2017
       APTCHE  PU3IKE in Brazil TcheTracker/Tcheduino
+      APTCMA  CAPI tracker - PU1CMA Brazil
       APTIGR  TigerTrack
       APTKPT  TrackPoint N0LP
+      APTPNx  TARPN Packet Node Tracker by KN4ORB http://tarpn.net/ 
       APTTxx  Tiny Track
       APTWxx  Byons WXTrac
       APTVxx  for ATV/APRN and SSTV applications
@@ -226,11 +239,15 @@ a TOCALL number series:
       APZTKP  TrackPoint, Nick N0LP (Balloon tracking)(depricated)
       APZWIT  MAP27 radio (Mountain Rescue) EI7IG
       APZWKR  GM1WKR NetSked application
+</tocalls>
+<notes>
 
 Authors with similar alphabetic requirements are encouraged to share
 their address space with other software.  Work out agreements amongst
 yourselves and keep me informed.
 
+</notes>
+<altnets>
 
 REGISTERED ALTNETS:
 -------------------
@@ -256,9 +273,11 @@ The following is a list of ALTNETS that may be of interest to other
 users.  This list is by no means complete, since ANY combination of
 characters other than APxxxx are considered an ALTNET.  But this list 
 can give consisntecy to ALTNETS that may be using the global APRS-IS 
-and need some special recognition:
+and need some special recognition.  Here are some ideas:
+</altnets>
+<altnet_list>
 
-  TEST   - A generic ALTNET for use during testing
-  PSKAPR - PSKmail .  But it is not AX.25 anyway
-
-de WB4APR, Bob
+  SATERN - Salvation Army Altnet
+  AFMARS   - Airforce Mars
+  AMARS  - Army Mars
+</altnet_list>
