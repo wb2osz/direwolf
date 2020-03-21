@@ -373,7 +373,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "P:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:e:X:",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:e:X:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -504,9 +504,10 @@ int main (int argc, char *argv[])
    	    }
             break;
 
+	  case 'h':			// -h for help
           case '?':
 
-            /* Unknown option message was already printed. */
+            /* For '?' unknown option message was already printed. */
             usage (argv);
             break;
 
