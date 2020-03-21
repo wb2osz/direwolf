@@ -326,6 +326,9 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      else if (strncmp((char*)pinfo, "{mc", 3) == 0) {
 	        aprs_morse_code (A, (char*)pinfo, info_len);
 	      }
+	      else if (strncmp((char*)pinfo, "{{", 2) == 0) {
+	        snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Experimental");
+	      }
 	      else {
 	        //aprs_user_defined (A, pinfo, info_len);
 	      }
