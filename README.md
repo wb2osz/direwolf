@@ -23,7 +23,7 @@ Without any additional software, it can perform as:
 - [APRStt](http://www.aprs.org/aprstt.html) gateway
 
 
-It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [UI-View32](http://www.ui-view.net/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), and many others.
+It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [PinPoint APRS](http://www.pinpointaprs.com/), [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), and many others.
  
  
 ## Features & Benefits ##
@@ -151,13 +151,14 @@ Then on any flavor of Linux:
 	cd ~
 	git clone https://www.github.com/wb2osz/direwolf
 	cd direwolf
+    git checkout dev
 	mkdir build && cd build
 	cmake ..
 	make -j4
 	sudo make install
 	make install-conf
 
-This should give you the most recent stable release.  If you want the latest (possibly unstable) development version, use "git checkout dev" after the "cd direwolf" command.
+This gives you the latest development version.  
 
 For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
