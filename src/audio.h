@@ -28,7 +28,8 @@
 enum ptt_method_e { 
 	PTT_METHOD_NONE,	/* VOX or no transmit. */
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
-	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
+	PTT_METHOD_GPIO,	/* General purpose I/O using sysfs, deprecated after 2020, Linux only. */
+	PTT_METHOD_GPIOD,	/* General purpose I/O, using libgpiod, Linux only. */
 	PTT_METHOD_LPT,	    	/* Parallel printer port, Linux only. */
 	PTT_METHOD_HAMLIB, 	/* HAMLib, Linux only. */
 	PTT_METHOD_CM108 };	/* GPIO pin of CM108/CM119/etc.  Linux only. */
@@ -266,6 +267,7 @@ struct audio_s {
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
 					/* recalculate it each time we access it. */
+					/* Also GPIO chip name for GPIOD method. Looks like 'gpiochip4' */
 
 					/* This could probably be collapsed into ptt_device instead of being separate. */
 

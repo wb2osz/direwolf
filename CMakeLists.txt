@@ -143,8 +143,8 @@ elseif(APPLE)
   message(STATUS "RPATH support: ${CMAKE_MACOSX_RPATH}")
 
 elseif (WIN32)
-  if(NOT VS2015 AND NOT VS2017)
-    message(FATAL_ERROR "You must use Microsoft Visual Studio 2015 or 2017 as compiler")
+  if(NOT VS2015 AND NOT VS2017 AND NOT VS2019)
+    message(FATAL_ERROR "You must use Microsoft Visual Studio 2015 | 2017 | 2019 as compiler")
   endif()
 
   # compile with full multicore
@@ -249,6 +249,14 @@ if(HAMLIB_FOUND)
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
+endif()
+
+find_package(gpiod)
+if(GPIOD_FOUND)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
+else()
+  set(GPIOD_INCLUDE_DIRS "")
+  set(GPIOD_LIBRARIES "")
 endif()
 
 if(LINUX)

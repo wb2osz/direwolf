@@ -8,6 +8,7 @@ include_directories(
   ${UDEV_INCLUDE_DIRS}
   ${PORTAUDIO_INCLUDE_DIRS}
   ${CUSTOM_GEOTRANZ_DIR}
+  ${GPIOD_INCLUDE_DIRS}
   )
 
 if(WIN32 OR CYGWIN)
@@ -127,6 +128,7 @@ target_link_libraries(direwolf
   ${ALSA_LIBRARIES}
   ${UDEV_LIBRARIES}
   ${PORTAUDIO_LIBRARIES}
+  ${GPIOD_LIBRARIES}
   )
 
 if(WIN32 OR CYGWIN)

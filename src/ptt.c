@@ -166,6 +166,10 @@
 #include "cm108.h"
 #endif
 
+#ifdef USE_GPIOD
+#include <gpiod.h>
+#endif 
+
 /* So we can have more common code for fd. */
 typedef int HANDLE;
 #define INVALID_HANDLE_VALUE (-1)
@@ -623,6 +627,31 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	get_access_to_gpio (gpio_value_path);
 }
 
+#if defined(USE_GPIOD)
+int gpiod_probe(const char *chip_name, int line_number)
+{
+	struct gpiod_chip *chip;
+	chip = gpiod_chip_open_by_name(chip_name);
+	if (chip == NULL) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Can't open GPIOD chip %s.\n", chip_name);
+		return -1;
+	}
+
+	struct gpiod_line *line;
+	line = gpiod_chip_get_line(chip, line_number);
+	if (line == NULL) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Can't get GPIOD line %d.\n", line_number);
+		return -1;
+	}
+	if (ptt_debug_level >= 2) {
+		text_color_set(DW_COLOR_DEBUG);
+		dw_printf("GPIOD probe OK. Chip: %s line: %d\n", chip_name, line_number);
+	}
+	return 0;
+}
+#endif   /* USE_GPIOD */
 #endif   /* not __WIN32__ */
 
 
@@ -639,7 +668,8 @@ void export_gpio(int ch, int ot, int invert, int direction)
  *			ptt_method	Method for PTT signal. 
  *					PTT_METHOD_NONE - not configured.  Could be using VOX. 
  *					PTT_METHOD_SERIAL - serial (com) port. 
- *					PTT_METHOD_GPIO - general purpose I/O. 
+ *					PTT_METHOD_GPIO - general purpose I/O (sysfs). 
+ *					PTT_METHOD_GPIOD - general purpose I/O (libgpiod). 
  *					PTT_METHOD_LPT - Parallel printer port. 
  *                  			PTT_METHOD_HAMLIB - HAMLib rig control.
  *					PTT_METHOD_CM108 - GPIO pins of CM108 etc. USB Audio.
@@ -718,12 +748,13 @@ void ptt_init (struct audio_s *audio_config_p)
 	    if (ptt_debug_level >= 2) {
 
 	      text_color_set(DW_COLOR_DEBUG);
-              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, gpio=%d, lpt_bit=%d, invert=%d\n",
+              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, name=%s, gpio=%d, lpt_bit=%d, invert=%d\n",
 		ch,
 		otnames[ot],
 		audio_config_p->achan[ch].octrl[ot].ptt_method, 
 		audio_config_p->achan[ch].octrl[ot].ptt_device,
 		audio_config_p->achan[ch].octrl[ot].ptt_line,
+		audio_config_p->achan[ch].octrl[ot].out_gpio_name,
 		audio_config_p->achan[ch].octrl[ot].out_gpio_num,
 		audio_config_p->achan[ch].octrl[ot].ptt_lpt_bit,
 		audio_config_p->achan[ch].octrl[ot].ptt_invert);
@@ -869,7 +900,28 @@ void ptt_init (struct audio_s *audio_config_p)
 	if (using_gpio) {
 	  get_access_to_gpio ("/sys/class/gpio/export");
 	}
-
+#if defined(USE_GPIOD)
+    // GPIOD
+	for (ch = 0; ch < MAX_CHANS; ch++) {
+	  if (save_audio_config_p->achan[ch].medium == MEDIUM_RADIO) {
+	    for (int ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+	        const char *chip_name = audio_config_p->achan[ch].octrl[ot].out_gpio_name;
+	        int line_number = audio_config_p->achan[ch].octrl[ot].out_gpio_num;
+	        int rc = gpiod_probe(chip_name, line_number);
+	        if (rc < 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Disable PTT for channel %d\n", ch);
+	          audio_config_p->achan[ch].octrl[ot].ptt_method = PTT_METHOD_NONE;
+	        } else {
+	          // Set initial state off ptt_set will invert output signal if appropriate.
+	          ptt_set (ot, ch, 0);
+	        }
+	      }
+	    }
+	  }
+	}
+#endif /* USE_GPIOD */
 /*
  * We should now be able to create the device nodes for 
  * the pins we want to use.
@@ -1226,6 +1278,18 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  close (fd);
 
 	}
+
+#if defined(USE_GPIOD)
+	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+		const char *chip = save_audio_config_p->achan[chan].octrl[ot].out_gpio_name;
+		int line = save_audio_config_p->achan[chan].octrl[ot].out_gpio_num;
+		int rc = gpiod_ctxless_set_value(chip, line, ptt, false, "direwolf", NULL, NULL);
+		if (ptt_debug_level >= 1) {
+			text_color_set(DW_COLOR_DEBUG);
+			dw_printf("PTT_METHOD_GPIOD chip: %s line: %d ptt: %d  rc: %d\n", chip, line, ptt, rc);
+		}
+	}
+#endif /* USE_GPIOD */
 #endif
 	
 /*
