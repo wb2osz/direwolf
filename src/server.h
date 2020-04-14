@@ -15,6 +15,8 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *misc_con
 
 void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int flen);
 
+void server_send_monitored (int chan, packet_t pp, int own_xmit);
+
 int server_callsign_registered_by_client (char *callsign);
 
 

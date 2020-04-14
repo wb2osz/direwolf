@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2020  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -45,9 +45,9 @@
  *			'k'	Ask to start receiving RAW AX25 frames.
  *
  *			'm'	Ask to start receiving Monitor AX25 frames.
+ *				Enables sending of U, I, S, and T messages to client app.
  *
  *			'V'	Transmit UI data frame.
- *				Generate audio for transmission.
  *
  *			'H'	Report recently heard stations.  Not implemented yet.
  *
@@ -89,7 +89,16 @@
  *			'K'	Received AX.25 frame in raw format.
  *				(Enabled with 'k' command.)
  *
- *			'U'	Received AX.25 frame in monitor format.
+ *			'U'	Received AX.25 "UI" frames in monitor format.
+ *				(Enabled with 'm' command.)
+ *
+ *			'I'	Received AX.25 "I" frames in monitor format.	(new in 1.6)
+ *				(Enabled with 'm' command.)
+ *
+ *			'S'	Received AX.25 "S" and "U" (other than UI) frames in monitor format.	(new in 1.6)
+ *				(Enabled with 'm' command.)
+ *
+ *			'T'	Own Transmitted AX.25 frames in monitor format.	(new in 1.6)
  *				(Enabled with 'm' command.)
  *
  *			'y'	Outstanding frames waiting on a Port   (new in 1.2)
@@ -768,9 +777,12 @@ static THREAD_F connect_listen_thread (void *arg)
  *
  *		There are two different formats:
  *			RAW - the original received frame.
- *			MONITOR - just the information part.
+ *			MONITOR - human readable monitoring format.
  *
  *--------------------------------------------------------------------*/
+
+static void mon_addrs (int chan, packet_t pp, char *result, int result_size);
+static char mon_desc (packet_t pp, char *result, int result_size);
 
 
 void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int flen)
@@ -781,15 +793,11 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	} agwpe_msg;
 
 	int err;
-	int info_len;
-	unsigned char *pinfo;
-	int client;
-
 
 /*
  * RAW format
  */
-	for (client=0; client<MAX_NET_CLIENTS; client++) {
+	for (int client=0; client<MAX_NET_CLIENTS; client++) {
 
 	  if (enable_send_raw_to_client[client] && client_sock[client] > 0){
 
@@ -839,32 +847,37 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	  }
 	}
 
+	// Application might want more human readable format.
 
-/* MONITOR format - only for UI frames. */
+	server_send_monitored (chan, pp, 0);
 
-	for (client=0; client<MAX_NET_CLIENTS; client++) {
-	
-	  if (enable_send_monitor_to_client[client] && client_sock[client] > 0 
-			&& ax25_get_control(pp) == AX25_UI_FRAME){
+} /* end server_send_rec_packet */
 
-	    time_t clock;
-	    struct tm *tm;
-	    int num_digi;
 
-	    clock = time(NULL);
-	    tm = localtime(&clock);	// TODO: should use localtime_r
+
+void server_send_monitored (int chan, packet_t pp, int own_xmit)
+{
+/*
+ * MONITOR format - 	'I' for information frames.
+ *			'U' for unnumbered information.
+ *			'S' for supervisory and other unnumbered.
+ */
+	struct {
+	  struct agwpe_s hdr;
+	  char data[1+AX25_MAX_PACKET_LEN];
+	} agwpe_msg;
+
+	int err;
+
+	for (int client=0; client<MAX_NET_CLIENTS; client++) {
+
+	  if (enable_send_monitor_to_client[client] && client_sock[client] > 0) {
 
 	    memset (&agwpe_msg.hdr, 0, sizeof(agwpe_msg.hdr));
 
-	    agwpe_msg.hdr.portx = chan;
-
-	    agwpe_msg.hdr.datakind = 'U';
-
+	    agwpe_msg.hdr.portx = chan;	// datakind is added later.
 	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, agwpe_msg.hdr.call_from);
-
 	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, agwpe_msg.hdr.call_to);
-
-	    info_len = ax25_get_info (pp, &pinfo);
 
 	    /* http://uz7ho.org.ua/includes/agwpeapi.htm#_Toc500723812 */
 
@@ -883,34 +896,34 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	    // AGWPE:
 	    // [AGWE-IN] 1:Fm ZL4FOX-8 To Q7P2U2 Via WIDE3-3 [08:32:14]`I0*l V>/"98}[:Barts Tracker 3.83V X
 
-	    num_digi = ax25_get_num_repeaters(pp);
+	    // Format the channel and addresses, with leading and trailing space.
 
-	    if (num_digi > 0) {
+	    mon_addrs (chan, pp, (char*)(agwpe_msg.data), sizeof(agwpe_msg.data));
 
-	      char via[AX25_MAX_REPEATERS*(AX25_MAX_ADDR_LEN+1)];
-	      char stemp[AX25_MAX_ADDR_LEN+1];
-	      int j;
+	    // Add the description with <... >
 
-	      ax25_get_addr_with_ssid (pp, AX25_REPEATER_1, via);
-	      for (j = 1; j < num_digi; j++) {
-	        ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, stemp);
-	        strlcat (via, ",", sizeof(via));
-	        strlcat (via, stemp, sizeof(via));
-	      }
-
-	      snprintf (agwpe_msg.data, sizeof(agwpe_msg.data), " %d:Fm %s To %s Via %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
-			chan+1, agwpe_msg.hdr.call_from, agwpe_msg.hdr.call_to, via,
-			ax25_get_pid(pp), info_len,
-			tm->tm_hour, tm->tm_min, tm->tm_sec,
-			pinfo);
+	    char desc[80];
+	    agwpe_msg.hdr.datakind = mon_desc (pp, desc, sizeof(desc));
+	    if (own_xmit) {
+	      agwpe_msg.hdr.datakind = 'T';
 	    }
-	    else {
+	    strlcat ((char*)(agwpe_msg.data), desc, sizeof(agwpe_msg.data));
 
-	      snprintf (agwpe_msg.data, sizeof(agwpe_msg.data), " %d:Fm %s To %s <UI pid=%02X Len=%d >[%02d:%02d:%02d]\r%s\r\r",
-			chan+1, agwpe_msg.hdr.call_from, agwpe_msg.hdr.call_to,
-			ax25_get_pid(pp), info_len, 
-			tm->tm_hour, tm->tm_min, tm->tm_sec,
-			pinfo);
+	    // Timestamp with [...]\r
+
+	    time_t clock = time(NULL);
+	    struct tm *tm = localtime(&clock);		// TODO: use localtime_r ?
+	    char ts[32];
+	    snprintf (ts, sizeof(ts), "[%02d:%02d:%02d]\r", tm->tm_hour, tm->tm_min, tm->tm_sec);
+	    strlcat ((char*)(agwpe_msg.data), ts, sizeof(agwpe_msg.data));
+
+	    // Information if any with \r\r.
+
+	    unsigned char *pinfo = NULL;
+	    int info_len = ax25_get_info (pp, &pinfo);
+	    if (info_len > 0 && pinfo != NULL) {
+	      strlcat ((char*)(agwpe_msg.data), (char*)pinfo, sizeof(agwpe_msg.data));
+	      strlcat ((char*)(agwpe_msg.data), "\r", sizeof(agwpe_msg.data));
 	    }
 
 	    agwpe_msg.hdr.data_len_NETLE = host2netle(strlen(agwpe_msg.data) + 1) /* +1 to include terminating null */ ;
@@ -944,8 +957,102 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	  }
 	}
 
-} /* server_send_rec_packet */
+} /* server_send_monitored */
 
+
+// Next two are broken out in case they can be reused elsewhere.
+
+// Format addresses in AGWPR monitoring format such as:
+//	 1:Fm ZL4FOX-8 To Q7P2U2 Via WIDE3-3
+
+static void mon_addrs (int chan, packet_t pp, char *result, int result_size)
+{
+	char src[AX25_MAX_ADDR_LEN];
+	char dst[AX25_MAX_ADDR_LEN];
+
+	ax25_get_addr_with_ssid (pp, AX25_SOURCE, src);
+	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dst);
+	int num_digi = ax25_get_num_repeaters(pp);
+
+	if (num_digi > 0) {
+
+	  char via[AX25_MAX_REPEATERS*(AX25_MAX_ADDR_LEN+1)];
+	  char stemp[AX25_MAX_ADDR_LEN+1];
+	  int j;
+
+	  ax25_get_addr_with_ssid (pp, AX25_REPEATER_1, via);
+	  for (j = 1; j < num_digi; j++) {
+	    ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, stemp);
+	    strlcat (via, ",", sizeof(via));
+	    strlcat (via, stemp, sizeof(via));
+	  }
+	  snprintf (result, result_size, " %d:Fm %s To %s Via %s ",
+		chan+1, src, dst, via);
+	}
+	else {
+	  snprintf (result, result_size, " %d:Fm %s To %s ",
+			chan+1, src, dst);
+	}
+}
+
+
+// Generate frame description in AGWPE monitoring format such as
+//	<UI pid=F0 Len=123 >
+//	<I R1 S3 pid=F0 Len=123 >
+//	<RR P1 R5 >
+//
+// Returns:
+//	'I' for information frame.
+//	'U' for unnumbered information frame.
+//	'S' for supervisory and other unnumbered frames.
+
+static char mon_desc (packet_t pp, char *result, int result_size)
+{
+	cmdres_t cr;		// command/response.
+	char ignore[80];	// direwolf description.  not used here.
+	int pf;			// poll/final bit.
+	int ns;			// N(S) Send sequence number.
+	int nr;			// N(R) Received sequence number.
+	char pf_text[4];	// P or F depending on whether command or response.
+
+	ax25_frame_type_t ftype = ax25_frame_type (pp, &cr, ignore, &pf, &nr, &ns);
+
+	switch (cr) {
+	  case cr_cmd:	strcpy(pf_text, "P"); break;	// P only: I, SABME, SABM, DISC
+	  case cr_res:	strcpy(pf_text, "F"); break;	// F only: DM, UA, FRMR
+							// Either: RR, RNR, REJ, SREJ, UI, XID, TEST
+
+	  default:	strcpy(pf_text, "PF"); break;	// Not AX.25 version >= 2.0
+							// APRS is often sloppy about this but it
+							// is essential for connected mode.
+	}
+
+	unsigned char *pinfo = NULL;	// I, UI, XID, SREJ, TEST can have information part.
+	int info_len = ax25_get_info (pp, &pinfo);
+
+	switch (ftype) {
+
+	  case frame_type_I:		snprintf (result, result_size, "<I S%d R%d pid=0x%02X Len=%d %s=%d >",  ns, nr, ax25_get_pid(pp), info_len, pf_text, pf); return ('I');
+
+	  case frame_type_U_UI:		snprintf (result, result_size, "<UI pid=%02X Len=%d %s=%d >", 	ax25_get_pid(pp), info_len, pf_text, pf);  return ('U'); break;
+
+	  case frame_type_S_RR:		snprintf (result, result_size, "<RR R%d %s=%d >",	nr, pf_text, pf);	return ('S'); break;
+	  case frame_type_S_RNR:	snprintf (result, result_size, "<RNR R%d %s=%d >",	nr, pf_text, pf);	return ('S'); break;
+	  case frame_type_S_REJ:	snprintf (result, result_size, "<REJ R%d %s=%d >",	nr, pf_text, pf);	return ('S'); break;
+	  case frame_type_S_SREJ:	snprintf (result, result_size, "<SREJ R%d %s=%d Len=%d >", nr, pf_text, pf, info_len);	return ('S'); break;
+
+	  case frame_type_U_SABME:	snprintf (result, result_size, "<SABME %s=%d >",	pf_text, pf);		return ('S'); break;
+	  case frame_type_U_SABM:	snprintf (result, result_size, "<SABM %s=%d >", 	pf_text, pf);		return ('S'); break;
+	  case frame_type_U_DISC:	snprintf (result, result_size, "<DISC %s=%d >", 	pf_text, pf);		return ('S'); break;
+	  case frame_type_U_DM:		snprintf (result, result_size, "<DM %s=%d >", 		pf_text, pf);		return ('S'); break;
+	  case frame_type_U_UA:		snprintf (result, result_size, "<UA %s=%d >", 		pf_text, pf);		return ('S'); break;
+	  case frame_type_U_FRMR:	snprintf (result, result_size, "<FRMR %s=%d >", 	pf_text, pf);		return ('S'); break;
+	  case frame_type_U_XID:	snprintf (result, result_size, "<XID %s=%d Len=%d >", 	pf_text, pf, info_len);	return ('S'); break;
+	  case frame_type_U_TEST:	snprintf (result, result_size, "<TEST %s=%d Len=%d >", 	pf_text, pf, info_len);	return ('S'); break;
+	  default:
+	  case frame_type_U:		snprintf (result, result_size, "<U other??? >");				return ('S'); break;
+	}
+}
 
 
 /*-------------------------------------------------------------------

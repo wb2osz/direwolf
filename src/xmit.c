@@ -76,7 +76,7 @@
 #include "dtmf.h"
 #include "xid.h"
 #include "dlq.h"
-
+#include "server.h"
 
 
 /*
@@ -1002,7 +1002,14 @@ static int send_one_frame (int c, int p, packet_t pp)
 	ax25_format_addrs (pp, stemp);
 	info_len = ax25_get_info (pp, &pinfo);
 	text_color_set(DW_COLOR_XMIT);
+#if 0
+	dw_printf ("[%d%c%s%s] ", c,
+			p==TQ_PRIO_0_HI ? 'H' : 'L',
+			save_audio_config_p->fx25_xmit_enable ? "F" : "",
+			ts);
+#else
 	dw_printf ("[%d%c%s] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L', ts);
+#endif
 	dw_printf ("%s", stemp);			/* stations followed by : */
 
 /* Demystify non-APRS.  Use same format for received frames in direwolf.c. */
@@ -1068,6 +1075,11 @@ static int send_one_frame (int c, int p, packet_t pp)
 	}
 
 	nb = hdlc_send_frame (c, fbuf, flen, send_invalid_fcs2, save_audio_config_p->fx25_xmit_enable);
+
+// Optionally send confirmation to AGW client app if monitoring enabled.
+
+	server_send_monitored (c, pp, 1);
+
 	return (nb);
 
 } /* end send_one_frame */
