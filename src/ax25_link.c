@@ -1157,6 +1157,15 @@ void dl_disconnect_request (dlq_item_t *E)
  *
  * Erratum:	Not sure how to interpret that.  See example below for how it was implemented.
  *
+ * Version 1.6:	Bug 252.  Segmentation was occuring for a V2.0 link.  From the spec:
+ *			"The receipt of an XID response from the other station establishes that both
+ *			stations are using AX.25 version 2.2 or higher and enables the use of the
+ *			segmenter/reassembler and selective reject."
+ *			"The segmenter/reassembler procedure is only enabled if both stations on the
+ *			link are using AX.25 version 2.2 or higher."
+ *
+ *		The Segmenter Ready State SDL has no decision based on protocol version.
+ *
  *------------------------------------------------------------------------------*/
 
 static void data_request_good_size (ax25_dlsm_t *S, cdata_t *txdata);
@@ -1166,8 +1175,6 @@ void dl_data_request (dlq_item_t *E)
 {
 	ax25_dlsm_t *S;
 	int ok_to_create = 1;
-	int nseg_to_follow;
-	int orig_offset, remaining_len;
 
 
 	S = get_link_handle (E->addrs, E->num_addr, E->chan, E->client, ok_to_create);
@@ -1182,6 +1189,39 @@ void dl_data_request (dlq_item_t *E)
 	if (E->txdata->len <= S->n1_paclen) {
 	  data_request_good_size (S, E->txdata);
 	  E->txdata = NULL;	// Now part of transmit I frame queue.
+	  return;
+	}
+
+#define DIVROUNDUP(a,b) (((a)+(b)-1) / (b))
+
+// Erratum: Don't do V2.2 segmentation for a V2.0 link.
+// In this case, we can just split it into multiple frames not exceeding the specified max size.
+// Hopefully the receiving end treats it like a stream and doesn't care about length of each frame.
+
+	if (S->modulo == 8) {
+
+	  int num_frames = 0;
+	  int remaining_len = E->txdata->len;
+	  int offset = 0;
+
+	  while (remaining_len > 0) {
+	    int this_len = MIN(remaining_len, S->n1_paclen);
+
+	    cdata_t *new_txdata = cdata_new(E->txdata->pid, E->txdata->data + offset, this_len);
+	    data_request_good_size (S, new_txdata);
+
+	    offset += this_len;
+	    remaining_len -= this_len;
+	    num_frames++;
+	  }
+
+	  if (num_frames != DIVROUNDUP(E->txdata->len, S->n1_paclen) || remaining_len != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("INTERNAL ERROR, Segmentation line %d, data length = %d, N1 = %d, num frames = %d, remaining len = %d\n",
+					__LINE__, E->txdata->len, S->n1_paclen, num_frames, remaining_len);
+	  }
+	  cdata_delete (E->txdata);
+	  E->txdata = NULL;
 	  return;
 	}
 
@@ -1251,7 +1291,7 @@ void dl_data_request (dlq_item_t *E)
 // We will decrement this before putting it in the frame so the first
 // will have one less than this number.
 
-	nseg_to_follow = DIVROUNDUP(E->txdata->len + 1, S->n1_paclen - 1);
+	int nseg_to_follow = DIVROUNDUP(E->txdata->len + 1, S->n1_paclen - 1);
 
 	if (nseg_to_follow < 2 || nseg_to_follow > 128) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1262,8 +1302,8 @@ void dl_data_request (dlq_item_t *E)
 	  return;
 	}
 
-	orig_offset = 0;
-	remaining_len = E->txdata->len;
+	int orig_offset = 0;
+	int remaining_len = E->txdata->len;
 
 // First segment.
 
