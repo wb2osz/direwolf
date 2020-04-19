@@ -54,6 +54,7 @@
 #include "dwgpsnmea.h"
 #include "decode_aprs.h"
 #include "telemetry.h"
+#include "ais.h"
 
 
 #define TRUE 1
@@ -109,6 +110,7 @@ static void aprs_status_report (decode_aprs_t *A, char *, int);
 static void aprs_general_query (decode_aprs_t *A, char *, int, int quiet);
 static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet);
 static void aprs_telemetry (decode_aprs_t *A, char *info, int info_len, int quiet);
+static void aprs_user_defined (decode_aprs_t *A, char *, int);
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *, int);
 static void aprs_morse_code (decode_aprs_t *A, char *, int);
 static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *, int);
@@ -232,6 +234,22 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	  }
 	}
 
+/*
+ * Application might be in the destination field for most message types.
+ * MIC-E format has part of location in the destination field.
+ */
+
+	switch (*pinfo) {	/* "DTI" data type identifier. */
+
+	  case '\'':		/* Old Mic-E Data */
+	  case '`':		/* Current Mic-E Data */
+	    break;
+
+	  default:
+	    decode_tocall (A, dest);
+	    break;
+	}
+
 	switch (*pinfo) {	/* "DTI" data type identifier. */
 
 	    case '!':		/* Position without timestamp (no APRS messaging). */
@@ -323,20 +341,8 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      break;
 
 	    case '{':		/* user defined data */
-				/* http://www.aprs.org/aprs11/expfmts.txt */
 
-	      if (strncmp((char*)pinfo, "{tt", 3) == 0) {
-	        aprs_raw_touch_tone (A, (char*)pinfo, info_len);
-	      }
-	      else if (strncmp((char*)pinfo, "{mc", 3) == 0) {
-	        aprs_morse_code (A, (char*)pinfo, info_len);
-	      }
-	      else if (strncmp((char*)pinfo, "{{", 2) == 0) {
-	        snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Experimental");
-	      }
-	      else {
-	        //aprs_user_defined (A, pinfo, info_len);
-	      }
+	      aprs_user_defined (A, (char*)pinfo, info_len);
 	      break;
 
 	    case 't':		/* Raw touch tone data - NOT PART OF STANDARD */
@@ -380,22 +386,6 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	if (A->g_symbol_table == ' ' || A->g_symbol_code == ' ') {
 
 	  symbols_from_dest_or_src (*pinfo, A->g_src, dest, &A->g_symbol_table, &A->g_symbol_code);
-	}
-
-/*
- * Application might be in the destination field for most message types.
- * MIC-E format has part of location in the destination field.
- */
-
-	switch (*pinfo) {	/* "DTI" data type identifier. */
-
-	  case '\'':		/* Old Mic-E Data */
-	  case '`':		/* Current Mic-E Data */
-	    break;
-
-	  default:
-	    decode_tocall (A, dest);
-	    break;
 	}
 	
 } /* end decode_aprs */
@@ -2318,6 +2308,50 @@ static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet)
 
 
 } /* end aprs_telemetry */
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	aprs_user_defined
+ *
+ * Purpose:	Decode user defined data.
+ *
+ * Inputs:	info 	- Pointer to Information field.
+ *		ilen 	- Information field length.
+ *
+ * Description:	APRS Protocol Specification, Chapter 18
+ *		User IDs allocated here:  http://www.aprs.org/aprs11/expfmts.txt
+ *		
+ *------------------------------------------------------------------*/
+
+static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
+{
+	if (strncmp(info, "{tt", 3) == 0) {		// Historical.  Should probably use DT.
+	  aprs_raw_touch_tone (A, info, ilen);
+	}
+	else if (strncmp(info, "{mc", 3) == 0) {	// Historical.  Should probably use DM.
+	  aprs_morse_code (A, info, ilen);
+	}
+	else if (info[0] == '{' && info[1] == USER_DEF_USER_ID && info[2] == USER_DEF_TYPE_AIS) {
+	  double lat, lon;
+	  float knots, course;
+
+	  ais_parse (info+3, 0, A->g_msg_type, sizeof(A->g_msg_type), A->g_name, sizeof(A->g_name), &lat, &lon, &knots, &course);
+
+	  A->g_lat = lat;
+	  A->g_lon = lon;
+	  A->g_speed_mph =  DW_KNOTS_TO_MPH(knots);
+	  A->g_course = course;
+	  strcpy (A->g_mfr, "");
+	}
+	else if (strncmp(info, "{{", 2) == 0) {
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Experimental");
+	}
+	else {
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Data");
+	}
+
+} /* end aprs_user_defined */
 
 
 /*------------------------------------------------------------------

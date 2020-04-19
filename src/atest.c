@@ -270,7 +270,13 @@ int main (int argc, char *argv[])
 
             case 'B':				/* -B for data Bit rate */
 						/* Also implies modem type based on speed. */
-	      B_opt = atoi(optarg);
+						/* Special case "AIS" rather than number. */
+	      if (strcasecmp(optarg, "AIS") == 0) {
+	        B_opt = 12345;	// See special case below.
+	      }
+	      else {
+	        B_opt = atoi(optarg);
+	      }
               break;
 
             case 'g':				/* -G Force G3RUH regardless of speed. */
@@ -446,6 +452,13 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].mark_freq = 0;
 	  my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
+	}
+	else if (my_audio_config.achan[0].baud == 12345) {
+	  my_audio_config.achan[0].modem_type = MODEM_AIS;
+	  my_audio_config.achan[0].baud = 9600;
+	  my_audio_config.achan[0].mark_freq = 0;
+	  my_audio_config.achan[0].space_freq = 0;
+	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
 	}
 	else {
 	  my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
@@ -890,6 +903,7 @@ static void usage (void) {
 	dw_printf ("               2400 bps uses QPSK based on V.26 standard.\n");
 	dw_printf ("               4800 bps uses 8PSK based on V.27 standard.\n");
 	dw_printf ("               9600 bps and up uses K9NG/G3RUH standard.\n");
+	dw_printf ("               AIS for ship Automatic Identification System.\n");
 	dw_printf ("\n");
 	dw_printf ("        -g     Use G3RUH modem rather rather than default for data rate.\n");
 	dw_printf ("        -j     2400 bps QPSK compatible with direwolf <= 1.5.\n");

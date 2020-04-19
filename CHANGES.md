@@ -10,13 +10,15 @@
 
 - Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.
 
-
+- README.md has a quick summary of the process.  More details in the User Guide.
 
 
 ### New Features: ###
 
 
-- "-X" option enables FX.25 transmission.  FX.25 reception is always enabled so you don't need to do anything special.
+- "-X" option enables FX.25 transmission.  FX.25 reception is always enabled so you don't need to do anything special.  "What is FX.25?" you might ask.  It is forward error correction (FEC) added in a way that is completely compatible with an ordinary AX.25 frame.  See new document ***AX25\_plus\_FEC\_equals\_FX25.pdf*** for details.
+
+- Receive AIS location data from ships.  Enable by using "-B AIS" command line option or "MODEM AIS" in the configuration file.  AIS NMEA sentences are encapsulated in APRS user-defined data with a "{DA" prefix.  This uses 9600 bps so you need to use wide band audio, not what comes out of the speaker.
 
 - "-t" option now accepts more values to accommodate inconsistent handling of text color control codes by different terminal emulators.  The default, 1, should work with most modern terminal types.  If the colors are not right, try "-t 9" to see the result of the different choices and pick the best one.  If none of them look right, file a bug report and specify: operating system version (e.g. Raspbian Buster), terminal emulator type and version (e.g.  LXTerminal 0.3.2).   Include a screen capture.
 

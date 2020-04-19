@@ -101,6 +101,9 @@
 #include "hdlc_rec2.h"
 #include "dlq.h"
 #include "fx25.h"
+#include "version.h"
+#include "ais.h"
+
 
 
 // Properties of the radio channels.
@@ -319,7 +322,21 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SUBCHANS);
 
-	pp = ax25_from_frame (fbuf, flen, alevel);
+// Special encapsulation for AIS so it can be treated normally pretty much everywhere else.
+
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_AIS) {
+	  char nmea[256];
+	  ais_to_nmea (fbuf, flen, nmea, sizeof(nmea));
+
+	  char monfmt[276];
+	  snprintf (monfmt, sizeof(monfmt), "AIS>%s%1d%1d:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_AIS, nmea);
+	  pp = ax25_from_text (monfmt, 1);
+
+	  // alevel gets in there somehow making me question why it is passed thru here.
+	}
+	else {
+	  pp = ax25_from_frame (fbuf, flen, alevel);
+	}
 
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);

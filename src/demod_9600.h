@@ -6,7 +6,7 @@
 #include "fsk_demod_state.h"
 
 
-void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s *D);
+void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, struct demodulator_state_s *D);
 
 void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D);
 

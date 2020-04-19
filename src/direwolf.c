@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -284,7 +284,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -416,8 +416,14 @@ int main (int argc, char *argv[])
 #endif
 
           case 'B':				/* -B baud rate and modem properties. */
-	 
-	    B_opt = atoi(optarg);
+						/* Also implies modem type based on speed. */
+						/* Special case "AIS" rather than number. */
+	    if (strcasecmp(optarg, "AIS") == 0) {
+	      B_opt = 12345;	// See special case below.
+	    }
+	    else {
+	      B_opt = atoi(optarg);
+	    }
             if (B_opt < MIN_BAUD || B_opt > MAX_BAUD) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Use a more reasonable data baud rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
@@ -715,6 +721,12 @@ int main (int argc, char *argv[])
               text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Bit rate should be standard 4800 rather than specified %d.\n", audio_config.achan[0].baud);
 	    }
+	  }
+	  else if (audio_config.achan[0].baud == 12345) {
+	    audio_config.achan[0].modem_type = MODEM_AIS;
+	    audio_config.achan[0].baud = 9600;
+	    audio_config.achan[0].mark_freq = 0;
+	    audio_config.achan[0].space_freq = 0;
 	  }
 	  else {
             audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
@@ -1367,6 +1379,7 @@ static void usage (char **argv)
 	dw_printf ("                     2400 bps uses QPSK based on V.26 standard.\n");
 	dw_printf ("                     4800 bps uses 8PSK based on V.27 standard.\n");
 	dw_printf ("                     9600 bps and up uses K9NG/G3RUH standard.\n");
+	dw_printf ("                     AIS for ship Automatic Identification System.\n");
 	dw_printf ("    -g             Force G3RUH modem regardless of speed.\n");
 	dw_printf ("    -j             2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("    -J             2400 bps QPSK compatible with MFJ-2400.\n");

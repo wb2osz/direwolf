@@ -105,6 +105,7 @@ endif()
 # Unit test for demodulators
 list(APPEND atest9_SOURCES
   ${CUSTOM_SRC_DIR}/atest.c
+  ${CUSTOM_SRC_DIR}/ais.c
   ${CUSTOM_SRC_DIR}/demod.c
   ${CUSTOM_SRC_DIR}/dsp.c
   ${CUSTOM_SRC_DIR}/demod_afsk.c
@@ -160,6 +161,7 @@ endif()
 # Unit test for inner digipeater algorithm
 list(APPEND dtest_SOURCES
   ${CUSTOM_SRC_DIR}/digipeater.c
+  ${CUSTOM_SRC_DIR}/ais.c
   ${CUSTOM_SRC_DIR}/dedupe.c
   ${CUSTOM_SRC_DIR}/pfilter.c
   ${CUSTOM_SRC_DIR}/ax25_pad.c
@@ -247,6 +249,7 @@ target_link_libraries(tttexttest
 # Unit test for Packet Filtering.
 list(APPEND pftest_SOURCES
   ${CUSTOM_SRC_DIR}/pfilter.c
+  ${CUSTOM_SRC_DIR}/ais.c
   ${CUSTOM_SRC_DIR}/ax25_pad.c
   ${CUSTOM_SRC_DIR}/textcolor.c
   ${CUSTOM_SRC_DIR}/fcs_calc.c
@@ -499,6 +502,7 @@ if(OPTIONAL_TEST)
   # Unit test for IGate
   list(APPEND itest_SOURCES
     ${CUSTOM_SRC_DIR}/igate.c
+    ${CUSTOM_SRC_DIR}/ais.c
     ${CUSTOM_SRC_DIR}/ax25_pad.c
     ${CUSTOM_SRC_DIR}/fcs_calc.c
     ${CUSTOM_SRC_DIR}/mheard.c
@@ -544,6 +548,7 @@ if(OPTIONAL_TEST)
   # For demodulator tweaking experiments.
   list(APPEND testagc_SOURCES
     ${CUSTOM_SRC_DIR}/atest.c
+    ${CUSTOM_SRC_DIR}/ais.c
     ${CUSTOM_SRC_DIR}/demod.c
     ${CUSTOM_SRC_DIR}/dsp.c
     ${CUSTOM_SRC_DIR}/demod_afsk.c
@@ -592,6 +597,7 @@ if(OPTIONAL_TEST)
   # Send GPS location to KISS TNC each second.
   list(APPEND walk96_SOURCES
     ${CUSTOM_SRC_DIR}/walk96.c
+    ${CUSTOM_SRC_DIR}/ais.c
     ${CUSTOM_SRC_DIR}/dwgps.c
     ${CUSTOM_SRC_DIR}/dwgpsnmea.c
     ${CUSTOM_SRC_DIR}/dwgpsd.c

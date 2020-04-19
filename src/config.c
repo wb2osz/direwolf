@@ -799,6 +799,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_audio_config->achan[channel].fulldup = DEFAULT_FULLDUP;
 	}
 
+	p_audio_config->fx25_auto_enable = AX25_N2_RETRY_DEFAULT / 2;
+
 	/* First channel should always be valid. */
 	/* If there is no ADEVICE, it uses default device in mono. */
 
@@ -1274,7 +1276,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Line %d: Missing data transmission speed for MODEM command.\n", line);
 	      continue;
 	    }
-	    n = atoi(t);
+	    if (strcasecmp(t,"AIS") == 0) {
+	      n = 12345;	// See special case later.
+	    }
+	    else {
+	      n = atoi(t);
+	    }
             if (n >= MIN_BAUD && n <= MAX_BAUD) {
 	      p_audio_config->achan[channel].baud = n;
 	      if (n != 300 && n != 1200 && n != 2400 && n != 4800 && n != 9600 && n != 19200) {
@@ -1313,6 +1320,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    else if (p_audio_config->achan[channel].baud < 7200) {
               p_audio_config->achan[channel].modem_type = MODEM_8PSK;
+              p_audio_config->achan[channel].mark_freq = 0;
+              p_audio_config->achan[channel].space_freq = 0;
+	    }
+	    else if (p_audio_config->achan[channel].baud == 12345) {
+              p_audio_config->achan[channel].modem_type = MODEM_AIS;
               p_audio_config->achan[channel].mark_freq = 0;
               p_audio_config->achan[channel].space_freq = 0;
 	    }
@@ -2188,6 +2200,63 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Line %d: Error trying to run Text-to-Speech function.\n", line);
 	      continue;
 	   }
+	  }
+
+/*
+ * FX25TX n		- Enable FX.25 transmission.  Default off.
+ *				0 = off, 1 = auto mode, others are suggestions for testing
+ *				or special cases.  16, 32, 64 is number of parity bytes to add.
+ *				Also set by "-X n" command line option.
+ *				Current a global setting.  Could be per channel someday.
+ */
+
+	  else if (strcasecmp(t, "FX25TX") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing FEC mode for FX25TX command.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= 0 && n < 200) {
+	      p_audio_config->fx25_xmit_enable = n;
+	    }
+	    else {
+	      p_audio_config->fx25_xmit_enable = 1;
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Unreasonable value for FX.25 transmission mode. Using %d.\n", 
+			line, p_audio_config->fx25_xmit_enable);
+   	    }
+	  }
+
+/*
+ * FX25AUTO n		- Enable Automatic use of FX.25 for connected mode.
+ *				Automatically enable, for that session only, when an identical
+ *				frame is sent more than this number of times.
+ *				Default 5 based on half of default RETRY.
+ *				0 to disable feature.
+ *				Current a global setting.  Could be per channel someday.
+ */
+
+	  else if (strcasecmp(t, "FX25AUTO") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing count for FX25AUTO command.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+            if (n >= 0 && n < 20) {
+	      p_audio_config->fx25_auto_enable = n;
+	    }
+	    else {
+	      p_audio_config->fx25_auto_enable = AX25_N2_RETRY_DEFAULT / 2;
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Unreasonable count for connected mode automatic FX.25. Using %d.\n", 
+			line, p_audio_config->fx25_auto_enable);
+   	    }
 	  }
 
 /*

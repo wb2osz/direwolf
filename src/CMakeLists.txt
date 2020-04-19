@@ -20,6 +20,7 @@ endif()
 # direwolf
 list(APPEND direwolf_SOURCES
   direwolf.c
+  ais.c
   aprs_tt.c
   audio_stats.c
   ax25_link.c
@@ -49,6 +50,7 @@ list(APPEND direwolf_SOURCES
   fx25_init.c
   fx25_rec.c
   fx25_send.c
+  fx25_auto.c
   gen_tone.c
   hdlc_rec.c
   hdlc_rec2.c
@@ -136,6 +138,7 @@ endif()
 # decode_aprs
 list(APPEND decode_aprs_SOURCES
   decode_aprs.c
+  ais.c
   kiss_frame.c
   ax25_pad.c
   dwgpsnmea.c
@@ -287,6 +290,7 @@ target_link_libraries(gen_packets
 # atest
 list(APPEND atest_SOURCES
   atest.c
+  ais.c
   demod.c
   demod_afsk.c
   demod_psk.c

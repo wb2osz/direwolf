@@ -112,6 +112,13 @@ struct audio_s {
 					/* Initially this applies to all channels. */
 					/* This should probably be per channel. One step at a time. */
 
+	int fx25_auto_enable;		/* Turn on FX.25 for current connected mode session */
+					/* under poor conditions. */
+					/* Set to 0 to disable feature. */
+					/* I put it here, rather than with the rest of the link layer */
+					/* parameters because it is really a part of the HDLC layer */
+					/* and is part of the KISS TNC functionality rather than our data link layer. */
+
 	char timestamp_format[40];	/* -T option */
 					/* Precede received & transmitted frames with timestamp. */
 					/* Command line option uses "strftime" format string. */
@@ -141,7 +148,7 @@ struct audio_s {
                                 	/* Could all be the same or different. */
 
 
-	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_QPSK, MODEM_8PSK, MODEM_OFF, MODEM_16_QAM, MODEM_64_QAM } modem_type;
+	    enum modem_t { MODEM_AFSK, MODEM_BASEBAND, MODEM_SCRAMBLE, MODEM_QPSK, MODEM_8PSK, MODEM_OFF, MODEM_16_QAM, MODEM_64_QAM, MODEM_AIS } modem_type;
 
 					/* Usual AFSK. */
 					/* Baseband signal. Not used yet. */

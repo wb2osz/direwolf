@@ -113,7 +113,9 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
  *
  * Purpose:     Initialize the 9600 (or higher) baud demodulator.
  *
- * Inputs:      samples_per_sec	- Number of samples per second.
+ * Inputs:      modem_type	- Determines whether scrambling is used.
+ *
+ *		samples_per_sec	- Number of samples per second.
  *				  Might be upsampled in hopes of
  *				  reducing the PLL jitter.
  *
@@ -125,12 +127,13 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
  *		
  *----------------------------------------------------------------*/
 
-void demod_9600_init (int samples_per_sec, int baud, struct demodulator_state_s *D)
+void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, struct demodulator_state_s *D)
 {	
 	float fc;
 	int j;
 
 	memset (D, 0, sizeof(struct demodulator_state_s));
+	D->modem_type = modem_type;
 	D->num_slicers = 1;
 
 // Multiple profiles in future?
@@ -512,7 +515,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 
 	  /* Overflow.  Was large positive, wrapped around, now large negative. */
 
-	  hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, 1, D->slicer[slice].lfsr);
+	  hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, D->modem_type == MODEM_SCRAMBLE, D->slicer[slice].lfsr);
 	}
 
 /*
