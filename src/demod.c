@@ -618,6 +618,7 @@ int demod_init (struct audio_s *pa)
 
 	    case MODEM_BASEBAND:
 	    case MODEM_SCRAMBLE:
+	    case MODEM_AIS:
 	    default:	/* Not AFSK */
 	      {
 
@@ -694,9 +695,10 @@ int demod_init (struct audio_s *pa)
 #endif
 
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("Channel %d: %d baud, K9NG/G3RUH, %s, %d sample rate x %d",
+	      dw_printf ("Channel %d: %d baud, %s, %s, %d sample rate x %d",
 		    chan,
 	            save_audio_config_p->achan[chan].baud,
+	            save_audio_config_p->achan[chan].modem_type == MODEM_AIS ? "AIS" : "K9NG/G3RUH",
 		    save_audio_config_p->achan[chan].profiles,
 		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
 	            save_audio_config_p->achan[chan].upsample);
@@ -745,7 +747,9 @@ int demod_init (struct audio_s *pa)
 	        dw_printf ("This is a suitable ratio for good performance.\n");
 	      }
 
-	      demod_9600_init (save_audio_config_p->achan[chan].upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec, save_audio_config_p->achan[chan].baud, D);
+	      demod_9600_init (save_audio_config_p->achan[chan].modem_type,
+			save_audio_config_p->achan[chan].upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+			save_audio_config_p->achan[chan].baud, D);
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
 
@@ -970,6 +974,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 
 	  case MODEM_BASEBAND:
 	  case MODEM_SCRAMBLE:
+	  case MODEM_AIS:
 	  default:
 	
 	    if (zerostuff) {
