@@ -25,6 +25,66 @@ function(detect_architecture symbol arch)
     endif()
 endfunction()
 
+# direwolf versions thru 1.5 were available pre-built for 32 bit Windows targets.
+# Research and experimentation revealed that the SSE instructions made a big
+# difference in runtime speed but SSE2 and later were not significantly better
+# for this application.  I decided to build with only the SSE instructions making
+# the Pentium 3 the minimum requirement. SSE2 would require at least a Pentium 4
+# and offered no significant performance advantage.
+# These are ancient history - from the previous Century - but old computers, generally
+# considered useless for anything else, often end up in the ham shack.
+#
+# When cmake was first used for direwolf, the default target became 64 bit and the
+# SSE2, SSE3, SSE4.1, and SSE4.2 instructions were automatically enabled based on the
+# build machine capabilities.  This was fine until I tried running the application
+# on a computer much older than where it was built.  It did not have the SSE4 instructions
+# and the application died without a clue for the reason.
+# Just how much benefit do these new instructions provide for this application?
+#
+# These were all run on the same computer, but compiled in different ways.
+# Times to run atest with Track 1 of the TNC test CD:
+#
+#   direwolf 1.5 - 32 bit target - gcc 6.3.0
+#
+#	60.4 sec. Pentium 3 with SSE
+#
+#   direwolf 1.6 - 32 bit target - gcc 7.4.0
+#
+#	81.0 sec. with no SIMD instructions enabled.
+#	54.4 sec. with SSE
+#	52.0 sec. with SSE2
+#	52.4 sec. with SSE2, SSE3
+#	52.3 sec. with SSE2, SSE3, SSE4.1, SSE4.2
+#	49.9 sec. Fedora standard: -m32 -march=i686 -mtune=generic -msse2 -mfpmath=sse
+#	50.4 sec. sse not sse2:    -m32 -march=i686 -mtune=generic -msse -mfpmath=sse
+#
+#	That's what I found several years ago with a much older compiler.
+#	The original SSE helped a lot but SSE2 and later made little difference.
+#
+#   direwolf 1.6 - 64 bit target - gcc 7.4.0
+#
+#	34.8 sec. with no SIMD instructions enabled.
+#	34.8 sec. with SSE
+#	34.8 sec. with SSE2
+#	34.2 sec. with SSE2, SSE3
+#	33.5 sec. with SSE2, SSE3, SSE4.1, SSE4.2
+#	33.4 Fedora standard: -mtune=generic
+#
+# 	Why do we see such little variation?  64-bit target implies
+#	SSE, SSE2, SSE3 instructions are available.
+#
+# Building for a 64 bit target makes it run about 1.5x faster on the same hardware.
+#
+# The default will be set for maximum portability so packagers won't need to
+# to anything special.
+#
+set(FORCE_SSE 1)
+#
+# While ENABLE_GENERIC also had the desired result (for x86_64), I don't think
+# it is the right approach.  It prevents the detection of the architecture,
+# i.e. x86, x86_64, ARM, ARM64.  That's why it did not go looking for the various
+# SSE instructions.   For x86, we would miss out on using SSE.
+
 if (NOT ENABLE_GENERIC)
     if (C_MSVC)
         detect_architecture("_M_AMD64" x86_64)
@@ -49,12 +109,24 @@ set(TEST_DIR ${PROJECT_SOURCE_DIR}/cmake/cpu_tests)
 
 # flag that set the minimum cpu flag requirements
 # used to create re-distribuitable binary
+
 if (${ARCHITECTURE} MATCHES "x86_64|x86" AND (FORCE_SSE OR FORCE_SSSE3 OR FORCE_SSE41))
   if (FORCE_SSE)
     set(HAS_SSE ON CACHE BOOL "SSE SIMD enabled")
     if(C_GCC OR C_CLANG)
-      set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse" )
-      set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse" )
+      if (${ARCHITECTURE} MATCHES "x86_64")
+          # All 64-bit capable chips support MMX, SSE, SSE2, and SSE3
+          # so they are all enabled automatically.  We don't want to use
+          # SSE4, based on build machine capabilites, because the application
+          # would not run properly on an older CPU.
+          set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mtune=generic" )
+          set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mtune=generic" )
+      else()
+          # Fedora standard uses -msse2 here.
+          # I dropped it down to -msse for greater compatibility and little penalty.
+          set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32 -march=i686 -mtune=generic -msse -mfpmath=sse" )
+          set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m32 -march=i686 -mtune=generic -msse -mfpmath=sse" )
+      endif()
       message(STATUS "Use SSE SIMD instructions")
       add_definitions(-DUSE_SSE)
     elseif(C_MSVC)
