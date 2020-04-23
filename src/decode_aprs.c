@@ -151,7 +151,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *------------------------------------------------------------------*/
 
-void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
+void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int metric)
 {
 
 	char dest[AX25_MAX_ADDR_LEN];
@@ -164,6 +164,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	memset (A, 0, sizeof (*A));
 
 	A->g_quiet = quiet;
+	A->g_metric = metric;
 
 	if (isprint(*pinfo)) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
@@ -559,7 +560,11 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  char spd[20];
 
 	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
-	  snprintf (spd, sizeof(spd), "%.0f MPH", A->g_speed_mph);
+	  if (A->g_metric) {
+	    snprintf (spd, sizeof(spd), "%.0f km/h", DW_MILES_TO_KM(A->g_speed_mph));
+	  } else {
+	    snprintf (spd, sizeof(spd), "%.0f MPH", A->g_speed_mph);
+	  }
 	  strlcat (stemp, spd, sizeof(stemp));
 	};
 
@@ -575,7 +580,11 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  char alt[20];
 
 	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
-	  snprintf (alt, sizeof(alt), "alt %.0f ft", A->g_altitude_ft);
+	  if (A->g_metric) {
+	    snprintf (alt, sizeof(alt), "alt %.0f m", DW_FEET_TO_METERS(A->g_altitude_ft));
+	  } else {
+	    snprintf (alt, sizeof(alt), "alt %.0f ft", A->g_altitude_ft);
+	  }
 	  strlcat (stemp, alt, sizeof(stemp));
 	};
 
@@ -4772,6 +4781,7 @@ int main (int argc, char *argv[])
 	int num_bytes;
 	char *p;	
 	packet_t pp;
+	int metric = 0;
 
 #if __WIN32__
 
@@ -4933,7 +4943,7 @@ int main (int argc, char *argv[])
 	        ax25_safe_print ((char *)pinfo, info_len, 1);	// Display non-ASCII to hexadecimal.
 	        dw_printf ("\n");
 
-	        decode_aprs (&A, pp, 0);			// Extract information into structure.
+	        decode_aprs (&A, pp, 0, metric);		// Extract information into structure.
 
 	        decode_aprs_print (&A);			// Now print it in human readable format.
 
@@ -4954,9 +4964,9 @@ int main (int argc, char *argv[])
 	      if (pp != NULL) {
 	        decode_aprs_t A;
 
-	        decode_aprs (&A, pp, 0);	// Extract information into structure.
+	        decode_aprs (&A, pp, 0, metric);	// Extract information into structure.
 
-	        decode_aprs_print (&A);		// Now print it in human readable format.
+	        decode_aprs_print (&A);			// Now print it in human readable format.
 
 	        // This seems to be redundant because we used strict option
 	        // when parsing the monitoring format text.
