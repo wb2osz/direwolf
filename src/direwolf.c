@@ -183,6 +183,7 @@ static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
+static int m_opt = 0;			/* "-m" for metric output. */
 
 static int A_opt_ais_to_obj = 0;	/* "-A" Convert received AIS to APRS "Object Report." */
 
@@ -387,7 +388,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:e:X:A",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:pxr:b:mn:d:q:t:ul:L:Sa:E:T:e:X:A",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -504,6 +505,10 @@ int main (int argc, char *argv[])
 	      r_opt = 0;
    	    }
             break;
+
+	  case 'm':				/* -m set metric */
+	    m_opt = 1;
+	    break;
 
           case 'n':				/* -n number of audio channels for first audio device.  1 or 2. */
 	 
@@ -1247,7 +1252,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // we still want to decode it for logging and other processing.
 	  // Just be quiet about errors if "-qd" is set.
 
-	  decode_aprs (&A, pp, q_d_opt);
+	  decode_aprs (&A, pp, q_d_opt, m_opt);
 
 	  if ( ! q_d_opt ) {
 
@@ -1453,6 +1458,7 @@ static void usage (char **argv)
 	dw_printf ("    -c fname       Configuration file name.\n");
 	dw_printf ("    -l logdir      Directory name for log files.  Use . for current.\n");
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
+	dw_printf ("    -m             Use metric instead of US customary units.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
 	dw_printf ("    -b n           Bits per audio sample, 8 or 16.\n");
 	dw_printf ("    -B n           Data rate in bits/sec for channel 0.  Standard values are 300, 1200, 2400, 4800, 9600.\n");

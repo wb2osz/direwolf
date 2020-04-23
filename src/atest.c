@@ -880,7 +880,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 	  decode_aprs_t A;
 
-	  decode_aprs (&A, pp, 0);
+	  decode_aprs (&A, pp, 0, 0);
 
 	  // Temp experiment to see how different systems set the RR bits in the source and destination.
 	  // log_rr_bits (&A, pp);

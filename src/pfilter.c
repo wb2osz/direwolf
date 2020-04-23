@@ -200,6 +200,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate_t pfstate;
 	char *p;
 	int result;
+	int metric = 0;
 
 	assert (from_chan >= 0 && from_chan <= MAX_CHANS);
 	assert (to_chan >= 0 && to_chan <= MAX_CHANS);
@@ -235,7 +236,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate.is_aprs = is_aprs;
 
 	if (is_aprs) {
-	  decode_aprs (&pfstate.decoded, pp, 1);
+	  decode_aprs (&pfstate.decoded, pp, 1, metric);
 	}
 
 	next_token(&pfstate);

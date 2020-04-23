@@ -24,6 +24,8 @@ typedef struct decode_aprs_s {
 
 	int g_quiet;			/* Suppress error messages when decoding. */
 
+	int g_metric;			/* Print metric instead of US customary units */
+
         char g_src[AX25_MAX_ADDR_LEN];
 
         char g_msg_type[60];		/* APRS data type.  Telemetry descriptions get pretty long. */
@@ -135,7 +137,7 @@ typedef struct decode_aprs_s {
 
 
 
-extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet);
+extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int metric);
 
 extern void decode_aprs_print (decode_aprs_t *A);
 
