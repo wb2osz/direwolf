@@ -1,0 +1,2 @@
+# Set direwolf command line arguments here
+DIREWOLF_ARGS="-l /var/log/direwolf -c /etc/direwolf.conf"

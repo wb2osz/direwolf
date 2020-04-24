@@ -1,0 +1,20 @@
+/var/log/direwolf/stdout /var/log/direwolf/stderr {
+    missingok
+    rotate 30
+    daily
+    copytruncate
+    notifempty
+    compress
+    delaycompress
+    dateext
+    dateyesterday
+ }
+
+/var/log/direwolf/*.log {
+    missingok
+    daily
+    rotate 30
+    minage 7
+    maxage 30
+    compress
+}
