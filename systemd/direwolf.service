@@ -1,0 +1,24 @@
+[Unit]
+Description=Direwolf Sound Card-based AX.25 TNC
+After=sound.target
+
+[Service]
+EnvironmentFile=/etc/sysconfig/direwolf
+User=direwolf
+# You may want to set the audio levels of your radio-connected soundcard
+# prior to starting direwolf.  To do so, copy this file to /etc/systemd/system/
+# and edit the ExecStartPre line to point to your preferred method of
+# doing so.  Then run systemctl daemon-reload so systemd uses your updated
+# copy of this service file.
+#ExecStartPre=/some/script.sh
+ExecStart=/bin/bash -ce "exec /usr/bin/direwolf $DIREWOLF_ARGS >>/var/log/direwolf/stdout 2>>/var/log/direwolf/stderr"
+Restart=always
+StandardOutput=null
+StandardError=null
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/direwolf
+
+[Install]
+WantedBy=multi-user.target
+DefaultInstance=1
