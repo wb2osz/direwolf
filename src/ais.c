@@ -50,6 +50,42 @@
 #include "textcolor.h"
 #include "ais.h"
 
+// Lengths, in bits, for the AIS message types.
+
+#define NUM_TYPES 27
+static const struct {
+	short min;
+	short max;
+} valid_len[NUM_TYPES+1] = {
+	{ -1, -1 },		// 0	not used
+	{ 168, 168 },		// 1
+	{ 168, 168 },		// 2
+	{ 168, 168 },		// 3
+	{ 168, 168 },		// 4
+	{ 424, 424 },		// 5
+	{ 72, 1008 },		// 6	multipurpose
+	{ 72, 168 },		// 7	increments of 32 bits
+	{ 168, 1008 },		// 8	multipurpose
+	{ 168, 168 },		// 9
+	{ 72, 72 },		// 10
+	{ 168, 168 },		// 11
+	{ 72, 1008 },		// 12
+	{ 72, 168 },		// 13	increments of 32 bits
+	{ 40, 1008 },		// 14
+	{ 88, 160 },		// 15
+	{ 96, 114 },		// 16	96 or 114, not range
+	{ 80, 816 },		// 17
+	{ 168, 168 },		// 18
+	{ 312, 312 },		// 19
+	{ 72, 160 },		// 20
+	{ 272, 360 },		// 21
+	{ 168, 168 },		// 22
+	{ 160, 160 },		// 23
+	{ 160, 168 },		// 24
+	{ 40, 168 },		// 25
+	{ 60, 1064 },		// 26
+	{ 96, 168 }		// 27	96 or 168, not range
+};
 
 /*-------------------------------------------------------------------
  *
@@ -113,21 +149,52 @@ static double get_field_latlon (unsigned char *base, unsigned int start, unsigne
 	// Latitude of 0x3412140 (91 deg) means not available.
 	// Longitude of 0x6791AC0 (181 deg) means not available.
 	return ((double)get_field_signed(base, start, len) / 600000.0);
+
+	// Message type 27 uses lower resolution, 17 & 18 bits rather than 27 & 28.
+	// It encodes minutes/10 rather than normal minutes/10000.
 }
 
 static float get_field_speed (unsigned char *base, unsigned int start, unsigned int len)
 {
 	// Raw 1023 means not available.
 	// Multiply by 0.1 to get knots.
-	return ((float)get_field_signed(base, start, len) * 0.1);
+	// For aircraft it is knots, not deciknots.
+	return ((float)get_field(base, start, len) * 0.1);
 }
 
 static float get_field_course (unsigned char *base, unsigned int start, unsigned int len)
 {
 	// Raw 3600 means not available.
 	// Multiply by 0.1 to get degrees
-	return ((float)get_field_signed(base, start, len) * 0.1);
+	return ((float)get_field(base, start, len) * 0.1);
 }
+
+static int get_field_ascii (unsigned char *base, unsigned int start, unsigned int len)
+{
+	assert (len == 6);
+	int ch = get_field(base, start, len);
+	if (ch < 32) ch += 64;
+	return (ch);
+}
+
+static void get_field_string (unsigned char *base, unsigned int start, unsigned int len, char *result)
+{
+	assert (len % 6 == 0);
+	int nc = len / 6;	// Number of characters.
+				// Caller better provide space for at least this +1.
+				// No bounds checking here.
+	for (int i = 0; i < nc; i++) {
+	  result[i] = get_field_ascii (base, start + i * 6, 6);
+	}
+	result[nc] = '\0';
+	// Officially it should be terminated/padded with @ but we also see trailing spaces.
+	char *p = strchr(result, '@');
+	if (p != NULL) *p = '\0';
+	for (int k = strlen(result) - 1; k >= 0 && result[k] == ' '; k--) {
+	  result[k] = '\0';
+	}
+}
+
 
 
 /*-------------------------------------------------------------------
@@ -238,18 +305,22 @@ void ais_to_nmea (unsigned char *ais, int ais_len, char *nmea, int nmea_size)
  *		mssi		9 digit identifier.
  *		odlat		latitude.
  *		odlon		longitude.
- *		ofknots		speed.
+ *		ofknots		speed, knots.
  *		ofcourse	direction of travel.
+ *		ofalt_m		altitude, meters.
+ *		symtab		APRS symbol table.
+ *		symbol		APRS symbol code.
  *		
  * Returns:	0 for success, -1 for error.
  *
  *--------------------------------------------------------------------*/
 
-// Maximum NMEA sentence length is 82 according to some people.  
+// Maximum NMEA sentence length is 82, including CR/LF.
 // Make buffer considerably larger to be safe.
 #define NMEA_MAX_LEN 240
 
-int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mssi, int mssi_size, double *odlat, double *odlon, float *ofknots, float *ofcourse)
+int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mssi, int mssi_size, double *odlat, double *odlon,
+			float *ofknots, float *ofcourse, float *ofalt_m, char *symtab, char *symbol, char *comment, int comment_size)
 {
 	char stemp[NMEA_MAX_LEN];	/* Make copy because parsing is destructive. */
 
@@ -258,6 +329,7 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	*odlon = G_UNKNOWN;
 	*ofknots = G_UNKNOWN;
 	*ofcourse = G_UNKNOWN;
+	*ofalt_m = G_UNKNOWN;
 
 	strlcpy (stemp, sentence, sizeof(stemp));
 
@@ -349,10 +421,15 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	  }
 	}
 
+
 // Extract the fields of interest from a few message types.
 // Don't get too carried away.
 
 	int type = get_field(ais, 0, 6);
+
+	if (type >= 1 && type <= 27) {
+	  snprintf (mssi, mssi_size, "%d", get_field(ais, 8, 30));
+	}
 	switch (type) {
 
 	  case 1:	// Position Report Class A
@@ -360,7 +437,8 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	  case 3:
 
 	    snprintf (descr, descr_size, "AIS %d: Position Report Class A", type);
-	    snprintf (mssi, mssi_size, "%d", get_field(ais, 8, 30));
+	    *symtab = '/';
+	    *symbol = 's';		// Power boat (ship) side view
 	    *odlon = get_field_latlon(ais, 61, 28);
 	    *odlat = get_field_latlon(ais, 89, 27);
 	    *ofknots = get_field_speed(ais, 50, 10);
@@ -370,7 +448,8 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	  case 4:	// Base Station Report
 
 	    snprintf (descr, descr_size, "AIS %d: Base Station Report", type);
-	    snprintf (mssi, mssi_size, "%d", get_field(ais, 8, 30));
+	    *symtab = '\\';
+	    *symbol = 'L';		// Lighthouse
 	    //year = get_field(ais, 38, 14);
 	    //month = get_field(ais, 52, 4);
 	    //day = get_field(ais, 56, 5);
@@ -381,10 +460,47 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    *odlat = get_field_latlon(ais, 107, 27);
 	    break;
 
+	  case 5:	// Static and Voyage Related Data
+
+	    snprintf (descr, descr_size, "AIS %d: Static and Voyage Related Data", type);
+	    *symtab = '/';
+	    *symbol = 's';		// Power boat (ship) side view
+	    {
+	      char callsign[12];
+	      char shipname[24];
+	      char destination[24];
+	      get_field_string(ais, 70, 42, callsign);
+	      get_field_string(ais, 112, 120, shipname);
+	      get_field_string(ais, 302, 120, destination);
+
+	      if (strlen(destination) > 0) {
+	        snprintf (comment, comment_size, "%s, %s, dest. %s", shipname, callsign, destination);
+	      }
+	      else {
+	        snprintf (comment, comment_size, "%s, %s", shipname, callsign);
+	      }
+	    }
+	    break;
+
+
+	  case 9:	// Standard SAR Aircraft Position Report
+
+	    snprintf (descr, descr_size, "AIS %d: SAR Aircraft Position Report", type);
+	    *symtab = '/';
+	    *symbol = '\'';		// Small AIRCRAFT
+	    *ofalt_m = get_field(ais, 38, 12);		// meters, 4095 means not available
+	    *odlon = get_field_latlon(ais, 61, 28);
+	    *odlat = get_field_latlon(ais, 89, 27);
+	    *ofknots = get_field_speed(ais, 50, 10) * 10.0;	// plane is knots, not knots/10
+	    *ofcourse = get_field_course(ais, 116, 12);
+	    break;
+
 	  case 18:	// Standard Class B CS Position Report
+			// As an oversimplification, Class A is commercial, B is recreational.
 
 	    snprintf (descr, descr_size, "AIS %d: Standard Class B CS Position Report", type);
-	    snprintf (mssi, mssi_size, "%d", get_field(ais, 8, 30));
+	    *symtab = '/';
+	    *symbol = 'Y';		// YACHT (sail)
 	    *odlon = get_field_latlon(ais, 57, 28);
 	    *odlat = get_field_latlon(ais, 85, 27);
 	    break;
@@ -392,9 +508,21 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	  case 19:	// Extended Class B CS Position Report
 
 	    snprintf (descr, descr_size, "AIS %d: Extended Class B CS Position Report", type);
-	    snprintf (mssi, mssi_size, "%d", get_field(ais, 8, 30));
+	    *symtab = '/';
+	    *symbol = 'Y';		// YACHT (sail)
 	    *odlon = get_field_latlon(ais, 57, 28);
 	    *odlat = get_field_latlon(ais, 85, 27);
+	    break;
+
+	  case 27:	// Long Range AIS Broadcast message
+
+	    snprintf (descr, descr_size, "AIS %d: Long Range AIS Broadcast message", type);
+	    *symtab = '\\';
+	    *symbol = 's';		// OVERLAY SHIP/boat (top view)
+	    *odlon = get_field_latlon(ais, 44, 18) * 1000;	// Note: minutes/10 rather than usual /10000.
+	    *odlat = get_field_latlon(ais, 62, 17) * 1000;
+	    *ofknots = get_field_speed(ais, 79, 6) * 10;	// Note: knots, not deciknots.
+	    *ofcourse = get_field_course(ais, 85, 9) * 10;	// Note: degrees, not decidegrees.
 	    break;
 
 	  default:
@@ -405,5 +533,46 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	return (0);
 
 } /* end ais_parse */
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        ais_check_length
+ *
+ * Purpose:    	Verify frame length against expected.
+ *
+ * Inputs:	type		Message type, 1 - 27.
+ *
+ *		length		Number of data octets in in frame.
+ *
+ * Returns:	-1		Invalid message type.
+ *		0		Good length.
+ *		1		Unexpected lenth.
+ *
+ *--------------------------------------------------------------------*/
+
+int ais_check_length (int type, int length)
+{
+	if (type >= 1 && type <= NUM_TYPES) {
+	  int b = length * 8;
+	  if (b >= valid_len[type].min && b <= valid_len[type].max) {
+	    return (0);		// Good.
+	  }
+	  else {
+	    //text_color_set (DW_COLOR_ERROR);
+            //dw_printf("AIS ERROR: type %d, has %d bits when %d to %d expected.\n",
+	    //	type, b, valid_len[type].min, valid_len[type].max);
+	    return (1);		// Length out of range.
+	  }
+	}
+	else {
+	  //text_color_set (DW_COLOR_ERROR);
+          //dw_printf("AIS ERROR: message type %d is invalid.\n", type);
+	  return (-1);		// Invalid type.
+	}
+
+} // end ais_check_length
+
 
 // end ais.c

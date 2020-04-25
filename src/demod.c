@@ -622,6 +622,22 @@ int demod_init (struct audio_s *pa)
 	    default:	/* Not AFSK */
 	      {
 
+	      // For AIS we will accept only a good CRC without any fixup attempts.
+	      // Even with that, there are still a lot of CRC false matches with random noise.
+
+	      if (save_audio_config_p->achan[chan].modem_type == MODEM_AIS) {
+		if (save_audio_config_p->achan[chan].fix_bits != RETRY_NONE) {
+	          text_color_set(DW_COLOR_INFO);
+		  dw_printf ("Channel %d: FIX_BITS option has been turned off for AIS.\n", chan);
+	          save_audio_config_p->achan[chan].fix_bits = RETRY_NONE;
+	        }
+		if (save_audio_config_p->achan[chan].passall != 0) {
+	          text_color_set(DW_COLOR_INFO);
+		  dw_printf ("Channel %d: PASSALL option has been turned off for AIS.\n", chan);
+	          save_audio_config_p->achan[chan].passall = 0;
+	        }
+	      }
+
 	      if (strcmp(save_audio_config_p->achan[chan].profiles, "") == 0) {
 
 		/* Apply default if not set earlier. */
@@ -632,11 +648,8 @@ int demod_init (struct audio_s *pa)
 		/* We want higher performance to be the default. */
 		/* "MODEM 9600 -" can be used on very slow CPU if necessary. */
 
-//#ifndef __arm__
 	        strlcpy (save_audio_config_p->achan[chan].profiles, "+", sizeof(save_audio_config_p->achan[chan].profiles));
-//#endif
 	      }
-
 
 
 #ifdef TUNE_ZEROSTUFF

@@ -2335,13 +2335,17 @@ static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
 	else if (info[0] == '{' && info[1] == USER_DEF_USER_ID && info[2] == USER_DEF_TYPE_AIS) {
 	  double lat, lon;
 	  float knots, course;
+	  float alt_meters;
 
-	  ais_parse (info+3, 0, A->g_msg_type, sizeof(A->g_msg_type), A->g_name, sizeof(A->g_name), &lat, &lon, &knots, &course);
+	  ais_parse (info+3, 0, A->g_msg_type, sizeof(A->g_msg_type), A->g_name, sizeof(A->g_name),
+			&lat, &lon, &knots, &course, &alt_meters, &(A->g_symbol_table), &(A->g_symbol_code),
+			A->g_comment, sizeof(A->g_comment));
 
 	  A->g_lat = lat;
 	  A->g_lon = lon;
 	  A->g_speed_mph =  DW_KNOTS_TO_MPH(knots);
 	  A->g_course = course;
+	  A->g_altitude_ft = DW_METERS_TO_FEET(alt_meters);
 	  strcpy (A->g_mfr, "");
 	}
 	else if (strncmp(info, "{{", 2) == 0) {
