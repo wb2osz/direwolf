@@ -116,6 +116,12 @@ static void send_packet (char *str)
 	}
 	else {
 	  pp = ax25_from_text (str, 1);
+	  if (pp == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Failed to create frame from text.\n");
+	    return;
+	  }
+
 	  flen = ax25_pack (pp, fbuf);
 	  for (c=0; c<modem.adev[0].num_channels; c++)
 	  {
