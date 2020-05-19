@@ -420,6 +420,24 @@ if(UDEV_FOUND)
 endif()
 
 
+# Utility for setting the CM108 GPIO pins.
+if(UDEV_FOUND)
+  list(APPEND cm108_set_gpio_SOURCES
+    cm108_set_gpio.c
+    ${cm108_SOURCES}
+    )
+
+  add_executable(cm108_set_gpio
+    ${cm108_set_gpio_SOURCES}
+    )
+
+  target_link_libraries(cm108_set_gpio
+    ${MISC_LIBRARIES}
+    ${UDEV_LIBRARIES}
+    )
+endif()
+
+
 # Touch Tone to Speech sample application.
 # ttcalc
 list(APPEND ttcalc_SOURCES

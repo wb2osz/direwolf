@@ -836,10 +836,11 @@ static int cm108_write (char *name, int iomask, int iodata)
 	io[3] = iomask;
 	io[4] = 0;
 
-	// Writing 4 bytes fails with errno 32, EPIPE, "broken pipe."
-	// Hamlib writes 5 bytes which I don't understand.
-	// Writing 5 bytes works.
-	// I have no idea why.  From the CMedia datasheet it looks like we need 4.
+	// Per https://www.kernel.org/doc/Documentation/hid/hidraw.txt, the
+	// first byte is the report number, which is always 0 since the device
+	// only has 1 report per the datasheet. The remaining 4 bytes follow the
+	// structure specified in the datasheet, although we only care about the
+	// GPIO bytes here.
 
 	n = write (fd, io, sizeof(io));
 	if (n != sizeof(io)) {
