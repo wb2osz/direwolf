@@ -593,9 +593,12 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int cli
 	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", port);
 	      dw_printf ("\n");
 	      dw_printf ("Are you using AX.25 for Linux?  It might be trying to use a modified\n");
-	      dw_printf ("version of KISS which uses the port field differently than the\n");
+	      dw_printf ("version of KISS which uses the port (channel) field differently than the\n");
 	      dw_printf ("original KISS protocol specification.  The solution might be to use\n");
 	      dw_printf ("a command like \"kissparms -c 1 -p radio\" to set CRC none mode.\n");
+	      dw_printf ("Another way of doing this is pre-loading the \"kiss\" kernel module with CRC disabled:\n");
+	      dw_printf ("sudo /sbin/modprobe -q mkiss crc_force=1\n");
+
 	      dw_printf ("\n");
               text_color_set(DW_COLOR_DEBUG);
 	      kiss_debug_print (FROM_CLIENT, NULL, kiss_msg, kiss_len);
