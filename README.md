@@ -158,14 +158,14 @@ Then on any flavor of Linux:
 	sudo make install
 	make install-conf
 
-This gives you the latest development version.  
+This gives you the latest development version.  Leave out the "git checkout dev" to get the most recent stable release.
 
 For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
 
 ### Linux - Using apt-get (Debian flavor operating systems) ###
 
-Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging.  
+Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging. Expect the version to lag significantly behind development.
 
 	sudo apt-get update
 	apt-cache showpkg direwolf
@@ -174,31 +174,18 @@ Results will vary depending on your hardware platform and operating system versi
 
 ### Linux - Using yum (Red Hat flavor operating systems) ###
 
-Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging.  
+Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging.  Expect the version to lag significantly behind development.
 
 	sudo yum check-update
 	sudo yum list direwolf
 	sudo yum install direwolf
 
-### Linux - Download source in tar or zip file ###
-
-Go to the [releases page](https://github.com/wb2osz/direwolf/releases).  Chose desired release and download the source as zip or compressed tar file.  Unpack the files, with "unzip" or "tar xfz," and then:
-
-	cd direwolf-*
-	mkdir build && cd build
-	cmake ..
-	make -j4
-	sudo make install
-	make install-conf
-
-For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
-
 
 ### Macintosh OS X ###
 
-Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).   It is a lot more complicated than Linux.  
+Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).   It is more complicated than Linux.
 
-If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) discussion group.   I don't have a Mac and probably won't be able to help you.  I rely on others, in the user community, for the Mac version.
+If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.io/g/direwolf) discussion group.
 
 
 

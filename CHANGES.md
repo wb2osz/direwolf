@@ -49,6 +49,10 @@
 
 - Power Point slide show in separate repository.  [https://github.com/wb2osz/direwolf-presentation ](https://github.com/wb2osz/direwolf-presentation)
 
+### Notes: ###
+
+Windows binary distribution now uses gcc (MinGW) version 7.4.0.
+
 
 
 ## Version 1.5  --  September 2018 ##
