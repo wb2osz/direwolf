@@ -117,6 +117,11 @@ static void send_packet (char *str)
 	}
 	else {
 	  pp = ax25_from_text (str, 1);
+	  if (pp == NULL) {
+            text_color_set(DW_COLOR_ERROR);
+            dw_printf ("\"%s\" is not valid TNC2 monitoring format.\n", str);
+	    return;
+	  }
 	  flen = ax25_pack (pp, fbuf);
 	  for (c=0; c<modem.adev[0].num_channels; c++)
 	  {
@@ -124,8 +129,7 @@ static void send_packet (char *str)
 #if 1
 	    int samples_per_symbol, n, j;
 
-/* Insert random amount of quiet time, approx. 0 to 10 symbol times, to test */
-/* how well the clock recovery PLL can regain lock after random phase shifts. */
+	    // Insert random amount of quiet time.
 
 	    if (modem.achan[c].modem_type == MODEM_QPSK) {
 	      samples_per_symbol = modem.adev[0].samples_per_sec / (modem.achan[c].baud / 2);
@@ -137,14 +141,19 @@ static void send_packet (char *str)
 	      samples_per_symbol = modem.adev[0].samples_per_sec / modem.achan[c].baud;
 	    }
 
-	    // for 1200 baud, 44100/sec, this should be 0 to 360.
-	    n = samples_per_symbol * 10 * (float)my_rand() / (float)MY_RAND_MAX;
+	    // Provide enough time for the DCD to drop.
+	    // Then throw in a random amount of time so that receiving
+	    // DPLL will need to adjust to a new phase.
 
-	    //dw_printf ("Random 0-360 = %d\n", n);
+	    n = samples_per_symbol * (32 + (float)my_rand() / (float)MY_RAND_MAX );
+
 	    for (j=0; j<n; j++) {
 	      gen_tone_put_sample (c, 0, 0);
 	    }
 #endif
+	    hdlc_send_flags (c, 8, 0);
+	    hdlc_send_flags (c, 8, 0);
+	    hdlc_send_flags (c, 8, 0);
 	    hdlc_send_flags (c, 8, 0);
 	    hdlc_send_frame (c, fbuf, flen, 0, modem.fx25_xmit_enable);
 	    hdlc_send_flags (c, 2, 1);

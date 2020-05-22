@@ -762,7 +762,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 #if DEBUG4
 
 	if (chan == 0) {
-	if (hdlc_rec_gathering (chan, subchan)) {
+	if (D->slicer[slice].data_detect) {
 	  char fname[30];
 
 	  
@@ -839,16 +839,18 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, 
 
 	if (D->slicer[slice].data_clock_pll < 0 && D->slicer[slice].prev_d_c_pll > 0) {
 
-	  /* Overflow. */
+	  /* Overflow - this is where we sample. */
 	  hdlc_rec_bit (chan, subchan, slice, demod_data, 0, -1);
+	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
 	}
 
-	// Even if we used alternative method to extract the data bit,
-	//  we still use the low pass output for the PLL.
+	// Transitions nudge the DPLL phase toward the incoming signal.
 
         if (demod_data != D->slicer[slice].prev_demod_data) {
 
-	  if (hdlc_rec_gathering (chan, subchan, slice)) {
+	  pll_dcd_signal_transition2 (D, slice, D->slicer[slice].data_clock_pll);
+
+	  if (D->slicer[slice].data_detect) {
 	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_locked_inertia);
 	  }
 	  else {

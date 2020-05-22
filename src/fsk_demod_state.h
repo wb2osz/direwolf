@@ -226,6 +226,8 @@ struct demodulator_state_s
 		signed int data_clock_pll;		// PLL for data clock recovery.
 							// It is incremented by pll_step_per_sample
 							// for each audio sample.
+							// Must be 32 bits!!!
+							// So far, this is the case for every compiler used.
 
 		signed int prev_d_c_pll;		// Previous value of above, before
 							// incrementing, to detect overflows.
@@ -238,6 +240,18 @@ struct demodulator_state_s
 
 		int lfsr;				// Descrambler shift register.
 
+		// This is for detecting phase lock to incoming signal.
+
+		int good_flag;				// Set if transition is near where expected,
+							// i.e. at a good time.
+		int bad_flag;				// Set if transition is not where expected,
+							// i.e. at a bad time.
+		unsigned char good_hist;		// History of good transitions for past octet.
+		unsigned char bad_hist;			// History of bad transitions for past octet.
+		unsigned int score;			// History of whether good triumphs over bad
+							// for past 32 symbols.
+		int data_detect;			// True when locked on to signal.
+		
 	} slicer [MAX_SLICERS];				// Actual number in use is num_slicers.
 							// Should be in range 1 .. MAX_SLICERS,
 /*
@@ -335,6 +349,101 @@ struct demodulator_state_s
 	} u;	// end of union for different demodulator types.
 
 };
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        pll_dcd_signal_transition2
+ *		dcd_each_symbol2
+ *
+ * Purpose:     New DCD strategy for 1.6.
+ *
+ * Inputs:	D		Pointer to demodulator state.
+ *
+ *		chan		Radio channel: 0 to MAX_CHANS - 1	
+ *
+ *		subchan		Which of multiple demodulators: 0 to MAX_SUBCHANS - 1
+ *
+ *		slice		Slicer number: 0 to MAX_SLICERS - 1.
+ *
+ *		dpll_phase	Signed 32 bit counter for DPLL phase.
+ *				Wraparound is where data is sampled.
+ *				Ideally transitions would occur close to 0.
+ *				
+ * Output:	D->slicer[slice].data_detect - true when PLL is locked to incoming signal.
+ *
+ * Description:	From the beginning, DCD was based on finding several flag octets
+ *		in a row and dropping when eight bits with no transitions.
+ *		It was less than ideal but we limped along with it all these years.
+ *		This fell apart when FX.25 came along and a couple of the
+ *		correlation tags have eight "1" bits in a row.
+ *
+ * 		Our new strategy is to keep a running score of how well demodulator
+ *		output transitions match to where expected.
+ *
+ *--------------------------------------------------------------------*/
+
+#include "hdlc_rec.h"        // for dcd_change
+
+// These are good for 1200 bps AFSK.
+// Might want to override for other modems.
+
+#ifndef DCD_THRESH_ON
+#define DCD_THRESH_ON 30		// Hysteresis: Can miss 2 out of 32 for detecting lock.
+					// 31 is best for TNC Test CD.  30 almost as good.
+					// 30 better for 1200 regression test.
+#endif
+
+#ifndef DCD_THRESH_OFF
+#define DCD_THRESH_OFF 6		// Might want a little more fine tuning.
+#endif
+
+#ifndef DCD_GOOD_WIDTH
+#define DCD_GOOD_WIDTH 512		// No more than 1024!!!
+#endif
+
+__attribute__((always_inline))
+inline static void pll_dcd_signal_transition2 (struct demodulator_state_s *D, int slice, int dpll_phase)
+{
+	if (dpll_phase > - DCD_GOOD_WIDTH * 1024 * 1024 && dpll_phase < DCD_GOOD_WIDTH * 1024 * 1024) {
+	  D->slicer[slice].good_flag = 1;
+	}
+	else {
+	  D->slicer[slice].bad_flag = 1;
+	}
+}
+
+__attribute__((always_inline))
+inline static void pll_dcd_each_symbol2 (struct demodulator_state_s *D, int chan, int subchan, int slice)
+{
+	D->slicer[slice].good_hist <<= 1;
+	D->slicer[slice].good_hist |= D->slicer[slice].good_flag;
+	D->slicer[slice].good_flag = 0;
+
+	D->slicer[slice].bad_hist <<= 1;
+	D->slicer[slice].bad_hist |= D->slicer[slice].bad_flag;
+	D->slicer[slice].bad_flag = 0;
+
+	D->slicer[slice].score <<= 1;
+	// 2 is to detect 'flag' patterns with 2 transitions per octet.
+	D->slicer[slice].score |= (signed)__builtin_popcount(D->slicer[slice].good_hist)
+					- (signed)__builtin_popcount(D->slicer[slice].bad_hist) >= 2;
+
+	int s = __builtin_popcount(D->slicer[slice].score);
+	if (s >= DCD_THRESH_ON) {
+	  if (D->slicer[slice].data_detect == 0) {
+	    D->slicer[slice].data_detect = 1;
+	    dcd_change (chan, subchan, slice, D->slicer[slice].data_detect);
+	  }
+	}
+	else if (s <= DCD_THRESH_OFF) {
+	  if (D->slicer[slice].data_detect != 0) {
+	    D->slicer[slice].data_detect = 0;
+	    dcd_change (chan, subchan, slice, D->slicer[slice].data_detect);
+	  }
+	}
+}
+
 
 #define FSK_DEMOD_STATE_H 1
 #endif

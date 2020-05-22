@@ -101,10 +101,6 @@ struct hdlc_state_s {
 	int frame_len;			/* Number of octets in frame_buf. */
 					/* Should be in range of 0 .. MAX_FRAME_LEN. */
 
-	int data_detect;		/* True when HDLC data is detected. */
-					/* This will not be triggered by voice or other */
-					/* noise or even tones.  */
-
 	rrbb_t rrbb;			/* Handle for bit array for raw received bits. */
 					
 };
@@ -129,6 +125,7 @@ static int composite_dcd[MAX_CHANS][MAX_SUBCHANS+1];
 static int was_init = 0;
 
 static struct audio_s *g_audio_p;
+
 
 void hdlc_rec_init (struct audio_s *pa)
 {
@@ -203,6 +200,7 @@ static int my_rand (void) {
  *		is_scrambled - Is the data scrambled?
  *
  *		descram_state - Current descrambler state.  (not used - remove)
+ *				Not so fast - plans to add new parameter.  PSK already provides it.
  *					
  *
  * Description:	This is called once for each received bit.
@@ -284,94 +282,6 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	if (dbit) {
 	  H->flag4_det |= 0x80000000;
 	}
-
-
-/*
- * "Data Carrier detect" function based on data patterns rather than
- * audio signal strength.
- *
- * Idle time, at beginning of transmission should be filled
- * with the special "flag" characters.
- *
- * Idle time of all zero bits (alternating tones at maximum rate)
- * has also been observed rarely. It is easy to understand the reasoning.
- * The tones alternate at the maximum rate, making it symmetrical and providing
- * the most opportunity for the PLL to lock on to the edges.
- * It also violates the published protocol spec.
- *
- * Recognize zero(s) followed by a single flag even though it violates the spec.
- *
- * It has been reported that the TinyTrak4 does this.
- * https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/1207
- */
-
-/*
- * Originally, this looked for 4 flags in a row or 3 zeros and a flag. 
- * Is that too fussy?
- * Here are the numbers of start of DCD for our favorite Track 2 test.
- *
- *	7e7e7e7e  504 	7e000000  32  	
- *	7e7e7e--  513   7e0000--  33	
- *	7e7e----  555   7e00----  42	
- *	7e------ 2088
- *					
- * I don't think we want to look for a single flag because that would
- * make DCD too sensitive to noise and it would interfere with waiting for a 
- * clear channel to transmit.  Even a two byte match causes a lot of flickering
- * when listening to live signals.  Let's try 3 and see how that works out.
- */
-
-
-	//if (H->flag4_det == 0x7e7e7e7e) {
-	if ((H->flag4_det & 0xffffff00) == 0x7e7e7e00) {		// three seems good
-	//if ((H->flag4_det & 0xffff0000) == 0x7e7e0000) {		// two in a row
-	//if ((H->flag4_det & 0xff000000) == 0x7e000000) {		// single flag
-	  if ( ! H->data_detect) {
-	    H->data_detect = 1;
-	    dcd_change (chan, subchan, slice, 1);
-	  }
-	}
-	//else if (H->flag4_det == 0x7e000000) {	
-	else if ((H->flag4_det & 0xffffff00) == 0x7e000000) {	
-	//else if ((H->flag4_det & 0xffff0000) == 0x7e000000) {	
-	  
-	  if ( ! H->data_detect) {
-	    H->data_detect = 1;
-	    dcd_change (chan, subchan, slice, 1);
-	  }
-	}
-
-
-/* 
- * Loss of signal should result in lack of transitions.
- * (all '1' bits) for at least a little while.
- *
- * When this was written, I was only concerned about 1200 baud.
- * For 9600, added later, there is a (de)scrambling function.
- * So if there is no change in the signal, we would get pseudo random bits here.
- * Maybe we need to put in another check earlier so DCD is not held on too long
- * after loss of signal for 9600.
- * No, that would not be a good idea.  part of a valid frame, when scrambled,
- * could have seven or more "1" bits in a row.
- * Needs more study.
- */
-
-  
-	if (H->pat_det == 0xff) {	
-	  
-	  if ( H->data_detect ) {
-	    H->data_detect = 0;
-	    dcd_change (chan, subchan, slice, 0);
-	  }
-	}
-
-
-/*
- * End of data carrier detect.  
- * 
- * The rest is concerned with framing.
- */
-
 
 	rrbb_append_bit (H->rrbb, raw);
 
@@ -554,47 +464,10 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	}
 }
 
-
-
-/*-------------------------------------------------------------------
- *
- * Name:        hdlc_rec_gathering
- *
- * Purpose:     Report whether bits are currently being gathered into a frame.
- *		This is used to influence the PLL inertia.
- *		The idea is that the PLL should be a little more agreeable to
- *		synchronize with the incoming data stream when not in a frame
- *		and resist changing a little more when capturing a frame.
- *
- * Inputs:	chan
- *		subchan
- *		slice
- *
- * Returns:	True if we are currently gathering bits.
- *		In this case we want the PLL to have more inertia.
- *
- * Discussion:	This simply returns the data carrier detect state.
- *		A couple other variations were tried but turned out to
- *		be slightly worse.
- *
- *--------------------------------------------------------------------*/
-
-int hdlc_rec_gathering (int chan, int subchan, int slice)
-{
-	assert (chan >= 0 && chan < MAX_CHANS);
-	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-	assert (slice >= 0 && slice < MAX_SLICERS);
-
-	// Counts from 	     Track 1 & Track 2
-	// data_detect		992	988
-	// olen>=0		992	985
-	// OR-ed		992	985
-
-	return ( hdlc_state[chan][subchan][slice].data_detect );
-
-} /* end hdlc_rec_gathering */
-
-
+// TODO:  Data Carrier Detect (DCD) is now based on DPLL lock
+// rather than data patterns found here.
+// It would make sense to move the next 2 functions to demod.c
+// because this is done at the modem level, rather than HDLC decoder.
 
 /*-------------------------------------------------------------------
  *

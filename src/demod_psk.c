@@ -86,15 +86,24 @@
 #include <assert.h>
 #include <ctype.h>
 
+// Fine tuning for different demodulator types.
+
+#define DCD_THRESH_ON 30		// Hysteresis: Can miss 2 out of 32 for detecting lock.
+#define DCD_THRESH_OFF 6		// Might want a little more fine tuning.
+#define DCD_GOOD_WIDTH 512
+#include "fsk_demod_state.h"		// Values above override defaults.
 
 #include "audio.h"
 #include "tune.h"
-#include "fsk_demod_state.h"
 #include "fsk_gen_filter.h"
 #include "hdlc_rec.h"
 #include "textcolor.h"
 #include "demod_psk.h"
 #include "dsp.h"
+
+
+
+
 
 static const int phase_to_gray_v26[4] = {0, 1, 3, 2};	
 static const int phase_to_gray_v27[8] = {1, 0, 2, 3, 7, 6, 4, 5};	
@@ -800,6 +809,7 @@ static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct 
 	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1]);
 	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, bit_quality[0]);
 	  }
+	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
 	}
 
 /*
@@ -813,7 +823,9 @@ static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct 
 
         if (demod_bits != D->slicer[slice].prev_demod_data) {
 
-	  if (hdlc_rec_gathering (chan, subchan, slice)) {
+	  pll_dcd_signal_transition2 (D, slice, D->slicer[slice].data_clock_pll);
+
+	  if (D->slicer[slice].data_detect) {
 	    D->slicer[slice].data_clock_pll = (int)floorf((float)(D->slicer[slice].data_clock_pll) * D->pll_locked_inertia);
 	  }
 	  else {

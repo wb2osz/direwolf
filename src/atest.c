@@ -82,7 +82,7 @@
 #include "ptt.h"
 #include "dtime_now.h"
 #include "fx25.h"
-
+#include "hdlc_rec.h"
 
 
 #if 0	/* Typical but not flexible enough. */
@@ -188,6 +188,9 @@ static int J_opt = 0;			/* 2400 bps PSK compatible MFJ-2400 and maybe others. */
 static int h_opt = 0;			// Hexadecimal display of received packet.
 static char P_opt[16] = "";		// Demodulator profiles.
 static int d_x_opt = 1;			// FX.25 debug.
+static int d_o_opt = 0;			// "-d o" option for DCD output control. */	
+static int dcd_count = 0;
+static int dcd_missing_errors = 0;
 
 
 int main (int argc, char *argv[])
@@ -382,6 +385,7 @@ int main (int argc, char *argv[])
 	       for (char *p=optarg; *p!='\0'; p++) {
 	        switch (*p) {
 	           case 'x':  d_x_opt++; break;			// FX.25
+	           case 'o':  d_o_opt++; break;			// DCD output control
 	           default: break;
 	        }
 	       }
@@ -686,6 +690,10 @@ int main (int argc, char *argv[])
 	elapsed = dtime_now() - start_time;
 
 	dw_printf ("%d packets decoded in %.3f seconds.  %.1f x realtime\n", packets_decoded_total, elapsed, total_filetime/elapsed);
+	if (d_o_opt) {
+	  dw_printf ("DCD count = %d\n", dcd_count);
+	  dw_printf ("DCD missing erors = %d\n", dcd_missing_errors);
+	}
 
 	if (error_if_less_than != -1 && packets_decoded_total < error_if_less_than) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -744,6 +752,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	char alevel_text[AX25_ALEVEL_TO_TEXT_SIZE];
 
 	packets_decoded_one++;
+	if ( ! hdlc_rec_data_detect_any(chan)) dcd_missing_errors++;
 
 	ax25_format_addrs (pp, stemp);
 
@@ -777,7 +786,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	int min = (int)(sec / 60.);
 	sec -= min * 60;
 
-	dw_printf ("%d:%07.4f ", min, sec);
+	dw_printf ("%d:%06.3f ", min, sec);
 
 	if (h != AX25_SOURCE) {
 	  dw_printf ("Digipeater ");
@@ -876,6 +885,38 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 void ptt_set (int ot, int chan, int ptt_signal)
 {
+	// Should only get here for DCD output control.
+	static double dcd_start_time[MAX_CHANS];
+
+	if (d_o_opt) {
+	  double t = (double)sample_number / my_audio_config.adev[0].samples_per_sec;
+	  double sec1, sec2;
+	  int min1, min2;
+
+	  text_color_set(DW_COLOR_INFO);
+
+	  if (ptt_signal) {
+	    //sec1 = t;
+	    //min1 = (int)(sec1 / 60.);
+	    //sec1 -= min1 * 60;
+	    //dw_printf ("DCD[%d] = ON    %d:%06.3f\n",  chan, min1, sec1);
+	    dcd_count++;
+	    dcd_start_time[chan] = t;
+	  }
+	  else {
+	    //dw_printf ("DCD[%d] = off   %d:%06.3f   %3.0f\n",  chan, min, sec, (t - dcd_start_time[chan]) * 1000.);
+
+	    sec1 = dcd_start_time[chan];
+	    min1 = (int)(sec1 / 60.);
+	    sec1 -= min1 * 60;
+
+	    sec2 = t;
+	    min2 = (int)(sec2 / 60.);
+	    sec2 -= min2 * 60;
+
+	    dw_printf ("DCD[%d]  %d:%06.3f - %d:%06.3f =  %3.0f\n",  chan, min1, sec1, min2, sec2, (t - dcd_start_time[chan]) * 1000.);
+	  }
+	}
 	return;
 }
 

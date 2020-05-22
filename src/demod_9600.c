@@ -44,12 +44,22 @@
 #include <assert.h>
 #include <ctype.h>
 
+// Fine tuning for different demodulator types.
+
+#define DCD_THRESH_ON 32		// Hysteresis: Can miss 0 out of 32 for detecting lock.
+					// This is best for actual on-the-air signals.
+					// Still too many brief false matches.
+#define DCD_THRESH_OFF 8		// Might want a little more fine tuning.
+#define DCD_GOOD_WIDTH 1024		// No more than 1024!!!
+#include "fsk_demod_state.h"		// Values above override defaults.
+
 #include "tune.h"
-#include "fsk_demod_state.h"
 #include "hdlc_rec.h"
 #include "demod_9600.h"
 #include "textcolor.h"
 #include "dsp.h"
+
+
 
 
 static float slice_point[MAX_SUBCHANS];
@@ -407,7 +417,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 	if (chan == 0) {
 
 	  if (1) {
-	  //if (hdlc_rec_gathering (chan, subchan, slice)) {
+	  //if (D->slicer[slice].data_detect) {
 	    char fname[30];
 	    int slice = 0;
 
@@ -516,6 +526,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 	  /* Overflow.  Was large positive, wrapped around, now large negative. */
 
 	  hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, D->modem_type == MODEM_SCRAMBLE, D->slicer[slice].lfsr);
+	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
 	}
 
 /*
@@ -526,11 +537,11 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 
 	  // Note:  Test for this demodulator, not overall for channel.
 
-	  float target = 0;
+	  pll_dcd_signal_transition2 (D, slice, D->slicer[slice].data_clock_pll);
 
-	  target = D->pll_step_per_sample * demod_out_f / (demod_out_f - D->slicer[slice].prev_demod_out_f);
+	  float target = D->pll_step_per_sample * demod_out_f / (demod_out_f - D->slicer[slice].prev_demod_out_f);
 
-	  if (hdlc_rec_gathering (chan, subchan, slice)) {
+	  if (D->slicer[slice].data_detect) {
 	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_locked_inertia + target * (1.0f - D->pll_locked_inertia) );
 	  }
 	  else {
@@ -542,7 +553,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 #if DEBUG5
 
 	//if (chan == 0) {
-	if (hdlc_rec_gathering (chan,subchan,slice)) {
+	if (D->slicer[slice].data_detect) {
 	
 	  char fname[30];
 
