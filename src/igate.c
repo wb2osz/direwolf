@@ -32,6 +32,8 @@
  *
  *		APRS iGate properties
  *		http://wiki.ham.fi/APRS_iGate_properties
+ *		(now gone but you can find a copy here:)
+ *		https://web.archive.org/web/20120503201832/http://wiki.ham.fi/APRS_iGate_properties
  *
  *		Notes to iGate developers
  *		https://github.com/hessu/aprsc/blob/master/doc/IGATE-HINTS.md#igates-dropping-duplicate-packets-unnecessarily
@@ -1535,6 +1537,10 @@ static void * igate_recv_thread (void *arg)
  *		The original is sent about 10 seconds later.
  *		Duplicate removal will drop the original if there is no
  *		corresponding digipeated version.
+ *
+ * 		In retrospect, I don't think this was such a good idea.
+ *		It would be of value only if there is no other IGate nearby
+ *		that would report on the original transmission.
  *
  *--------------------------------------------------------------------*/
 
