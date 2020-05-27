@@ -87,6 +87,10 @@ static const struct {
 	{ 96, 168 }		// 27	96 or 168, not range
 };
 
+static void save_ship_data(char *mssi, char *shipname, char *callsign, char *destination);
+static void get_ship_data(char *mssi, char *comment, int comment_size);
+
+
 /*-------------------------------------------------------------------
  *
  * Functions to get and set element of a bit vector.
@@ -144,14 +148,34 @@ static int get_field_signed (unsigned char *base, unsigned int start, unsigned i
 	return (result);
 }
 
-static double get_field_latlon (unsigned char *base, unsigned int start, unsigned int len)
+static double get_field_lat (unsigned char *base, unsigned int start, unsigned int len)
 {
 	// Latitude of 0x3412140 (91 deg) means not available.
-	// Longitude of 0x6791AC0 (181 deg) means not available.
-	return ((double)get_field_signed(base, start, len) / 600000.0);
-
-	// Message type 27 uses lower resolution, 17 & 18 bits rather than 27 & 28.
+	// Message type 27 uses lower resolution, 17 bits rather than 27.
 	// It encodes minutes/10 rather than normal minutes/10000.
+
+	int n = get_field_signed(base, start, len);
+	if (len == 17) {
+	  return ((n == 91*600) ? G_UNKNOWN : (double)n / 600.0);
+	}
+	else {
+	  return ((n == 91*600000) ? G_UNKNOWN : (double)n / 600000.0);
+	}
+}
+
+static double get_field_lon (unsigned char *base, unsigned int start, unsigned int len)
+{
+	// Longitude of 0x6791AC0 (181 deg) means not available.
+	// Message type 27 uses lower resolution, 18 bits rather than 28.
+	// It encodes minutes/10 rather than normal minutes/10000.
+
+	int n = get_field_signed(base, start, len);
+	if (len == 18) {
+	  return ((n == 181*600) ? G_UNKNOWN : (double)n / 600.0);
+	}
+	else {
+	  return ((n == 181*600000) ? G_UNKNOWN : (double)n / 600000.0);
+	}
 }
 
 static float get_field_speed (unsigned char *base, unsigned int start, unsigned int len)
@@ -159,14 +183,33 @@ static float get_field_speed (unsigned char *base, unsigned int start, unsigned 
 	// Raw 1023 means not available.
 	// Multiply by 0.1 to get knots.
 	// For aircraft it is knots, not deciknots.
-	return ((float)get_field(base, start, len) * 0.1);
+
+	// Message type 27 uses lower resolution, 6 bits rather than 10.
+	// It encodes minutes/10 rather than normal minutes/10000.
+
+	int n = get_field(base, start, len);
+	if (len == 6) {
+	  return ((n == 63) ? G_UNKNOWN : (float)n);
+	}
+	else {
+	  return ((n == 1023) ? G_UNKNOWN : (float)n * 0.1);
+	}
 }
 
 static float get_field_course (unsigned char *base, unsigned int start, unsigned int len)
 {
 	// Raw 3600 means not available.
 	// Multiply by 0.1 to get degrees
-	return ((float)get_field(base, start, len) * 0.1);
+	// Message type 27 uses lower resolution, 9 bits rather than 12.
+	// It encodes degrees rather than normal degrees/10.
+
+	int n = get_field(base, start, len);
+	if (len == 9) {
+	  return ((n == 360) ? G_UNKNOWN : (float)n);
+	}
+	else {
+	  return ((n == 3600) ? G_UNKNOWN : (float)n * 0.1);
+	}
 }
 
 static int get_field_ascii (unsigned char *base, unsigned int start, unsigned int len)
@@ -428,7 +471,7 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	int type = get_field(ais, 0, 6);
 
 	if (type >= 1 && type <= 27) {
-	  snprintf (mssi, mssi_size, "%d", get_field(ais, 8, 30));
+	  snprintf (mssi, mssi_size, "%09d", get_field(ais, 8, 30));
 	}
 	switch (type) {
 
@@ -439,10 +482,11 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    snprintf (descr, descr_size, "AIS %d: Position Report Class A", type);
 	    *symtab = '/';
 	    *symbol = 's';		// Power boat (ship) side view
-	    *odlon = get_field_latlon(ais, 61, 28);
-	    *odlat = get_field_latlon(ais, 89, 27);
+	    *odlon = get_field_lon(ais, 61, 28);
+	    *odlat = get_field_lat(ais, 89, 27);
 	    *ofknots = get_field_speed(ais, 50, 10);
 	    *ofcourse = get_field_course(ais, 116, 12);
+	    get_ship_data(mssi, comment, comment_size);
 	    break;
 
 	  case 4:	// Base Station Report
@@ -456,8 +500,10 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    //hour = get_field(ais, 61, 5);
 	    //minute = get_field(ais, 66, 6);
 	    //second = get_field(ais, 72, 6);
-	    *odlon = get_field_latlon(ais, 79, 28);
-	    *odlat = get_field_latlon(ais, 107, 27);
+	    *odlon = get_field_lon(ais, 79, 28);
+	    *odlat = get_field_lat(ais, 107, 27);
+	    // Is this suitable or not?  Doesn't hurt, I suppose.
+	    get_ship_data(mssi, comment, comment_size);
 	    break;
 
 	  case 5:	// Static and Voyage Related Data
@@ -472,13 +518,8 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	      get_field_string(ais, 70, 42, callsign);
 	      get_field_string(ais, 112, 120, shipname);
 	      get_field_string(ais, 302, 120, destination);
-
-	      if (strlen(destination) > 0) {
-	        snprintf (comment, comment_size, "%s, %s, dest. %s", shipname, callsign, destination);
-	      }
-	      else {
-	        snprintf (comment, comment_size, "%s, %s", shipname, callsign);
-	      }
+	      save_ship_data(mssi, shipname, callsign, destination);
+	      get_ship_data(mssi, comment, comment_size);
 	    }
 	    break;
 
@@ -489,10 +530,12 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    *symtab = '/';
 	    *symbol = '\'';		// Small AIRCRAFT
 	    *ofalt_m = get_field(ais, 38, 12);		// meters, 4095 means not available
-	    *odlon = get_field_latlon(ais, 61, 28);
-	    *odlat = get_field_latlon(ais, 89, 27);
-	    *ofknots = get_field_speed(ais, 50, 10) * 10.0;	// plane is knots, not knots/10
+	    *odlon = get_field_lon(ais, 61, 28);
+	    *odlat = get_field_lat(ais, 89, 27);
+	    *ofknots = get_field_speed(ais, 50, 10);	// plane is knots, not knots/10
+	    if (*ofknots != G_UNKNOWN) *ofknots = *ofknots * 10.0;
 	    *ofcourse = get_field_course(ais, 116, 12);
+	    get_ship_data(mssi, comment, comment_size);
 	    break;
 
 	  case 18:	// Standard Class B CS Position Report
@@ -501,8 +544,9 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    snprintf (descr, descr_size, "AIS %d: Standard Class B CS Position Report", type);
 	    *symtab = '/';
 	    *symbol = 'Y';		// YACHT (sail)
-	    *odlon = get_field_latlon(ais, 57, 28);
-	    *odlat = get_field_latlon(ais, 85, 27);
+	    *odlon = get_field_lon(ais, 57, 28);
+	    *odlat = get_field_lat(ais, 85, 27);
+	    get_ship_data(mssi, comment, comment_size);
 	    break;
 
 	  case 19:	// Extended Class B CS Position Report
@@ -510,8 +554,9 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    snprintf (descr, descr_size, "AIS %d: Extended Class B CS Position Report", type);
 	    *symtab = '/';
 	    *symbol = 'Y';		// YACHT (sail)
-	    *odlon = get_field_latlon(ais, 57, 28);
-	    *odlat = get_field_latlon(ais, 85, 27);
+	    *odlon = get_field_lon(ais, 57, 28);
+	    *odlat = get_field_lat(ais, 85, 27);
+	    get_ship_data(mssi, comment, comment_size);
 	    break;
 
 	  case 27:	// Long Range AIS Broadcast message
@@ -519,10 +564,11 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
 	    snprintf (descr, descr_size, "AIS %d: Long Range AIS Broadcast message", type);
 	    *symtab = '\\';
 	    *symbol = 's';		// OVERLAY SHIP/boat (top view)
-	    *odlon = get_field_latlon(ais, 44, 18) * 1000;	// Note: minutes/10 rather than usual /10000.
-	    *odlat = get_field_latlon(ais, 62, 17) * 1000;
-	    *ofknots = get_field_speed(ais, 79, 6) * 10;	// Note: knots, not deciknots.
-	    *ofcourse = get_field_course(ais, 85, 9) * 10;	// Note: degrees, not decidegrees.
+	    *odlon = get_field_lon(ais, 44, 18);	// Note: minutes/10 rather than usual /10000.
+	    *odlat = get_field_lat(ais, 62, 17);
+	    *ofknots = get_field_speed(ais, 79, 6);	// Note: knots, not deciknots.
+	    *ofcourse = get_field_course(ais, 85, 9);	// Note: degrees, not decidegrees.
+	    get_ship_data(mssi, comment, comment_size);
 	    break;
 
 	  default:
@@ -573,6 +619,92 @@ int ais_check_length (int type, int length)
 	}
 
 } // end ais_check_length
+
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        save_ship_data
+ *
+ * Purpose:    	Save shipname, etc., from "Static and Voyage Related Data"
+ *		so it can be combined later with the position reports.
+ *
+ * Inputs:	mssi
+ *		shipname
+ *		callsign
+ *		destination
+ *
+ *--------------------------------------------------------------------*/
+
+struct ship_data_s {
+	struct ship_data_s *pnext;
+	char mssi[9+1];
+	char shipname[20+1];
+	char callsign[7+1];
+	char destination[20+1];
+};
+
+// Just use a single linked list for now.
+// If I get ambitious, I might use a hash table.
+// I don't think we need a critical region because all channels
+// should be serialized thru the receive queue.
+
+static struct ship_data_s *ships = NULL;
+
+
+static void save_ship_data(char *mssi, char *shipname, char *callsign, char *destination)
+{
+	// Get list node, either existing or new.
+	struct ship_data_s *p = ships;
+	while (p != NULL) {
+	  if (strcmp(mssi, p->mssi) == 0) {
+	    break;
+	  }
+	  p = p->pnext;
+	}
+	if (p == NULL) {
+	  p = calloc(sizeof(struct ship_data_s),1);
+	  p->pnext = ships;
+	  ships = p;
+	}
+
+	strlcpy (p->mssi, mssi, sizeof(p->mssi));
+	strlcpy (p->shipname, shipname, sizeof(p->shipname));
+	strlcpy (p->callsign, callsign, sizeof(p->callsign));
+	strlcpy (p->destination, destination, sizeof(p->destination));
+}
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        save_ship_data
+ *
+ * Purpose:    	Get ship data for specified mssi.
+ *
+ * Inputs:	mssi
+ *
+ * Outputs:	comment	- If mssi is found, return in single string here,
+ *			  suitable for the comment field.
+ *
+ *--------------------------------------------------------------------*/
+
+static void get_ship_data(char *mssi, char *comment, int comment_size)
+{
+	struct ship_data_s *p = ships;
+	while (p != NULL) {
+	  if (strcmp(mssi, p->mssi) == 0) {
+	    break;
+	  }
+	  p = p->pnext;
+	}
+	if (p != NULL) {
+	  if (strlen(p->destination) > 0) {
+	    snprintf (comment, comment_size, "%s, %s, dest. %s", p->shipname, p->callsign, p->destination);
+	  }
+	  else {
+	    snprintf (comment, comment_size, "%s, %s", p->shipname, p->callsign);
+	  }
+	}
+}
 
 
 // end ais.c

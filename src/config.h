@@ -65,10 +65,15 @@ struct misc_config_s {
 				/* Default is  2947. */
 
 				
-	char waypoint_port[20];	/* Serial port name for sending NMEA waypoint sentences */
+	char waypoint_serial_port[20];	/* Serial port name for sending NMEA waypoint sentences */
 				/* to a GPS map display or other mapping application. */
 				/* e.g. COM22, /dev/ttyACM0 */
 				/* Currently no option for setting non-standard speed. */
+				/* This was done in 2014 and no one has complained yet. */
+
+	char waypoint_udp_hostname[80];	/* Destination host when using UDP. */
+
+	int waypoint_udp_portnum;	/* UDP port. */
 
 	int waypoint_formats;	/* Which sentence formats should be generated? */
 
@@ -76,6 +81,7 @@ struct misc_config_s {
 #define WPT_FORMAT_GARMIN       0x02		/* G	$PGRMW */
 #define WPT_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
 #define WPT_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
+#define WPT_FORMAT_AIS          0x10		/* A	!AIVDM */
 
 
 	int log_daily_names;	/* True to generate new log file each day. */

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2015, 2016, 2020  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -32,16 +32,21 @@
 
 #include "direwolf.h"		// should be first
 
-
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #if __WIN32__
-#include <stdlib.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>           // _WIN32_WINNT must be set to 0x0501 before including this
 #else
-#include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+//#include <arpa/inet.h>
+#include <netdb.h>		// gethostbyname
 #endif
 
 #include <assert.h>
@@ -57,13 +62,16 @@
 #include "mgn_icon.h"		/* Magellan icons */
 #include "dwgpsnmea.h"
 #include "serial_port.h"
+#include "dwsock.h"
 
 
-static MYFDTYPE s_waypoint_port_fd = MYFDERROR;
+static MYFDTYPE s_waypoint_serial_port_fd = MYFDERROR;
+static int s_waypoint_udp_sock_fd = -1;	// ideally INVALID_SOCKET for Windows.
+static struct sockaddr_in s_udp_dest_addr;
 
 static int s_waypoint_formats = 0;	/* which formats should we generate? */
 
-static int s_waypoint_debug = 0;		/* Print information flowing to attached device. */
+static int s_waypoint_debug = 0;	/* Print information flowing to attached device. */
 
 
 
@@ -86,19 +94,24 @@ void waypoint_set_debug (int n)
  *
  * Inputs:	mc			- Pointer to configuration options.
  *
- *		  ->waypoint_port	- Name of serial port.  COM1, /dev/ttyS0, etc.
+ *		  ->waypoint_serial_port	- Name of serial port.  COM1, /dev/ttyS0, etc.
  *
+ *		  ->waypoint_udp_hostname	- Destination host when using UDP.
+ *
+ *		  ->waypoint_udp_portnum	- UDP port number.
  *
  *		  (currently none)	- speed, baud.  Default 4800 if not set
  *
  *
  *		  ->waypoint_formats	- Set of formats enabled. 
- *					  If none set, default to generic & Kenwood.
+ *					  If none set, default to generic & Kenwood here.
  *
- * Global output: s_waypoint_port_fd
+ * Global output: s_waypoint_serial_port_fd
+ *		  s_waypoint_udp_sock_fd
  *
  * Description:	First to see if this is shared with GPS input.
  *		If not, open serial port.
+ *		In version 1.6 UDP is added.  It is possible to use both.
  *
  * Restriction:	MUST be done after GPS init because we might be sharing the
  *		same serial port device.
@@ -111,46 +124,79 @@ void waypoint_init (struct misc_config_s *mc)
 
 #if DEBUG
 	text_color_set (DW_COLOR_DEBUG);
-	dw_printf ("waypoint_init() device=%s formats=%d\n", mc->waypoint_port, mc->waypoint_formats);
+	dw_printf ("waypoint_init() serial device=%s formats=%02x\n", mc->waypoint_serial_port, mc->waypoint_formats);
+	dw_printf ("waypoint_init() destination hostname=%s UDP port=%d\n", mc->waypoint_udp_hostname, mc->waypoint_udp_portnum);
 #endif
-	
+
+	s_waypoint_udp_sock_fd = -1;
+
+	if (mc->waypoint_udp_portnum > 0) {
+
+	  s_waypoint_udp_sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	  if (s_waypoint_udp_sock_fd != -1) {
+
+	    // Not thread-safe.  Should use getaddrinfo instead.
+	    struct hostent *hp = gethostbyname(mc->waypoint_udp_hostname);
+
+	    if (hp != NULL) {
+	      memset ((char *)&s_udp_dest_addr, 0, sizeof(s_udp_dest_addr));
+	      s_udp_dest_addr.sin_family = AF_INET;
+	      memcpy ((char *)&s_udp_dest_addr.sin_addr, (char *)hp->h_addr, hp->h_length);
+	      s_udp_dest_addr.sin_port = htons(mc->waypoint_udp_portnum);
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Waypoint: Couldn't get address for %s\n", mc->waypoint_udp_hostname);
+	      close (s_waypoint_udp_sock_fd);
+	      s_waypoint_udp_sock_fd = -1;
+	    }
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Couldn't create socket for waypoint send to %s\n", mc->waypoint_udp_hostname);
+	  }
+	}
+
 /*
  * TODO:
  * Are we sharing with GPS input?
  * First try to get fd if they have same device name.
  * If that fails, do own serial port open.
  */
-	if (strlen(mc->waypoint_port) > 0) {
+	s_waypoint_serial_port_fd = MYFDERROR;
 
-	  s_waypoint_port_fd = dwgpsnmea_get_fd (mc->waypoint_port, 4800);
+	if (strlen(mc->waypoint_serial_port) > 0) {
 
-	  if (s_waypoint_port_fd == MYFDERROR) {
-	    s_waypoint_port_fd = serial_port_open (mc->waypoint_port, 4800);
+	  s_waypoint_serial_port_fd = dwgpsnmea_get_fd (mc->waypoint_serial_port, 4800);
+
+	  if (s_waypoint_serial_port_fd == MYFDERROR) {
+	    s_waypoint_serial_port_fd = serial_port_open (mc->waypoint_serial_port, 4800);
 	  }
 	  else {
 	    text_color_set (DW_COLOR_INFO);
 	    dw_printf ("Note: Sharing same port for GPS input and waypoint output.\n");
 	  }
 
-	  if (s_waypoint_port_fd == MYFDERROR) {
+	  if (s_waypoint_serial_port_fd == MYFDERROR) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Unable to open %s for waypoint output.\n", mc->waypoint_port);
-	    return;
-	  }
-
-	  s_waypoint_formats = mc->waypoint_formats;
-	  if (s_waypoint_formats == 0) {
-	    s_waypoint_formats = WPT_FORMAT_NMEA_GENERIC | WPT_FORMAT_KENWOOD;
-	  }
-	  if (s_waypoint_formats & WPT_FORMAT_GARMIN) {
-	    s_waypoint_formats |= WPT_FORMAT_NMEA_GENERIC;		/* See explanation below. */
+	    dw_printf ("Unable to open serial port %s for waypoint output.\n", mc->waypoint_serial_port);
 	  }
 	}
 
+// Set default formats if user did not specify any.
+
+	s_waypoint_formats = mc->waypoint_formats;
+	if (s_waypoint_formats == 0) {
+	  s_waypoint_formats = WPT_FORMAT_NMEA_GENERIC | WPT_FORMAT_KENWOOD;
+	}
+	if (s_waypoint_formats & WPT_FORMAT_GARMIN) {
+	  s_waypoint_formats |= WPT_FORMAT_NMEA_GENERIC;		/* See explanation below. */
+	}
 
 #if DEBUG
 	text_color_set (DW_COLOR_DEBUG);
-	dw_printf ("end of waypoint_init: s_waypoint_port_fd = %d\n", s_waypoint_port_fd);
+	dw_printf ("end of waypoint_init: s_waypoint_serial_port_fd = %d\n", s_waypoint_serial_port_fd);
+	dw_printf ("end of waypoint_init: s_waypoint_udp_sock_fd = %d\n", s_waypoint_udp_sock_fd);
 #endif
 }
 
@@ -252,6 +298,12 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
 	dw_printf ("waypoint_send_sentence (\"%s\", \"%c%c\")\n", name_in, symtab, symbol);
 #endif
 
+// Don't waste time if no destintations specified.
+
+	if (s_waypoint_serial_port_fd == MYFDERROR &&
+	    s_waypoint_udp_sock_fd == -1) {
+	  return;
+	}
 
 /*
  * We need to remove any , or * from name, symbol, or comment because they are field delimiters.
@@ -583,29 +635,59 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
 } /* end waypoint_send_sentence */
 
 
+/*-------------------------------------------------------------------
+ *
+ * Name:        nema_send_ais
+ *
+ * Purpose:     Send NMEA AIS sentence to GPS display or other mapping application.
+ *		
+ * Inputs:	sentence	- should look something like this, with checksum, and no CR LF.
+ *
+ *			!AIVDM,1,1,,A,35NO=dPOiAJriVDH@94E84AJ0000,0*4B
+ *
+ *--------------------------------------------------------------------*/
+
+void waypoint_send_ais (char *sentence)
+{
+	if (s_waypoint_serial_port_fd == MYFDERROR &&
+	    s_waypoint_udp_sock_fd == -1) {
+	  return;
+	}
+
+	if (s_waypoint_formats & WPT_FORMAT_AIS) {
+	  send_sentence (sentence);
+	}
+}
+
+
 /*
  * Append CR LF and send it.
  */
 
 static void send_sentence (char *sent)
 {
-
 	char final[256];
-
-
-	if (s_waypoint_port_fd == MYFDERROR) {
-	  return;
-	}
 
 	if (s_waypoint_debug) {
 	  text_color_set(DW_COLOR_XMIT);
-	  dw_printf ("%s\n", sent);
+	  dw_printf ("waypoint send sentence: \"%s\"\n", sent);
 	}
 
 	strlcpy (final, sent, sizeof(final));
 	strlcat (final, "\r\n", sizeof(final));
+	int final_len = strlen(final);
 
-	serial_port_write (s_waypoint_port_fd, final, strlen(final));
+	if (s_waypoint_serial_port_fd != MYFDERROR) {
+	  serial_port_write (s_waypoint_serial_port_fd, final, final_len);
+	}
+
+	if (s_waypoint_udp_sock_fd != -1) {
+	  int n = sendto(s_waypoint_udp_sock_fd, final, final_len, 0, (struct sockaddr*)(&s_udp_dest_addr), sizeof(struct sockaddr_in));
+	  if (n != final_len) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Failed to send waypoint via UDP, errno=%d\n", errno);
+	  }
+	}
 
 } /* send_sentence */
 
@@ -613,10 +695,13 @@ static void send_sentence (char *sent)
 
 void waypoint_term (void)
 {
-
-	if (s_waypoint_port_fd != MYFDERROR) {
+	if (s_waypoint_serial_port_fd != MYFDERROR) {
 	  //serial_port_close (s_waypoint_port_fd);
-	  s_waypoint_port_fd = MYFDERROR;
+	  s_waypoint_serial_port_fd = MYFDERROR;
+	}
+	if (s_waypoint_udp_sock_fd != -1) {
+	  close (s_waypoint_udp_sock_fd);
+	  s_waypoint_udp_sock_fd = -1;
 	}
 }
 

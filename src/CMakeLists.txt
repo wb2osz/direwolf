@@ -41,6 +41,7 @@ list(APPEND direwolf_SOURCES
   dtime_now.c
   dtmf.c
   dwgps.c
+  dwsock.c
   encode_aprs.c
   encode_aprs.c
   fcs_calc.c

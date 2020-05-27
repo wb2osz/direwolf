@@ -885,7 +885,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->kiss_serial_poll = 0;
 
 	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
-	strlcpy (p_misc_config->waypoint_port, "", sizeof(p_misc_config->waypoint_port));
+	strlcpy (p_misc_config->waypoint_serial_port, "", sizeof(p_misc_config->waypoint_serial_port));
 
 	p_misc_config->log_daily_names = 0;
 	strlcpy (p_misc_config->log_path, "", sizeof(p_misc_config->log_path));
@@ -4602,21 +4602,46 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * WAYPOINT		- Generate WPL NMEA sentences for display on map.
+ * WAYPOINT		- Generate WPL and AIS NMEA sentences for display on map.
  *
  * WAYPOINT  serial-device [ formats ]
+ * WAYPOINT  host:udpport [ formats ]
  *		  
  */
 	  else if (strcasecmp(t, "waypoint") == 0) {
+
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file: Missing device name for WAYPOINT on line %d.\n", line);
+	      dw_printf ("Config file: Missing output device for WAYPOINT on line %d.\n", line);
 	      continue;
 	    }
-	    else {
-	      strlcpy (p_misc_config->waypoint_port, t, sizeof(p_misc_config->waypoint_port));
+
+	    /* If there is a ':' in the name, split it into hostname:udpportnum. */
+	    /* Otherwise assume it is serial port name. */
+
+	    char *p = strchr (t, ':');
+	    if (p != NULL) {
+	      *p = '\0';
+	      int n = atoi(p+1);
+              if (n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) {
+	        strlcpy (p_misc_config->waypoint_udp_hostname, t, sizeof(p_misc_config->waypoint_udp_hostname));
+	        if (strlen(p_misc_config->waypoint_udp_hostname) == 0) {
+	          strlcpy (p_misc_config->waypoint_udp_hostname, "localhost", sizeof(p_misc_config->waypoint_udp_hostname));
+	        }
+	        p_misc_config->waypoint_udp_portnum = n;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: Invalid UDP port number %d for sending waypoints.\n", line, n);
+	      }
 	    }
+	    else {
+	      strlcpy (p_misc_config->waypoint_serial_port, t, sizeof(p_misc_config->waypoint_serial_port));
+	    }
+	
+	    /* Anthing remaining is the formats to enable. */
+
 	    t = split(NULL,1);
 	    if (t != NULL) {
 	      for ( ; *t != '\0' ; t++ ) {
@@ -4632,6 +4657,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	            break;
 	          case 'K':
 	            p_misc_config->waypoint_formats |= WPT_FORMAT_KENWOOD;
+	            break;
+	          case 'A':
+	            p_misc_config->waypoint_formats |= WPT_FORMAT_AIS;
 	            break;
 	          case ' ':
 	          case ',':

@@ -215,6 +215,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 
 	      case MODEM_BASEBAND:
 	      case MODEM_SCRAMBLE:
+	      case MODEM_AIS:
 
 		// Tone is half baud.
 	        ticks_per_bit[chan] = (int) ((TICKS_PER_CYCLE / (double)audio_config_p->achan[chan].baud ) + 0.5);
@@ -398,6 +399,7 @@ void tone_gen_put_bit (int chan, int dat)
 
 	    case MODEM_BASEBAND:
 	    case MODEM_SCRAMBLE:
+	    case MODEM_AIS:
 
 	      if (dat != prev_dat[chan]) {
 	        tone_phase[chan] += f1_change_per_sample[chan];

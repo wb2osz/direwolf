@@ -94,6 +94,7 @@
 #include "ax25_pad.h"
 #include "xid.h"
 #include "decode_aprs.h"
+#include "encode_aprs.h"
 #include "textcolor.h"
 #include "server.h"
 #include "kiss.h"
@@ -123,6 +124,7 @@
 #include "ax25_link.h"
 #include "dtime_now.h"
 #include "fx25.h"
+#include "dwsock.h"
 
 
 //static int idx_decoded = 0;
@@ -181,6 +183,8 @@ static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
 static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
+
+static int A_opt_ais_to_obj = 0;	/* "-A" Convert received AIS to APRS "Object Report." */
 
 
 int main (int argc, char *argv[])
@@ -284,7 +288,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "F", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -321,22 +325,32 @@ int main (int argc, char *argv[])
  * Apple computers with Intel processors started with P6. Since the
  * cpu test code was giving Clang compiler grief it has been excluded.
  *
- * Now, where can I find a Pentium 2 or earlier to test this?
+ * Version 1.6: Newer compiler with i686, rather than i386 target.
+ * This is running about 10% faster for the same hardware so it would
+ * appear the compiler is using newer, more efficient, instructions.
+ *
+ * According to https://en.wikipedia.org/wiki/P6_(microarchitecture)
+ * and https://en.wikipedia.org/wiki/Streaming_SIMD_Extensions
+ * the Pentium III still seems to be the minimum required because
+ * it has the P6 microarchitecture and SSE instructions.
+ *
+ * I've never heard any complaints about anyone getting the message below.
  */
 
 #if defined(__SSE__) && !defined(__APPLE__)
-	int cpuinfo[4];
+	int cpuinfo[4];		// EAX, EBX, ECX, EDX
 	__cpuid (cpuinfo, 0);
 	if (cpuinfo[0] >= 1) {
 	  __cpuid (cpuinfo, 1);
 	  //dw_printf ("debug: cpuinfo = %x, %x, %x, %x\n", cpuinfo[0], cpuinfo[1], cpuinfo[2], cpuinfo[3]);
+	  // https://en.wikipedia.org/wiki/CPUID
 	  if ( ! ( cpuinfo[3] & (1 << 25))) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("------------------------------------------------------------------\n");
 	    dw_printf ("This version requires a minimum of a Pentium 3 or equivalent.\n");
 	    dw_printf ("If you are seeing this message, you are probably using a computer\n");
-	    dw_printf ("from the previous century.  See comments in Makefile.win for\n");
-	    dw_printf ("information on how you can recompile it for use with your antique.\n");
+	    dw_printf ("from the previous Century.  See instructions in User Guide for\n");
+	    dw_printf ("information on how you can compile it for use with your antique.\n");
 	    dw_printf ("------------------------------------------------------------------\n");
 	  }
 	}
@@ -373,7 +387,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:e:X:",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:pxr:b:n:d:q:t:ul:L:Sa:E:T:e:X:A",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -636,6 +650,11 @@ int main (int argc, char *argv[])
 	    X_fx25_xmit_enable = atoi(optarg);
             break;
 
+	  case 'A':			// -A 	convert AIS to APRS object
+
+	    A_opt_ais_to_obj = 1;
+	    break;
+
           default:
 
             /* Should not be here. */
@@ -669,6 +688,8 @@ int main (int argc, char *argv[])
 #endif
 
 	symbols_init ();
+
+	(void)dwsock_init();
 
 	config_init (config_file, &audio_config, &digi_config, &cdigi_config, &tt_config, &igate_config, &misc_config);
 
@@ -1205,6 +1226,8 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  *
  * Suppress printed decoding if "-q d" option used.
  */
+	char ais_obj_packet[300];
+	strcpy (ais_obj_packet, "");
 
 	if (ax25_is_aprs(pp)) {
 
@@ -1239,6 +1262,37 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	  mheard_save_rf (chan, &A, pp, alevel, retries);
 
+// For AIS, we have an option to convert the NMEA format, in User Defined data,
+// into an APRS "Object Report" and send that to the clients as well.
+
+// FIXME: partial implementation.
+
+	  static const char user_def_da[4] = { '{', USER_DEF_USER_ID, USER_DEF_TYPE_AIS, '\0' };
+
+	  if (strncmp((char*)pinfo, user_def_da, 3) == 0) {
+
+	    waypoint_send_ais((char*)pinfo + 3);
+
+	    if (A_opt_ais_to_obj && A.g_lat != G_UNKNOWN && A.g_lon != G_UNKNOWN) {
+
+	      char ais_obj_info[256];
+	      (void)encode_object (A.g_name, 0, time(NULL),
+	        A.g_lat, A.g_lon, 0,	// no ambiguity
+		A.g_symbol_table, A.g_symbol_code,
+		0, 0, 0, "",	// power, height, gain, direction.
+	        // Unknown not handled properly.
+		// Should encode_object take floating point here?
+		(int)(A.g_course+0.5), (int)(DW_MPH_TO_KNOTS(A.g_speed_mph)+0.5),
+		0, 0, 0, A.g_comment,	// freq, tone, offset
+		ais_obj_info, sizeof(ais_obj_info));
+
+	      snprintf (ais_obj_packet, sizeof(ais_obj_packet), "%s>%s%1d%1d:%s", A.g_src, APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, ais_obj_info);
+
+	      dw_printf ("[%d.AIS] %s\n", chan, ais_obj_packet);
+
+	      // This will be sent to client apps after the User Defined Data representation.
+	    }
+	  }
 
 	  // Convert to NMEA waypoint sentence if we have a location.
 
@@ -1264,6 +1318,20 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS TCP
 	kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS serial port
 	kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS pseudo terminal
+
+	if (A_opt_ais_to_obj && strlen(ais_obj_packet) != 0) {
+	  packet_t ao_pp = ax25_from_text (ais_obj_packet, 1);
+	  if (ao_pp != NULL) {
+	    unsigned char ao_fbuf[AX25_MAX_PACKET_LEN];
+	    int ao_flen = ax25_pack(ao_pp, ao_fbuf);
+
+	    server_send_rec_packet (chan, ao_pp, ao_fbuf, ao_flen);
+	    kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, -1);
+	    kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, -1);
+	    kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, -1);
+	    ax25_delete (ao_pp);
+	  }
+	}
 
 /* 
  * If it came from DTMF decoder, send it to APRStt gateway.
@@ -1301,6 +1369,9 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  * APRS digipeater.
  * Use only those with correct CRC; We don't want to spread corrupted data!
  */
+
+// TODO: Should also use anything received with FX.25 because it is known to be good.
+// Our earlier "fix bits" hack could allow corrupted information to get thru.
 
 	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
 
@@ -1384,8 +1455,9 @@ static void usage (char **argv)
 	dw_printf ("    -j             2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("    -J             2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("    -P xxx         Modem Profiles.\n");
+	dw_printf ("    -A             Convert AIS positions to APRS Object Reports.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
-	dw_printf ("    -X n           Enable FX.25 transmit. Specify number of check bytes: 16, 32, or 64.\n");
+	dw_printf ("    -X n           1 to enable FX.25 transmit.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");
 	dw_printf ("       k             k = KISS serial port or pseudo terminal client.\n");
