@@ -4,6 +4,7 @@ install(FILES "${CUSTOM_DOC_DIR}/2400-4800-PSK-for-APRS-Packet-Radio.pdf" DESTIN
 install(FILES "${CUSTOM_DOC_DIR}/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/A-Better-APRS-Packet-Demodulator-Part-2-9600-baud.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/A-Closer-Look-at-the-WA8LMF-TNC-Test-CD.pdf" DESTINATION ${INSTALL_DOC_DIR})
+install(FILES "${CUSTOM_DOC_DIR}/AIS-Reception.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/APRS-Telemetry-Toolkit.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/APRStt-Implementation-Notes.pdf" DESTINATION ${INSTALL_DOC_DIR})
 install(FILES "${CUSTOM_DOC_DIR}/APRStt-interface-for-SARTrack.pdf" DESTINATION ${INSTALL_DOC_DIR})

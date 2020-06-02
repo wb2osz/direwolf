@@ -96,6 +96,11 @@ These dive into more detail for specialized topics or typical usage scenarios.
 
 	Why stop at 9600 baud?  Go faster if your soundcard and radio can handle it.
 
+- [**AIS Reception**](AIS-Reception.pdf) [ [*download*](../../../raw/dev/doc/AIS-Reception.pdf) ]
+
+
+	AIS is an international tracking system for ships.  Messages can contain position, speed, course, name, destination, status, vessel dimensions, and many other types of information.  Learn how to receive these signals with an ordindary ham transceiver and display the ship locations with APRS applications or [OpenCPN](https://opencpn.org).
+
 
 ## Miscellaneous ##
 
