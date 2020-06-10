@@ -69,15 +69,15 @@ void ENCODE_RS(struct rs * restrict rs, DTYPE * restrict data, DTYPE * restrict 
   for(i=0;i<NN-NROOTS;i++){
     feedback = INDEX_OF[data[i] ^ bb[0]];
     if(feedback != A0){      /* feedback term is non-zero */
+      /* Shift and XOR */
       for(j=1;j<NROOTS;j++)
-	    bb[j] ^= ALPHA_TO[MODNN(feedback + GENPOLY[NROOTS-j])];
-    }
-    /* Shift */
-    memmove(&bb[0],&bb[1],sizeof(DTYPE)*(NROOTS-1));
-    if(feedback != A0)
+	    bb[j-1] = bb[j] ^ ALPHA_TO[MODNN(feedback + GENPOLY[NROOTS-j])];
       bb[NROOTS-1] = ALPHA_TO[MODNN(feedback + GENPOLY[0])];
-    else
+    } else{
+      /* Shift only */
+      memmove(&bb[0],&bb[1],sizeof(DTYPE)*(NROOTS-1));
       bb[NROOTS-1] = 0;
+    }
   }
 }
 
