@@ -133,6 +133,20 @@ int demod_init (struct audio_s *pa)
 	      break;
 
 	    case MODEM_AFSK:
+	    case MODEM_EAS:
+
+	      if (save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
+		if (save_audio_config_p->achan[chan].fix_bits != RETRY_NONE) {
+	          text_color_set(DW_COLOR_INFO);
+		  dw_printf ("Channel %d: FIX_BITS option has been turned off for EAS.\n", chan);
+	          save_audio_config_p->achan[chan].fix_bits = RETRY_NONE;
+	        }
+		if (save_audio_config_p->achan[chan].passall != 0) {
+	          text_color_set(DW_COLOR_INFO);
+		  dw_printf ("Channel %d: PASSALL option has been turned off for EAS.\n", chan);
+	          save_audio_config_p->achan[chan].passall = 0;
+	        }
+	      }
 
 /*
  * Tear apart the profile and put it back together in a normalized form:
@@ -954,6 +968,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 	    break;
 
 	  case MODEM_AFSK:
+	  case MODEM_EAS:
 
 	    if (save_audio_config_p->achan[chan].decimate > 1) {
 
@@ -1070,7 +1085,8 @@ alevel_t demod_get_audio_level (int chan, int subchan)
 
 	alevel.rec = (int) (( D->alevel_rec_peak - D->alevel_rec_valley ) * 50.0f + 0.5f);
 
-	if (save_audio_config_p->achan[chan].modem_type == MODEM_AFSK) {
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_AFSK ||
+	    save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
 
 	  /* For AFSK, we have mark and space amplitudes. */
 

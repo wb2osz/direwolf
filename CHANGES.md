@@ -18,7 +18,9 @@
 
 - "-X" option enables FX.25 transmission.  FX.25 reception is always enabled so you don't need to do anything special.  "What is FX.25?" you might ask.  It is forward error correction (FEC) added in a way that is completely compatible with an ordinary AX.25 frame.  See new document ***AX25\_plus\_FEC\_equals\_FX25.pdf*** for details.
 
-- Receive AIS location data from ships.  Enable by using "-B AIS" command line option or "MODEM AIS" in the configuration file.  AIS NMEA sentences are encapsulated in APRS user-defined data with a "{DA" prefix.  This uses 9600 bps so you need to use wide band audio, not what comes out of the speaker.
+- Receive AIS location data from ships.  Enable by using "-B AIS" command line option or "MODEM AIS" in the configuration file.  AIS NMEA sentences are encapsulated in APRS user-defined data with a "{DA" prefix.  This uses 9600 bps so you need to use wide band audio, not what comes out of the speaker.  There is also a "-A" option to generate APRS Object Reports.
+
+- Receive Emergency Alert System (EAS) Specific Area Message Encoding (SAME).  Enable by using "-B EAS" command line option or "MODEM EAS" in the configuration file.  EAS SAME messages are encapsulated in APRS user-defined data with a "{DE" prefix.  This uses low speed AFSK so speaker output is fine.
 
 - "-t" option now accepts more values to accommodate inconsistent handling of text color control codes by different terminal emulators.  The default, 1, should work with most modern terminal types.  If the colors are not right, try "-t 9" to see the result of the different choices and pick the best one.  If none of them look right, file a bug report and specify: operating system version (e.g. Raspbian Buster), terminal emulator type and version (e.g.  LXTerminal 0.3.2).   Include a screen capture.
 

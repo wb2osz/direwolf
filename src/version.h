@@ -18,3 +18,4 @@
 #define USER_DEF_USER_ID 'D'		// user id D for direwolf
 
 #define USER_DEF_TYPE_AIS 'A'		// data type A for AIS NMEA sentence
+#define USER_DEF_TYPE_EAS 'E'		// data type E for EAS broadcasts

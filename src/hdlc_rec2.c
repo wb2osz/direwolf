@@ -123,6 +123,7 @@ static struct audio_s          *save_audio_config_p;
 				
 #define MAX_FRAME_LEN ((AX25_MAX_PACKET_LEN) + 2)	
 
+
 /*
  * This is the current state of the HDLC decoder.
  *
@@ -132,7 +133,11 @@ static struct audio_s          *save_audio_config_p;
  * Should have a reset function instead of initializations here.
  */
 
-struct hdlc_state_s {
+// TODO: Clean up. This is a remnant of splitting hdlc_rec.c into 2 parts.
+// This is not the same as hdlc_state_s in hdlc_rec.c
+// "2" was added to reduce confusion.  Can be trimmed down.
+
+struct hdlc_state2_s {
 
 	int prev_raw;			/* Keep track of previous bit so */
 					/* we can look for transitions. */
@@ -582,7 +587,7 @@ inline static char is_sep_bit_modified(int bit_idx, retry_conf_t retry_conf) {
 
 static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t alevel, retry_conf_t retry_conf, int passall)
 {
-	struct hdlc_state_s H;	
+	struct hdlc_state2_s H2;
 	int blen;			/* Block length in bits. */
 	int i;
 	int raw;			/* From demodulator.  Should be 0 or 1. */
@@ -594,10 +599,10 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	int retry_conf_retry = retry_conf.retry;
 
 
-	H.is_scrambled = rrbb_get_is_scrambled (block);
-	H.prev_descram = rrbb_get_prev_descram (block);
-	H.lfsr = rrbb_get_descram_state (block);
-	H.prev_raw = rrbb_get_bit (block, 0);	  /* Actually last bit of the */
+	H2.is_scrambled = rrbb_get_is_scrambled (block);
+	H2.prev_descram = rrbb_get_prev_descram (block);
+	H2.lfsr = rrbb_get_descram_state (block);
+	H2.prev_raw = rrbb_get_bit (block, 0);	  /* Actually last bit of the */
 					/* opening flag so we can derive the */
 					/* first data bit.  */
 
@@ -608,13 +613,13 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 
 	if ((retry_conf.mode == RETRY_MODE_CONTIGUOUS && is_contig_bit_modified(0, retry_conf)) ||
 	    (retry_conf.mode == RETRY_MODE_SEPARATED && is_sep_bit_modified(0, retry_conf))) {
-	  H.prev_raw = ! H.prev_raw;
+	  H2.prev_raw = ! H2.prev_raw;
 	}
 
-	H.pat_det = 0;
-	H.oacc = 0;
-	H.olen = 0;
-	H.frame_len = 0;
+	H2.pat_det = 0;
+	H2.oacc = 0;
+	H2.olen = 0;
+	H2.frame_len = 0;
 
 	blen = rrbb_get_len(block);
 
@@ -646,49 +651,49 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
  * Octets are sent LSB first.
  * Shift the most recent 8 bits thru the pattern detector.
  */
-	    H.pat_det >>= 1;
+	    H2.pat_det >>= 1;
 
 /*
  * Using NRZI encoding,
  *   A '0' bit is represented by an inversion since previous bit.
  *   A '1' bit is represented by no change.
- *   Note: this code can be factorized with the raw != H.prev_raw code at the cost of processing time 
+ *   Note: this code can be factorized with the raw != H2.prev_raw code at the cost of processing time 
  */
 
 	    int dbit ;
 
-	    if (H.is_scrambled) {
+	    if (H2.is_scrambled) {
 	      int descram;
 
-	      descram = descramble(raw, &(H.lfsr));
+	      descram = descramble(raw, &(H2.lfsr));
 
-	      dbit = (descram == H.prev_descram);
-	      H.prev_descram = descram;
-	      H.prev_raw = raw;
+	      dbit = (descram == H2.prev_descram);
+	      H2.prev_descram = descram;
+	      H2.prev_raw = raw;
 	    }
 	    else {
 
-	      dbit = (raw == H.prev_raw);
-	      H.prev_raw = raw;
+	      dbit = (raw == H2.prev_raw);
+	      H2.prev_raw = raw;
 	    }
 
 	    if (dbit) {
 
-	      H.pat_det |= 0x80;
+	      H2.pat_det |= 0x80;
 	      /* Valid data will never have 7 one bits in a row: exit. */
-	      if (H.pat_det == 0xfe) {
+	      if (H2.pat_det == 0xfe) {
 #if DEBUGx
 	        text_color_set(DW_COLOR_DEBUG);
 	        dw_printf ("try_decode: found abort, i=%d\n", i);
 #endif
 	        return 0;
 	      }
-	      H.oacc >>= 1;
-	      H.oacc |= 0x80;
+	      H2.oacc >>= 1;
+	      H2.oacc |= 0x80;
 	    } else {
 	      
 	      /* The special pattern 01111110 indicates beginning and ending of a frame: exit. */
-	      if (H.pat_det == 0x7e) {
+	      if (H2.pat_det == 0x7e) {
 #if DEBUGx
 	        text_color_set(DW_COLOR_DEBUG);
 	        dw_printf ("try_decode: found flag, i=%d\n", i);
@@ -703,10 +708,10 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
  * "bit stuffing."
  */
 	
-	      } else if ( (H.pat_det >> 2) == 0x1f ) {
+	      } else if ( (H2.pat_det >> 2) == 0x1f ) {
 	        continue;
 	      }
-	      H.oacc >>= 1;
+	      H2.oacc >>= 1;
 	    }
 
 /*
@@ -714,14 +719,14 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
  * into the frame buffer.
  */
 
-	    H.olen++;
+	    H2.olen++;
 
-	    if (H.olen & 8) {
-	      H.olen = 0;
+	    if (H2.olen & 8) {
+	      H2.olen = 0;
 
-	      if (H.frame_len < MAX_FRAME_LEN) {
-	        H.frame_buf[H.frame_len] = H.oacc;
-		H.frame_len++;
+	      if (H2.frame_len < MAX_FRAME_LEN) {
+	        H2.frame_buf[H2.frame_len] = H2.oacc;
+		H2.frame_len++;
 	      
 	      }
 	    }
@@ -732,10 +737,10 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("try_decode: olen=%d, frame_len=%d\n", H.olen, H.frame_len);
+	dw_printf ("try_decode: olen=%d, frame_len=%d\n", H2.olen, H2.frame_len);
 #endif
 
-	if (H.olen == 0 && H.frame_len >= MIN_FRAME_LEN) {
+	if (H2.olen == 0 && H2.frame_len >= MIN_FRAME_LEN) {
 
 	  unsigned short actual_fcs, expected_fcs;
 
@@ -743,9 +748,9 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
         if (retry_conf.type == RETRY_TYPE_NONE) {
 	  int j;
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("NEW WAY: frame len = %d\n", H.frame_len);
-	  for (j=0; j<H.frame_len; j++) {
-	    dw_printf ("  %02x", H.frame_buf[j]);
+	  dw_printf ("NEW WAY: frame len = %d\n", H2.frame_len);
+	  for (j=0; j<H2.frame_len; j++) {
+	    dw_printf ("  %02x", H2.frame_buf[j]);
 	  }
 	  dw_printf ("\n");
 
@@ -760,15 +765,15 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	  /* I think making a second pass over it and comparing is */
 	  /* easier to understand. */
 
-	  actual_fcs = H.frame_buf[H.frame_len-2] | (H.frame_buf[H.frame_len-1] << 8);
+	  actual_fcs = H2.frame_buf[H2.frame_len-2] | (H2.frame_buf[H2.frame_len-1] << 8);
 
-	  expected_fcs = fcs_calc (H.frame_buf, H.frame_len - 2);
+	  expected_fcs = fcs_calc (H2.frame_buf, H2.frame_len - 2);
 
 	  if (actual_fcs == expected_fcs && save_audio_config_p->achan[chan].modem_type == MODEM_AIS) {
 
 	      // Sanity check for AIS.
-	      if (ais_check_length((H.frame_buf[0] >> 2) & 0x3f, H.frame_len - 2) == 0) {
-	          multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, retry_conf.retry, 0);   /* len-2 to remove FCS. */
+	      if (ais_check_length((H2.frame_buf[0] >> 2) & 0x3f, H2.frame_len - 2) == 0) {
+	          multi_modem_process_rec_frame (chan, subchan, slice, H2.frame_buf, H2.frame_len - 2, alevel, retry_conf.retry, 0);   /* len-2 to remove FCS. */
 	          return 1;		/* success */
 	      }
 	      else {
@@ -776,7 +781,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	      }
 	  }
 	  else if (actual_fcs == expected_fcs &&
-			sanity_check (H.frame_buf, H.frame_len - 2, retry_conf.retry, save_audio_config_p->achan[chan].sanity_test)) {
+			sanity_check (H2.frame_buf, H2.frame_len - 2, retry_conf.retry, save_audio_config_p->achan[chan].sanity_test)) {
 
 	      // TODO: Shouldn't be necessary to pass chan, subchan, alevel into
 	      // try_decode because we can obtain them from block.
@@ -784,7 +789,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 
 	      assert (rrbb_get_chan(block) == chan);
 	      assert (rrbb_get_subchan(block) == subchan);
-	      multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, retry_conf.retry, 0);   /* len-2 to remove FCS. */
+	      multi_modem_process_rec_frame (chan, subchan, slice, H2.frame_buf, H2.frame_len - 2, alevel, retry_conf.retry, 0);   /* len-2 to remove FCS. */
 	      return 1;		/* success */
 
 	  } else if (passall) {
@@ -793,7 +798,7 @@ static int try_decode (rrbb_t block, int chan, int subchan, int slice, alevel_t 
 	      //text_color_set(DW_COLOR_ERROR);
 	      //dw_printf ("ATTEMPTING PASSALL PROCESSING\n");
   
-	      multi_modem_process_rec_frame (chan, subchan, slice, H.frame_buf, H.frame_len - 2, alevel, RETRY_MAX, 0);   /* len-2 to remove FCS. */
+	      multi_modem_process_rec_frame (chan, subchan, slice, H2.frame_buf, H2.frame_len - 2, alevel, RETRY_MAX, 0);   /* len-2 to remove FCS. */
 	      return 1;		/* success */
 	    }
 	    else {
@@ -818,25 +823,25 @@ failure:
 	      text_color_set(DW_COLOR_ERROR);
               if (crc_failed)
 	            dw_printf ("CRC failed\n");
-	      if (H.olen != 0) 
-		      dw_printf ("Bad olen: %d \n", H.olen);
-	      else if (H.frame_len < MIN_FRAME_LEN) {
+	      if (H2.olen != 0)
+		      dw_printf ("Bad olen: %d \n", H2.olen);
+	      else if (H2.frame_len < MIN_FRAME_LEN) {
 		      dw_printf ("Frame too small\n");
                       goto end;
 	      }
 
-	      dw_printf ("FAILURE with frame: frame len = %d\n", H.frame_len);
+	      dw_printf ("FAILURE with frame: frame len = %d\n", H2.frame_len);
 	      dw_printf ("\n");
-	      for (j=0; j<H.frame_len; j++) {
-                      dw_printf (" %02x", H.frame_buf[j]);
+	      for (j=0; j<H2.frame_len; j++) {
+                      dw_printf (" %02x", H2.frame_buf[j]);
 	      }
 	  dw_printf ("\nDEC\n");
-	  for (j=0; j<H.frame_len; j++) {
-	    dw_printf ("%c", H.frame_buf[j]>>1);
+	  for (j=0; j<H2.frame_len; j++) {
+	    dw_printf ("%c", H2.frame_buf[j]>>1);
 	  }
 	  dw_printf ("\nORIG\n");
-          for (j=0; j<H.frame_len; j++) {
-	    dw_printf ("%c", H.frame_buf[j]);
+          for (j=0; j<H2.frame_len; j++) {
+	    dw_printf ("%c", H2.frame_buf[j]);
 	  }
 	  dw_printf ("\n");
         }

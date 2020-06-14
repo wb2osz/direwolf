@@ -307,9 +307,18 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 /*
  * Calculate constants used for timing.
  * The audio sample rate must be at least a few times the data rate.
+ *
+ * Baud is an integer so we hack in a fine ajustment for EAS.
+ * Probably makes no difference because the DPLL keeps it in sync.
+ *
+ * A fraction if a Hz would make no difference for the filters.
  */
-
-	D->pll_step_per_sample = (int) round((TICKS_PER_PLL_CYCLE * (double)baud) / ((double)samples_per_sec));
+	if (baud == 521) {
+	  D->pll_step_per_sample = (int) round((TICKS_PER_PLL_CYCLE * (double)520.83) / ((double)samples_per_sec));
+	}
+	else {
+	  D->pll_step_per_sample = (int) round((TICKS_PER_PLL_CYCLE * (double)baud) / ((double)samples_per_sec));
+	}
 
 /*
  * Convert number of bit times to number of taps.

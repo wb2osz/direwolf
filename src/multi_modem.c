@@ -322,7 +322,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SUBCHANS);
 
-// Special encapsulation for AIS so it can be treated normally pretty much everywhere else.
+// Special encapsulation for AIS & EAS so they can be treated normally pretty much everywhere else.
 
 	if (save_audio_config_p->achan[chan].modem_type == MODEM_AIS) {
 	  char nmea[256];
@@ -334,10 +334,17 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 
 	  // alevel gets in there somehow making me question why it is passed thru here.
 	}
+	else if (save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
+	  char monfmt[300];	// EAS SAME message max length is 268
+
+	  snprintf (monfmt, sizeof(monfmt), "EAS>%s%1d%1d:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_EAS, fbuf);
+	  pp = ax25_from_text (monfmt, 1);
+
+	  // alevel gets in there somehow making me question why it is passed thru here.
+	}
 	else {
 	  pp = ax25_from_frame (fbuf, flen, alevel);
 	}
-
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Unexpected internal problem, %s %d\n", __FILE__, __LINE__);

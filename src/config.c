@@ -1279,6 +1279,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (strcasecmp(t,"AIS") == 0) {
 	      n = 12345;	// See special case later.
 	    }
+	    else if (strcasecmp(t,"EAS") == 0) {
+	      n = 23456;	// See special case later.
+	    }
 	    else {
 	      n = atoi(t);
 	    }
@@ -1327,6 +1330,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               p_audio_config->achan[channel].modem_type = MODEM_AIS;
               p_audio_config->achan[channel].mark_freq = 0;
               p_audio_config->achan[channel].space_freq = 0;
+	    }
+	    else if (p_audio_config->achan[channel].baud == 23456) {
+	      p_audio_config->achan[channel].modem_type = MODEM_EAS;
+	      p_audio_config->achan[channel].baud = 521;	// Actually 520.83 but we have an integer field here.
+								// Will make more precise in afsk demod init.
+	      p_audio_config->achan[channel].mark_freq = 2083;	// Actually 2083.3 - logic 1.
+	      p_audio_config->achan[channel].space_freq = 1563;	// Actually 1562.5 - logic 0.
+	      // ? strlcpy (p_audio_config->achan[channel].profiles, "D", sizeof(p_audio_config->achan[channel].profiles));
 	    }
 	    else {
               p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;
