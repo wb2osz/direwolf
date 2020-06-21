@@ -261,12 +261,12 @@ static const struct {
 
 
 // Make sure the array is null terminated.
-// If search order is changed, do the same in decode_aprs.c
+// If search order is changed, do the same in decode_aprs.c for consistency.
 
 static const char *search_locations[] = {
-	(const char *) "symbols-new.txt",
-	(const char *) "data/symbols-new.txt",
-	(const char *) "../data/symbols-new.txt",
+	(const char *) "symbols-new.txt",		// CWD
+	(const char *) "data/symbols-new.txt",		// Windows with Cmake
+	(const char *) "../data/symbols-new.txt",	// ?
 #ifndef __WIN32__
 	(const char *) "/usr/local/share/direwolf/symbols-new.txt",
 	(const char *) "/usr/share/direwolf/symbols-new.txt",
@@ -278,7 +278,7 @@ static const char *search_locations[] = {
 	// path as well.
 	(const char *) "/opt/local/share/direwolf/symbols-new.txt",
 #endif
-	(const char *) NULL
+	(const char *) NULL		// Important - Indicates end of list.
 };
 
 

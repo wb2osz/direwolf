@@ -1967,6 +1967,7 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 /*
  * Do we have format with 6 character Maidenhead locator?
  */
+
 	else if (get_maidenhead (A, pm6->mhead6) == 6) {
 
 	  memset (A->g_maidenhead, 0, sizeof(A->g_maidenhead));
@@ -3788,11 +3789,12 @@ static struct tocalls_s {
 static int num_tocalls = 0;
 
 // Make sure the array is null terminated.
-// If search order is changed, do the same in symbols.c
+// If search order is changed, do the same in symbols.c for consistency.
 
 static const char *search_locations[] = {
-	(const char *) "tocalls.txt",
-	(const char *) "../data/tocalls.txt",
+	(const char *) "tocalls.txt",			// CWD
+	(const char *) "data/tocalls.txt",		// Windows with CMake
+	(const char *) "../data/tocalls.txt",		// ?
 #ifndef __WIN32__
 	(const char *) "/usr/local/share/direwolf/tocalls.txt",
 	(const char *) "/usr/share/direwolf/tocalls.txt",
@@ -3804,7 +3806,7 @@ static const char *search_locations[] = {
 	// path as well.
 	(const char *) "/opt/local/share/direwolf/tocalls.txt",
 #endif
-	(const char *) NULL
+	(const char *) NULL		// Important - Indicates end of list.
 };
 
 static int tocall_cmp (const void *px, const void *py)
