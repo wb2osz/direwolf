@@ -1277,17 +1277,17 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    if (strcasecmp(t,"AIS") == 0) {
-	      n = 12345;	// See special case later.
+	      n = MAX_BAUD-1;	// Hack - See special case later.
 	    }
 	    else if (strcasecmp(t,"EAS") == 0) {
-	      n = 23456;	// See special case later.
+	      n = MAX_BAUD-2;	// Hack - See special case later.
 	    }
 	    else {
 	      n = atoi(t);
 	    }
             if (n >= MIN_BAUD && n <= MAX_BAUD) {
 	      p_audio_config->achan[channel].baud = n;
-	      if (n != 300 && n != 1200 && n != 2400 && n != 4800 && n != 9600 && n != 19200) {
+	      if (n != 300 && n != 1200 && n != 2400 && n != 4800 && n != 9600 && n != 19200 && n != MAX_BAUD-1 && n != MAX_BAUD-2) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Line %d: Warning: Non-standard data rate of %d bits per second.  Are you sure?\n", line, n);
     	      }
@@ -1326,12 +1326,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               p_audio_config->achan[channel].mark_freq = 0;
               p_audio_config->achan[channel].space_freq = 0;
 	    }
-	    else if (p_audio_config->achan[channel].baud == 12345) {
+	    else if (p_audio_config->achan[channel].baud == MAX_BAUD-1) {
               p_audio_config->achan[channel].modem_type = MODEM_AIS;
               p_audio_config->achan[channel].mark_freq = 0;
               p_audio_config->achan[channel].space_freq = 0;
 	    }
-	    else if (p_audio_config->achan[channel].baud == 23456) {
+	    else if (p_audio_config->achan[channel].baud == MAX_BAUD-2) {
 	      p_audio_config->achan[channel].modem_type = MODEM_EAS;
 	      p_audio_config->achan[channel].baud = 521;	// Actually 520.83 but we have an integer field here.
 								// Will make more precise in afsk demod init.
