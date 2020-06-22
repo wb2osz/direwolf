@@ -130,6 +130,9 @@ static const struct correlation_tag_s tags[16] = {
 				// 12 got many false matches with random noise.
 				// Even 8 might be too high.  We see 2 or 4 bit errors here
 				// at the point where decoding the block is very improbable.
+				// After 2 months of continuous operation as a digipeater/iGate,
+				// no false triggers were observed.  So 8 doesn't seem to be too
+				// high for 1200 bps.  No study has been done for 9600 bps.
 
 // Given a 64 bit correlation tag value, find acceptable match in table.
 // Return index into table or -1 for no match.
@@ -215,14 +218,14 @@ void fx25_init ( int debug_level )
 	  assert (tags[j].n_block_rs == FX25_BLOCK_SIZE);
 	}
 
-	assert (fx25_pick_mode (1, 239) == 1);
-	assert (fx25_pick_mode (1, 240) == -1);
+	assert (fx25_pick_mode (100+1, 239) == 1);
+	assert (fx25_pick_mode (100+1, 240) == -1);
 
-	assert (fx25_pick_mode (5, 223) == 5);
-	assert (fx25_pick_mode (5, 224) == -1);
+	assert (fx25_pick_mode (100+5, 223) == 5);
+	assert (fx25_pick_mode (100+5, 224) == -1);
 
-	assert (fx25_pick_mode (9, 191) == 9);
-	assert (fx25_pick_mode (9, 192) == -1);
+	assert (fx25_pick_mode (100+9, 191) == 9);
+	assert (fx25_pick_mode (100+9, 192) == -1);
 
 	assert (fx25_pick_mode (16, 32) == 4);
 	assert (fx25_pick_mode (16, 64) == 3);
@@ -240,6 +243,16 @@ void fx25_init ( int debug_level )
 	assert (fx25_pick_mode (64, 128) == 10);
 	assert (fx25_pick_mode (64, 191) == 9);
 	assert (fx25_pick_mode (64, 192) == -1);
+
+	assert (fx25_pick_mode (1, 32) == 4);
+	assert (fx25_pick_mode (1, 33) == 3);
+	assert (fx25_pick_mode (1, 64) == 3);
+	assert (fx25_pick_mode (1, 65) == 6);
+	assert (fx25_pick_mode (1, 128) == 6);
+	assert (fx25_pick_mode (1, 191) == 9);
+	assert (fx25_pick_mode (1, 223) == 5);
+	assert (fx25_pick_mode (1, 239) == 1);
+	assert (fx25_pick_mode (1, 240) == -1);
 
 }  // fx25_init
 
@@ -290,12 +303,13 @@ int fx25_get_debug (void)
  * Purpose:	Pick suitable transmission format based on user preference
  *		and size of data part required.
  *
- * Inputs:	fx_mode	- Normally, this would be 16, 32, or 64 for the desired number
- *			  of check bytes.  The shortest format, adequate for the 
- *			  required data length will be picked automatically.
- *			  0x01 thru 0x0b may also be specified for a specific format
- *			  but this is expected to be mostly for testing, not normal
- *			  operation.
+ * Inputs:	fx_mode	- 0 = none.
+ *			1 = pick a tag automatically.
+ *			16, 32, 64 = use this many check bytes.
+ *			100 + n = use tag n.
+ *
+ *			0 and 1 would be the most common.
+ *			Others are mostly for testing.
  *
  *		dlen - 	Required size for transmitted "data" part, in bytes.
  *			This includes the AX.25 frame with bit stuffing and a flag
@@ -303,24 +317,29 @@ int fx25_get_debug (void)
  *
  * Returns:	Correlation tag number in range of CTAG_MIN thru CTAG_MAX.
  *		-1 is returned for failure.
- *
- * Future:	Might be more accomodating.
- *		For example, if 64 check bytes were specified for 200 data bytes,
- *		we might automatically drop it down to 32 check bytes, print a 
- *		warning and continue.  Keep it simple at first.  Fine tune later.
+ *		The caller should fall back to using plain old AX.25.
  *
  *--------------------------------------------------------------*/
 
 int fx25_pick_mode (int fx_mode, int dlen)
 {
-	if (fx_mode >= CTAG_MIN && fx_mode <= CTAG_MAX) {
-	  if (dlen <= fx25_get_k_data_radio(fx_mode)) {
-	    return (fx_mode);
+	if (fx_mode <= 0) return (-1);
+
+// Specify a specific tag by adding 100 to the number.
+// Fails if data won't fit.
+
+	if (fx_mode - 100 >= CTAG_MIN && fx_mode - 100 <= CTAG_MAX) {
+	  if (dlen <= fx25_get_k_data_radio(fx_mode - 100)) {
+	    return (fx_mode - 100);
 	  }
 	  else {
 	    return (-1);	// Assuming caller prints failure message.
 	  }
 	}
+
+// Specify number of check bytes.
+// Pick the shortest one that can handle the required data length.
+
 	else if (fx_mode == 16 || fx_mode == 32 || fx_mode == 64) {
 	  for (int k = CTAG_MAX; k >= CTAG_MIN; k--) {
 	    if (fx_mode == fx25_get_nroots(k) && dlen <= fx25_get_k_data_radio(k)) {
@@ -329,11 +348,41 @@ int fx25_pick_mode (int fx_mode, int dlen)
 	  }
 	  return (-1);
 	}
-	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf("FX.25: Transmission format %d must be 0x00 thru 0x0b, 16, 32, or 64.\n", fx_mode);
-	  exit(EXIT_FAILURE);
+
+// For any other number, [[ or if the preference was not possible, ?? ]]
+// try to come up with something reasonable.  For shorter frames,
+// use smaller overhead.  For longer frames, where an error is
+// more probable, use more check bytes.  When the data gets even
+// larger, check bytes must be reduced to fit in block size.
+// When all else fails, fall back to normal AX.25.
+// Some of this is from observing UZ7HO Soundmodem behavior.
+//
+//	Tag 	Data 	Check 	Max Num
+//	Number	Bytes	Bytes	Repaired
+//	------	-----	-----	-----
+//	0x04	32	16	8
+//	0x03	64	16	8
+//	0x06	128	32	16
+//	0x09	191	64	32
+//	0x05	223	32	16
+//	0x01	239	16	8
+//	none	larger		
+//
+// The PRUG FX.25 TNC has additional modes that will handle larger frames
+// by using multiple RS blocks.  This is a future possibility but needs
+// to be coordinated with other FX.25 developers so we maintain compatibility.
+
+	static const int prefer[6] = { 0x04, 0x03, 0x06, 0x09, 0x05, 0x01 };
+	for (int k = 0; k < 6; k++) {
+	  int m = prefer[k];
+	  if (dlen <= fx25_get_k_data_radio(m)) {
+	    return (m);
+	  }
 	}
+	return (-1);
+
+// TODO: revisit error messages, produced by caller, when this returns -1.
+
 }
 
 
