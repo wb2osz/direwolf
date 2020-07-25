@@ -24,10 +24,20 @@ R		W	Windows version only.
 R		L	Linux version only.
 R
 C#
+C# Extensive documentation can be found here:
+C# Stable release -       https://github.com/wb2osz/direwolf/tree/master/doc
+C# Latest development -   https://github.com/wb2osz/direwolf/tree/dev/doc
+C#
+W# The complete documentation set can also be found in the doc folder.
+L# The complete documentation set can also be found in
+L# /usr/local/share/doc/direwolf/ or /usr/share/doc/direwolf/
+L# Concise "man" pages are also available for Linux.
+C#
+C# This sample file does not have examples for all of the possibilities.
 C# Consult the User Guide for more details on configuration options.
 C#
 C#
-C# These are the most likely settings you might change:
+C# These are the most likely settings you might change just to get started:
 C#
 C#	(1)   	MYCALL 	-  call sign and SSID for your station.
 C#
@@ -123,12 +133,14 @@ L# ADEVICE  plughw:1,0
 L
 L# Starting with version 1.0, you can also use "-" or "stdin" to 
 L# pipe stdout from some other application such as a software defined
-L# radio.  You can also specify "UDP:" and an optional port for input.
+L# radio.  "stdin" is not an audio device.  Don't use this unless you
+L# understand what this means.  Read the User Guide.
+L# You can also specify "UDP:" and an optional port for input.
 L# Something different must be specified for output.
 L
-W# ADEVICE - 0
+W# ADEVICE stdin 0
 W# ADEVICE UDP:7355 0
-L# ADEVICE - plughw:1,0
+L# ADEVICE stdin plughw:1,0
 L# ADEVICE UDP:7355 default
 L
 L
@@ -321,7 +333,6 @@ C# This applies to all channels.
 C#
 C#	0  [NONE] - Don't try to repair.
 C#	1  [SINGLE] - Attempt to fix single bit error.  (default)
-C#	2  [DOUBLE] - Also attempt to fix two adjacent bits.
 C#	... see User Guide for more values and in-depth discussion.
 C#
 C
@@ -330,13 +341,13 @@ C
 C#	
 C#############################################################
 C#                                                           #
-C#               BEACONING PROPERTIES                        #
+C#               FIXED POSITION BEACONING PROPERTIES         #
 C#                                                           #
 C#############################################################
 C
 C
 C#
-C# Beaconing is configured with these two commands:
+C# Fixed Position Beaconing is configured with these two commands:
 C#
 C#	PBEACON		- for a position report (usually yourself)
 C#	OBEACON		- for an object report (usually some other entity)
@@ -437,24 +448,6 @@ C# To relay messages from the Internet to radio, you need to add
 C# one more options with the transmit channel number and a VIA path.
 C
 C#IGTXVIA 0 WIDE1-1
-C
-C# The APRS Internet Server (APRS-IS) has its own idea about what you
-C# should be transmitting.  This includes "messages" addressed to stations
-C# recently heard in your area.  For special situations, you can subscribe
-C# to
-C# decrease what you are already subscribed to.  This is known as a server
-C# side filter.  Read here:  http://www.aprs-is.net/javaprsfilter.aspx
-C# Example, positions and objects within 50 km of my location:
-C
-C#IGFILTER m/50 
-C
-C# Sometimes the server will send you more than you want. You can also apply
-C# local filtering to limit what will be transmitted on the RF side.
-C# For example, transmit only "messages" (which is the default) on channel 0
-C# and weather reports on channel 1.
-C
-C#FILTER IG 0 i/30
-C#FILTER IG 1 t/wn
 C
 C# Finally, we don't want to flood the radio channel.  
 C# The IGate function will limit the number of packets transmitted 
