@@ -117,34 +117,36 @@ For more details see the **User Guide** in the [**doc** directory](https://githu
 
 ***Note that this has changed for version 1.6.  There are now a couple extra steps.***
 
-A standard operating system install will probably include these already:
 
-- git
-- gcc or clang compiler
-- make
+First you will need to install some software development packages using different commands depending on your flavor of Linux.
+In most cases, the first few  will already be there and the package installer will tell you that installation is not necessary.
 
-You will probably need to install additional packages:
+On Debian / Ubuntu / Raspbian / Raspberry Pi OS:
 
-On Debian / Ubuntu / Raspbian:
-
+    sudo apt-get install git
+    sudo apt-get install gcc
+    sudo apt-get install g++
+    sudo apt-get install make
     sudo apt-get install cmake
     sudo apt-get install libasound2-dev
     sudo apt-get install libudev-dev
 
-Or on Red Hat / Fedora / Centos:
+Or on Red Hat / Fedora / CentOS:
+
+	sudo yum install git
+	sudo yum install gcc
+	sudo yum install gcc-c++
+	sudo yum install make
+    sudo yum install alsa-lib-devel
+    sudo yum install libudev-devel
 
 CentOS 6 & 7 currently have cmake 2.8 but we need 3.1 or later.
-First you need to enable the EPEL repository.  Add a symlink if you want to type cmake rather than cmake3.
+First you need to enable the EPEL repository.  Add a symlink if you don't already have the older version and want to type cmake rather than cmake3.
 
-	sudo yum install epel-release
+    sudo yum install epel-release
 	sudo rpm -e cmake
 	sudo yum install cmake3
 	sudo ln -s /usr/bin/cmake3 /usr/bin/cmake
-
-Continue with the other required packages:
-
-    sudo yum install alsa-lib-devel
-    sudo yum install libudev-devel
 
 Then on any flavor of Linux:
 
