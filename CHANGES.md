@@ -2,7 +2,7 @@
 # Revision History #
 
 
-## Version 1.6  --  Under Development ##
+## Version 1.6  --  October 2020 ##
 
 
 ### New Build Procedure: ###
@@ -10,7 +10,7 @@
 
 - Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.
 
-- README.md has a quick summary of the process.  More details in the User Guide.
+- README.md has a quick summary of the process.  More details in the ***User Guide***.
 
 
 ### New Features: ###
@@ -45,15 +45,21 @@
 
 - ***AX.25 + FEC = FX.25***
 
+- ***AIS Reception***
+
 - ***AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?***
 
-- [***Ham Radio of Things - IoT over Ham Radio***](https://github.com/wb2osz/hrot)
+- [***Ham Radio of Things (HRoT) - IoT over Ham Radio***](https://github.com/wb2osz/hrot)
 
-- Power Point slide show in separate repository.  [https://github.com/wb2osz/direwolf-presentation ](https://github.com/wb2osz/direwolf-presentation)
+- [***EAS SAME to APRS Message Converter***](https://github.com/wb2osz/eas2aprs)
+
+- [***Dire Wolf PowerPoint Slide Show***](https://github.com/wb2osz/direwolf-presentation)
 
 ### Notes: ###
 
-Windows binary distribution now uses gcc (MinGW) version 7.4.0.
+The Windows binary distribution now uses gcc (MinGW) version 7.4.0.
+The Windows version is built for both 32 and 64 bit operating systems.
+Use the 64 bit version if possible; it runs considerably faster.
 
 
 
