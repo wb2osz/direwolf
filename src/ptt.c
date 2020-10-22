@@ -984,10 +984,20 @@ void ptt_init (struct audio_s *audio_config_p)
 	          /* For "AUTO" model, try to guess what is out there. */
 
 	          if (audio_config_p->achan[ch].octrl[ot].ptt_model == -1) {
-	            hamlib_port_t hport;
+	            hamlib_port_t hport;	// http://hamlib.sourceforge.net/manuals/1.2.15/structhamlib__port__t.html
 
 	            memset (&hport, 0, sizeof(hport));
 	            strlcpy (hport.pathname, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(hport.pathname));
+
+	            if (audio_config_p->achan[ch].octrl[ot].ptt_rate > 0) {
+	              // Override the default serial port data rate.
+	              hport.parm.serial.rate = audio_config_p->achan[ch].octrl[ot].ptt_rate;
+	              hport.parm.serial.data_bits = 8;
+	              hport.parm.serial.stop_bits = 1;
+	              hport.parm.serial.parity = RIG_PARITY_NONE;
+	              hport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
+	            }
+
 	            rig_load_all_backends();
                     audio_config_p->achan[ch].octrl[ot].ptt_model = rig_probe(&hport);
 
@@ -1011,6 +1021,29 @@ void ptt_init (struct audio_s *audio_config_p)
 	          }
 
 	          strlcpy (rig[ch][ot]->state.rigport.pathname, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(rig[ch][ot]->state.rigport.pathname));
+
+	          // Issue 290.
+	          // We had a case where hamlib defaulted to 9600 baud for a particular
+		  // radio model but 38400 was needed.  Add an option for the configuration
+		  // file to override the hamlib default speed.
+
+	          text_color_set(DW_COLOR_INFO);
+	          if (audio_config_p->achan[ch].octrl[ot].ptt_model != 2) {	// 2 is network, not serial port.
+	            dw_printf ("Hamlib determined CAT control serial port rate of %d.\n", rig[ch][ot]->state.rigport.parm.serial.rate);
+	          }
+
+	          // Config file can optionally override the rate that hamlib came up with.
+
+	          if (audio_config_p->achan[ch].octrl[ot].ptt_rate > 0) {
+	            dw_printf ("User configuration overriding hamlib CAT control speed to %d.\n", audio_config_p->achan[ch].octrl[ot].ptt_rate);
+	            rig[ch][ot]->state.rigport.parm.serial.rate = audio_config_p->achan[ch].octrl[ot].ptt_rate;
+
+		    // Do we want to explicitly set all of these or let it default?
+	            rig[ch][ot]->state.rigport.parm.serial.data_bits = 8;
+	            rig[ch][ot]->state.rigport.parm.serial.stop_bits = 1;
+	            rig[ch][ot]->state.rigport.parm.serial.parity = RIG_PARITY_NONE;
+	            rig[ch][ot]->state.rigport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
+	          }
 	          int err = rig_open(rig[ch][ot]);
 	          if (err != RIG_OK) {
 	            text_color_set(DW_COLOR_ERROR);

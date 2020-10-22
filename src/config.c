@@ -1682,8 +1682,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * xxx  serial-port [-]rts-or-dtr [ [-]rts-or-dtr ]
  * xxx  GPIO  [-]gpio-num
  * xxx  LPT  [-]bit-num
- * PTT  RIG  model  port
- * PTT  RIG  AUTO  port
+ * PTT  RIG  model  port [ rate ]
+ * PTT  RIG  AUTO  port [ rate ]
  * PTT  CM108 [ [-]bit-num ] [ hid-device ]
  *
  * 		When model is 2, port would host:port like 127.0.0.1:4532
@@ -1807,6 +1807,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        continue;
 	      }
 	      strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
+
+	      // Optional serial port rate for CAT controll PTT.
+
+	      t = split(NULL,0);
+	      if (t != NULL) {
+		if ( ! alldigits(t)) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: An optional number is required here for CAT serial port speed: %s\n", line, t);
+	          continue;
+	        }
+	        int n = atoi(t);
+	        p_audio_config->achan[channel].octrl[ot].ptt_rate = n;
+	      }
 
 	      t = split(NULL,0);
 	      if (t != NULL) {
