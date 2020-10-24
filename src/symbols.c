@@ -495,7 +495,7 @@ void symbols_list (void)
 	  }
 	}
 	dw_printf ("\n");
-
+	dw_printf ("More information here: http://www.aprs.org/symbols.html\n");
 
 } /* end symbols_list */
 
