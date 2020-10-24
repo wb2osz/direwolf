@@ -86,13 +86,21 @@ set(CUSTOM_SHELL_SHABANG "#!/bin/sh -e")
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_STRIP_FILES true)
 set(CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
-set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_${CMAKE_SYSTEM_PROCESSOR}")
+# This has architecture of the build machine, not the target platform.
+# e.g. Comes out as x86_64 when building for i686 target platform.
+#set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_${CMAKE_SYSTEM_PROCESSOR}")
+# We don't know the target yet so this is set after FindCPUflags.
 set(CPACK_PACKAGE_CONTACT "https://github.com/wb2osz/direwolf")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Dire Wolf is a software soundcard AX.25 packet modem/TNC and APRS encoder/decoder")
+SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Dire Wolf is an AX.25 soundcard TNC, digipeater, APRS IGate, GPS tracker, and APRStt gateway")
 set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 set(CPACK_SOURCE_IGNORE_FILES "${PROJECT_BINARY_DIR};/.git/;.gitignore;menu.yml;.travis.yml;.appveyor.yml;default.nix;.envrc;TODOs.org;/.scripts/")
+SET(CPACK_PACKAGE_VERSION "${direwolf_VERSION}")
+SET(CPACK_PACKAGE_VERSION_MAJOR "${direwolf_VERSION_MAJOR}")
+SET(CPACK_PACKAGE_VERSION_MINOR "${direwolf_VERSION_MINOR}")
+SET(CPACK_PACKAGE_VERSION_PATCH "${direwolf_VERSION_PATCH}")
+SET(CPACK_DEBIAN_PACKAGE_DEPENDS "libasound2,libgps23")
 
 # if we don't set build_type
 if(NOT DEFINED CMAKE_BUILD_TYPE OR "${CMAKE_BUILD_TYPE}" STREQUAL "")
@@ -113,6 +121,12 @@ include(FindCompiler)
 
 # find cpu flags (and set compiler)
 include(FindCPUflags)
+
+if(${ARCHITECTURE} MATCHES "x86")
+  set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_i686")
+else()
+  set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_${ARCHITECTURE}")
+endif()
 
 # auto include current directory
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
