@@ -1,9 +1,10 @@
 C#############################################################
 C#                                                           #
-C#               Configuration file for Dire Wolf            #
+C#          Sample Configuration file for Dire Wolf          #
 C#                                                           #
 L#                   Linux version                           #
 W#                   Windows version                         #
+M#                   Mac OSX version                         #
 C#                                                           #
 C#############################################################
 R
@@ -22,6 +23,7 @@ R		R	remark which is discarded.
 R		C	common to both versions.
 R		W	Windows version only.
 R		L	Linux version only.
+R		M	Mac OSX version only.
 R
 C#
 C# Extensive documentation can be found here:
@@ -32,6 +34,8 @@ W# The complete documentation set can also be found in the doc folder.
 L# The complete documentation set can also be found in
 L# /usr/local/share/doc/direwolf/ or /usr/share/doc/direwolf/
 L# Concise "man" pages are also available for Linux.
+M# /usr/local/share/doc/direwolf/ or /usr/share/doc/direwolf/
+M# Concise "man" pages are also available for Mac OSX.
 C#
 C# This sample file does not have examples for all of the possibilities.
 C# Consult the User Guide for more details on configuration options.
@@ -144,12 +148,22 @@ L# ADEVICE stdin plughw:1,0
 L# ADEVICE UDP:7355 default
 L
 L
+M# Specify input (receive) and output (transmit) devices separately.
+M# The list of choices available is listed at application start up time.
+M# The names can contain spaces so they must be quoted.
+M#
+M# Examples:
+M
+MADEVICE "Built-in Input" "Built-in Output"
+M
+M#ADEVICE "USB Audio Codec:6" "USB Audio Codec:5"
+M
 C
 C#
-C# Number of audio channels for this souncard:  1 or 2.
+C# Number of audio channels for this souncard:  1 (mono) or 2 (stereo).
+C# 1 is the default so there is no need to specify it.
 C#
 C
-CACHANNELS 1
 C#ACHANNELS 2
 C
 C
@@ -201,32 +215,23 @@ C
 C#
 C# Pick a suitable modem speed based on your situation.
 C#	1200 	Most common for VHF/UHF.  Default if not specified.
-C#	300	Low speed for HF SSB.
-C#	9600	High speed - Can't use Microphone and Speaker connections.
+C#	2400	QPSK compatible with MFJ-2400, and probably PK232-2400 & KPC-2400.
+C#	300	Low speed for HF SSB.  Default tones 1600 & 1800.
+C#	EAS	Emergency Alert System (EAS) Specific Area Message Encoding (SAME).
+C#	9600	G3RUH style - Can't use Microphone and Speaker connections.
+C#	AIS	International system for tracking ships on VHF.
+C#			Also uses 9600 bps so Speaker connection won't work.
 C#
-C# In the simplest form, just specify the speed. 
+C# In most cases you can just specify the speed.  Examples:
 C# 
 C
 CMODEM 1200
-C#MODEM 300
 C#MODEM 9600
 C
 C#
-C# These are the defaults should be fine for most cases.  In special situations, 
-C# you might want to specify different AFSK tones or the baseband mode which does
-C# not use AFSK.
+C# Many options are available for great flexibility.
+C# See User Guide for details.
 C#
-C#MODEM 1200 1200:2200
-C#MODEM 300  1600:1800
-C#MODEM 9600 0:0
-C#
-C#
-C# On HF SSB, you might want to use multiple demodulators on slightly different
-C# frequencies to compensate for stations off frequency.  Here we have 7 different
-C# demodulators at 30 Hz intervals.  This takes a lot of CPU power so you will 
-C# probably need to reduce the audio sampling rate with the /n option.
-C
-C#MODEM 300 1600:1800 7@30 /4
 C
 C
 C#
@@ -260,6 +265,15 @@ L# The number may be preceded by "-" to invert the signal.
 L#
 L
 L#PTT GPIO 25
+L
+L#
+L# If using a USB audio adapter with the C-Media CM108, CM119, or similar,
+L# a GPIO pin of the chip can be used.  This is very tidy because a single
+L# USB device is used for both audio and PTT.  The "cm108" utility is
+L# very useful to see what you have.
+L#
+L#PTT CM108
+L
 L
 C# The Data Carrier Detect (DCD) signal can be sent to the same places
 C# as the PTT signal.  This could be used to light up an LED like a normal TNC.
@@ -388,7 +402,7 @@ C
 C
 C#############################################################
 C#                                                           #
-C#               DIGIPEATER PROPERTIES                       #
+C#           APRS DIGIPEATER PROPERTIES                      #
 C#                                                           #
 C#############################################################
 C
@@ -409,6 +423,8 @@ C#
 C
 C#FILTER 0 1 t/wn 
 C
+C# Traditional connected mode packet radio uses a different
+C# type of digipeating.  See User Guide for details.
 C
 C#############################################################
 C#                                                           #
