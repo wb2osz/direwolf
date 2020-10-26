@@ -476,6 +476,7 @@ void decode_aprs_print (decode_aprs_t *A) {
  * Any example was checked for each hemihemisphere using
  * http://www.amsat.org/cgi-bin/gridconv
  */
+// FIXME soften language about upper case.
 
 	if (strlen(A->g_maidenhead) > 0) {
 
@@ -3778,7 +3779,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 
 // Dec. 2016 tocalls.txt has 153 destination addresses.
 
-#define MAX_TOCALLS 200
+#define MAX_TOCALLS 250
 
 static struct tocalls_s {
 	unsigned char len;
