@@ -91,7 +91,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 #include "ax25_pad.h"
 #include "textcolor.h"

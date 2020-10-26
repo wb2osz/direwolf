@@ -129,7 +129,8 @@ static inline float convolve (const float *__restrict__ data, const float *__res
 	float sum = 0.0;
 	int j;
 
-#pragma GCC ivdep
+//Does pragma make any difference?  Annoying warning on Mac.
+//#pragma GCC ivdep
 	for (j=0; j<filter_size; j++) {
 	    sum += filter[j] * data[j];
 	}
