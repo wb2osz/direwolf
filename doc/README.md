@@ -26,7 +26,26 @@ Brief summary of packet radio / APRS history and the capbilities of Dire Wolf.
 
 These dive into more detail for specialized topics or typical usage scenarios.
 
-- [**Successful APRS IGate Operation**](Successful-APRS-IGate-Operation.pdf)  [ [*download*](../../../raw/master/doc/Successful-APRS-IGate-Operation.pdf) ]
+
+
+- [**AX.25 + FEC = FX.25**](AX25_plus_FEC_equals_FX25.pdf)  [ [*download*](../../../raw/dev/doc/AX25_plus_FEC_equals_FX25.pdf) ]
+
+	What can you do if your radio signal isn’t quite strong enough to get through reliably?  Move to higher ground?  Get a better antenna?  More power?  Use very narrow bandwidth and very slow data?
+
+    Sometimes those are not options.  Another way to improve communication reliability is to add redundant information so the message will still get through even if small parts are missing.  FX.25 adds forward error correction (FEC) which maintaining complete compatibility with older equipment.
+
+
+- [**AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?**](Why-is-9600-only-twice-as-fast-as-1200.pdf)  [ [*download*](../../../raw/dev/doc/Why-is-9600-only-twice-as-fast-as-1200.pdf) ]
+
+	Simply switching to a higher data rate will probably result in great disappointment.  You might expect it to be 8 times faster but it can turn out to be only twice as fast.
+
+    In this document, we look at why a large increase in data bit rate can produce a much smaller increase in throughput.  We will explore techniques that can be used to make large improvements and drastically speed up large data transfer.
+
+
+
+
+- [**Successful APRS IGate Operation**](Successful-APRS-IGate-Operation.pdf)  [ [*download*](../../../raw/dev/doc/Successful-APRS-IGate-Operation.pdf) ]
+
 
 	Dire Wolf can serve as a gateway between the APRS radio network and APRS-IS servers on the Internet.
 
@@ -79,9 +98,29 @@ These dive into more detail for specialized topics or typical usage scenarios.
 
 	Why stop at 9600 baud?  Go faster if your soundcard and radio can handle it.
 
+- [**AIS Reception**](AIS-Reception.pdf) [ [*download*](../../../raw/dev/doc/AIS-Reception.pdf) ]
+
+
+	AIS is an international tracking system for ships.  Messages can contain position, speed, course, name, destination, status, vessel dimensions, and many other types of information.  Learn how to receive these signals with an ordindary ham transceiver and display the ship locations with APRS applications or [OpenCPN](https://opencpn.org).
+
+- **[EAS to APRS message converter](https://github.com/wb2osz/eas2aprs)**
+
+
+	The [U.S. National Weather Service](https://www.weather.gov/nwr/) (NWS) operates more than 1,000 VHF FM radio stations that continuously transmit weather information.  These stations also transmit special warnings about severe weather, disasters (natural & manmade), and public safety.
+
+    Alerts are sent in a digital form known as Emergency Alert System (EAS) Specific Area Message Encoding (SAME). [You can hear a sample here](https://en.wikipedia.org/wiki/Specific_Area_Message_Encoding).
+
+    It is possible to buy radios that decode these messages but what fun is that? We are ham radio operators so we want to build our own from stuff that we already have sitting around.
+
 
 ## Miscellaneous ##
 
+- **[Ham Radio of Things (HRoT)](https://github.com/wb2osz/hrot)**
+
+
+	Now that billions of computers and mobile phones (which are handheld computers) are all connected by the Internet, the large growth is expected from the “Internet of Things.” What is a “thing?” It could be a temperature sensor, garage door opener, motion detector, flood water level, smoke alarm, antenna rotator, coffee maker, lights, home thermostat, …, just about anything you might want to monitor or control.
+
+    There have been other occasional mentions of merging Ham Radio with the Internet of Things but only ad hoc incompatible narrowly focused applications. Here is a proposal for a standardized more flexible method so different systems can communicate with each other.
 
 - [**A Better APRS Packet Demodulator, part 1, 1200 baud**](A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf) [ [*download*](../../../raw/master/doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf) ]
 
@@ -119,11 +158,11 @@ and a couple things that can be done about it.
  
 Here are some good places to ask questions and share your experiences:
 
-- [Dire Wolf packet TNC](https://groups.yahoo.com/neo/groups/direwolf_packet/info) 
+- [Dire Wolf Software TNC](https://groups.io/g/direwolf)
 
-- [Raspberry Pi 4 Ham Radio](https://groups.yahoo.com/neo/groups/Raspberry_Pi_4-Ham_RADIO/info)
+- [Raspberry Pi 4 Ham Radio](https://groups.io/g/RaspberryPi-4-HamRadio)
 
-- [linuxham](https://groups.yahoo.com/neo/groups/linuxham/info)
+- [linuxham](https://groups.io/g/linuxham)
 
 - [TAPR aprssig](http://www.tapr.org/pipermail/aprssig/)
  

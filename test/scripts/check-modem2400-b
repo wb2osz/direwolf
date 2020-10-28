@@ -1,0 +1,5 @@
+@CUSTOM_SHELL_SHABANG@
+
+@GEN_PACKETS_BIN@ -B2400 -J -n 100 -o test24-b.wav
+@ATEST_BIN@ -B2400 -J -F0 -L81 -G88 test24-b.wav
+@ATEST_BIN@ -B2400 -J -F1 -L86 -G90 test24-b.wav

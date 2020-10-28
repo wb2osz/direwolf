@@ -1,16 +1,36 @@
-# Select proper Makefile for operating system.
-# The Windows version is built with the help of Cygwin. 
 
-# In my case, I see CYGWIN_NT-6.1-WOW so we don't check for 
-# equal to some value.   Your mileage my vary.
-
-win := $(shell uname | grep CYGWIN)
-dar := $(shell uname | grep Darwin)
-
-ifneq ($(win),)
-   include Makefile.win
-else ifeq ($(dar),Darwin)
-   include Makefile.macosx
-else
-   include Makefile.linux
-endif
+all:
+	@echo "The build procedure has changed in version 1.6."
+	@echo "In general, it now looks like this:"
+	@echo " "
+	@echo "Download the source code:"
+	@echo " "
+	@echo "	cd ~"
+	@echo "	git clone https://www.github.com/wb2osz/direwolf"
+	@echo "	cd direwolf"
+	@echo " "
+	@echo "Optional - Do this to get the latest development version"
+	@echo "rather than the latest stable release."
+	@echo " "
+	@echo "	git checkout dev"
+	@echo " "
+	@echo "Build it.  There are two new steps not used for earlier releases."
+	@echo " "
+	@echo "	mkdir build && cd build"
+	@echo "	cmake .."
+	@echo "	make -j4"
+	@echo " "
+	@echo "Install:"
+	@echo " "
+	@echo "	sudo make install"
+	@echo "	make install-conf"
+	@echo " "
+	@echo "You will probably need to install additional applications and"
+	@echo "libraries depending on your operating system."
+	@echo "More details are in the README.md file."
+	@echo " "
+	@echo "Questions?"
+	@echo " "
+	@echo " - Extensive documentation can be found in the 'doc' directory."
+	@echo " - Join the discussion forum here:   https://groups.io/g/direwolf"
+	@echo " "

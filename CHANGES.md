@@ -2,6 +2,67 @@
 # Revision History #
 
 
+## Version 1.6  --  October 2020 ##
+
+
+### New Build Procedure: ###
+
+
+- Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.
+
+- README.md has a quick summary of the process.  More details in the ***User Guide***.
+
+
+### New Features: ###
+
+
+- "-X" option enables FX.25 transmission.  FX.25 reception is always enabled so you don't need to do anything special.  "What is FX.25?" you might ask.  It is forward error correction (FEC) added in a way that is completely compatible with an ordinary AX.25 frame.  See new document ***AX25\_plus\_FEC\_equals\_FX25.pdf*** for details.
+
+- Receive AIS location data from ships.  Enable by using "-B AIS" command line option or "MODEM AIS" in the configuration file.  AIS NMEA sentences are encapsulated in APRS user-defined data with a "{DA" prefix.  This uses 9600 bps so you need to use wide band audio, not what comes out of the speaker.  There is also a "-A" option to generate APRS Object Reports.
+
+- Receive Emergency Alert System (EAS) Specific Area Message Encoding (SAME).  Enable by using "-B EAS" command line option or "MODEM EAS" in the configuration file.  EAS SAME messages are encapsulated in APRS user-defined data with a "{DE" prefix.  This uses low speed AFSK so speaker output is fine.
+
+- "-t" option now accepts more values to accommodate inconsistent handling of text color control codes by different terminal emulators.  The default, 1, should work with most modern terminal types.  If the colors are not right, try "-t 9" to see the result of the different choices and pick the best one.  If none of them look right, file a bug report and specify: operating system version (e.g. Raspbian Buster), terminal emulator type and version (e.g.  LXTerminal 0.3.2).   Include a screen capture.
+
+
+- "-g" option to force G3RUH mode for lower speeds where a different modem type may be the default.
+
+- 2400 bps compatibility with MFJ-2400.  See ***2400-4800-PSK-for-APRS-Packet-Radio.pdf*** for details
+
+- "atest -h" will display the frame in hexadecimal for closer inspection.
+
+- Add support for Multi-GNSS NMEA sentences.
+
+
+
+### Bugs Fixed: ###
+
+- Proper counting of frames in transmit queue for AGW protocol 'Y' command.
+
+
+
+### New Documentation: ###
+
+- ***AX.25 + FEC = FX.25***
+
+- ***AIS Reception***
+
+- ***AX.25 Throughput: Why is 9600 bps Packet Radio only twice as fast as 1200?***
+
+- [***Ham Radio of Things (HRoT) - IoT over Ham Radio***](https://github.com/wb2osz/hrot)
+
+- [***EAS SAME to APRS Message Converter***](https://github.com/wb2osz/eas2aprs)
+
+- [***Dire Wolf PowerPoint Slide Show***](https://github.com/wb2osz/direwolf-presentation)
+
+### Notes: ###
+
+The Windows binary distribution now uses gcc (MinGW) version 7.4.0.
+The Windows version is built for both 32 and 64 bit operating systems.
+Use the 64 bit version if possible; it runs considerably faster.
+
+
+
 ## Version 1.5  --  September 2018 ##
 
 
