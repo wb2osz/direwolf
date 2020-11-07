@@ -5273,6 +5273,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->freq = G_UNKNOWN;
 	b->tone = G_UNKNOWN;
 	b->offset = G_UNKNOWN;
+	b->source = NULL;
+	b->dest = NULL;
 
 	while ((t = split(NULL,0)) != NULL) {
 
@@ -5342,6 +5344,17 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	       }
 	       b->sendto_type = SENDTO_XMIT;
 	       b->sendto_chan = n;
+	    }
+	  }
+	  else if (strcasecmp(keyword, "SOURCE") == 0) {
+	    b->source = strdup(value);
+	    for (p = b->source; *p != '\0'; p++) {
+	      if (islower(*p)) {
+	        *p = toupper(*p);	/* silently force upper case. */
+	      }
+	    }
+	    if (strlen(b->source) > 9) {
+	       b->source[9] = '\0';
 	    }
 	  }
 	  else if (strcasecmp(keyword, "DEST") == 0) {
