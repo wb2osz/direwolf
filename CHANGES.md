@@ -2,13 +2,23 @@
 # Revision History #
 
 
-## Version 1.6  --  October 2020 ##
+## Version 1.7  --  Under Development ('dev' branch) ##
 
+
+### New Features: ###
+
+
+- The BEACON configuration now recognizes the SOURCE= option.  This replaces the AX.25 source address rather than using the MYCALL value for the channel.  This is useful for sending more than 5 analog telemetry channels.  Use two, or more, source addresses with up to 5 analog channels each.
+
+
+
+
+## Version 1.6  --  October 2020 ##
 
 ### New Build Procedure: ###
 
 
-- Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.
+- Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.  This was contributed by Davide Gerhard.
 
 - README.md has a quick summary of the process.  More details in the ***User Guide***.
 
