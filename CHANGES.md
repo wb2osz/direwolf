@@ -8,7 +8,7 @@
 ### New Build Procedure: ###
 
 
-- Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.
+- Rather than trying to keep a bunch of different platform specific Makefiles in sync, "cmake" is now used for greater portability and easier maintenance.  This was contributed by Davide Gerhard.
 
 - README.md has a quick summary of the process.  More details in the ***User Guide***.
 
