@@ -9,7 +9,8 @@ set(direwolf_VERSION_PATCH "0")
 set(direwolf_VERSION_SUFFIX "Development")
 
 # options
-option(FORCE_SSE "Compile with SSE instruction only" OFF)
+# See Issue 297.
+option(FORCE_SSE "Compile with SSE instruction only" ON)
 option(FORCE_SSSE3 "Compile with SSSE3 instruction only" OFF)
 option(FORCE_SSE41 "Compile with SSE4.1 instruction only" OFF)
 option(OPTIONAL_TEST "Compile optional test (might be broken)" OFF)
