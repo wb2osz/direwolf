@@ -659,6 +659,8 @@ void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, ch
 
 /*
  * When all else fails, use source SSID.
+ * This is totally non-obvious and confusing, but it is in the APRS protocol spec.
+ * Chapter 20, "Symbol in the Source Address SSID"
  */
 
 	p = strchr (src, '-');
