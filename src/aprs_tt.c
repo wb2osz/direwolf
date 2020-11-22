@@ -115,6 +115,8 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
 static void check_result (void);
 #endif
 
+static int tt_debug = 0;
+
 
 /*------------------------------------------------------------------
  *
@@ -122,7 +124,8 @@ static void check_result (void);
  *
  * Purpose:     Initialize the APRStt gateway at system startup time.
  *
- * Inputs:      Configuration options gathered by config.c.
+ * Inputs:      P	- Pointer to configuration options gathered by config.c.
+ *		debug	- Debug printing control.
  *
  * Global out:	Make our own local copy of the structure here.
  *
@@ -164,9 +167,10 @@ static struct ttloc_s test_config[] = {
 #endif
 
 
-void aprs_tt_init (struct tt_config_s *p)
+void aprs_tt_init (struct tt_config_s *p, int debug)
 {
 	int c;
+	tt_debug = debug;
 
 #if TT_MAIN
 	/* For unit testing. */
@@ -483,7 +487,19 @@ static int parse_fields (char *msg)
 	//text_color_set(DW_COLOR_DEBUG);
 	//dw_printf ("parse_fields (%s).\n", msg);
 
-	strlcpy (stemp, msg, sizeof(stemp));
+// Make a copy of msg because strtok corrupts the original.
+// While we are at it, remove any blanks.
+// This should not happen with DTMF reception but could happen
+// in manually crafted strings for testing.
+
+	int n = 0;
+	for (char *m = msg; *m != '\0' && n < sizeof(stemp)-1; m++) {
+	  if (*m != ' ') {
+	    stemp[n++] = *m;
+	  }
+	}
+	stemp[n] = '\0';
+
 	e = strtok_r (stemp, "*#", &save);
 	while (e != NULL) {
 
@@ -551,7 +567,7 @@ static int parse_fields (char *msg)
 	    default:
 
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Field does not start with A, B, C, or digit: \"%s\"\n", msg);
+	      dw_printf ("Field does not start with A, B, C, or digit: \"%s\"\n", e);
 	      return (TT_ERROR_D_MSG);
 
 	  }
@@ -690,17 +706,15 @@ static int expand_macro (char *e)
  *
  * Inputs:      e		- An "entry" extracted from a complete
  *				  APRStt messsage.
- *				  In this case, it should start with "A".
+ *				  In this case, it should start with "A" then a digit.
  *
  * Outputs:	m_callsign
  *
  *		m_symtab_or_overlay - Set to 0-9 or A-Z if specified.
  *
- *		m_symbol_code	- Always set to 'A'.
- *					NO!  This should be applied only if we
- *					have the default value at this point.
- *					The symbol might have been explicitly
- *					set already and we don't want to overwrite that.
+ *		m_symbol_code	- Always set to 'A' (Box, DTMF or RFID)
+ *					If you want a different symbol, use the new
+ *					object name format and separate symbol specification.
  *
  * Returns:	0 for success or one of the TT_ERROR_... codes.
  *
@@ -752,6 +766,11 @@ static int parse_callsign (char *e)
 	int len;
 	char tttemp[40], stemp[30];
 
+	if (tt_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("APRStt parse callsign (starts with A then digit): \"%s\"\n", e);
+	}
+
 	assert (*e == 'A');
 
 	len = strlen(e);
@@ -762,6 +781,10 @@ static int parse_callsign (char *e)
 
 	if (len == 4 && isdigit(e[1]) && isdigit(e[2]) && isdigit(e[3])) {
 	  strlcpy (m_callsign, e+1, sizeof(m_callsign));
+	  if (tt_debug) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Special case, 3 digit tactical call: \"%s\"\n", m_callsign);
+	  }
 	  return (0);
 	}
 
@@ -779,7 +802,7 @@ static int parse_callsign (char *e)
 	    return (cs_err);
 	  }
 
-	  strncpy (m_callsign, e+1, 3);
+	  memcpy (m_callsign, e+1, 3);
 	  m_callsign[3] = '\0';
 	
 	  if (len == 7) {
@@ -789,10 +812,20 @@ static int parse_callsign (char *e)
 	    tt_two_key_to_text (tttemp, 0, stemp);
 	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = stemp[0];
+	    if (tt_debug) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Three digit abbreviation1: callsign \"%s\", symbol code '%c (Box DTMF)', overlay '%c', checksum %c\n",
+				m_callsign, m_symbol_code, m_symtab_or_overlay, e[len-1]);
+	    }
 	  }
 	  else {
 	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = e[len-2];
+	    if (tt_debug) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Three digit abbreviation2: callsign \"%s\", symbol code '%c' (Box DTMF), overlay '%c', checksum %c\n",
+				m_callsign, m_symbol_code, m_symtab_or_overlay, e[len-1]);
+	    }
 	  }
 	  return (0);
 	}
@@ -810,7 +843,7 @@ static int parse_callsign (char *e)
 	  }
 	
 	  if (isupper(e[len-2])) {
-	    strncpy (tttemp, e+1, len-4);
+	    memcpy (tttemp, e+1, len-4);
 	    tttemp[len-4] = '\0';
 	    tt_two_key_to_text (tttemp, 0, m_callsign);
 
@@ -820,14 +853,24 @@ static int parse_callsign (char *e)
 	    tt_two_key_to_text (tttemp, 0, stemp);
 	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = stemp[0];
+	    if (tt_debug) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Callsign in two key format1: callsign \"%s\", symbol code '%c' (Box DTMF), overlay '%c', checksum %c\n",
+				m_callsign, m_symbol_code, m_symtab_or_overlay, e[len-1]);
+	    }
 	  }
 	  else {
-	    strncpy (tttemp, e+1, len-3);
+	    memcpy (tttemp, e+1, len-3);
 	    tttemp[len-3] = '\0';
 	    tt_two_key_to_text (tttemp, 0, m_callsign);
 
 	    m_symbol_code = APRSTT_DEFAULT_SYMBOL;
 	    m_symtab_or_overlay = e[len-2];
+	    if (tt_debug) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Callsign in two key format2: callsign \"%s\", symbol code '%c' (Box DTMF), overlay '%c', checksum %c\n",
+				m_callsign, m_symbol_code, m_symtab_or_overlay, e[len-1]);
+	    }
 	  }
 	  return (0);
 	}
@@ -864,9 +907,11 @@ static int parse_callsign (char *e)
 static int parse_object_name (char *e)
 {
 	int len;
-	//int c_length;
-	//char tttemp[40];
-	//char stemp[30];
+
+	if (tt_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("APRStt parse object name (starts with AA): \"%s\"\n", e);
+	}
 
 	assert (e[0] == 'A');
 	assert (e[1] == 'A');
@@ -882,6 +927,10 @@ static int parse_object_name (char *e)
 	  if (tt_two_key_to_text (e+2, 0, m_callsign) == 0) {
 	    m_callsign[9] = '\0';  /* truncate to 9 */
 	    m_ssid = 0;		/* No ssid for object name */
+	    if (tt_debug) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Object name in two key format: \"%s\"\n", m_callsign);
+	    }
 	    return (0);
 	  }
 	}
@@ -935,6 +984,11 @@ static int parse_symbol (char *e)
 	int nn;
 	char stemp[10];
 
+	if (tt_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("APRStt parse symbol (starts with AB): \"%s\"\n", e);
+	}
+
 	assert (e[0] == 'A');
 	assert (e[1] == 'B');
 
@@ -959,12 +1013,22 @@ static int parse_symbol (char *e)
 	    case '1':
 	      m_symtab_or_overlay = '/';
 	      m_symbol_code = 32 + nn;
+	      if (tt_debug) {
+	        text_color_set(DW_COLOR_DEBUG);
+	        dw_printf ("symbol code '%c', primary symbol table '%c'\n",
+				m_symbol_code, m_symtab_or_overlay);
+	      }
 	      return (0);
 	      break;
 
 	    case '2':
 	      m_symtab_or_overlay = '\\';
 	      m_symbol_code = 32 + nn;
+	      if (tt_debug) {
+	        text_color_set(DW_COLOR_DEBUG);
+	        dw_printf ("symbol code '%c', alternate symbol table '%c'\n",
+				m_symbol_code, m_symtab_or_overlay);
+	      }
 	      return (0);
 	      break;
 
@@ -973,6 +1037,11 @@ static int parse_symbol (char *e)
 	        if (tt_two_key_to_text (e+5, 0, stemp) == 0) {
 	          m_symbol_code = 32 + nn;
 	          m_symtab_or_overlay = stemp[0];
+	          if (tt_debug) {
+	            text_color_set(DW_COLOR_DEBUG);
+	            dw_printf ("symbol code '%c', alternate symbol table with overlay '%c'\n",
+				m_symbol_code, m_symtab_or_overlay);
+	          }
 	          return (0);
 	        }
 	      }
@@ -1017,6 +1086,11 @@ static int parse_aprstt3_call (char *e)
 
 	assert (e[0] == 'A');
 	assert (e[1] == 'C');
+
+	if (tt_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("APRStt parse QIKcom-2 / APRStt 3 ten digit call or five digit suffix (starts with AC): \"%s\"\n", e);
+	}
 
 	if (strlen(e) == 2+10) {
 	  char call[12];
@@ -1125,6 +1199,11 @@ static int parse_location (char *e)
 	char mh[20];	
 	char stemp[32];
 
+	if (tt_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("APRStt parse location (starts with B): \"%s\"\n", e);
+	  // TODO: more detail later...
+	}
 
 	assert (*e == 'B');
 
@@ -1985,7 +2064,7 @@ static void check_result (void)
 
 int main (int argc, char *argv[])
 {
-	aprs_tt_init (NULL);
+	aprs_tt_init (NULL, 0);
 
 	error_count = 0;
 
