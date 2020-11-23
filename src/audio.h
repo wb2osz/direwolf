@@ -278,6 +278,8 @@ struct audio_s {
 #ifdef USE_HAMLIB
 
 	        int ptt_model;		/* HAMLIB model.  -1 for AUTO.  2 for rigctld.  Others are radio model. */
+	        int ptt_rate;		/* Serial port speed when using hamlib CAT control for PTT. */
+					/* If zero, hamlib will come up with a default for pariticular rig. */
 #endif
 
 	    } octrl[NUM_OCTYPES];

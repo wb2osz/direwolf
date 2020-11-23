@@ -1682,8 +1682,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * xxx  serial-port [-]rts-or-dtr [ [-]rts-or-dtr ]
  * xxx  GPIO  [-]gpio-num
  * xxx  LPT  [-]bit-num
- * PTT  RIG  model  port
- * PTT  RIG  AUTO  port
+ * PTT  RIG  model  port [ rate ]
+ * PTT  RIG  AUTO  port [ rate ]
  * PTT  CM108 [ [-]bit-num ] [ hid-device ]
  *
  * 		When model is 2, port would host:port like 127.0.0.1:4532
@@ -1807,6 +1807,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        continue;
 	      }
 	      strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
+
+	      // Optional serial port rate for CAT controll PTT.
+
+	      t = split(NULL,0);
+	      if (t != NULL) {
+		if ( ! alldigits(t)) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: An optional number is required here for CAT serial port speed: %s\n", line, t);
+	          continue;
+	        }
+	        int n = atoi(t);
+	        p_audio_config->achan[channel].octrl[ot].ptt_rate = n;
+	      }
 
 	      t = split(NULL,0);
 	      if (t != NULL) {
@@ -5260,6 +5273,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->freq = G_UNKNOWN;
 	b->tone = G_UNKNOWN;
 	b->offset = G_UNKNOWN;
+	b->source = NULL;
+	b->dest = NULL;
 
 	while ((t = split(NULL,0)) != NULL) {
 
@@ -5329,6 +5344,17 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	       }
 	       b->sendto_type = SENDTO_XMIT;
 	       b->sendto_chan = n;
+	    }
+	  }
+	  else if (strcasecmp(keyword, "SOURCE") == 0) {
+	    b->source = strdup(value);
+	    for (p = b->source; *p != '\0'; p++) {
+	      if (islower(*p)) {
+	        *p = toupper(*p);	/* silently force upper case. */
+	      }
+	    }
+	    if (strlen(b->source) > 9) {
+	       b->source[9] = '\0';
 	    }
 	  }
 	  else if (strcasecmp(keyword, "DEST") == 0) {

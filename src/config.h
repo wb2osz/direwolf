@@ -160,6 +160,9 @@ struct misc_config_s {
 
 	  time_t next;		/* Unix time to transmit next one. */
 
+	  char *source;		/* NULL or explicit AX.25 source address to use */
+				/* instead of the mycall value for the channel. */
+
 	  char *dest;		/* NULL or explicit AX.25 destination to use */
 				/* instead of the software version such as APDW11. */
 

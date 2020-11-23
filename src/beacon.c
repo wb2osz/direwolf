@@ -804,7 +804,12 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
  * 	src > dest [ , via ]
  */
 
-	      strlcpy (beacon_text, mycall, sizeof(beacon_text));
+	      if (bp->source != NULL) {
+	        strlcpy (beacon_text, bp->source, sizeof(beacon_text));
+	      }
+	      else {
+	        strlcpy (beacon_text, mycall, sizeof(beacon_text));
+	      }
 	      strlcat (beacon_text, ">", sizeof(beacon_text));
 
 	      if (bp->dest != NULL) {

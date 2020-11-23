@@ -165,7 +165,7 @@ struct tt_config_s {
 
 
 	
-void aprs_tt_init (struct tt_config_s *p_config);
+void aprs_tt_init (struct tt_config_s *p_config, int debug);
 
 void aprs_tt_button (int chan, char button);
 

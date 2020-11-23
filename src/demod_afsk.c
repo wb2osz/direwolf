@@ -67,7 +67,7 @@
 /* No benefit for regular PC. */
 /* Should help with microcomputer platform. */
 
-
+#if 0	// not using anymore
 __attribute__((hot)) __attribute__((always_inline))
 static inline float z (float x, float y)
 {
@@ -81,6 +81,7 @@ static inline float z (float x, float y)
           return (y * .941246f + x * .41f);
         }
 }
+#endif
 
 /* Add sample to buffer and shift the rest down. */
 

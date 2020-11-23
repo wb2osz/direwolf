@@ -44,7 +44,8 @@ RUNMODE=AUTO
 
 DIREWOLF="direwolf"
 
-#Direwolf start up command :: two examples where example one is enabled
+
+#Direwolf start up command :: Uncomment only one of the examples.
 #
 # 1. For normal operation as TNC, digipeater, IGate, etc.
 #    Print audio statistics each 100 seconds for troubleshooting.
@@ -52,9 +53,14 @@ DIREWOLF="direwolf"
 
 DWCMD="$DIREWOLF -a 100"
 
+# 2. FX.25 Forward Error Correction (FEC) will allow your signal to
+#    go farther under poor radio conditions.  Add "-X 1" to the command line.
+
+#DWCMD="$DIREWOLF -a 100 -X 1"
+
 #---------------------------------------------------------------
 #
-# 2. Alternative for running with SDR receiver.
+# 3. Alternative for running with SDR receiver.
 #    Piping one application into another makes it a little more complicated.
 #    We need to use bash for the | to be recognized.
 

@@ -1,9 +1,19 @@
 <title>
-APRS TO-CALL VERSION NUMBERS                            20 Jan 2020
+APRS TO-CALL VERSION NUMBERS                           13 Oct  2020
 -------------------------------------------------------------------
                                                              WB4APR
 </title>
 <version_notes>
+
+13 Oct 20 Added APIZCI hymTR IZCI Tracker by TA7W/OH2UDS and TA6AEU
+13 Aug 20 Added APLGxx for LoRa Gateway/Digipeater
+                APLTxx for LoRa Tracker - OE5BPA
+02 Aug 20 Added APNVxx for SQ8L's VP digi and Nodes
+26 May 20 Added APY300 for Yaesu
+ 5 May 20 added APESPG ESP SmartBeacon APRS-IS Client
+                APESPW ESP Weather Station APRS-IS Client
+17 Apr 20 Added APGDTx for VK4FAST's Graphic Data Terminal
+19 Mar 20 Added APOSW and APOSB for OpenSPOT2 and 3
 20 Jan 20 Added APBT62 for BTech DMR 6x2
 08 Jan 20 Added APCLUB for Brazil APRS network
 06 Jan 20 Added APMQxx for Ham Radio of Things WB2OSZ
@@ -106,13 +116,16 @@ a TOCALL number series:
       APELKx  WB8ELK balloons
       APERXQ  Experimental tracker by PE1RXQ
       APERSx  Runner tracking by Jason,KG7YKZ
+      APESPG  ESP SmartBeacon APRS-IS Client
+      APESPW  ESP Weather Station APRS-IS Client
  APF  APFxxx  Firenet
       APFGxx  Flood Gage (KP4DJT)
       APFIxx  for APRS.FI OH7LZB, Hessu
       APFPRS  for FreeDV by Jeroen PE1RXQ
  APG  APGxxx  Gates, etc
       APGOxx  for AA3NJ PDA application
-      APGBLN for NW5W's GoBalloon
+      APGBLN  for NW5W's GoBalloon
+      APGDTx  for VK4FAST's Graphic Data Terminal
  APH  APHKxx  for LA1BR tracker/digipeater
       APHAXn  SM2APRS by PY2UEP
       APHTxx  HMTracker by IU0AAC 
@@ -121,6 +134,7 @@ a TOCALL number series:
       APICxx  HA9MCQ's Pic IGate
       APIExx  W7KMV's PiAPRS system
       APINxx  PinPoint by AB0WV
+      APIZCI  hymTR IZCI Tracker by TA7W/OH2UDS and TA6AEU
  APJ  APJ8xx  Jordan / KN4CRD JS8Call application
       APJAxx  JavAPRS
       APJExx  JeAPRS
@@ -133,9 +147,11 @@ a TOCALL number series:
       APK1xx  Kenwood D700's
       APK102  Kenwood D710
       APKRAM  KRAMstuff.com - Mark. G7LEU
- APL  APLIGx  LightAPRS - TA2MUN and TA9OHC
+ APL  APLGxx  LoRa Gateway/Digipeater OE5BPA
+      APLIGx  LightAPRS - TA2MUN and TA9OHC
       APLQRU  Charlie - QRU Server
       APLMxx  WA0TQG transceiver controller
+      APLTxx  LoRa Tracker - OE5BPA
  APM  APMxxx  MacAPRS, 
       APMGxx  PiCrumbs and MiniGate - Alex, AB0TJ
       APMIxx  SQ3PLX http://microsat.com.pl/
@@ -155,6 +171,7 @@ a TOCALL number series:
       APNPxx  Paccom TNC roms
       APNTxx  SV2AGW's TNT tnc as a digi
       APNUxx  UIdigi
+      APNVxx  SQ8L's VP digi and Nodes
       APNXxx  TNC-X  (K6DBG)
       APNWxx  SQ3FYK.com WX/Digi and SQ3PLX http://microsat.com.pl/
  APO  APRSpoint
@@ -162,8 +179,10 @@ a TOCALL number series:
       APOLUx  for OSCAR satellites for AMSAT-LU by LU9DO
       APOAxx  OpenAPRS - Greg Carter
       APOCSG  For N0AGI's APRS to POCSAG project
-      APOTxx  Open Track
       APOD1w  Open Track with 1 wire WX
+      APOSBx  openSPOT3 by HA2NON at sharkrf.com
+      APOSWx  openSPOT2
+      APOTxx  Open Track
       APOU2k  Open Track for Ultimeter
       APOZxx  www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO
  APP  APP6xx  for APRSlib
@@ -225,11 +244,15 @@ a TOCALL number series:
       APWWxx  APRSISCE win32 version
  APX  APXnnn  Xastir
       APXRnn  Xrouter
- APY  APYxxx  Yeasu
+ APY  APYxxx  Yaesu Radios
       APY008  Yaesu VX-8 series
-      APY350  Yaesu FTM-350 series
-      APYTxx  for YagTracker
-      APYSxx  for W2GMD's Python APRS
+      APY01D  Yaesu FT1D series
+      APY02D  Yaesu FT2D series
+      APY03D  Yaesu FT3D series
+      APY100  Yaesu FTM-100D series
+      APY300  Yaesu FTM-300D series
+      APY350  Yaesu FTM-350  series
+      APY400  Yaesu FTM-400D series
  APZ  APZxxx  Experimental
       APZ247  for UPRS NR0Q
       APZ0xx  Xastir (old versions. See APX)

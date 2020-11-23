@@ -101,9 +101,24 @@ These dive into more detail for specialized topics or typical usage scenarios.
 
 	AIS is an international tracking system for ships.  Messages can contain position, speed, course, name, destination, status, vessel dimensions, and many other types of information.  Learn how to receive these signals with an ordindary ham transceiver and display the ship locations with APRS applications or [OpenCPN](https://opencpn.org).
 
+- **[EAS to APRS message converter](https://github.com/wb2osz/eas2aprs)**
+
+
+	The [U.S. National Weather Service](https://www.weather.gov/nwr/) (NWS) operates more than 1,000 VHF FM radio stations that continuously transmit weather information.  These stations also transmit special warnings about severe weather, disasters (natural & manmade), and public safety.
+
+    Alerts are sent in a digital form known as Emergency Alert System (EAS) Specific Area Message Encoding (SAME). [You can hear a sample here](https://en.wikipedia.org/wiki/Specific_Area_Message_Encoding).
+
+    It is possible to buy radios that decode these messages but what fun is that? We are ham radio operators so we want to build our own from stuff that we already have sitting around.
+
 
 ## Miscellaneous ##
 
+- **[Ham Radio of Things (HRoT)](https://github.com/wb2osz/hrot)**
+
+
+	Now that billions of computers and mobile phones (which are handheld computers) are all connected by the Internet, the large growth is expected from the “Internet of Things.” What is a “thing?” It could be a temperature sensor, garage door opener, motion detector, flood water level, smoke alarm, antenna rotator, coffee maker, lights, home thermostat, …, just about anything you might want to monitor or control.
+
+    There have been other occasional mentions of merging Ham Radio with the Internet of Things but only ad hoc incompatible narrowly focused applications. Here is a proposal for a standardized more flexible method so different systems can communicate with each other.
 
 - [**A Better APRS Packet Demodulator, part 1, 1200 baud**](A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf) [ [*download*](../../../raw/dev/doc/A-Better-APRS-Packet-Demodulator-Part-1-1200-baud.pdf) ]
 

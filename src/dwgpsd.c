@@ -59,7 +59,7 @@
 // An incompatibility was introduced with version 7
 // and again with 9 and again with 10.
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 10
+#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 11
 #error libgps API version might be incompatible.
 #endif
 
@@ -348,6 +348,15 @@ static void * read_gpsd_thread (void *arg)
 #define stupid_status status
 #endif
 
+
+	  if (s_debug >= 3) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("gpsdata: status=%d, mode=%d, lat=%.6f, lon=%.6f, track=%.1f, speed=%.1f, alt=%.0f\n",
+	       gpsdata.stupid_status, gpsdata.fix.mode,
+	       gpsdata.fix.latitude, gpsdata.fix.longitude,
+	       gpsdata.fix.track, gpsdata.fix.speed, gpsdata.fix.stupid_altitude);
+	  }
+
 	  // Inform user about change in fix status.
 
 	  switch (gpsdata.fix.mode) {
@@ -378,23 +387,25 @@ static void * read_gpsd_thread (void *arg)
 	      break;
 	  }
 
-	  if (gpsdata.stupid_status >= STATUS_FIX && gpsdata.fix.mode >= MODE_2D) {
 
-	    info.dlat = isnan(gpsdata.fix.latitude) ? G_UNKNOWN : gpsdata.fix.latitude;
-	    info.dlon = isnan(gpsdata.fix.longitude) ? G_UNKNOWN : gpsdata.fix.longitude;
-	    info.track = isnan(gpsdata.fix.track) ? G_UNKNOWN : gpsdata.fix.track;
-	    info.speed_knots = isnan(gpsdata.fix.speed) ? G_UNKNOWN : (MPS_TO_KNOTS * gpsdata.fix.speed);
+// Oct. 2020 - 'status' is always zero for latest version of libgps so we can't use that anymore.
 
+	  if (/*gpsdata.stupid_status >= STATUS_FIX &&*/ gpsdata.fix.mode >= MODE_2D) {
+
+	    info.dlat = isfinite(gpsdata.fix.latitude) ? gpsdata.fix.latitude : G_UNKNOWN;
+	    info.dlon = isfinite(gpsdata.fix.longitude) ? gpsdata.fix.longitude : G_UNKNOWN;
+	    // When stationary, track is NaN which is not finite.
+	    info.track = isfinite(gpsdata.fix.track) ? gpsdata.fix.track : G_UNKNOWN;
+	    info.speed_knots = isfinite(gpsdata.fix.speed) ? (MPS_TO_KNOTS * gpsdata.fix.speed) : G_UNKNOWN;
 	    if (gpsdata.fix.mode >= MODE_3D) {
-	      info.altitude = isnan(gpsdata.fix.stupid_altitude) ? G_UNKNOWN : gpsdata.fix.stupid_altitude;
+	      info.altitude = isfinite(gpsdata.fix.stupid_altitude) ? gpsdata.fix.stupid_altitude : G_UNKNOWN;
 	    }
+	    // Otherwise keep last known altitude when we downgrade from 3D to 2D fix.
+	    // Caller knows altitude is outdated if info.fix == DWFIX_2D.
 	  }
-	  else {
-	    // Keep the last known location.
-	    // Using info.fix, the caller knows if the location is current (DWFIX_[23]D),
-	    // last known (DWFIX_NONE), or never known (DWFIX_NOT_SEEN).
-	    info.fix = DWFIX_NO_FIX;
-	  }
+	  // Otherwise keep the last known location which is better than totally lost.
+	  // Caller knows location is outdated if info.fix == DWFIX_NO_FIX.
+
 
 	  info.timestamp = time(NULL);
 	  if (s_debug >= 2) {

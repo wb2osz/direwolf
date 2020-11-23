@@ -116,7 +116,6 @@ static void aprs_morse_code (decode_aprs_t *A, char *, int);
 static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *, int);
 static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix);
 static void aprs_ultimeter (decode_aprs_t *A, char *, int);
-static void third_party_header (decode_aprs_t *A, char *, int);
 static void decode_position (decode_aprs_t *A, position_t *ppos);
 static void decode_compressed_position (decode_aprs_t *A, compressed_position_t *ppos);
 static double get_latitude_8 (char *p, int quiet);
@@ -197,7 +196,22 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	A->g_footprint_lon = G_UNKNOWN;
 	A->g_footprint_radius = G_UNKNOWN;
 
+// If third-party header, try to decode just the payload.
 
+	if (*pinfo == '}') {
+
+	  packet_t pp_payload = ax25_from_text ((char*)pinfo+1, 0);
+	  if (pp_payload != NULL) {
+	    decode_aprs (A, pp_payload, quiet);
+	    ax25_delete (pp_payload);
+	    return;
+	  }
+	  else {
+	    strlcpy (A->g_msg_type, "Third Party Header: Unable to parse payload.", sizeof(A->g_msg_type));
+	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
+	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
+	  }
+	}
 
 /*
  * Extract source and destination including the SSID.
@@ -362,11 +376,9 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      aprs_morse_code (A, (char*)pinfo, info_len);
 	      break;
 
-	    case '}':		/* third party header */
+	    //case '}':		/* third party header */
 
-	      third_party_header (A, (char*)pinfo, info_len);
-	      break;
-
+	      // was already caught earlier.
 
 	    //case '\r':		/* CR or LF? */
 	    //case '\n':
@@ -380,7 +392,12 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 
 /*
- * Look in other locations if not found in information field.
+ * Priority order for determining the symbol is:
+ *	- Information part, where appropriate.  Already done above.
+ *	- Destination field starting with GPS, SPC, or SYM.
+ *	- Source SSID - Confusing to most people.  Even I forgot about it when
+ *		someone questioned where the symbol came from.  It's in the APRS
+ *		protocol spec, end of Chapter 20.
  */
 
 	if (A->g_symbol_table == ' ' || A->g_symbol_code == ' ') {
@@ -476,6 +493,7 @@ void decode_aprs_print (decode_aprs_t *A) {
  * Any example was checked for each hemihemisphere using
  * http://www.amsat.org/cgi-bin/gridconv
  */
+// FIXME soften language about upper case.
 
 	if (strlen(A->g_maidenhead) > 0) {
 
@@ -2933,31 +2951,6 @@ static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen)
 } /* end aprs_ultimeter */
 
 
-/*------------------------------------------------------------------
- *
- * Function:	third_party_header
- *
- * Purpose:	Decode packet from a third party network.
- *
- * Inputs:	info 	- Pointer to Information field.
- *		ilen 	- Information field length.
- *
- * Outputs:	A->g_comment
- *
- * Description:	
- *
- *------------------------------------------------------------------*/
-
-static void third_party_header (decode_aprs_t *A, char *info, int ilen) 
-{
-
-	strlcpy (A->g_msg_type, "Third Party Header", sizeof(A->g_msg_type));
-
-	/* more later? */
-
-} /* end third_party_header */
-
-
 
 /*------------------------------------------------------------------
  *
@@ -3778,7 +3771,7 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 
 // Dec. 2016 tocalls.txt has 153 destination addresses.
 
-#define MAX_TOCALLS 200
+#define MAX_TOCALLS 250
 
 static struct tocalls_s {
 	unsigned char len;

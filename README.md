@@ -5,7 +5,7 @@
 
 In the early days of Amateur Packet Radio, it was necessary to use an expensive "Terminal Node Controller" (TNC) with specialized hardware.  Those days are gone.  You can now get better results at lower cost by connecting your radio to the "soundcard" interface of a computer and using software to decode the signals.
 
-Why settle for mediocre receive performance from a 1980's technology  TNC using an old modem chip?   Dire Wolf decodes over 1000 error-free frames from Track 2 of the [WA8LMF TNC Test CD](https://github.com/wb2osz/direwolf/tree/dev/doc/WA8LMF-TNC-Test-CD-Results.pdf), leaving all the hardware TNCs, and first generation "soundcard" modems, behind in the dust.
+Why waste $200 and settle for mediocre receive performance from a 1980's technology  TNC using an old modem chip?   Dire Wolf decodes over 1000 error-free frames from Track 2 of the [WA8LMF TNC Test CD](https://github.com/wb2osz/direwolf/tree/dev/doc/WA8LMF-TNC-Test-CD-Results.pdf), leaving all the hardware TNCs, and first generation "soundcard" modems, behind in the dust.
 
 ![](tnc-test-cd-results.png)
 
@@ -23,7 +23,7 @@ Without any additional software, it can perform as:
 - [APRStt](http://www.aprs.org/aprstt.html) gateway
 
 
-It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [PinPoint APRS](http://www.pinpointaprs.com/), [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), and many others.
+It can also be used as a virtual TNC for other applications such as [APRSIS32](http://aprsisce.wikidot.com/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [PinPoint APRS](http://www.pinpointaprs.com/), [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), [Packet Compressed Sensing Imaging (PCSI)](https://maqifrnswa.github.io/PCSI/), and many others.
  
  
 ## Features & Benefits ##
@@ -51,7 +51,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
     IGate stations allow communication between disjoint radio networks by allowing some content to flow between them over the Internet.
 
-- **Ham Radio of Things.**
+- **Ham Radio of Things (HRoT).**
 
     There have been occasional mentions of merging Ham Radio with the Internet of Things but only ad hoc incompatible narrowly focused applications. Here is a proposal for a standardized more flexible method so different systems can communicate with each other.
 
@@ -63,7 +63,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 - **KISS Interface (TCP/IP, serial port, Bluetooth) & AGW network Interface (TCP/IP).**
 
-    Dire Wolf can be used as a virtual TNC for applications such as   APRSIS32,           UI-View32, Xastir, APRS-TW,YAAC, UISS, Linux  AX25, SARTrack, Winlink / RMS Express, Outpost PM, and many others.  
+    Dire Wolf can be used as a virtual TNC for applications such as [APRSIS32](http://aprsisce.wikidot.com/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [PinPoint APRS](http://www.pinpointaprs.com/), [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), [Packet Compressed Sensing Imaging (PCSI)](https://maqifrnswa.github.io/PCSI/), and many others.
 
 ### Radio Interfaces:   ###
 
@@ -79,7 +79,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 - **DTMF ("Touch Tone") Decoding and Encoding.**
  
-- **Speech Synthesizer & Morse code generator.**
+- **Speech Synthesizer interface & Morse code generator.**
 
     Transmit human understandable messages.
 
@@ -108,7 +108,7 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 Go to the [**releases** page](https://github.com/wb2osz/direwolf/releases).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
 
-For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  
+You can also build it yourself from source.  For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).
 
 
 

@@ -223,6 +223,7 @@ int main (int argc, char *argv[])
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
 	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
+	int aprstt_debug = 0;	/* "-d d" option for APRStt (think Dtmf) debug. */
 
 	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering trasmit frames. */
 	int E_rx_opt = 0;		/* "-E Rn" Error rate % for clobbering receive frames. */
@@ -288,7 +289,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -566,6 +567,7 @@ int main (int argc, char *argv[])
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
 	      case 'x':  d_x_opt++; break;			// FX.25
+	      case 'd':	 aprstt_debug++; break;			// APRStt (mnemonic Dtmf)
 	      default: break;
 	     }
 	    }
@@ -758,7 +760,7 @@ int main (int argc, char *argv[])
 						// Will make more precise in afsk demod init.
 	    audio_config.achan[0].mark_freq = 2083;	// Actually 2083.3 - logic 1.
 	    audio_config.achan[0].space_freq = 1563;	// Actually 1562.5 - logic 0.
-	    strlcpy (audio_config.achan[0].profiles, "D", sizeof(audio_config.achan[0].profiles));
+	    strlcpy (audio_config.achan[0].profiles, "A", sizeof(audio_config.achan[0].profiles));
 	  }
 	  else {
             audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
@@ -883,7 +885,7 @@ int main (int argc, char *argv[])
  * Initialize the touch tone decoder & APRStt gateway.
  */
 	dtmf_init (&audio_config, audio_amplitude);
-	aprs_tt_init (&tt_config);
+	aprs_tt_init (&tt_config, aprstt_debug);
 	tt_user_init (&audio_config, &tt_config);
 
 /*
@@ -1345,17 +1347,23 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	}
 
 /* 
- * If it came from DTMF decoder, send it to APRStt gateway.
+ * If it came from DTMF decoder (subchan == -1), send it to APRStt gateway.
  * Otherwise, it is a candidate for IGate and digipeater.
  *
- * TODO: It would be useful to have some way to simulate touch tone
+ * It is also useful to have some way to simulate touch tone
  * sequences with BEACON sendto=R0 for testing.
  */
 
-	if (subchan == -1) {
+	if (subchan == -1) {		// from DTMF decoder
 	  if (tt_config.gateway_enabled && info_len >= 2) {
 	    aprs_tt_sequence (chan, (char*)(pinfo+1));
 	  }
+	}
+	else if (*pinfo == 't' && info_len >= 2 && tt_config.gateway_enabled) {
+				// For testing.
+				// Would be nice to verify it was generated locally,
+				// not received over the air.
+	  aprs_tt_sequence (chan, (char*)(pinfo+1));
 	}
 	else { 
 	
@@ -1487,6 +1495,7 @@ static void usage (char **argv)
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif
 	dw_printf ("       x             x = FX.25 increase verbose level.\n");
+	dw_printf ("       d             d = APRStt (DTMF to APRS object translation).\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Decoding of APRS packets.\n");
@@ -1510,9 +1519,12 @@ static void usage (char **argv)
 	dw_printf ("\n");
   
 #if __WIN32__
+	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
 #else
-	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf.\n");
+	// TODO: Could vary by platform and build options.
+	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
 #endif
+	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
 	exit (EXIT_FAILURE);
 }
 

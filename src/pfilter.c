@@ -1298,7 +1298,7 @@ static int filt_s (pfstate_t *pf)
  *
  *
  *		"time" is maximum number of minutes since message addressee was last heard.
- *			This is required.
+ *			This is required.  APRS-IS uses 3 hours so that would be a good value here.
  *
  *		"hops" is maximum number of digpeater hops.  (i.e. 0 for heard directly).
  * 			If hops is not specified, the maximum transmit digipeater hop count,
@@ -1309,8 +1309,8 @@ static int filt_s (pfstate_t *pf)
  *		Examples:
  *			i/60/0		Heard in past 60 minutes directly.
  *			i/45		Past 45 minutes, default max digi hops.
- *			i/30/3		Default time, max 3 digi hops.
- *			i/30/8/42.6/-71.3/50.
+ *			i/180/3		Default time (3 hours), max 3 digi hops.
+ *			i/180/8/42.6/-71.3/50.
  *
  *
  *		It only makes sense to use this for the IS>RF direction.
@@ -1321,6 +1321,10 @@ static int filt_s (pfstate_t *pf)
  *		position report from the sender of the "message."
  *		That is done somewhere else.  We are not concerned with it here.
  *
+ *		IMHO, the rules here are too restrictive.
+ *
+ *		FIXME -explain
+ *
  *------------------------------------------------------------------------------*/
 
 static int filt_i (pfstate_t *pf)
@@ -1329,7 +1333,15 @@ static int filt_i (pfstate_t *pf)
 	char *cp;
 	char sep[2];
 	char *v;
-	int heardtime = 30;
+
+// http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2020-July/048656.html
+// Default of 3 hours should be good.
+// One might question why to have a time limit at all.  Messages are very rare
+// the the APRS-IS wouldn't be sending it to me unless the addressee was in the
+// vicinity recently.
+// TODO: Should produce a warning if a user specified filter does not include "i".
+
+	int heardtime = 180;	// 3 hours * 60 min/hr = 180 minutes
 #if PFTEST
 	int maxhops = 2;
 #else
@@ -1466,7 +1478,7 @@ static int filt_i (pfstate_t *pf)
  *
  * Maybe we could compromise here and say the sender must have been heard directly.
  * It sent the message currently being processed so we must have heard it very recently, i.e. in
- * the past minute, rather than the usual 30 or 60 minutes for the addressee.
+ * the past minute, rather than the usual 180 minutes for the addressee.
  */
 
 	was_heard = mheard_was_recently_nearby ("source", src, 1, 0, G_UNKNOWN, G_UNKNOWN, G_UNKNOWN);

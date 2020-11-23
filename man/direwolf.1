@@ -61,6 +61,10 @@ Data rate in bits/sec for first channel.  Standard values are 300, 1200, 2400, 4
 4800 bps uses 8PSK based on V.27 standard.
 .P
 9600 bps and up uses K9NG/G3RUH standard.
+.P
+AIS for ship Automatic Identification System.
+.P
+EAS for Emergency Alert System (EAS) Specific Area Message Encoding (SAME).
 .RE
 .RE
 .PD
@@ -80,6 +84,10 @@ Force G3RUH modem regardless of data rate.
 .TP
 .BI "-D " "n"
 Divide audio sample by n for first channel.
+
+.TP
+.BI "-X " "n"
+1 to enable FX.25 transmit.
 
 .TP
 .BI "-d " "x"
@@ -112,6 +120,10 @@ h = Hamlib verbose level.  Repeat for more.
 m = Monitor heard station list.
 .P
 f = Packet filtering.
+.P
+x = FX.25 increase verbose level.
+.P
+d = APRStt (DTMF to APRS object conversion).
 .RE
 .RE
 .PD
@@ -131,7 +143,8 @@ d = Decoding of APRS packets.
 
 .TP
 .BI "-t " "n"
-Text colors.  1=normal, 0=disabled.
+Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.  Use 9 to test compatibility with your terminal.
+
 
 .TP
 .B "-p " 
@@ -153,6 +166,13 @@ Print Symbol tables and exit.
 .BI "-a " "n"
 Report audio device statistics each n seconds.
 
+.TP
+.BI "-T " "fmt"
+Time stamp format for sent and received frames.
+
+.TP
+.BI "-e " "ber"
+Receive Bit Error Rate (BER), e.g. 1e-5
 
 .SH EXAMPLES
 gqrx (2.3 and later) has the ability to send streaming audio through a UDP socket to another application for further processing. 

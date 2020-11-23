@@ -81,8 +81,14 @@ typedef struct position_s {
 
 static int set_norm_position (char symtab, char symbol, double dlat, double dlong, int ambiguity, position_t *presult)
 {
+	// An over zealous compiler might complain about l*itude_to_str writing
+	// N characters plus nul to an N character field so we stick it into a
+	// larger temp then copy the desired number of bytes.  (Issue 296)
 
-	latitude_to_str (dlat, ambiguity, presult->lat);
+	char stemp[16];
+
+	latitude_to_str (dlat, ambiguity, stemp);
+	memcpy (presult->lat, stemp, sizeof(presult->lat));
 
 	if (symtab != '/' && symtab != '\\' && ! isdigit(symtab) && ! isupper(symtab)) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -90,7 +96,8 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
 	}
 	presult->sym_table_id = symtab;
 
-	longitude_to_str (dlong, ambiguity, presult->lon);
+	longitude_to_str (dlong, ambiguity, stemp);
+	memcpy (presult->lon, stemp, sizeof(presult->lon));
 
 	if (symbol < '!' || symbol > '~') {
 	  text_color_set(DW_COLOR_ERROR);
