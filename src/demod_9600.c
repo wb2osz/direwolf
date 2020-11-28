@@ -221,7 +221,7 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
 
 	//dw_printf ("demod_9600_init: call gen_lowpass(fc=%.2f, , size=%d, )\n", fc, D->lp_filter_size);
 
-	(void)gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, 0);
+	gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window);
 
 	/* Version 1.2: Experiment with different slicing levels. */
 

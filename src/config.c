@@ -1337,7 +1337,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 								// Will make more precise in afsk demod init.
 	      p_audio_config->achan[channel].mark_freq = 2083;	// Actually 2083.3 - logic 1.
 	      p_audio_config->achan[channel].space_freq = 1563;	// Actually 1562.5 - logic 0.
-	      // ? strlcpy (p_audio_config->achan[channel].profiles, "D", sizeof(p_audio_config->achan[channel].profiles));
+	      // ? strlcpy (p_audio_config->achan[channel].profiles, "A", sizeof(p_audio_config->achan[channel].profiles));
 	    }
 	    else {
               p_audio_config->achan[channel].modem_type = MODEM_SCRAMBLE;

@@ -198,46 +198,57 @@ int demod_init (struct audio_s *pa)
 	      assert (num_letters == (int)(strlen(just_letters)));
 
 /*
- * Pick a good default demodulator if none specified. 
+ * Pick a good default demodulator if none specified.
+ * Previously, we had "D" optimized for 300 bps.
+ * Gone in 1.7 so it is always "A+".
  */
 	      if (num_letters == 0) {
+	        strlcpy (just_letters, "A", sizeof(just_letters));
+	        num_letters = strlen(just_letters);
 
-	        if (save_audio_config_p->achan[chan].baud < 600) {
-
-	          /* This has been optimized for 300 baud. */
-
-	          strlcpy (just_letters, "D", sizeof(just_letters));
-
-	        }
-	        else {
-#if __arm__
-	          /* We probably don't have a lot of CPU power available. */
-	          /* Previously we would use F if possible otherwise fall back to A. */
-
-	          /* In version 1.2, new default is E+ /3. */
-	          strlcpy (just_letters, "E", sizeof(just_letters));			// version 1.2 now E.
-	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
+	        if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
 								// If not explicitly turned off.
-	          if (save_audio_config_p->achan[chan].decimate == 0) {
-	            if (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
-	              save_audio_config_p->achan[chan].decimate = 3;
-	            }
-	          }
-#else
-	          strlcpy (just_letters, "E", sizeof(just_letters));			// version 1.2 changed C to E.
-	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
-								// If not explicitly turned off.
-#endif
-	        }
-	        num_letters = 1;
 	      }
 
+/*
+ * Special case for ARM.
+ * The higher end ARM chips have loads of power but many people
+ * are using a single core Pi Zero or similar.
+ * (I'm still using a model 1 for my digipeater/IGate!)
+ * Decreasing CPU requirement has a negligible impact on decoding performance.
+ *
+ * 	atest -PA- 01_Track_1.wav		--> 1002 packets decoded.
+ * 	atest -PA- -D3 01_Track_1.wav		--> 997 packets decoded.
+ *
+ * Someone concerned about 1/2 of one percent difference can add "-D 1"
+ */
+#if __arm__
+	      if (save_audio_config_p->achan[chan].decimate == 0) {
+	        if (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
+	          save_audio_config_p->achan[chan].decimate = 3;
+	        }
+	      }
+#endif
 
-	      assert (num_letters == (int)(strlen(just_letters)));
+/*
+ * Number of filter taps is proportional to number of audio samples in a "symbol" duration.
+ * These can get extremely large for low speeds, e.g. 300 baud.
+ * In this case, increase the decimation ration.  Crude approximation. Could be improved.
+ */
+	      if (save_audio_config_p->achan[chan].decimate == 0 &&
+		  save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000 &&
+	          save_audio_config_p->achan[chan].baud < 600) {
+
+		// Avoid enormous number of filter taps.
+
+	        save_audio_config_p->achan[chan].decimate = 3;
+	      }
+
 
 /*
  * Put it back together again.
  */
+	      assert (num_letters == (int)(strlen(just_letters)));
 
 		/* At this point, have_plus can have 3 values: */
 		/* 	1 = turned on, either explicitly or by applied default */
@@ -286,7 +297,7 @@ int demod_init (struct audio_s *pa)
 
 	      if (save_audio_config_p->achan[chan].decimate == 0) {
 	        save_audio_config_p->achan[chan].decimate = 1;
-		if (strchr (just_letters, 'D') != NULL && save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
+		if (strchr (just_letters, 'B') != NULL && save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
 		  save_audio_config_p->achan[chan].decimate = 3;
 		}
 	      }

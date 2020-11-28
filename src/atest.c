@@ -236,7 +236,7 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[channel].space_freq = DEFAULT_SPACE_FREQ;		
 	  my_audio_config.achan[channel].baud = DEFAULT_BAUD;	
 
-	  strlcpy (my_audio_config.achan[channel].profiles, "E", sizeof(my_audio_config.achan[channel].profiles));
+	  strlcpy (my_audio_config.achan[channel].profiles, "A", sizeof(my_audio_config.achan[channel].profiles));
  		
 	  my_audio_config.achan[channel].num_freq = 1;				
 	  my_audio_config.achan[channel].offset = 0;	
@@ -430,19 +430,21 @@ int main (int argc, char *argv[])
 	/* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
 	/* that need to be kept in sync.  Maybe it could be a common function someday. */
 
-	if (my_audio_config.achan[0].baud == 100) {
+	if (my_audio_config.achan[0].baud == 100) {		// What was this for?
 	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
 	  my_audio_config.achan[0].mark_freq = 1615;
 	  my_audio_config.achan[0].space_freq = 1785;
-	  strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	  //strlcpy (my_audio_config.achan[0].profiles, "A", sizeof(my_audio_config.achan[0].profiles));
 	}
-	else if (my_audio_config.achan[0].baud < 600) {
+	else if (my_audio_config.achan[0].baud < 600) {		// e.g. HF SSB packet
 	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
 	  my_audio_config.achan[0].mark_freq = 1600;
 	  my_audio_config.achan[0].space_freq = 1800;
-	  strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	  // Previously we had a "D" which was fine tuned for 300 bps.
+	  // In v1.7, it's not clear if we should use "B" or just stick with "A".
+	  //strlcpy (my_audio_config.achan[0].profiles, "B", sizeof(my_audio_config.achan[0].profiles));
 	}
-	else if (my_audio_config.achan[0].baud < 1800) {
+	else if (my_audio_config.achan[0].baud < 1800) {	// common 1200
 	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
 	  my_audio_config.achan[0].mark_freq = DEFAULT_MARK_FREQ;
 	  my_audio_config.achan[0].space_freq = DEFAULT_SPACE_FREQ;
@@ -460,7 +462,7 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
 	}
-	else if (my_audio_config.achan[0].baud == 12345) {
+	else if (my_audio_config.achan[0].baud == 12345) {	// Hack for different use of 9600
 	  my_audio_config.achan[0].modem_type = MODEM_AIS;
 	  my_audio_config.achan[0].baud = 9600;
 	  my_audio_config.achan[0].mark_freq = 0;
@@ -473,7 +475,7 @@ int main (int argc, char *argv[])
 						// Will make more precise in afsk demod init.
 	  my_audio_config.achan[0].mark_freq = 2083;	// Actually 2083.3 - logic 1.
 	  my_audio_config.achan[0].space_freq = 1563;	// Actually 1562.5 - logic 0.
-	  strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
+	  strlcpy (my_audio_config.achan[0].profiles, "A", sizeof(my_audio_config.achan[0].profiles));
 	}
 	else {
 	  my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
