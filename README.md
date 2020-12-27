@@ -131,15 +131,17 @@ On Debian / Ubuntu / Raspbian / Raspberry Pi OS:
     sudo apt-get install cmake
     sudo apt-get install libasound2-dev
     sudo apt-get install libudev-dev
+    sudo apt-get install libavahi-client-dev
 
 Or on Red Hat / Fedora / CentOS:
 
-	sudo yum install git
-	sudo yum install gcc
-	sudo yum install gcc-c++
-	sudo yum install make
+    sudo yum install git
+    sudo yum install gcc
+    sudo yum install gcc-c++
+    sudo yum install make
     sudo yum install alsa-lib-devel
     sudo yum install libudev-devel
+    sudo yum install avahi-devel
 
 CentOS 6 & 7 currently have cmake 2.8 but we need 3.1 or later.
 First you need to enable the EPEL repository.  Add a symlink if you don't already have the older version and want to type cmake rather than cmake3.

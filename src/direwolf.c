@@ -125,6 +125,7 @@
 #include "dtime_now.h"
 #include "fx25.h"
 #include "dwsock.h"
+#include "dns_sd_dw.h"
 
 
 //static int idx_decoded = 0;
@@ -943,6 +944,11 @@ int main (int argc, char *argv[])
  */
 	server_init (&audio_config, &misc_config);
 	kissnet_init (&misc_config);
+
+#if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
+	if (misc_config.kiss_port > 0 && misc_config.dns_sd_enabled)
+	  dns_sd_announce(&misc_config);
+#endif
 
 /*
  * Create a pseudo terminal and KISS TNC emulator.
