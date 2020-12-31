@@ -556,10 +556,10 @@ void decode_aprs_print (decode_aprs_t *A) {
 	};
 
 	if (A->g_speed_mph != G_UNKNOWN) {
-	  char spd[20];
+	  char spd[32];
 
 	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
-	  snprintf (spd, sizeof(spd), "%.0f MPH", A->g_speed_mph);
+	  snprintf (spd, sizeof(spd), "%.0f km/h (%.0f MPH)", DW_MILES_TO_KM(A->g_speed_mph), A->g_speed_mph);
 	  strlcat (stemp, spd, sizeof(stemp));
 	};
 
@@ -572,10 +572,10 @@ void decode_aprs_print (decode_aprs_t *A) {
 	};
 
 	if (A->g_altitude_ft != G_UNKNOWN) {
-	  char alt[20];
+	  char alt[32];
 
 	  if (strlen(stemp) > 0) strlcat (stemp, ", ", sizeof(stemp));
-	  snprintf (alt, sizeof(alt), "alt %.0f ft", A->g_altitude_ft);
+	  snprintf (alt, sizeof(alt), "alt %.0f m (%.0f ft)", DW_FEET_TO_METERS(A->g_altitude_ft), A->g_altitude_ft);
 	  strlcat (stemp, alt, sizeof(stemp));
 	};
 
