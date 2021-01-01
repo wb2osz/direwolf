@@ -109,5 +109,5 @@ $RECYCLE.BIN/
 *.dSYM
 
 # cmake
-build/
+build*/
 tmp/

@@ -306,6 +306,9 @@ int main (int argc, char *argv[])
 #if defined(USE_CM108)
 	dw_printf (" cm108-ptt");
 #endif
+#if defined(USE_GPIOD)
+	dw_printf (" libgpiod");
+#endif
 	dw_printf ("\n");
 #endif
 
