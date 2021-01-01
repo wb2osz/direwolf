@@ -230,7 +230,8 @@ int main (int argc, char *argv[])
 	float e_recv_ber = 0.0;		/* Receive Bit Error Rate (BER). */
 	int X_fx25_xmit_enable = 0;	/* FX.25 transmit enable. */
 
-	int x_opt = 0;		/* "-x N" option for transmitting calibration tones. */
+	char x_opt_mode = ' ';		/* "-x N" option for transmitting calibration tones. */
+	int x_opt_chan = 0;		/* Split into 2 parts.  Mode e.g.  m, a, and optional channel. */
 
 	strlcpy(l_opt_logdir, "", sizeof(l_opt_logdir));
 	strlcpy(L_opt_logfile, "", sizeof(L_opt_logfile));
@@ -492,21 +493,42 @@ int main (int argc, char *argv[])
             break;
 
           case 'x':				/* -x N for transmit calibration tones. */
+						/* N is composed of a channel number and/or one letter */
+						/* for the mode: mark, space, alternate, ptt-only. */
 
-      	     switch (*optarg) {
-      	      case 'a':  x_opt = 1; break; // Alternating tones
-      	      case 'm':  x_opt = 2; break; // Mark tone
-      	      case '1':  x_opt = 2; break; // Mark tone alternative
-      	      case 's':  x_opt = 3; break; // Space tone
-      	      case '2':  x_opt = 3; break; // Space tone alternative
-      	      case 'p':  x_opt = 4; break; // Set PTT only
+	    for (char *p = optarg; *p != '\0'; p++ ) {
+	      switch (*p) {
+	      case '0':
+	      case '1':
+	      case '2':
+	      case '3':
+	      case '4':
+	      case '5':
+	      case '6':
+	      case '7':
+	      case '8':
+	      case '9':
+	        x_opt_chan = x_opt_chan * 10 + *p - '0';
+	        if (x_opt_mode == ' ') x_opt_mode = 'a';
+	        break;
+	      case 'a':  x_opt_mode = *p; break; // Alternating tones
+	      case 'm':  x_opt_mode = *p; break; // Mark tone
+	      case 's':  x_opt_mode = *p; break; // Space tone
+	      case 'p':  x_opt_mode = *p; break; // Set PTT only
       	      default:
-      	    	text_color_set(DW_COLOR_ERROR);
-      	    	dw_printf ("Invalid option for -x. \n");
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Invalid option '%c' for -x. Must be a, m, s, or p.\n", *p);
+	        text_color_set(DW_COLOR_INFO);
       	    	exit (EXIT_FAILURE);
       	    	break;
       	     }
-
+	    }
+	    if (x_opt_chan < 0 || x_opt_chan >= MAX_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Invalid channel %d for -x. \n", x_opt_chan);
+	      text_color_set(DW_COLOR_INFO);
+	      exit (EXIT_FAILURE);
+	    }
             break;
 
           case 'r':				/* -r audio samples/sec.  e.g. 44100 */
@@ -923,65 +945,72 @@ int main (int argc, char *argv[])
 /*
  * If -x N option specified, transmit calibration tones for transmitter
  * audio level adjustment, up to 1 minute then quit.
- * N = a: Alternating mark/space tones
- * N = m: (or 1): Mark tone (e.g. 1200Hz)
- * N = s: (or 2): Space tone (e.g. 2200Hz)
- * N = p: Set PTT only.
- * TODO:  enhance for more than one channel.
+ * a: Alternating mark/space tones
+ * m: Mark tone (e.g. 1200Hz)
+ * s: Space tone (e.g. 2200Hz)
+ * p: Set PTT only.
+ * A leading or trailing number is the channel.
  */
 
-	if (x_opt != 0) {
-		if (audio_config.achan[0].mark_freq
-				&& audio_config.achan[0].space_freq) {
+	if (x_opt_mode != ' ') {
+	  if (audio_config.achan[x_opt_chan].medium == MEDIUM_RADIO) {
+		if (audio_config.achan[x_opt_chan].mark_freq
+				&& audio_config.achan[x_opt_chan].space_freq) {
 			int max_duration = 60;
-			int n = audio_config.achan[0].baud * max_duration;
-			int chan = 0;
+			int n = audio_config.achan[x_opt_chan].baud * max_duration;
 
 			text_color_set(DW_COLOR_INFO);
-			ptt_set(OCTYPE_PTT, chan, 1);
+			ptt_set(OCTYPE_PTT, x_opt_chan, 1);
 
-			switch (x_opt) {
-			case 1:  // Alternating tones: -x a
-				dw_printf(
-						"\nSending alternating mark/space calibration tones (%d/%dHz).\nPress control-C to terminate.\n",
-						audio_config.achan[0].mark_freq,
-						audio_config.achan[0].space_freq);
+			switch (x_opt_mode) {
+			default:
+			case 'a':  // Alternating tones: -x a
+				dw_printf("\nSending alternating mark/space calibration tones (%d/%dHz) on channel %d.\nPress control-C to terminate.\n",
+						audio_config.achan[x_opt_chan].mark_freq,
+						audio_config.achan[x_opt_chan].space_freq,
+						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(chan, n & 1);
+					tone_gen_put_bit(x_opt_chan, n & 1);
 				}
 				break;
-			case 2:  // "Mark" tone: -x m
-				dw_printf(
-						"\nSending mark calibration tone (%dHz).\nPress control-C to terminate.\n",
-						audio_config.achan[0].mark_freq);
+			case 'm':  // "Mark" tone: -x m
+				dw_printf("\nSending mark calibration tone (%dHz) on channel %d.\nPress control-C to terminate.\n",
+						audio_config.achan[x_opt_chan].mark_freq,
+						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(chan, 0);
+					tone_gen_put_bit(x_opt_chan, 0);
 				}
 				break;
-			case 3:  // "Space" tone: -x s
-				dw_printf(
-						"\nSending space calibration tone (%dHz).\nPress control-C to terminate.\n",
-						audio_config.achan[0].space_freq);
+			case 's':  // "Space" tone: -x s
+				dw_printf("\nSending space calibration tone (%dHz) on channel %d.\nPress control-C to terminate.\n",
+						audio_config.achan[x_opt_chan].space_freq,
+						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(chan, 1);
+					tone_gen_put_bit(x_opt_chan, 1);
 				}
 				break;
-			case 4:  // Silence - set PTT only: -x p
-				dw_printf(
-						"\nSending silence (Set PTT only).\nPress control-C to terminate.\n");
-				sleep(max_duration);
+			case 'p':  // Silence - set PTT only: -x p
+				dw_printf("\nSending silence (Set PTT only) on channel %d.\nPress control-C to terminate.\n", x_opt_chan);
+				SLEEP_SEC(max_duration);
 				break;
 			}
 
-			ptt_set(OCTYPE_PTT, chan, 0);
-			exit(0);
+			ptt_set(OCTYPE_PTT, x_opt_chan, 0);
+			text_color_set(DW_COLOR_INFO);
+			exit(EXIT_SUCCESS);
 
 		} else {
 			text_color_set(DW_COLOR_ERROR);
-			dw_printf(
-					"\nSpace/mark frequencies not defined. Cannot calibrate using this modem type.\n");
+			dw_printf("\nMark/Space frequencies not defined for channel %d. Cannot calibrate using this modem type.\n", x_opt_chan);
+			text_color_set(DW_COLOR_INFO);
 			exit(EXIT_FAILURE);
 		}
+	    } else {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf("\nChannel %d is not configured as a radio channel.\n", x_opt_chan);
+		text_color_set(DW_COLOR_INFO);
+		exit(EXIT_FAILURE);
+	    }
 	}
 
 
@@ -1562,10 +1591,11 @@ static void usage (char **argv)
 	dw_printf ("    -p             Enable pseudo terminal for KISS protocol.\n");
 #endif
 	dw_printf ("    -x             Send Xmit level calibration tones.\n");
-	dw_printf ("       a             a        = Alternating mark/space tones.\n");
-	dw_printf ("       m             m (or 1) = Steady mark tone (e.g. 1200Hz).\n");
-	dw_printf ("       s             s (or 2) = Steady space tone (e.g. 2200Hz).\n");
-	dw_printf ("       p             p        = Silence (Set PTT only).\n");
+	dw_printf ("       a             a = Alternating mark/space tones.\n");
+	dw_printf ("       m             m = Steady mark tone (e.g. 1200Hz).\n");
+	dw_printf ("       s             s = Steady space tone (e.g. 2200Hz).\n");
+	dw_printf ("       p             p = Silence (Set PTT only).\n");
+	dw_printf ("        chan          Optionally add a number to specify radio channel.\n");
 	dw_printf ("    -u             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
 	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
@@ -1583,6 +1613,7 @@ static void usage (char **argv)
 	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	text_color_set(DW_COLOR_INFO);
 	exit (EXIT_FAILURE);
 }
 
