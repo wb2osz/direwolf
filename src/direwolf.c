@@ -296,7 +296,7 @@ int main (int argc, char *argv[])
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
-#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108)
+#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD
 	dw_printf ("Includes optional support for: ");
 #if defined(ENABLE_GPSD)
 	dw_printf (" gpsd");
@@ -306,6 +306,9 @@ int main (int argc, char *argv[])
 #endif
 #if defined(USE_CM108)
 	dw_printf (" cm108-ptt");
+#endif
+#if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
+	dw_printf (" dns-sd");
 #endif
 	dw_printf ("\n");
 #endif

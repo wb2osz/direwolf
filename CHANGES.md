@@ -7,6 +7,8 @@
 
 ### New Features: ###
 
+- Dire Wolf now advertises itself using DNS Service Discovery.  This allows suitable APRS / Packet Radio applications to find a network KISS TNC without knowing the IP address or TCP port.    Thanks to Hessu for providing this.  Currently available only for Linux and Mac OSX.  [Read all about it here.](https://github.com/hessu/aprs-specs/blob/master/TCP-KISS-DNS-SD.md)
+
 - The transmit calibration tone (-x) command line option now accepts a radio channel number and/or a single letter mode:  a = alternate tones, m = mark tone, s = space tone, p = PTT only no sound.
 
 - The BEACON configuration now recognizes the SOURCE= option.  This replaces the AX.25 source address rather than using the MYCALL value for the channel.  This is useful for sending more than 5 analog telemetry channels.  Use two, or more, source addresses with up to 5 analog channels each.
