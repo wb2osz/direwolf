@@ -1,15 +1,3 @@
-include(CheckSymbolExists)
-# Some platforms provide their own strlcpy & strlcat. (BSD, MacOSX)
-# Others don't so we provide our own. (Most, but not all Linux)
-# Define the preprocessor macro so libgps does not supply its own version.
-check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
-if(HAVE_STRLCPY)
-    add_compile_options(-DHAVE_STRLCPY)
-endif()
-check_symbol_exists(strlcat string.h HAVE_STRLCAT)
-if(HAVE_STRLCAT)
-    add_compile_options(-DHAVE_STRLCAT)
-endif()
 
 # global includes
 # not ideal but not so slow
