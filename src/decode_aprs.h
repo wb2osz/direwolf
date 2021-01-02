@@ -80,6 +80,8 @@ typedef struct decode_aprs_s {
 	char g_message_number[8];	/* Message number.  Should be 1 - 5 characters if used. */
 
         float g_speed_mph;		/* Speed in MPH.  */
+					/* The APRS transmission uses knots so watch out for */
+					/* conversions when sending and receiving APRS packets. */
 
         float g_course;			/* 0 = North, 90 = East, etc. */
 	
@@ -94,6 +96,9 @@ typedef struct decode_aprs_s {
         float g_range;			/* Precomputed radio range in miles. */
 
         float g_altitude_ft;		/* Feet above median sea level.  */
+					/* I used feet here because the APRS specification */
+					/* has units of feet for alititude.  Meters would be */
+					/* more natural to the other 96% of the world. */
 
         char g_mfr[80];			/* Manufacturer or application. */
 
