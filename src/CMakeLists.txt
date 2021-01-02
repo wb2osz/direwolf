@@ -109,6 +109,12 @@ if(LINUX)
       cm108.c
       )
   endif()
+  if(AVAHI_CLIENT_FOUND)
+    list(APPEND direwolf_SOURCES
+      dns_sd_common.c
+      dns_sd_avahi.c
+      )
+  endif()
   elseif(WIN32 OR CYGWIN) # windows
     list(APPEND direwolf_SOURCES
       audio_win.c
@@ -124,6 +130,12 @@ if(LINUX)
     list(APPEND direwolf_SOURCES
       audio_portaudio.c
       )
+    if(USE_MACOS_DNSSD)
+      list(APPEND direwolf_SOURCES
+        dns_sd_common.c
+        dns_sd_macos.c
+        )
+    endif()
 endif()
 
 add_executable(direwolf
@@ -140,6 +152,7 @@ target_link_libraries(direwolf
   ${ALSA_LIBRARIES}
   ${UDEV_LIBRARIES}
   ${PORTAUDIO_LIBRARIES}
+  ${AVAHI_LIBRARIES}
   )
 
 if(WIN32 OR CYGWIN)
