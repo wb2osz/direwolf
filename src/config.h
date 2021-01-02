@@ -88,6 +88,9 @@ struct misc_config_s {
 
 	char log_path[80];	/* Either directory or full file name depending on above. */
 
+	int dns_sd_enabled;	/* DNS Service Discovery announcement enabled. */
+	char dns_sd_name[64];	/* Name announced on dns-sd; defaults to "Dire Wolf on <hostname>" */
+
 	int sb_configured;	/* TRUE if SmartBeaconing is configured. */
 	int sb_fast_speed;	/* MPH */
 	int sb_fast_rate;	/* seconds */

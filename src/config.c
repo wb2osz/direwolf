@@ -856,6 +856,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->enable_kiss_pt = 0;				/* -p option */
 	p_misc_config->kiss_copy = 0;
 
+	p_misc_config->dns_sd_enabled = 1;
+
 	/* Defaults from http://info.aprs.net/index.php?title=SmartBeaconing */
 
 	p_misc_config->sb_configured = 0;	/* TRUE if SmartBeaconing is configured. */
@@ -4562,6 +4564,43 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "KISSCOPY") == 0) {
 	    p_misc_config->kiss_copy = 1;
 	  }
+
+
+/*
+ * DNSSD 		- Enable or disable (1/0) dns-sd, DNS Service Discovery announcements
+ * DNSSDNAME            - Set DNS-SD service name, defaults to "Dire Wolf on <hostname>"
+ */
+
+	  else if (strcasecmp(t, "DNSSD") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing integer value for DNSSD command.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+	    if (n == 0 || n == 1) {
+	      p_misc_config->dns_sd_enabled = n;
+	    } else {
+	      p_misc_config->dns_sd_enabled = 0;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Invalid integer value for DNSSD. Disabling dns-sd.\n", line);
+	    }
+	  }
+
+	  else if (strcasecmp(t, "DNSSDNAME") == 0) {
+	    t = split(NULL, 1);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing service name for DNSSDNAME.\n", line);
+	      continue;
+	    }
+	    else {
+	      strlcpy(p_misc_config->dns_sd_name, t, sizeof(p_misc_config->dns_sd_name));
+	    }
+	  }
+
 
 
 /*
