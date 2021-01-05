@@ -59,7 +59,8 @@ static void registerServiceCallBack(DNSServiceRef sdRef, DNSServiceFlags flags, 
 
 void dns_sd_announce (struct misc_config_s *mc)
 {
-	int kiss_port = mc->kiss_port;
+	//int kiss_port = mc->kiss_port;	// now an array.
+	int kiss_port = mc->kiss_port[0];	// FIXME:  Quick hack until I can handle multiple TCP ports properly.
 
 	if (mc->dns_sd_name[0]) {
 		name = strdup(mc->dns_sd_name);

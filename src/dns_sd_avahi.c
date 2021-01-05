@@ -220,7 +220,8 @@ static void *avahi_mainloop(void *arg)
 void dns_sd_announce (struct misc_config_s *mc)
 {
 	text_color_set(DW_COLOR_DEBUG);
-	kiss_port = mc->kiss_port;
+	//kiss_port = mc->kiss_port;	// now an array.
+	kiss_port = mc->kiss_port[0];	// FIXME:  Quick hack until I can handle multiple TCP ports properly.
 
 	int error;
 
