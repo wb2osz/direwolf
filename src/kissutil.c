@@ -663,7 +663,7 @@ static THREAD_F tnc_listen_net (void *arg)
 	    // on the assumption it was being used in only one direction.
 	    // Not worried enough about it to do anything at this time.
 
-	    kiss_rec_byte (&kstate, data[j], verbose, client, NULL);
+	    kiss_rec_byte (&kstate, data[j], verbose, NULL, client, NULL);
 	  }
 	}
 
@@ -726,7 +726,7 @@ static THREAD_F tnc_listen_serial (void *arg)
 	  // Feed in one byte at a time.
 	  // kiss_process_msg is called when a complete frame has been accumulated.
 
-	  kiss_rec_byte (&kstate, ch, verbose, client, NULL);
+	  kiss_rec_byte (&kstate, ch, verbose, NULL, client, NULL);
 	}
 
 } /* end tnc_listen_serial */
@@ -754,7 +754,8 @@ static THREAD_F tnc_listen_serial (void *arg)
  *
  *-----------------------------------------------------------------*/
 
-void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
+void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct kissport_status_s *kps, int client,
+			void (*sendfun)(int chan, int kiss_cmd, unsigned char *fbuf, int flen, struct kissport_status_s *onlykps, int onlyclient))
 {
 	int chan;
 	int cmd;

@@ -1419,10 +1419,10 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	flen = ax25_pack(pp, fbuf);
 
-	server_send_rec_packet (chan, pp, fbuf, flen);				// AGW net protocol
-	kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS TCP
-	kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS serial port
-	kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);	// KISS pseudo terminal
+	server_send_rec_packet (chan, pp, fbuf, flen);					// AGW net protocol
+	kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);	// KISS TCP
+	kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);	// KISS serial port
+	kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);	// KISS pseudo terminal
 
 	if (A_opt_ais_to_obj && strlen(ais_obj_packet) != 0) {
 	  packet_t ao_pp = ax25_from_text (ais_obj_packet, 1);
@@ -1431,9 +1431,9 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	    int ao_flen = ax25_pack(ao_pp, ao_fbuf);
 
 	    server_send_rec_packet (chan, ao_pp, ao_fbuf, ao_flen);
-	    kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, -1);
-	    kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, -1);
-	    kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, -1);
+	    kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);
+	    kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);
+	    kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);
 	    ax25_delete (ao_pp);
 	  }
 	}

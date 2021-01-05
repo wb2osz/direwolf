@@ -261,6 +261,7 @@ void kissserial_init (struct misc_config_s *mc)
  *		flen		- Length of raw received frame not including the FCS
  *				  or -1 for a text string.
  *
+ *		kps
  *		client		- Not used for serial port version.
  *				  Here so that 3 related functions all have
  *				  the same parameter list.
@@ -272,7 +273,8 @@ void kissserial_init (struct misc_config_s *mc)
  *--------------------------------------------------------------------*/
 
 
-void kissserial_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client)
+void kissserial_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen,
+		struct kissport_status_s *notused1, int notused2)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int kiss_len;
@@ -488,7 +490,7 @@ static THREAD_F kissserial_listen_thread (void *arg)
 
 	while (1) {
 	  ch = kissserial_get();
-	  kiss_rec_byte (&kf, ch, kissserial_debug, -1, kissserial_send_rec_packet);
+	  kiss_rec_byte (&kf, ch, kissserial_debug, NULL, -1, kissserial_send_rec_packet);
 	}
 
 #if __WIN32__

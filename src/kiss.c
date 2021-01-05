@@ -94,7 +94,7 @@ void kisspt_set_debug (int n)
 	return;
 }
 
-void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client)
+void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, struct kissport_status_s *kps, int client)
 {
 	return;
 }
@@ -374,7 +374,7 @@ static int kisspt_open_pt (void)
  *		flen		- Length of raw received frame not including the FCS
  *				  or -1 for a text string.
  *
- *		client		- Not used for pseudo terminal.
+ *		kps, client	- Not used for pseudo terminal.
  *				  Here so that 3 related functions all have
  *				  the same parameter list.
  *
@@ -385,7 +385,7 @@ static int kisspt_open_pt (void)
  *--------------------------------------------------------------------*/
 
 
-void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client)
+void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, struct kissport_status_s *kps, int client)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int kiss_len;
@@ -591,7 +591,7 @@ static void * kisspt_listen_thread (void *arg)
 
 	while (1) {
 	  ch = kisspt_get();
-	  kiss_rec_byte (&kf, ch, kisspt_debug, -1, kisspt_send_rec_packet);
+	  kiss_rec_byte (&kf, ch, kisspt_debug, NULL, -1, kisspt_send_rec_packet);
 	}
 
 	return (void *) 0;	/* Unreachable but avoids compiler warning. */

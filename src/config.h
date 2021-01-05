@@ -30,11 +30,31 @@ enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 
 
 #define MAX_BEACONS 30
+#define MAX_KISS_TCP_PORTS (MAX_CHANS+1)
 
 struct misc_config_s {
 
-	int agwpe_port;		/* Port number for the "AGW TCPIP Socket Interface" */
-	int kiss_port;		/* Port number for the "TCP KISS" protocol. */
+	int agwpe_port;		/* TCP Port number for the "AGW TCPIP Socket Interface" */
+
+	// Previously we allowed only a single TCP port for KISS.
+	// An increasing number of people want to run multiple radios.
+	// Unfortunately, most applications don't know how to deal with multi-radio TNCs.
+	// They ignore the channel on receive and always transmit to channel 0.
+	// Running multiple instances of direwolf is a work-around but this leads to
+	// more complex configuration and we lose the cross-channel digipeating capability.
+	// In release 1.7 we add a new feature to assign a single radio channel to a TCP port.
+	// e.g.
+	//	KISSPORT 8001		# default, all channels.  Radio channel = KISS channel.
+	//
+	//	KISSPORT 7000 0		# Only radio channel 0 for receive.
+	//				# Transmit to radio channel 0, ignoring KISS channel.
+	//
+	//	KISSPORT 7001 1		# Only radio channel 1 for receive.  KISS channel set to 0.
+	//				# Transmit to radio channel 1, ignoring KISS channel.
+
+	int kiss_port[MAX_KISS_TCP_PORTS];	/* TCP Port number for the "TCP KISS" protocol. */
+	int kiss_chan[MAX_KISS_TCP_PORTS];	/* Radio Channel number for this port or -1 for all.  */
+
 	int kiss_copy;		/* Data from network KISS client is copied to all others. */
 	int enable_kiss_pt;	/* Enable pseudo terminal for KISS. */
 				/* Want this to be off by default because it hangs */

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -852,7 +852,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	memset (p_misc_config, 0, sizeof(struct misc_config_s));
 	p_misc_config->agwpe_port = DEFAULT_AGWPE_PORT;
-	p_misc_config->kiss_port = DEFAULT_KISS_PORT;
+
+	for (int i=0; i<MAX_KISS_TCP_PORTS; i++) {
+	  p_misc_config->kiss_port[i] = 0;	// entry not used.
+	  p_misc_config->kiss_chan[i] = -1;
+	}
+	p_misc_config->kiss_port[0] = DEFAULT_KISS_PORT;
+	p_misc_config->kiss_chan[0] = -1;	// all channels.
+
 	p_misc_config->enable_kiss_pt = 0;				/* -p option */
 	p_misc_config->kiss_copy = 0;
 
@@ -4477,27 +4484,89 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * KISSPORT 		- Port number for KISS over IP. 
+ * KISSPORT port [ chan ]		- Port number for KISS over IP.
  */
 
+	// Previously we allowed only a single TCP port for KISS.
+	// An increasing number of people want to run multiple radios.
+	// Unfortunately, most applications don't know how to deal with multi-radio TNCs.
+	// They ignore the channel on receive and always transmit to channel 0.
+	// Running multiple instances of direwolf is a work-around but this leads to
+	// more complex configuration and we lose the cross-channel digipeating capability.
+	// In release 1.7 we add a new feature to assign a single radio channel to a TCP port.
+	// e.g.
+	//	KISSPORT 8001		# default, all channels.  Radio channel = KISS channel.
+	//
+	//	KISSPORT 7000 0		# Only radio channel 0 for receive.
+	//				# Transmit to radio channel 0, ignoring KISS channel.
+	//
+	//	KISSPORT 7001 1		# Only radio channel 1 for receive.  KISS channel set to 0.
+	//				# Transmit to radio channel 1, ignoring KISS channel.
+
+// FIXME
 	  else if (strcasecmp(t, "KISSPORT") == 0) {
 	    int n;
+	    int tcp_port = 0;
+	    int chan = -1;	// optional.  default to all if not specified.
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing port number for KISSPORT command.\n", line);
+	      dw_printf ("Line %d: Missing TCP port number for KISSPORT command.\n", line);
 	      continue;
 	    }
 	    n = atoi(t);
             if ((n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) || n == 0) {
-	      p_misc_config->kiss_port = n;
+	      tcp_port = n;
 	    }
 	    else {
-	      p_misc_config->kiss_port = DEFAULT_KISS_PORT;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid port number for KISS TCPIP Socket Interface. Using %d.\n", 
-			line, p_misc_config->kiss_port);
+              dw_printf ("Line %d: Invalid TCP port number for KISS TCPIP Socket Interface.\n", line);
+              dw_printf ("Use something in the range of %d to %d.\n", MIN_IP_PORT_NUMBER, MAX_IP_PORT_NUMBER);
+	      continue;
    	    }
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      chan = atoi(t);
+	      if (chan < 0 || chan >= MAX_CHANS) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Invalid channel %d for KISSPORT command.  Must be in range 0 thru %d.\n", line, chan, MAX_CHANS-1);
+	        continue;
+	      }
+	    }
+
+	    // "KISSPORT 0" is used to remove the default entry.
+
+	    if (tcp_port == 0) {
+	      p_misc_config->kiss_port[0] = 0;		// Should all be wiped out?
+	    }
+	    else {
+
+	      // Try to find an empty slot.
+	      // A duplicate TCP port number will overwrite the previous value.
+
+	      int slot = -1;
+	      for (int i = 0; i < MAX_KISS_TCP_PORTS && slot == -1; i++) {
+	        if (p_misc_config->kiss_port[i] == tcp_port) {
+	          slot = i;
+	          if ( ! (slot == 0 && tcp_port == DEFAULT_KISS_PORT)) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: Warning: Duplicate TCP port %d will overwrite previous value.\n", line, tcp_port);
+	          }
+	        }
+	        else if (p_misc_config->kiss_port[i] == 0) {
+	          slot = i;
+	        }
+	      }
+	      if (slot >= 0) {
+	        p_misc_config->kiss_port[slot] = tcp_port;
+	        p_misc_config->kiss_chan[slot] = chan;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Too many KISSPORT commands.\n", line);
+	      }
+	    }
 	  }
 
 /*
