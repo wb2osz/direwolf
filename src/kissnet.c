@@ -96,7 +96,7 @@ Maybe a single stereo audio interface is used for 2 radios.
 
                    +------------+    tcp 8001, all channels
 Radio A  --------  |            |  -------------------------- Application A
-                   |  direwolf  | 
+                   |  direwolf  |
 Radio B  --------  |            |  -------------------------- Application B
                    +------------+    tcp 8001, all channels
 
@@ -110,11 +110,11 @@ Many people are using the work-around of two separate instances of direwolf.
 
                    +------------+    tcp 8001, KISS ch 0
 Radio A  --------  |  direwolf  |  -------------------------- Application A
-                   +------------+    
+                   +------------+
 
                    +------------+    tcp 8002, KISS ch 0
 Radio B  --------  |  direwolf  |  -------------------------- Application B
-                   +------------+    
+                   +------------+
 
 
 Or they might be using a single application that knows how to talk to multiple
@@ -127,7 +127,7 @@ Radio A  --------  |  direwolf  |  ------------------------
                                                             -- Application
                    +------------+    tcp 8002, KISS ch 0   /
 Radio B  --------  |  direwolf  |  ------------------------
-                   +------------+    
+                   +------------+
 
 Using two different instances of direwolf means more complex configuration
 and loss of cross-channel digipeating.  It is possible to use a stereo
@@ -145,7 +145,7 @@ Now can use a single instance of direwolf.
 
                    +------------+    tcp 8001, KISS ch 0
 Radio A  --------  |            |  -------------------------- Application A
-                   |  direwolf  | 
+                   |  direwolf  |
 Radio B  --------  |            |  -------------------------- Application B
                    +------------+    tcp 8002, KISS ch 0
 
@@ -446,7 +446,7 @@ static THREAD_F connect_listen_thread (void *arg)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-    	dw_printf("Binding to port %s ... \n", tcp_port_str);
+	dw_printf("Binding to port %s ... \n", tcp_port_str);
 #endif
 
 	err = bind( listen_sock, ai->ai_addr, (int)ai->ai_addrlen);
@@ -465,7 +465,7 @@ static THREAD_F connect_listen_thread (void *arg)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
- 	dw_printf("opened KISS socket as fd (%d) on port (%s) for stream i/o\n", listen_sock, tcp_port_str );
+	dw_printf("opened KISS socket as fd (%d) on port (%s) for stream i/o\n", listen_sock, tcp_port_str );
 #endif
 
  	while (1) {
@@ -551,12 +551,12 @@ static THREAD_F connect_listen_thread (void *arg)
         setsockopt (listen_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&bcopt, 4);
 
     	sockaddr.sin_addr.s_addr = INADDR_ANY;
-    	sockaddr.sin_port = htons(kps->tcp_port);
+	sockaddr.sin_port = htons(kps->tcp_port);
     	sockaddr.sin_family = AF_INET;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-    	dw_printf("Binding to port %d ... \n", kps->tcp_port);
+	dw_printf("Binding to port %d ... \n", kps->tcp_port);
 #endif
 
         if (bind(listen_sock,(struct sockaddr*)&sockaddr,sizeof(sockaddr))  == -1) {
@@ -598,20 +598,20 @@ static THREAD_F connect_listen_thread (void *arg)
 	
 	    text_color_set(DW_COLOR_INFO);
 	    if (kps->chan == -1) {
-              dw_printf("Ready to accept KISS TCP client application %d on port %s ...\n", client, tcp_port_str);
+              dw_printf("Ready to accept KISS TCP client application %d on port %d ...\n", client, kps->tcp_port);
 	    }
 	    else {
-              dw_printf("Ready to accept KISS TCP client application %d on port %s (radio channel %d) ...\n", client, tcp_port_str, kps->chan);
+              dw_printf("Ready to accept KISS TCP client application %d on port %d (radio channel %d) ...\n", client, kps->tcp_port, kps->chan);
 	    }
 
             kps->client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
 	    text_color_set(DW_COLOR_INFO);
 	    if (kps->chan == -1) {
-	      dw_printf("\nAttached to KISS TCP client application %d on port %s ...\n\n", client, tcp_port_str);
+	      dw_printf("\nAttached to KISS TCP client application %d on port %d ...\n\n", client, kps->tcp_port);
 	    }
 	    else {
-	      dw_printf("\nAttached to KISS TCP client application %d on port %s (radio channel %d) ...\n\n", client, tcp_port_str, kps->chan);
+	      dw_printf("\nAttached to KISS TCP client application %d on port %d (radio channel %d) ...\n\n", client, kps->tcp_port, kps->chan);
 	    }
 
 	    // Reset the state and buffer.
@@ -767,7 +767,7 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
                   err = SOCK_SEND (kps->client_sock[client], kiss_buff, kiss_len);
 	          if (err <= 0) {
 	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("\nError %d sending message to KISS client application %d on port %d.  Closing connection.\n\n", WSAGetLastError(), client, kps->tcp_port);
+	            dw_printf ("\nError %d sending message to KISS client application %d on port %d.  Closing connection.\n\n", err, client, kps->tcp_port);
 	            close (kps->client_sock[client]);
 	            kps->client_sock[client] = -1;
 	          }
