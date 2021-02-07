@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -1206,6 +1206,11 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too high.  Reduce so most stations are around 50.\n");
+	}
+	else if (alevel.rec < 5) {
+
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Audio input level is too low.  Increase so most stations are around 50.\n");
 	}
 
 

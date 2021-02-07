@@ -72,6 +72,7 @@ set(CUSTOM_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(CUSTOM_EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
 set(CUSTOM_MISC_DIR "${CUSTOM_EXTERNAL_DIR}/misc")
 set(CUSTOM_REGEX_DIR "${CUSTOM_EXTERNAL_DIR}/regex")
+set(CUSTOM_HIDAPI_DIR "${CUSTOM_EXTERNAL_DIR}/hidapi")
 set(CUSTOM_GEOTRANZ_DIR "${CUSTOM_EXTERNAL_DIR}/geotranz")
 set(CUSTOM_DATA_DIR "${CMAKE_SOURCE_DIR}/data")
 set(CUSTOM_SCRIPTS_DIR "${CMAKE_SOURCE_DIR}/scripts")
@@ -321,6 +322,7 @@ add_subdirectory(data)
 # external libraries
 add_subdirectory(${CUSTOM_GEOTRANZ_DIR})
 add_subdirectory(${CUSTOM_REGEX_DIR})
+add_subdirectory(${CUSTOM_HIDAPI_DIR})
 add_subdirectory(${CUSTOM_MISC_DIR})
 
 # direwolf source code and utilities

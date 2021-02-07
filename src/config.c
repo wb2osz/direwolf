@@ -63,7 +63,7 @@
 #include "tt_text.h"
 #include "ax25_link.h"
 
-#ifdef USE_CM108		// Linux only
+#if USE_CM108		// Current Linux or Windows only
 #include "cm108.h"
 #endif
 
@@ -1854,9 +1854,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    else if (strcasecmp(t, "CM108") == 0) {
 
-/* CM108 - GPIO of USB sound card. case, Linux only. */
+/* CM108 - GPIO of USB sound card. case, Linux and Windows only. */
 
-#ifdef USE_CM108
+#if USE_CM108
 
 	      if (ot != OCTYPE_PTT) {
 		// Future project:  Allow DCD and CON via the same device.
@@ -1912,22 +1912,23 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file line %d: Could not determine USB Audio GPIO PTT device for audio output %s.\n", line,
 					p_audio_config->adev[ACHAN2ADEV(channel)].adevice_out);
+#if __WIN32__
+	        dw_printf ("You must explicitly mention a HID path.\n");
+#else
 	        dw_printf ("You must explicitly mention a device name such as /dev/hidraw1.\n");
-	        dw_printf ("See User Guide for details.\n");
+#endif
+	        dw_printf ("Run \"cm108\" utility to get a list.\n");
+	        dw_printf ("See Interface Guide for details.\n");
 	        continue;
 	      }
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_CM108;
 
 #else
-#if __WIN32__
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: CM108 USB Audio GPIO PTT is not available for Windows.\n", line);
-#else
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: %s with CM108 is only available when USB Audio GPIO support is enabled.\n", line, otname);
 	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
-	      dw_printf ("See User Guide for details.\n");
-#endif
+	      dw_printf ("See Interface Guide for details.\n");
+
 	      exit (EXIT_FAILURE);
 #endif
 	    }

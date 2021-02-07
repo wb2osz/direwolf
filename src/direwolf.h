@@ -37,6 +37,12 @@
 
 #endif
 
+// Version 1.7 supports CM108/CM119 GPIO PTT for Windows.
+// Define it here so we don't need to have separate Windows
+// check in all the places that test this.
+#if __WIN32__
+#define USE_CM108 1
+#endif
 
 /*
  * Previously, we could handle only a single audio device.

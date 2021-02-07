@@ -9,6 +9,7 @@ include_directories(
   ${UDEV_INCLUDE_DIRS}
   ${PORTAUDIO_INCLUDE_DIRS}
   ${CUSTOM_GEOTRANZ_DIR}
+  ${CUSTOM_HIDAPI_DIR}
   )
 
 if(WIN32 OR CYGWIN)
@@ -106,6 +107,7 @@ if(LINUX)
   elseif(WIN32 OR CYGWIN) # windows
     list(APPEND direwolf_SOURCES
       audio_win.c
+      cm108.c
 
       # icon
       # require plain gcc binary or link
@@ -134,6 +136,7 @@ target_link_libraries(direwolf
   ${GEOTRANZ_LIBRARIES}
   ${MISC_LIBRARIES}
   ${REGEX_LIBRARIES}
+  ${HIDAPI_LIBRARIES}
   Threads::Threads
   ${GPSD_LIBRARIES}
   ${HAMLIB_LIBRARIES}
@@ -147,7 +150,7 @@ if(WIN32 OR CYGWIN)
   set_target_properties(direwolf
     PROPERTIES COMPILE_FLAGS "-DUSE_REGEX_STATIC"
     )
-  target_link_libraries(direwolf winmm ws2_32)
+  target_link_libraries(direwolf winmm ws2_32 setupapi)
 endif()
 
 # decode_aprs
@@ -413,8 +416,11 @@ endif()
 
 
 # List USB audio adapters than can use GPIO for PTT.
+# Originally for Linux only (using udev).
+# Version 1.7 adds it for Windows.  Needs hidapi library.
+
 # cm108
-if(UDEV_FOUND)
+if(UDEV_FOUND OR WIN32 OR CYGWIN)
   list(APPEND cm108_SOURCES
     cm108.c
     textcolor.c
@@ -430,8 +436,21 @@ if(UDEV_FOUND)
 
   target_link_libraries(cm108
     ${MISC_LIBRARIES}
-    ${UDEV_LIBRARIES}
     )
+
+  if (LINUX)
+    target_link_libraries(cm108
+      ${UDEV_LIBRARIES}
+      )
+  endif()
+
+  if (WIN32 OR CYGWIN)
+    target_link_libraries(cm108
+      ${HIDAPI_LIBRARIES}
+      ws2_32
+      setupapi
+      )
+  endif()
 endif()
 
 
@@ -496,6 +515,6 @@ install(TARGETS atest DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS ttcalc DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS kissutil DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS appserver DESTINATION ${INSTALL_BIN_DIR})
-if(UDEV_FOUND)
+if(UDEV_FOUND OR WIN32 OR CYGWIN)
   install(TARGETS cm108 DESTINATION ${INSTALL_BIN_DIR})
 endif()

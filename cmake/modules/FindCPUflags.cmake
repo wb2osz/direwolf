@@ -78,7 +78,6 @@ endfunction()
 # The default will be set for maximum portability so packagers won't need to
 # to anything special.
 #
-set(FORCE_SSE 1)
 #
 # While ENABLE_GENERIC also had the desired result (for x86_64), I don't think
 # it is the right approach.  It prevents the detection of the architecture,
