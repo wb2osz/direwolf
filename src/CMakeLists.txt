@@ -7,6 +7,7 @@ include_directories(
   ${ALSA_INCLUDE_DIRS}
   ${UDEV_INCLUDE_DIRS}
   ${PORTAUDIO_INCLUDE_DIRS}
+  ${SNDIO_INCLUDE_DIRS}
   ${CUSTOM_GEOTRANZ_DIR}
   )
 
@@ -107,7 +108,11 @@ if(LINUX)
     list(REMOVE_ITEM direwolf_SOURCES
       dwgpsd.c
       )
-  else() # macOS freebsd openbsd
+  elseif(HAVE_SNDIO)
+    list(APPEND direwolf_SOURCES
+      audio.c
+      )
+  else() # macOS freebsd
     list(APPEND direwolf_SOURCES
       audio_portaudio.c
       )
@@ -127,6 +132,7 @@ target_link_libraries(direwolf
   ${ALSA_LIBRARIES}
   ${UDEV_LIBRARIES}
   ${PORTAUDIO_LIBRARIES}
+  ${SNDIO_LIBRARIES}
   )
 
 if(WIN32 OR CYGWIN)
