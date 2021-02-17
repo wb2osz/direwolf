@@ -614,6 +614,14 @@ static void * beacon_thread (void *arg)
 	        /* i.e. Don't take relative to now in case there was some delay. */
 
 	        bp->next += bp->every;
+
+                /* craigerl: if next beacon is scheduled in the past, then set next beacon relative to now (happens when NTP pushes clock AHEAD) */
+                /* fixme: if NTP sets clock BACK an hour, this thread will sleep for that hour */
+                if ( bp->next < now ) {
+                    bp->next = now + bp->every;
+                    dw_printf("\nSystem clock appears to have jumped forward.  Beacon schedule updated.\n\n");
+                }
+
 	      }
 
 	    }  /* if time to send it */
