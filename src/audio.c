@@ -1000,8 +1000,6 @@ int audio_get (int a)
 	int n;
 #if USE_ALSA
 	int retries = 0;
-#elif USE_SNDIO
-	int err;
 #endif
 
 #if STATISTICS
@@ -1135,8 +1133,7 @@ int audio_get (int a)
 	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
 
 	      assert (adev[a].sndio_in_handle != NULL);
-	      err = poll_sndio (adev[a].sndio_in_handle, POLLIN);
-	      if (err < 0) {
+	      if (poll_sndio (adev[a].sndio_in_handle, POLLIN) < 0) {
 		adev[a].inbuf_len = 0;
 		adev[a].inbuf_next = 0;
 		return (-1);
@@ -1436,15 +1433,14 @@ int audio_flush (int a)
 
 	int k;
 	unsigned char *ptr;
-	int len, err;
+	int len;
 
 	ptr = adev[a].outbuf_ptr;
 	len = adev[a].outbuf_len;
 
 	while (len > 0) {
 	  assert (adev[a].sndio_out_handle != NULL);
-	  err = poll_sndio (adev[a].sndio_out_handle, POLLOUT);
-	  if (err < 0) {
+	  if (poll_sndio (adev[a].sndio_out_handle, POLLOUT) < 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    perror("Can't write to audio device");
 	    adev[a].outbuf_len = 0;
