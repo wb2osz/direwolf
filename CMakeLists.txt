@@ -145,6 +145,10 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
   configure_file("${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}.desktop.in"
     "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop" @ONLY)
 
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "OpenBSD")
+  set(OPENBSD TRUE)
+  set(HAVE_SNDIO TRUE)
+
 elseif(APPLE)
   if("${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL "")
     message(STATUS "Build for macOS target: local version")
@@ -301,6 +305,12 @@ if(LINUX)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_AVAHI_CLIENT")
   endif()
 
+elseif (HAVE_SNDIO)
+  find_package(sndio REQUIRED)
+  if(SNDIO_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_SNDIO")
+  endif()
+
 elseif (NOT WIN32 AND NOT CYGWIN)
   find_package(Portaudio REQUIRED)
   if(PORTAUDIO_FOUND)
@@ -314,6 +324,8 @@ else()
   set(UDEV_LIBRARIES "")
   set(PORTAUDIO_INCLUDE_DIRS "")
   set(PORTAUDIO_LIBRARIES "")
+  set(SNDIO_INCLUDE_DIRS "")
+  set(SNDIO_LIBRARIES "")
 endif()
 
 # manage and fetch new data
