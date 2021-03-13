@@ -116,6 +116,10 @@
  * References:	AGWPE TCP/IP API Tutorial
  *		http://uz7ho.org.ua/includes/agwpeapi.htm
  *
+ *		It has disappeared from the original location but you can find it here:
+ *		https://web.archive.org/web/20130807113413/http:/uz7ho.org.ua/includes/agwpeapi.htm
+ *		https://www.on7lds.net/42/sites/default/files/AGWPEAPI.HTM
+ *
  * 		Getting Started with Winsock
  *		http://msdn.microsoft.com/en-us/library/windows/desktop/bb530742(v=vs.85).aspx
  *

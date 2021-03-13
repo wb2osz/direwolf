@@ -289,6 +289,7 @@ static void * read_gpsnmea_thread (void *arg)
 	      }
 
 /* Process sentence. */
+// FIXME: Ignore the second letter rather than recognizing only GP... and GN...
 
 	      if (strncmp(gps_msg, "$GPRMC", 6) == 0 ||
 		  strncmp(gps_msg, "$GNRMC", 6) == 0) {
