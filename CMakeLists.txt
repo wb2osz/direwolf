@@ -312,6 +312,8 @@ else()
   set(ALSA_LIBRARIES "")
   set(UDEV_INCLUDE_DIRS "")
   set(UDEV_LIBRARIES "")
+  # Version 1.7 supports CM108/CM119 GPIO PTT for Windows.
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CM108")
   set(PORTAUDIO_INCLUDE_DIRS "")
   set(PORTAUDIO_LIBRARIES "")
 endif()

@@ -162,15 +162,15 @@
 #include <hamlib/rig.h>
 #endif
 
-#ifdef USE_CM108
-#include "cm108.h"
-#endif
-
 /* So we can have more common code for fd. */
 typedef int HANDLE;
 #define INVALID_HANDLE_VALUE (-1)
 
-#endif
+#endif /* __WIN32__ */
+
+#ifdef USE_CM108
+#include "cm108.h"
+#endif /* USE_CM108 */
 
 #include "textcolor.h"
 #include "audio.h"
