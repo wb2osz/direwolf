@@ -157,8 +157,8 @@ elseif(APPLE)
   message(STATUS "RPATH support: ${CMAKE_MACOSX_RPATH}")
 
 elseif (WIN32)
-  if(NOT VS2015 AND NOT VS2017)
-    message(FATAL_ERROR "You must use Microsoft Visual Studio 2015 or 2017 as compiler")
+  if(NOT VS2015 AND NOT VS2017 AND NOT VS2019)
+    message(FATAL_ERROR "You must use Microsoft Visual Studio 2015, 2017 or 2019 as compiler")
   endif()
 
   # compile with full multicore
