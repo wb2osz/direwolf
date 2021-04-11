@@ -67,9 +67,8 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
-#ifdef __OpenBSD__
-#include <soundcard.h>
-#elif __APPLE__
+#if USE_SNDIO || __APPLE__
+// no need to include <soundcard.h>
 #else
 #include <sys/soundcard.h>
 #endif

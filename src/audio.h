@@ -352,8 +352,8 @@ struct audio_s {
 #define DEFAULT_ADEVICE	""		/* Mac OSX: Empty string = default audio device. */
 #elif USE_ALSA
 #define DEFAULT_ADEVICE	"default"	/* Use default device for ALSA. */
-#elif __OpenBSD__
-#define DEFAULT_ADEVICE	"default"	/* Use default device for OpenBSD-portaudio. */
+#elif USE_SNDIO
+#define DEFAULT_ADEVICE	"default"	/* Use default device for sndio. */
 #else
 #define DEFAULT_ADEVICE	"/dev/dsp"	/* First audio device for OSS.  (FreeBSD) */
 #endif					
