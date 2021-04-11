@@ -18,7 +18,7 @@ if(WIN32 OR CYGWIN) # windows
     )
 
   set_target_properties(regex
-    PROPERTIES COMPILE_FLAGS "-Dbool=int -Dtrue=1 -Dfalse=0 -DUSE_REGEX_STATIC"
+    PROPERTIES COMPILE_FLAGS "-Dbool=int -Dtrue=1 -Dfalse=0 -DREGEX_STATIC"
     )
 
 endif()
