@@ -1893,6 +1893,16 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	          p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t);
 		  p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
 	        }
+#if __WIN32__
+	        else if (*t == '\\') {
+	          strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
+		}
+		else {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Config file line %d: Found \"%s\" when expecting GPIO number or device name like \\\\?\\hid#vid_0d8c&... .\n", line, t);
+	          continue;
+	        }
+#else
 	        else if (*t == '/') {
 	          strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 		}
@@ -1901,6 +1911,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	          dw_printf ("Config file line %d: Found \"%s\" when expecting GPIO number or device name like /dev/hidraw1.\n", line, t);
 	          continue;
 	        }
+#endif
 	      }
 	      if (p_audio_config->achan[channel].octrl[ot].out_gpio_num < 1 || p_audio_config->achan[channel].octrl[ot].out_gpio_num > 8) {
 	          text_color_set(DW_COLOR_ERROR);
