@@ -1,4 +1,4 @@
-﻿
+
 # Dire Wolf #
 
 ### Decoded Information from Radio Emissions for Windows Or Linux Fans ###
@@ -192,6 +192,9 @@ Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/dir
 
 If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.io/g/direwolf) discussion group.
 
+You can also install a pre-built version from Mac Ports.  Keeping this up to date depends on volunteers who perform the packaging. This version could lag behind development.
+
+	sudo port install direwolf
 
 
 ## Join the conversation  ##
