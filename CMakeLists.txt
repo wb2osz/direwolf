@@ -157,15 +157,16 @@ elseif(APPLE)
   message(STATUS "RPATH support: ${CMAKE_MACOSX_RPATH}")
 
 elseif (WIN32)
-  if(NOT VS2015 AND NOT VS2017 AND NOT VS2019)
-    message(FATAL_ERROR "You must use Microsoft Visual Studio 2015, 2017 or 2019 as compiler")
+  if(C_MSVC)
+    if (NOT VS2015 AND NOT VS2017 AND NOT VS2019)
+      message(FATAL_ERROR "You must use Microsoft Visual Studio 2015, 2017 or 2019 as compiler")
+    else()
+      # compile with full multicore
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+      set(CUSTOM_SHELL_BIN "")
+    endif()
   endif()
-
-  # compile with full multicore
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-
-  set(CUSTOM_SHELL_BIN "")
 endif()
 
 if (C_CLANG OR C_GCC)
