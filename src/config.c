@@ -4535,13 +4535,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
    	    }
 
-            if (tcp_port == 0) {
-              // If existing config files have KISSPORT 0, ignore it and move on
-              text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Warning: KISSPORT 0 setting no longer needed.\n", line);
-              continue;
-            }
-
 	    t = split(NULL,0);
 	    if (t != NULL) {
 	      chan = atoi(t);
@@ -4551,6 +4544,16 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        continue;
 	      }
 	    }
+
+            // KISSPORT == 0, if slot 0 still unset, disable setting of default
+            // Use kiss_chan == -2 to indicate default disabled
+            // Subsequent KISSPORT settings can still overwrite this slot
+            if (tcp_port == 0) {
+              if (p_misc_config->kiss_port[0] == 0) {
+                p_misc_config->kiss_chan[0] = -2; // Don't set default
+              }
+              continue;
+            }
 
 	    // Try to find an empty slot.
 	    // A duplicate TCP port number will overwrite the previous value.
@@ -5352,9 +5355,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_misc_config->maxv22 = p_misc_config->retry / 3;
 	}
 
-        /* If no kiss port specified, add default to first slot */
-        if (p_misc_config->kiss_port[0] == 0) {
+        // If no kiss port specified, add default to first slot
+        // kiss_chan == -2 in slot 0 means a KISSPORT of 0 was set in config
+        if (p_misc_config->kiss_port[0] == 0 && p_misc_config->kiss_chan[0] != -2) {
           p_misc_config->kiss_port[0] = DEFAULT_KISS_PORT;
+          p_misc_config->kiss_chan[0] = -1;
         }
 
 } /* end config_init */
