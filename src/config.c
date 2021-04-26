@@ -857,8 +857,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_misc_config->kiss_port[i] = 0;	// entry not used.
 	  p_misc_config->kiss_chan[i] = -1;
 	}
-	p_misc_config->kiss_port[0] = DEFAULT_KISS_PORT;
-	p_misc_config->kiss_chan[0] = -1;	// all channels.
 
 	p_misc_config->enable_kiss_pt = 0;				/* -p option */
 	p_misc_config->kiss_copy = 0;
@@ -4547,37 +4545,37 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	    }
 
-	    // "KISSPORT 0" is used to remove the default entry.
+            // KISSPORT == 0, if slot 0 still unset, disable setting of default
+            // Use kiss_chan == -2 to indicate default disabled
+            // Subsequent KISSPORT settings can still overwrite this slot
+            if (tcp_port == 0) {
+              if (p_misc_config->kiss_port[0] == 0) {
+                p_misc_config->kiss_chan[0] = -2; // Don't set default
+              }
+              continue;
+            }
 
-	    if (tcp_port == 0) {
-	      p_misc_config->kiss_port[0] = 0;		// Should all be wiped out?
+	    // Try to find an empty slot.
+	    // A duplicate TCP port number will overwrite the previous value.
+
+	    int slot = -1;
+	    for (int i = 0; i < MAX_KISS_TCP_PORTS && slot == -1; i++) {
+	      if (p_misc_config->kiss_port[i] == tcp_port) {
+	        slot = i;
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Warning: Duplicate TCP port %d will overwrite previous value.\n", line, tcp_port);
+	      }
+	      else if (p_misc_config->kiss_port[i] == 0) {
+	        slot = i;
+	      }
+	    }
+	    if (slot >= 0) {
+	      p_misc_config->kiss_port[slot] = tcp_port;
+	      p_misc_config->kiss_chan[slot] = chan;
 	    }
 	    else {
-
-	      // Try to find an empty slot.
-	      // A duplicate TCP port number will overwrite the previous value.
-
-	      int slot = -1;
-	      for (int i = 0; i < MAX_KISS_TCP_PORTS && slot == -1; i++) {
-	        if (p_misc_config->kiss_port[i] == tcp_port) {
-	          slot = i;
-	          if ( ! (slot == 0 && tcp_port == DEFAULT_KISS_PORT)) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("Line %d: Warning: Duplicate TCP port %d will overwrite previous value.\n", line, tcp_port);
-	          }
-	        }
-	        else if (p_misc_config->kiss_port[i] == 0) {
-	          slot = i;
-	        }
-	      }
-	      if (slot >= 0) {
-	        p_misc_config->kiss_port[slot] = tcp_port;
-	        p_misc_config->kiss_chan[slot] = chan;
-	      }
-	      else {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Line %d: Too many KISSPORT commands.\n", line);
-	      }
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Too many KISSPORT commands.\n", line);
 	    }
 	  }
 
@@ -5356,6 +5354,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	if (p_misc_config->maxv22 < 0) {
 	  p_misc_config->maxv22 = p_misc_config->retry / 3;
 	}
+
+        // If no kiss port specified, add default to first slot
+        // kiss_chan == -2 in slot 0 means a KISSPORT of 0 was set in config
+        if (p_misc_config->kiss_port[0] == 0 && p_misc_config->kiss_chan[0] != -2) {
+          p_misc_config->kiss_port[0] = DEFAULT_KISS_PORT;
+          p_misc_config->kiss_chan[0] = -1;
+        }
 
 } /* end config_init */
 
