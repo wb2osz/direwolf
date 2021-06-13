@@ -894,6 +894,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->kiss_serial_poll = 0;
 
 	strlcpy (p_misc_config->gpsnmea_port, "", sizeof(p_misc_config->gpsnmea_port));
+	p_misc_config->gpsnmea_speed = 0;
 	strlcpy (p_misc_config->waypoint_serial_port, "", sizeof(p_misc_config->waypoint_serial_port));
 
 	p_misc_config->log_daily_names = 0;
@@ -4685,7 +4686,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * GPSNMEA		- Device name for reading from GPS receiver.
+ * GPSNMEA name [ speed ] - Device name and speed for reading from GPS receiver.
+ * If no speed is provided, a default of 4800 is used.
  */
 	  else if (strcasecmp(t, "gpsnmea") == 0) {
 	    t = split(NULL,0);
@@ -4697,6 +4699,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else {
 	      strlcpy (p_misc_config->gpsnmea_port, t, sizeof(p_misc_config->gpsnmea_port));
 	    }
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      p_misc_config->gpsnmea_speed = 4800;
+	    }
+	    else {
+	      p_misc_config->gpsnmea_speed = atoi(t);
+	    }
+	    dw_printf ("Using port %s at %d bps for NMEA GPS.\n", p_misc_config->gpsnmea_port, p_misc_config->gpsnmea_speed);
 	  }
 
 /*
