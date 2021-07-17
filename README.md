@@ -124,13 +124,7 @@ In most cases, the first few  will already be there and the package installer wi
 
 On Debian / Ubuntu / Raspbian / Raspberry Pi OS:
 
-    sudo apt-get install git
-    sudo apt-get install gcc
-    sudo apt-get install g++
-    sudo apt-get install make
-    sudo apt-get install cmake
-    sudo apt-get install libasound2-dev
-    sudo apt-get install libudev-dev
+    sudo apt-get install git gcc g++ make cmake libasound2-dev libudev-dev
 
 Or on Red Hat / Fedora / CentOS:
 
