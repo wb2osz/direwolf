@@ -4529,10 +4529,10 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	      (x >= 902 && x <= 928)) { 
 
 	    if ( ! A->g_quiet) {
-	      snprintf (good, sizeof(good), "%07.3fMHz", x);
+//	      snprintf (good, sizeof(good), "%07.3fMHz", x);
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("\"%s\" in comment looks like a frequency in non-standard format.\n", bad);
-	      dw_printf("For most systems to recognize it, use exactly this form \"%s\" at beginning of comment.\n", good);
+//	      dw_printf("\"%s\" in comment looks like a frequency in non-standard format.\n", bad);
+//	      dw_printf("For most systems to recognize it, use exactly this form \"%s\" at beginning of comment.\n", good);
 	    }
 	    if (A->g_freq == G_UNKNOWN) {
 	      A->g_freq = x;
@@ -4571,10 +4571,10 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    if (strcmp (s_ctcss[i], bad2) == 0) {
 
 	      if ( ! A->g_quiet) {
-                snprintf (good, sizeof(good), "T%03d", i_ctcss[i]);
+//                snprintf (good, sizeof(good), "T%03d", i_ctcss[i]);
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf("\"%s\" in comment looks like it might be a CTCSS tone in non-standard format.\n", bad1);
-	        dw_printf("For most systems to recognize it, use exactly this form \"%s\" at near beginning of comment, after any frequency.\n", good);
+//	        dw_printf("\"%s\" in comment looks like it might be a CTCSS tone in non-standard format.\n", bad1);
+//	        dw_printf("For most systems to recognize it, use exactly this form \"%s\" at near beginning of comment, after any frequency.\n", good);
 	      }
 	      if (A->g_tone == G_UNKNOWN) {
 	        A->g_tone = atof(bad2);
