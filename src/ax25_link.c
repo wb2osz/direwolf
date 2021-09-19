@@ -2993,7 +2993,7 @@ dw_printf ("%s:%d, %d srej exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, 
 	      if (first == AX25MODULO(S->vr - 1, S->modulo, __FILE__, __func__, __LINE__)) {
 	        //  Oops!  Went too far.  This I frame was already processed.
 		text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("INTERNAL ERROR calulating what to put in SREJ, %s line %d\n", __func__, __LINE__);
+	        dw_printf ("INTERNAL ERROR calculating what to put in SREJ, %s line %d\n", __func__, __LINE__);
 	        dw_printf ("V(R)=%d, N(S)=%d, SREJ exception=%d, first=%d, ask_resend_count=%d\n", S->vr, ns, selective_reject_exception(S), first, ask_resend_count);
 		int k;
 	        for (k=0; k<128; k++) {
@@ -3146,7 +3146,7 @@ static void send_srej_frames (ax25_dlsm_t *S, int *resend, int count, int allow_
 	if (s_debug_retry) {
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("%s line %d\n", __func__, __LINE__);
-	  //dw_printf ("state=%d, count=%d, k=%d, V(R)=%d, SREJ exeception=%d\n", S->state, count, S->k_maxframe, S->vr, selective_reject_exception(S));
+	  //dw_printf ("state=%d, count=%d, k=%d, V(R)=%d, SREJ exception=%d\n", S->state, count, S->k_maxframe, S->vr, selective_reject_exception(S));
 	  dw_printf ("state=%d, count=%d, k=%d, V(R)=%d\n", S->state, count, S->k_maxframe, S->vr);
 
 	  dw_printf ("resend[]=");

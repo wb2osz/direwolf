@@ -321,7 +321,7 @@ static void * tnc_listen_thread (void *arg)
 	    s_tnc_sock = dwsock_connect (s_tnc_host, s_tnc_port, "TNC", 0, 0, tncaddr);
 
 	    if (s_tnc_sock != -1) {
-	      dw_printf ("Succesfully reattached to network TNC.\n");
+	      dw_printf ("Successfully reattached to network TNC.\n");
 
 	      // Might need to run TNC initialization again.
 	      // For example, a server would register its callsigns.

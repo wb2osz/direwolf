@@ -503,8 +503,8 @@ int demod_init (struct audio_s *pa)
 
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Two incompatible versions of 2400 bps QPSK are now available.\n");
-	        dw_printf ("For compatbility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
-	        dw_printf ("For compatbility MFJ-2400 use 'V26B' modem option in config file.\n");
+	        dw_printf ("For compatibility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
+	        dw_printf ("For compatibility MFJ-2400 use 'V26B' modem option in config file.\n");
 	        dw_printf ("Command line options -j and -J can be used for channel 0.\n");
 	        dw_printf ("For more information, read the Dire Wolf User Guide and\n");
 	        dw_printf ("2400-4800-PSK-for-APRS-Packet-Radio.pdf.\n");

@@ -915,7 +915,7 @@ static void usage(void)
  	dw_printf ("		a serial port.  e.g.  /dev/ttyAMA0 or COM3.\n");
  	dw_printf ("	-s	Serial port speed, default 9600.\n");
 	dw_printf ("	-v	Verbose.  Show the KISS frame contents.\n");
-	dw_printf ("	-f	Transmit files directory.  Processs and delete files here.\n");
+	dw_printf ("	-f	Transmit files directory.  Process and delete files here.\n");
 	dw_printf ("	-o	Receive output queue directory.  Store received frames here.\n");
 	dw_printf ("	-T	Precede received frames with 'strftime' format time stamp.\n");
 	usage2();
@@ -929,7 +929,7 @@ static void usage2 (void)
 	dw_printf ("Input, starting with upper case letter or digit, is assumed\n");
 	dw_printf ("to be an AX.25 frame in the usual TNC2 monitoring format.\n");
 	dw_printf ("\n");
-	dw_printf ("Input, starting with a lower case letter is a commmand.\n");
+	dw_printf ("Input, starting with a lower case letter is a command.\n");
 	dw_printf ("Whitespace, as shown in examples, is optional.\n");
 	dw_printf ("\n");
 	dw_printf ("	letter	meaning			example\n");

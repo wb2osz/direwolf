@@ -771,7 +771,7 @@ void telemetry_coefficents_message (char *station, char *msg, int quiet)
 	    else {
 	      if ( ! quiet) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Equation coefficent position A%d%c is empty.\n", n/3+1, n%3+'a');
+	        dw_printf ("Equation coefficient position A%d%c is empty.\n", n/3+1, n%3+'a');
 	        dw_printf ("Some applications might not handle this correctly.\n");
 	      }
 	    }
@@ -782,7 +782,7 @@ void telemetry_coefficents_message (char *station, char *msg, int quiet)
 	if (n != T_NUM_ANALOG * 3) {
 	  if ( ! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Found %d equation coefficents when 15 were expected.\n", n);
+	    dw_printf ("Found %d equation coefficients when 15 were expected.\n", n);
 	    dw_printf ("Some applications might not handle this correctly.\n");
 	  }
 	}

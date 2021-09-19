@@ -1566,7 +1566,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficents Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficients Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_eqns;
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}

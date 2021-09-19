@@ -397,7 +397,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 
 	if (msg_len < 36) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("AGWPE message length, %d, is shorter than minumum 36.\n", msg_len);
+	  dw_printf ("AGWPE message length, %d, is shorter than minimum 36.\n", msg_len);
 	}
 	if (msg_len != netle2host(pmsg->data_len_NETLE) + 36) {
 	  text_color_set (DW_COLOR_ERROR);
