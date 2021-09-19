@@ -840,7 +840,7 @@ void dlq_channel_busy (int chan, int activity, int status)
  * Name:        dlq_seize_confirm
  *
  * Purpose:     Inform data link state machine that the transmitter is on.
- *		This is in reponse to lm_seize_request.
+ *		This is in response to lm_seize_request.
  *
  * Inputs:	chan		- Radio channel number.
  *

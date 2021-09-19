@@ -201,7 +201,7 @@ static int calcbufsize(int rate, int chans, int bits)
  *				more restrictive in its capabilities.
  *				It might say, the best I can do is mono, 8 bit, 8000/sec.
  *
- *				The sofware modem must use this ACTUAL information
+ *				The software modem must use this ACTUAL information
  *				that the device is supplying, that could be different
  *				than what the user specified.
  *              
@@ -769,7 +769,7 @@ static int set_oss_params (int a, int fd, struct audio_s *pa)
  * This was long ago under different conditions.
  * Should study this again some day.
  *
- * Your milage may vary.
+ * Your mileage may vary.
  */
 	err = ioctl (fd, SNDCTL_DSP_GETBLKSIZE, &ossbuf_size_in_bytes);
    	if (err == -1) {

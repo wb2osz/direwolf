@@ -158,7 +158,7 @@ struct audio_s {
 
 	    enum v26_e { V26_UNSPECIFIED=0, V26_A, V26_B } v26_alternative;
 
-					// Original implementaion used alternative A for 2400 bbps PSK.
+					// Original implementation used alternative A for 2400 bbps PSK.
 					// Years later, we discover that MFJ-2400 used alternative B.
 					// It's likely the others did too.  it also works a little better.
 					// Default to MFJ compatible and print warning if user did not
@@ -261,7 +261,7 @@ struct audio_s {
 #define MAX_GPIO_NAME_LEN 20	// 12 would cover any case I've seen so this should be safe
 
 		char out_gpio_name[MAX_GPIO_NAME_LEN];
-					/* orginally, gpio number NN was assumed to simply */
+					/* originally, gpio number NN was assumed to simply */
 					/* have the name gpioNN but this turned out not to be */
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
@@ -298,7 +298,7 @@ struct audio_s {
 		int in_gpio_num;	/* GPIO number */
 
 		char in_gpio_name[MAX_GPIO_NAME_LEN];
-					/* orginally, gpio number NN was assumed to simply */
+					/* originally, gpio number NN was assumed to simply */
 					/* have the name gpioNN but this turned out not to be */
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
@@ -312,7 +312,7 @@ struct audio_s {
 	    int dwait;			/* First wait extra time for receiver squelch. */
 					/* Default 0 units of 10 mS each . */
 
-	    int slottime;		/* Slot time in 10 mS units for persistance algorithm. */
+	    int slottime;		/* Slot time in 10 mS units for persistence algorithm. */
 					/* Typical value is 10 meaning 100 milliseconds. */
 
 	    int persist;		/* Sets probability for transmitting after each */

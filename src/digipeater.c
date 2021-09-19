@@ -608,7 +608,7 @@ void digi_regen (int from_chan, packet_t pp)
  *
  * Name:	main
  * 
- * Purpose:	Standalone test case for this funtionality.
+ * Purpose:	Standalone test case for this functionality.
  *
  * Usage:	make -f Makefile.<platform> dtest
  *		./dtest 

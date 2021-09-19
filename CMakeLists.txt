@@ -131,7 +131,7 @@ endif()
 # auto include current directory
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-# set OS dependant variables
+# set OS dependent variables
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   set(LINUX TRUE)
 

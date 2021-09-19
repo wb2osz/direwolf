@@ -309,7 +309,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
  * Calculate constants used for timing.
  * The audio sample rate must be at least a few times the data rate.
  *
- * Baud is an integer so we hack in a fine ajustment for EAS.
+ * Baud is an integer so we hack in a fine adjustment for EAS.
  * Probably makes no difference because the DPLL keeps it in sync.
  *
  * A fraction if a Hz would make no difference for the filters.
@@ -642,7 +642,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
  * A simple IIR filter is faster but FIR produces better results.
  *
  * It is a balancing act between removing high frequency components
- * from the tone dectection while letting the data thru.
+ * from the tone detection while letting the data thru.
  */
 
 	if (D->lpf_use_fir) {
@@ -717,7 +717,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
  *
  * First, let's take a look at Track 1 of the TNC test CD.  Here the receiver
  * has a flat response.  We find the mark/space strength ratios very from 0.53 to 1.38
- * with a median of 0.81.  This in in line with expections because most
+ * with a median of 0.81.  This in in line with exceptions because most
  * transmitters add pre-emphasis to boost the higher audio frequencies.
  * Track 2 should more closely resemble what comes out of the speaker on a typical
  * transceiver.  Here we see a ratio from 1.73 to 3.81 with a median of 2.48.
@@ -831,7 +831,7 @@ inline static void nudge_pll (int chan, int subchan, int slice, int demod_data, 
  * If we adjust it too quickly, the clock will have too much jitter.
  * If we adjust it too slowly, it will take too long to lock on to a new signal.
  *
- * Be a little more agressive about adjusting the PLL
+ * Be a little more aggressive about adjusting the PLL
  * phase when searching for a signal.  Don't change it as much when
  * locked on to a signal.
  *

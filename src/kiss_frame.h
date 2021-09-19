@@ -41,7 +41,7 @@ enum kiss_state_e {
 
 
 #define MAX_KISS_LEN 2048	/* Spec calls for at least 1024. */
-				/* Might want to make it longer to accomodate */
+				/* Might want to make it longer to accommodate */
 				/* maximum packet length. */
 
 #define MAX_NOISE_LEN 100

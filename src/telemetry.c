@@ -69,7 +69,7 @@
 
 
 #define T_NUM_ANALOG 5				/* Number of analog channels. */
-#define T_NUM_DIGITAL 8				/* Number of digital channnels. */
+#define T_NUM_DIGITAL 8				/* Number of digital channels. */
 
 #define T_STR_LEN 16				/* Max len for labels and units. */
 
@@ -707,7 +707,7 @@ void telemetry_unit_label_message (char *station, char *msg)
  *
  * Name:        telemetry_coefficents_message
  *
- * Purpose:     Interpret message with scaling coefficents for analog channels.
+ * Purpose:     Interpret message with scaling coefficients for analog channels.
  *
  * Inputs:	station	- Name of station reporting telemetry.
  *			  In this case it is the destination for the message,
@@ -807,7 +807,7 @@ void telemetry_coefficents_message (char *station, char *msg, int quiet)
  *
  * Name:        telemetry_bit_sense_message
  *
- * Purpose:     Interpret message with scaling coefficents for analog channels.
+ * Purpose:     Interpret message with scaling coefficients for analog channels.
  *
  * Inputs:	station	- Name of station reporting telemetry.
  *			  In this case it is the destination for the message,
@@ -910,7 +910,7 @@ void telemetry_bit_sense_message (char *station, char *msg, int quiet)
  *		seq	- Sequence number.
  *		araw	- 5 analog raw values.
  *		ndp	- Number of decimal points for each.
- *		draw	- 8 digial raw vales.
+ *		draw	- 8 digital raw vales.
  *
  * Outputs:	output	- Decoded telemetry in human readable format.
  *

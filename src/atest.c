@@ -25,10 +25,10 @@
  *
  * Purpose:     Test fixture for the AFSK demodulator.
  *
- * Inputs:	Takes audio from a .WAV file insted of the audio device.
+ * Inputs:	Takes audio from a .WAV file instead of the audio device.
  *
  * Description:	This can be used to test the AFSK demodulator under
- *		controlled and reproducable conditions for tweaking.
+ *		controlled and reproducible conditions for tweaking.
  *	
  *		For example
  *

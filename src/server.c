@@ -666,7 +666,7 @@ static THREAD_F connect_listen_thread (void *arg)
 #else		/* End of Windows case, now Linux */
 
 
-    	struct sockaddr_in sockaddr; /* Internet socket address stuct */
+    	struct sockaddr_in sockaddr; /* Internet socket address struct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
 	int server_port = (int)(ptrdiff_t)arg;
 	int listen_sock;  
@@ -1860,7 +1860,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	          dw_printf ("AGW protocol error.  Unregister callsign for invalid channel %d.\n", chan);
 	        }
 	      }
-	      /* No reponse is expected. */
+	      /* No response is expected. */
 	      break;
 
 	    case 'C':				/* Connect, Start an AX.25 Connection  */
@@ -2065,7 +2065,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      // Before disconnecting from another station, it would be good to know
 	      // that it actually received the last message we sent.  For this reason,
 	      // I think it would be good for this to include information frames that were 
-	      // transmitted but not yet acknowleged.
+	      // transmitted but not yet acknowledged.
 	      // You could say that a particular frame is still waiting to be sent even
 	      // if was already sent because it could be sent again if lost previously.
 

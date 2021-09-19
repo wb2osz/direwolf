@@ -205,7 +205,7 @@ if(WIN32 OR CYGWIN)
 endif()
 
 
-# Unit test for APRStt tone seqence parsing.
+# Unit test for APRStt tone sequence parsing.
 list(APPEND ttest_SOURCES
   ${CUSTOM_SRC_DIR}/aprs_tt.c
   ${CUSTOM_SRC_DIR}/tt_text.c

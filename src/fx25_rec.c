@@ -258,7 +258,7 @@ int fx25_rec_busy (int chan)
 {
 	assert (chan >= 0 && chan < MAX_CHANS);
 
-	// This could be a litle faster if we knew number of
+	// This could be a little faster if we knew number of
 	// subchannels and slicers but it is probably insignificant.
 
 	for (int i = 0; i < MAX_SUBCHANS; i++) {

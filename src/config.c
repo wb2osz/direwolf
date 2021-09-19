@@ -317,7 +317,7 @@ static double parse_ll (char *str, enum parse_ll_which_e which, int line)
  *		  - Negative zone for south.
  *		  - Separate North or South.
  *		
- *		I'm using the first alternatve.
+ *		I'm using the first alternative.
  *		GEOTRANS uses the third.
  *		We will also recognize the second one but I'm not sure if I want to document it.
  *
@@ -1808,7 +1808,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	      strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, t, sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
 
-	      // Optional serial port rate for CAT controll PTT.
+	      // Optional serial port rate for CAT control PTT.
 
 	      t = split(NULL,0);
 	      if (t != NULL) {
@@ -2642,11 +2642,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *			  There is discussion about this in the document called
  *			  Why-is-9600-only-twice-as-fast-as-1200.pdf
  *
- *	IGFILTER	- APRS-IS (IGate) server side - completely diffeent.
+ *	IGFILTER	- APRS-IS (IGate) server side - completely different.
  *			  I'm not happy with this name because IG sounds like IGate
  *			  which is really the client side.  More comments later.
  *			  Maybe it should be called subscribe or something like that
- *			  because the subscriptions are cummulative.
+ *			  because the subscriptions are cumulative.
  */
 
 	  else if (strcasecmp(t, "FILTER") == 0) {
@@ -3677,7 +3677,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    strlcpy(tl->pattern, "", sizeof(tl->pattern));
 
 	    /* Pattern: Any combination of digits, x, y, and z. */
-	    /* Also make note of which letters are used in pattern and defintition. */
+	    /* Also make note of which letters are used in pattern and definition. */
  	    /* Version 1.2: also allow A,B,C,D in the pattern. */
 
 	    t = split(NULL,0);
@@ -4664,7 +4664,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      strlcpy (p_misc_config->waypoint_serial_port, t, sizeof(p_misc_config->waypoint_serial_port));
 	    }
 	
-	    /* Anthing remaining is the formats to enable. */
+	    /* Anything remaining is the formats to enable. */
 
 	    t = split(NULL,1);
 	    if (t != NULL) {
@@ -5031,7 +5031,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 /*
  * V20  address [ address ... ] 	- Stations known to support only AX.25 v2.0.
  *					  When connecting to these, skip SABME and go right to SABM.
- *					  Possible to have multiple and they are cummulative.
+ *					  Possible to have multiple and they are cumulative.
  */
 
 	  else if (strcasecmp(t, "V20") == 0) {
@@ -5065,9 +5065,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * NOXID  address [ address ... ] 	- Stations known not to understand XID.
- *					  After connecting to these (with v2.2 obviously), don't try using XID commmand.
+ *					  After connecting to these (with v2.2 obviously), don't try using XID command.
  *					  AX.25 for Linux is the one known case so far.
- *					  Possible to have multiple and they are cummulative.
+ *					  Possible to have multiple and they are cumulative.
  */
 
 	  else if (strcasecmp(t, "NOXID") == 0) {
@@ -5480,7 +5480,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	}
 
 /*
- * Convert UTM coordintes to lat / long.
+ * Convert UTM coordinates to lat / long.
  */
 	if (strlen(zone) > 0 || easting != G_UNKNOWN || northing != G_UNKNOWN) {
 

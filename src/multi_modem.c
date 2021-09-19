@@ -468,7 +468,7 @@ static void pick_best_candidate (int chan)
 	    spectrum[n] = '.';
 	  }
 
-	  /* Begining score depends on effort to get a valid frame CRC. */
+	  /* Beginning score depends on effort to get a valid frame CRC. */
 
 	  if (candidate[chan][j][k].packet_p == NULL) {
 	    candidate[chan][j][k].score = 0;

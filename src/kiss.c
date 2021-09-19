@@ -465,11 +465,11 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
  *
  * Returns:	one byte (value 0 - 255) or terminate thread on error.
  *
- * Description:	There is room for improvment here.  Reading one byte
+ * Description:	There is room for improvement here.  Reading one byte
  *		at a time is inefficient.  We could read a large block
  *		into a local buffer and return a byte from that most of the time.
  *		Is it worth the effort?  I don't know.  With GHz processors and
- *		the low data rate here it might not make a noticable difference.
+ *		the low data rate here it might not make a noticeable difference.
  *
  *--------------------------------------------------------------------*/
 

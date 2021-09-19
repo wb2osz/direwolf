@@ -424,7 +424,7 @@ static THREAD_F connect_listen_thread (void *arg)
 #else		/* End of Windows case, now Linux. */
 
 
-    	struct sockaddr_in sockaddr; /* Internet socket address stuct */
+    	struct sockaddr_in sockaddr; /* Internet socket address struct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
 	int kiss_port = (int)(ptrdiff_t)arg;
 	int listen_sock;  

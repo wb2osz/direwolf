@@ -759,7 +759,7 @@ void dcd_change (int chan, int subchan, int slice, int state)
  *
  * Name:        hdlc_rec_data_detect_any
  *
- * Purpose:     Determine if the radio channel is curently busy
+ * Purpose:     Determine if the radio channel is currently busy
  *		with packet data.
  *		This version doesn't care about voice or other sounds.
  *		This is used by the transmit logic to transmit only
@@ -774,7 +774,7 @@ void dcd_change (int chan, int subchan, int slice, int state)
  * Description:	We have two different versions here.
  *
  *		hdlc_rec_data_detect_any sees if ANY of the decoders
- *		for this channel are receving a signal.   This is
+ *		for this channel are receiving a signal.   This is
  *		used to determine whether the channel is clear and
  *		we can transmit.  This would apply to the 300 baud
  *		HF SSB case where we have multiple decoders running

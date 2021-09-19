@@ -49,7 +49,7 @@
  *
  *
  *	APRS uses only UI frames.
- *	Each starts with 2-10 addressses (14-70 octets):
+ *	Each starts with 2-10 addresses (14-70 octets):
  *
  *	* Destination Address  (note: opposite order in printed format)
  *
@@ -940,7 +940,7 @@ int ax25_check_addresses (packet_t pp)
  *
  * Name:	ax25_unwrap_third_party
  * 
- * Purpose:	Unwrap a third party messge from the header.
+ * Purpose:	Unwrap a third party message from the header.
  *
  * Inputs:	copy_from	- Existing packet object.
  *

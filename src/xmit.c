@@ -88,7 +88,7 @@
  */
 
 
-static int xmit_slottime[MAX_CHANS];	/* Slot time in 10 mS units for persistance algorithm. */
+static int xmit_slottime[MAX_CHANS];	/* Slot time in 10 mS units for persistence algorithm. */
 
 static int xmit_persist[MAX_CHANS];	/* Sets probability for transmitting after each */
 					/* slot time delay.  Transmit if a random number */
@@ -1384,7 +1384,7 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
  *		New in version 1.5: full duplex.
  *		Just start transmitting rather than waiting for clear channel.
  *		This would only be appropriate when transmit and receive are
- *		using different radio freqencies.  e.g.  VHF up, UHF down satellite.
+ *		using different radio frequencies.  e.g.  VHF up, UHF down satellite.
  *
  * Transmit delay algorithm:
  *

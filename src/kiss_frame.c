@@ -64,7 +64,7 @@
  *			_6	SetHardware	TNC specific.
  *
  *			_C	XKISS extension - not supported.
- *			_E	XKISS extention - not supported.
+ *			_E	XKISS extension - not supported.
  *			
  *			FF	Return		Exit KISS mode.  Ignored.
  *

@@ -11,7 +11,7 @@
 
 
 #define AX25_MAX_REPEATERS 8
-#define AX25_MIN_ADDRS 2	/* Destinatin & Source. */
+#define AX25_MIN_ADDRS 2	/* Destination & Source. */
 #define AX25_MAX_ADDRS 10	/* Destination, Source, 8 digipeaters. */	
 
 #define AX25_DESTINATION  0	/* Address positions in frame. */
@@ -98,7 +98,7 @@ struct packet_s {
 			         *
 				 * Bits:   H  R  R  SSID  0
 				 *
-				 *   H 		for digipeaters set to 0 intially.
+				 *   H 		for digipeaters set to 0 initially.
 				 *		Changed to 1 when position has been used.
  				 *
 				 *		for source & destination it is called

@@ -255,7 +255,7 @@ typedef struct ax25_dlsm_s {
 						// addrs[OWNCALL] is owncall for this end of link.
 						// Note that we are acting on behalf of
 						// a client application so the APRS mycall
-						// might not be relevent.
+						// might not be relevant.
 
 #define PEERCALL AX25_DESTINATION
 						// addrs[PEERCALL] is call for other end.
@@ -319,8 +319,8 @@ typedef struct ax25_dlsm_s {
 
 	int reject_exception;			// A REJ frame has been sent to the remote station. (boolean)
 
-						// This is used only when receving an I frame, in states 3 & 4, SREJ not enabled.
-						// When an I frame has an unepected N(S),
+						// This is used only when receiving an I frame, in states 3 & 4, SREJ not enabled.
+						// When an I frame has an unexpected N(S),
 						//   - if not already set, set it and send REJ.
 						// When an I frame with expected N(S) is received, clear it.
 						// This would prevent us from sending additional REJ while
@@ -1157,7 +1157,7 @@ void dl_disconnect_request (dlq_item_t *E)
  *
  * Erratum:	Not sure how to interpret that.  See example below for how it was implemented.
  *
- * Version 1.6:	Bug 252.  Segmentation was occuring for a V2.0 link.  From the spec:
+ * Version 1.6:	Bug 252.  Segmentation was occurring for a V2.0 link.  From the spec:
  *			"The receipt of an XID response from the other station establishes that both
  *			stations are using AX.25 version 2.2 or higher and enables the use of the
  *			segmenter/reassembler and selective reject."
@@ -1564,7 +1564,7 @@ void dl_unregister_callsign (dlq_item_t *E)
  *
  * Description:	This is the sum of:
  *		- Incoming connected data, from application still in the queue.
- *		- I frames which have been transmitted but not yet acknowleged.
+ *		- I frames which have been transmitted but not yet acknowledged.
  *
  *------------------------------------------------------------------------------*/
 
@@ -1633,7 +1633,7 @@ void dl_outstanding_frames_request (dlq_item_t *E)
  * Description:	By client application we mean something that attached with the 
  *		AGW network protocol.
  *
- *		Clean out anything related to the specfied client application.
+ *		Clean out anything related to the specified client application.
  *		This would include state machines and registered callsigns.
  *	
  *------------------------------------------------------------------------------*/
@@ -2201,7 +2201,7 @@ void lm_data_indication (dlq_item_t *E)
 	    break;
 
 // Erratum: The AX.25 spec is not clear about whether SREJ should be command, response, or both.
-// The underlying X.25 spec clearly says it is reponse only.  Let's go with that.
+// The underlying X.25 spec clearly says it is response only.  Let's go with that.
 
 	  case frame_type_S_SREJ:
 	  case frame_type_U_DM:
@@ -2224,7 +2224,7 @@ void lm_data_indication (dlq_item_t *E)
 	  case frame_type_U_UI:
 	    // Don't test at this point in case an APRS frame gets thru.
 	    // APRS doesn't specify what to put in the Source and Dest C bits.
-	    // In practice we see all 4 possble combinations.
+	    // In practice we see all 4 possible combinations.
 	    // I have an opinion about what would be "correct" (discussed elsewhere)
 	    // but in practice no one seems to care.
 	    break;
@@ -2701,7 +2701,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 
 	  if (S->rxdata_by_ns[ns] != NULL) {
 	    // There is a possibility that we might have another received frame stashed
-	    // away from 8 or 128 (modulo) frames back.  Remove it so it doesn't accidently
+	    // away from 8 or 128 (modulo) frames back.  Remove it so it doesn't accidentally
 	    // show up at some future inopportune time.
 
 	    cdata_delete (S->rxdata_by_ns[ns]);
@@ -2786,7 +2786,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 // we discard 3,4,5,6, and tell the other end to resend everything starting with 2.
 
 // At one time, I had some doubts about when to use command or response for REJ.
-// I now believe that reponse, as implied by setting F in the flow chart, is correct.
+// I now believe that response, as implied by setting F in the flow chart, is correct.
 
 	  int f = p;
 	  int nr = S->vr;		// Next expected sequence number.
@@ -2796,7 +2796,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 	  S->reject_exception = 1;
 
 	  if (s_debug_retry) {
-	      text_color_set(DW_COLOR_ERROR);	// make it more noticable.
+	      text_color_set(DW_COLOR_ERROR);	// make it more noticeable.
 	      dw_printf ("sending REJ, at %s %d, SREJ not enabled case, V(R)=%d", __func__, __LINE__, S->vr);
 	  }
 
@@ -2860,7 +2860,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 // In version 1.4:
 // We end up sending more SREJ than necessary and and get back redundant information.  Example:
 // When we see 113 missing, we ask for a resend.
-// When we see 115 & 116 missing, a cummulative SREJ asks for everything.
+// When we see 115 & 116 missing, a cumulative SREJ asks for everything.
 // The other end dutifully sends 113 twice.
 //
 // [0.4] DW1>DW0:(SREJ res, n(r)=113, f=0)
@@ -2890,7 +2890,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 //	      int allow_f1 = 0;		// F=1 from X.25 2.4.6.4 b) 3)
 	      int allow_f1 = 1;		// F=1 from X.25 2.4.6.4 b) 3)
 
-// send only for this gap, not cummulative from V(R).
+// send only for this gap, not cumulative from V(R).
 
 	      int last = AX25MODULO(ns - 1, S->modulo, __FILE__, __func__, __LINE__);
 	      int first = last;
@@ -3447,7 +3447,7 @@ static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr
 // we received RR frames with N(R) values indicating that the other side received everything
 // that we sent.  Eventually rc could reach the limit and we would get an error.
 // If we are in state 4, and other guy ack'ed last I frame we sent, transition to state 3.
-// The same thing was done for receving I frames after check_i_frame_ackd.
+// The same thing was done for receiving I frames after check_i_frame_ackd.
 
 // Thought: Could we simply call check_i_frame_ackd, for consistency, rather than only setting V(A)?
 
@@ -3759,7 +3759,7 @@ static void rej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr)
  *
  *		The SREJ command/response initiates more-efficient error recovery by requesting the retransmission of a
  *		single I frame following the detection of a sequence error. This is an advancement over the earlier versions in
- *		which the requested I frame was retransmitted togther with all additional I frames subsequently transmitted and
+ *		which the requested I frame was retransmitted together with all additional I frames subsequently transmitted and
  *		successfully received.
  *
  *		When a TNC sends one or more SREJ commands, each with the P bit set to "0" or "1", or one or more SREJ
@@ -4409,7 +4409,7 @@ static void disc_frame (ax25_dlsm_t *S, int p)
  *		earliest opportunity. If the TNC is not capable of accepting a SABME command, it responds with a DM frame.
  *
  *		A TNC that uses a version of AX.25 prior to v2.2 responds with a FRMR.
- *		( I think the KPC-3+ has a bug - it replys with DM - WB2OSZ )
+ *		( I think the KPC-3+ has a bug - it replies with DM - WB2OSZ )
  *
  *		4.3.3.5. Disconnected Mode (DM) Response
  *
@@ -4636,7 +4636,7 @@ static void ua_frame (ax25_dlsm_t *S, int f)
 	    if (f == 1) {
 	      if (S->layer_3_initiated) {
 	        text_color_set(DW_COLOR_INFO);
-	        // TODO: add via if apppropriate.
+	        // TODO: add via if appropriate.
 	        dw_printf ("Stream %d: Connected to %s.  (%s)\n", S->stream_id, S->addrs[PEERCALL], S->state == state_5_awaiting_v22_connection ? "v2.2" : "v2.0");
 	        // There is a subtle difference here between connect confirm and indication.
 	        // connect *confirm* means "has been made"
@@ -5615,7 +5615,7 @@ static void clear_exception_conditions (ax25_dlsm_t *S)
  *
  *					Other guy gets RR/RNR command P=1.
  *					Same action for either state 3 or 4.
- *					Whether he has outstanding un-ack'ed sent I frames is irrelevent.
+ *					Whether he has outstanding un-ack'ed sent I frames is irrelevant.
  *					He calls "enquiry response" which sends RR/RNR response F=1.
  *					(Read about detour 1 below and in enquiry_response.)
  *
