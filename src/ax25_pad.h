@@ -397,6 +397,7 @@ extern int ax25_get_first_not_repeated(packet_t pp);
 extern int ax25_get_rr (packet_t this_p, int n);
 
 extern int ax25_get_info (packet_t pp, unsigned char **paddr);
+extern void ax25_set_info (packet_t pp, unsigned char *info_ptr, int info_len);
 extern int ax25_cut_at_crlf (packet_t this_p);
 
 extern void ax25_set_nextp (packet_t this_p, packet_t next_p);
@@ -409,6 +410,7 @@ extern void ax25_set_release_time (packet_t this_p, double release_time);
 extern double ax25_get_release_time (packet_t this_p);
 
 extern void ax25_set_modulo (packet_t this_p, int modulo);
+extern int ax25_get_modulo (packet_t this_p);
 
 extern void ax25_format_addrs (packet_t pp, char *);
 extern void ax25_format_via_path (packet_t this_p, char *result, size_t result_size);
@@ -428,6 +430,7 @@ extern int ax25_get_c2 (packet_t this_p);
 extern int ax25_get_pid (packet_t this_p);
 
 extern int ax25_get_frame_len (packet_t this_p);
+extern unsigned char *ax25_get_frame_data_ptr (packet_t this_p);
 
 extern unsigned short ax25_dedupe_crc (packet_t pp);
 

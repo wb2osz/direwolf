@@ -372,7 +372,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 /*
  * Tearing it apart is destructive so make our own copy first.
  */
-	char stuff[512];
+	char stuff[AX25_MAX_PACKET_LEN+1];
 	char *pinfo;
 
 	int ssid_temp, heard_temp;
@@ -1717,6 +1717,19 @@ int ax25_get_info (packet_t this_p, unsigned char **paddr)
 } /* end ax25_get_info */
 
 
+void ax25_set_info (packet_t this_p, unsigned char *new_info_ptr, int new_info_len)
+{
+	unsigned char *old_info_ptr;
+	int old_info_len = ax25_get_info (this_p, &old_info_ptr);
+	this_p->frame_len -= old_info_len;
+
+	if (new_info_len < 0) new_info_len = 0;
+	if (new_info_len > AX25_MAX_INFO_LEN) new_info_len = AX25_MAX_INFO_LEN;
+	memcpy (old_info_ptr, new_info_ptr, new_info_len);
+	this_p->frame_len += new_info_len;
+}
+
+
 /*------------------------------------------------------------------------------
  *
  * Name:	ax25_cut_at_crlf
@@ -1891,6 +1904,25 @@ void ax25_set_modulo (packet_t this_p, int modulo)
 	this_p->modulo = modulo;
 }
 
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_get_modulo
+ *
+ * Purpose:	Get modulo value for I and S frame sequence numbers.
+ *
+ * Returns:	8 or 128 if known.
+ *		0 if unknown.
+ *
+ *------------------------------------------------------------------------------*/
+
+int ax25_get_modulo (packet_t this_p)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	return (this_p->modulo);
+}
 
 
 
@@ -2597,6 +2629,15 @@ int ax25_get_frame_len (packet_t this_p)
 
 } /* end ax25_get_frame_len */
 
+
+unsigned char *ax25_get_frame_data_ptr (packet_t this_p)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	return (this_p->frame_data);
+
+} /* end ax25_get_frame_data_ptr */
 
 
 /*------------------------------------------------------------------------------
