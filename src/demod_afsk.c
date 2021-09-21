@@ -25,6 +25,8 @@
 // #define DEBUG4 1	/* capture AFSK demodulator output to log files */
 			/* Can be used to make nice plots. */
 
+// #define DEBUG5 1	// Write just demodulated bit stream to file. */
+
 
 /*------------------------------------------------------------------
  *
@@ -874,6 +876,24 @@ static void nudge_pll (int chan, int subchan, int slice, float demod_out, struct
 
 	  int quality = fabsf(demod_out) * 100.0f / amplitude;
 	  if (quality > 100) quality = 100;
+
+#if DEBUG5
+	  // Write bit stream to a file.
+
+	  static FILE *bsfp = NULL;
+	  static int bcount = 0;
+	  if (chan == 0 && subchan == 0 && slice == 0) {
+	    if (bsfp == NULL) {
+	       bsfp = fopen ("bitstream.txt", "w");
+	    }
+	    fprintf (bsfp, "%d", demod_out > 0);
+	    bcount++;
+	    if (bcount % 64 == 0) {
+	      fprintf (bsfp, "\n");
+	    }
+	  }
+
+#endif
 
 	  hdlc_rec_bit (chan, subchan, slice, demod_out > 0, 0, quality);
 	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
