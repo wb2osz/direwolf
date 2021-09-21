@@ -304,17 +304,12 @@ int serial_port_write (MYFDTYPE fd, char *str, int len)
 	  {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error writing to serial port.  Error %d.\n\n", err);
+	    return (-1);
 	  }
 	}
-	else if ((int)nwritten != len) 
-	{
-	  // Do we want this message here?
-	  // Or rely on caller to check and provide something more meaningful for the usage?
-	  //text_color_set(DW_COLOR_ERROR);
-	  //dw_printf ("Error writing to serial port.  Only %d of %d written.\n\n", (int)nwritten, len);
-	}
 
-	return (nwritten);
+	// nwritten is 0 for asynchronous write, at this point, so just return the requested len.
+	return (len);
 
 #else
 	int written;
