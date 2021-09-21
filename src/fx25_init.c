@@ -482,7 +482,7 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
   }
   
 // diagnostic prints
-/*
+#if 0
   printf("Alpha To:\n\r");
   for (i=0; i < sizeof(DTYPE)*(rs->nn+1); i++) 
     printf("0x%2x,", rs->alpha_to[i]);
@@ -497,7 +497,7 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
   for (i = 0; i <= nroots; i++) 
     printf("0x%2x,", rs->genpoly[i]);
   printf("\n\r");
-*/
+#endif
   return rs;
 }
 
