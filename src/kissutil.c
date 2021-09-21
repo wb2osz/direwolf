@@ -308,10 +308,15 @@ int main (int argc, char *argv[])
 	}
 #endif
 
+// Give the threads a little while to open the TNC connection before trying to use it.
+// This was a problem when the transmit queue already existed when starting up.
+
+	SLEEP_MS (500);
+
 /*
  * Process keyboard or other input source.
  */
-	char stuff[1000];
+	char stuff[AX25_MAX_PACKET_LEN];
 
 	if (strlen(transmit_from) > 0) {
 /*
@@ -544,8 +549,8 @@ static void process_input (char *stuff)
 
 static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 {
-	unsigned char temp[1000];
-	unsigned char kissed[2000];
+	unsigned char temp[AX25_MAX_PACKET_LEN];	// We don't limit to 256 info bytes.
+	unsigned char kissed[AX25_MAX_PACKET_LEN*2];
 	int klen;
 
 	if (chan < 0 || chan > 15) {
@@ -587,6 +592,7 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 	  if (rc != klen) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("ERROR writing KISS frame to serial port.\n");
+	    //dw_printf ("DEBUG wanted %d, got %d\n", klen, rc);
 	  }
 	}
 
