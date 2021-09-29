@@ -382,7 +382,7 @@ int tt_text_to_two_key (const char *text, int quiet, char *buttons)
  * Outputs:	buttons	- Sequence of two buttons to press.
  *			  "00" for error because this is probably
  *			  being used to build up a fixed length
- *			  string where positions are signficant.
+ *			  string where positions are significant.
  *			  Must be at least 3 bytes.
  *
  * Returns:     Number of errors detected.

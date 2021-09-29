@@ -245,7 +245,7 @@ char dtmf_sample (int c, float input)
  * others in the same group multiplied by some factor.
  *
  * For perfect synthetic signals this needs to be in
- * the range of about 1.33 (very senstive) to 2.15 (very fussy).
+ * the range of about 1.33 (very sensitive) to 2.15 (very fussy).
  *
  * Too low will cause false triggers on random noise.
  * Too high will won't decode less than perfect signals.

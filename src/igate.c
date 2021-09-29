@@ -2211,7 +2211,7 @@ static int rx_to_ig_allow (packet_t pp)
  *
  * Future:
  *		Should the digipeater function avoid transmitting something if it
- *		was recently transmitted by the IGate funtion?
+ *		was recently transmitted by the IGate function?
  *		This code is pretty much the same as dedupe.c. Maybe it could all
  *		be combined into one.  Need to ponder this some more.
  * 

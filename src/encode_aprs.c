@@ -504,7 +504,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *
  *		comment	- Additional comment text.
  *
- *		result_size - Ammount of space for result, provideed by 
+ *		result_size - Amount of space for result, provided by
  *				caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.  Should be at least ??? bytes.
@@ -519,7 +519,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *			Power/height/gain/directivity or
  *			Course/speed.
  *
- *		Afer that, 
+ *		After that,
  *
  *----------------------------------------------------------------*/
 
@@ -646,7 +646,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *
  *		comment	- Additional comment text.
  *
- *		result_size - Ammount of space for result, provideed by 
+ *		result_size - Amount of space for result, provided by
  *				caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.  Should be at least ??? bytes.
@@ -776,7 +776,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
  * Inputs:      addressee	- Addressed to, up to 9 characters.
  *		text		- Text part of the message.
  *		id		- Identifier, 0 to 5 characters.
- *		result_size 	- Ammount of space for result, provided by
+ *		result_size 	- Amount of space for result, provided by
  *				  caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.
@@ -860,7 +860,7 @@ int main (int argc, char *argv[])
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
-/* with freq & tone.  minus offset, no offset, explict simplex. */
+/* with freq & tone.  minus offset, no offset, explicit simplex. */
 
 	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));

@@ -26,7 +26,7 @@
  *
  * Description: Present the packet contents in human readable format.
  *		This is a fairly complete implementation with error messages
- *		pointing out various specication violations. 
+ *		pointing out various specification violations.
  *
  * Assumptions:	ax25_from_frame() has been called to 
  *		separate the header and information.
@@ -458,7 +458,7 @@ void decode_aprs_print (decode_aprs_t *A) {
 	if (A->g_power > 0) {
 	  char phg[100];
 
-	  /* Protcol spec doesn't mention whether this is dBd or dBi.  */
+	  /* Protocol spec doesn't mention whether this is dBd or dBi.  */
 	  /* Clarified later. */
 	  /* http://eng.usna.navy.mil/~bruninga/aprs/aprs11.html */
 	  /* "The Antenna Gain in the PHG format on page 28 is in dBi." */
@@ -509,7 +509,7 @@ void decode_aprs_print (decode_aprs_t *A) {
 
 	if (A->g_lat != G_UNKNOWN || A->g_lon != G_UNKNOWN) {
 
-// Have location but it is posible one part is invalid.
+// Have location but it is possible one part is invalid.
 
 	  if (A->g_lat != G_UNKNOWN) {
   
@@ -1039,7 +1039,7 @@ N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Byonics TinyTrack4|4
 
 # The next group starts with metacharacter "T" which can be any of space > ] ` '
 # But space is for original Mic-E, # > and ] are for Kenwood, 
-# so ` ' would probably be less ambigous choices but any appear to be valid.
+# so ` ' would probably be less ambiguous choices but any appear to be valid.
 
 N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Hamhud\9
 N1ZZN-9>T2SP0W:'c_Vm6hk/`"49}Argent/9
@@ -1147,7 +1147,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 		 mic_e_digit(A, dest[5], 0, &std_msg, &cust_msg)) / 6000.0;
 
 
-/* 4th character of desination indicates north / south. */
+/* 4th character of destination indicates north / south. */
 
 	if ((dest[3] >= '0' && dest[3] <= '9') || dest[3] == 'L') {
 	  /* South */
@@ -1189,7 +1189,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 /* First character of information field is longitude in degrees. */
 /* It is possible for the unprintable DEL character to occur here. */
 
-/* 5th character of desination indicates longitude offset of +100. */
+/* 5th character of destination indicates longitude offset of +100. */
 /* Not quite that simple :-( */
 
 	ch = p->lon[0];
@@ -1473,7 +1473,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
- *		quiet	- supress error messages.
+ *		quiet	- suppress error messages.
  *
  * Outputs:	A->g_msg_type		Text description for screen display.
  *
@@ -1497,7 +1497,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  * Cases:	:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
  *		:xxxxxxxxx:UNIT.		Telemetry metadata, unit/label
- *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficents
+ *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficients
  *		:xxxxxxxxx:BITS.		Telemetry metadata, Bit Sense/Project Name
  *		:xxxxxxxxx:?			Directed Station Query
  *		:xxxxxxxxx:ack			Message acknowledged (received)
@@ -1520,7 +1520,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char message[73];		/* 0-67 characters for message */
 					/* Optional { followed by 1-5 characters for message number */
 
-					/* If the first chracter is '?' it is a Directed Station Query. */
+					/* If the first character is '?' it is a Directed Station Query. */
 	} *p;
 
 	char addressee[AX25_MAX_ADDR_LEN];
@@ -1583,7 +1583,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficents Message for \"%s\"", addressee);
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficients Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_eqns;
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
@@ -4026,7 +4026,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *
  *			!DAO!			APRS precision and Datum option.
  *
- *		Protocol reference, end of chaper 6.
+ *		Protocol reference, end of chapter 6.
  *
  *			/A=123456		Altitude
  *
@@ -4066,7 +4066,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		  This same thing has been observed from others and is intermittent.
  *
  *		* AGW Tracker can send UTF-16 if an option is selected.  This can introduce nul bytes.
- *		  This is wrong.  It should be using UTF-8 and I'm not going to accomodate it here.
+ *		  This is wrong.  It should be using UTF-8 and I'm not going to accommodate it here.
  *
  *
  *		The digipeater and IGate functions should pass along anything exactly the
@@ -4233,7 +4233,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 /*
  * Watch out for buffer overflow.
  * KG6AZZ reports that there is a local digipeater that seems to 
- * malfunction ocassionally.  It corrupts the packet, as it is
+ * malfunction occasionally.  It corrupts the packet, as it is
  * digipeated, causing the comment to be hundreds of characters long.
  */
 
@@ -4440,7 +4440,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * This would not make sense to use this with a compressed location which
  * already has much greater resolution.
  *
- * It surprized me to see this in a MIC-E message.
+ * It surprised me to see this in a MIC-E message.
  * MIC-E has resolution of .01 minute so it would make sense to have it as an option.
  */
 
@@ -4896,7 +4896,7 @@ int main (int argc, char *argv[])
 	        hex_dump (kiss_frame, kiss_len);
 
 	        // Put FEND at end to keep kiss_unwrap happy.
-	        // Having one at the begining is optional.
+	        // Having one at the beginning is optional.
 
 	        kiss_frame[kiss_len++] = FEND;
 

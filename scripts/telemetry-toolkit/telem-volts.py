@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 # Part of Dire Wolf APRS Telemetry Toolkit, WB2OSZ, 2015
 
@@ -33,4 +33,4 @@ volts = adc.readADCSingleEnded(0, gain, sps) * 0.001 * (r1+r2) / r2
 # (multiply by expected value, divide by uncalibrated result.)
 #volts = volts * 4.98 / 4.889
 
-print "%.3f" % (volts)
+print("%.3f" % (volts))

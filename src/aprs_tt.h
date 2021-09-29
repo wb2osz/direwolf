@@ -123,7 +123,7 @@ struct tt_config_s {
 	int obj_recv_chan;		/* Channel to listen for tones. */
 
 	int obj_xmit_chan;		/* Channel to transmit object report. */
-					/* -1 for none.  This could happpen if we */
+					/* -1 for none.  This could happen if we */
 					/* are only sending to application */
 					/* and/or IGate. */
 

@@ -34,7 +34,7 @@
  *		are significantly different and I thought it would be
  *		too confusing to munge them together.
  *
- * References:	The Ax.25 protcol barely mentions digipeaters and
+ * References:	The Ax.25 protocol barely mentions digipeaters and
  *		and doesn't describe how they should work.
  *		
  *------------------------------------------------------------------*/
@@ -255,7 +255,7 @@ static packet_t cdigipeat_match (int from_chan, packet_t pp, char *mycall_rec, c
  *				Originally this was the only one.
  *				Should we change it to AFILTER to make it clearer?
  *	CFILTER		- Similar for connected moded digipeater.
- *	IGFILTER	- APRS-IS (IGate) server side - completely diffeent.
+ *	IGFILTER	- APRS-IS (IGate) server side - completely different.
  *				Confusing with similar name but much different idea.
  *				Maybe this should be renamed to SUBSCRIBE or something like that.
  *

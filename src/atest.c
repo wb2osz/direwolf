@@ -25,10 +25,10 @@
  *
  * Purpose:     Test fixture for the AFSK demodulator.
  *
- * Inputs:	Takes audio from a .WAV file insted of the audio device.
+ * Inputs:	Takes audio from a .WAV file instead of the audio device.
  *
  * Description:	This can be used to test the AFSK demodulator under
- *		controlled and reproducable conditions for tweaking.
+ *		controlled and reproducible conditions for tweaking.
  *	
  *		For example
  *
@@ -705,7 +705,7 @@ int main (int argc, char *argv[])
 	dw_printf ("%d packets decoded in %.3f seconds.  %.1f x realtime\n", packets_decoded_total, elapsed, total_filetime/elapsed);
 	if (d_o_opt) {
 	  dw_printf ("DCD count = %d\n", dcd_count);
-	  dw_printf ("DCD missing erors = %d\n", dcd_missing_errors);
+	  dw_printf ("DCD missing errors = %d\n", dcd_missing_errors);
 	}
 
 	if (error_if_less_than != -1 && packets_decoded_total < error_if_less_than) {

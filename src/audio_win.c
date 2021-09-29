@@ -209,7 +209,7 @@ static struct adev_s {
  *				more restrictive in its capabilities.
  *				It might say, the best I can do is mono, 8 bit, 8000/sec.
  *
- *				The sofware modem must use this ACTUAL information
+ *				The software modem must use this ACTUAL information
  *				that the device is supplying, that could be different
  *				than what the user specified.
  * 
@@ -921,7 +921,7 @@ int audio_get (int a)
  *		c	- One byte in range of 0 - 255.
  *
  *
- * Global In:	out_current	- index of output buffer currenly being filled.
+ * Global In:	out_current	- index of output buffer currently being filled.
  *
  * Returns:     Normally non-negative.
  *              -1 for any type of error.

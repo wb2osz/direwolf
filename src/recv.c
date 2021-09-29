@@ -42,7 +42,7 @@
  *				multi_modem_process_sample(s)
  *				
  *
- *		When a packet is succesfully decoded, somebody calls
+ *		When a packet is successfully decoded, somebody calls
  *		app_process_rec_frame, also in direwolf.c
  *
  *

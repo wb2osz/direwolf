@@ -224,7 +224,7 @@ int main (int argc, char *argv[])
 	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
 	int aprstt_debug = 0;	/* "-d d" option for APRStt (think Dtmf) debug. */
 
-	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering trasmit frames. */
+	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering transmit frames. */
 	int E_rx_opt = 0;		/* "-E Rn" Error rate % for clobbering receive frames. */
 
 	float e_recv_ber = 0.0;		/* Receive Bit Error Rate (BER). */

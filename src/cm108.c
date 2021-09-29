@@ -30,7 +30,7 @@
  *		
  * Description:
  *
- *	There is an incresing demand for using the GPIO pins of USB audio devices for PTT.
+ *	There is an increasing demand for using the GPIO pins of USB audio devices for PTT.
  *	We have a few commercial products:
  *
  *		DINAH		https://hamprojects.info/dinah/
@@ -53,7 +53,7 @@
  *	painful roundabout way.  This is documented in the User Guide, section called,
  *		 "Hamlib PTT Example 2: Use GPIO of USB audio adapter.  (e.g. DMK URI)"
  *
- *	It's rather involved and the explantion doesn't cover the case of multiple
+ *	It's rather involved and the explanation doesn't cover the case of multiple
  *	USB-Audio adapters.  It is not as straightforward as you might expect.  Here we have
  *	an example of 3 C-Media USB adapters, a SignaLink USB, a keyboard, and a mouse.
  *	
@@ -740,7 +740,7 @@ int cm108_inventory (struct thing_s *things, int max_things)
  *		ptt_device_size	- Size of result area to avoid buffer overflow.
  *
  * Outputs:	ptt_device	- Device name, something like /dev/hidraw2.
- *				  Will be emptry string if no match found.
+ *				  Will be empty string if no match found.
  *
  * Returns:	none
  *
