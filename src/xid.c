@@ -92,7 +92,7 @@
 // The first byte must be of the form	1000 0xx0
 // The second byte must be of the form	1010 xx00
 // The third byte must be of the form	0000 0010
-// If we process the three byte "HDLC Optional Parmeters" like
+// If we process the three byte "HDLC Optional Parameters" like
 // the other multibyte numeric fields, with the most significant
 // byte first, we end up with bit masks like this.
 // The bit order would be  8 7 6 5 4 3 2 1   16 15 14 13 12 11 10 9   24 23 22 21 20 19 18 17

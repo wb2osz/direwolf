@@ -212,7 +212,7 @@ void aprs_tt_init (struct tt_config_s *p, int debug)
  *		The complete message is then processed.
  *		The touch tone decoder sends $ if no activity
  *		for some amount of time, perhaps 5 seconds.
- *		A partially accumulated messge is discarded if
+ *		A partially accumulated message is discarded if
  *		there is a long gap.
  *
  *		'.' means no activity during processing period.
@@ -590,7 +590,7 @@ static int parse_fields (char *msg)
  * Purpose:     Expand compact form "macro" to full format then process.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should contain only digits.
  *
  * Returns:	0 for success or one of the TT_ERROR_... codes.
@@ -705,7 +705,7 @@ static int expand_macro (char *e)
  * Purpose:     Extract traditional format callsign or object name from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "A" then a digit.
  *
  * Outputs:	m_callsign
@@ -888,7 +888,7 @@ static int parse_callsign (char *e)
  * Purpose:     Extract object name from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "AA".
  *
  * Outputs:	m_callsign
@@ -950,7 +950,7 @@ static int parse_object_name (char *e)
  * Purpose:     Extract symbol from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "AB".
  *
  * Outputs:	m_symtab_or_overlay
@@ -1064,7 +1064,7 @@ static int parse_symbol (char *e)
  * Purpose:     Extract QIKcom-2 / APRStt 3 ten digit call or five digit suffix.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "AC".
  *
  * Outputs:	m_callsign
@@ -1147,7 +1147,7 @@ static int parse_aprstt3_call (char *e)
  * Purpose:     Extract location from touch tone sequence.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "B".
  *
  * Outputs:	m_latitude
@@ -1494,7 +1494,7 @@ static int parse_location (char *e)
  *		defined in the configuration file.
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "B".
  *
  *		valstrsize	- size of the outputs so we can check for buffer overflow.
@@ -1645,7 +1645,7 @@ static int find_ttloc_match (char *e, char *xstr, char *ystr, char *zstr, char *
  * Purpose:     Extract comment / status or other special information from touch tone message. 
  *
  * Inputs:      e		- An "entry" extracted from a complete
- *				  APRStt messsage.
+ *				  APRStt message.
  *				  In this case, it should start with "C".
  *
  * Outputs:	m_comment

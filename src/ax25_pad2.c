@@ -406,7 +406,7 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	}
 
 	// Erratum: The AX.25 spec is not clear about whether SREJ should be command, response, or both.
-	// The underlying X.25 spec clearly says it is reponse only.  Let's go with that.
+	// The underlying X.25 spec clearly says it is response only.  Let's go with that.
 
 	if (ftype == frame_type_S_SREJ && cr != cr_res) {
 	  text_color_set(DW_COLOR_ERROR);

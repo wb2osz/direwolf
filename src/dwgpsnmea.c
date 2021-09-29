@@ -437,7 +437,7 @@ static int remove_checksum (char *sent, int quiet)
  *
  * Name:        dwgpsnmea_gprmc
  *
- * Purpose:    	Parse $GPRMC sentence and extract interesing parts.
+ * Purpose:    	Parse $GPRMC sentence and extract interesting parts.
  *
  * Inputs:	sentence	NMEA sentence.
  *
@@ -586,7 +586,7 @@ dwfix_t dwgpsnmea_gprmc (char *sentence, int quiet, double *odlat, double *odlon
  *
  * Name:        dwgpsnmea_gpgga
  *
- * Purpose:    	Parse $GPGGA sentence and extract interesing parts.
+ * Purpose:    	Parse $GPGGA sentence and extract interesting parts.
  *
  * Inputs:	sentence	NMEA sentence.
  *

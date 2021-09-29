@@ -503,7 +503,7 @@ int demod_init (struct audio_s *pa)
 	      // In versions 1.4 and 1.5, V.26 "Alternative A" was used.
 	      // years later, I discover that the MFJ-2400 used "Alternative B."
 	      // It looks like the other two manufacturers use the same but we
-              // can't be sure until we find one for compatbility testing.
+              // can't be sure until we find one for compatibility testing.
 
 	      // In version 1.6 we add a choice for the user.
 	      // If neither one was explicitly specified, print a message and take
@@ -514,8 +514,8 @@ int demod_init (struct audio_s *pa)
 
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Two incompatible versions of 2400 bps QPSK are now available.\n");
-	        dw_printf ("For compatbility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
-	        dw_printf ("For compatbility MFJ-2400 use 'V26B' modem option in config file.\n");
+	        dw_printf ("For compatibility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
+	        dw_printf ("For compatibility MFJ-2400 use 'V26B' modem option in config file.\n");
 	        dw_printf ("Command line options -j and -J can be used for channel 0.\n");
 	        dw_printf ("For more information, read the Dire Wolf User Guide and\n");
 	        dw_printf ("2400-4800-PSK-for-APRS-Packet-Radio.pdf.\n");
@@ -709,7 +709,7 @@ int demod_init (struct audio_s *pa)
 	        else if (ratio < 10) {
 
 	          // 48000 / 9600 is 5.00
-	          // Need more reasearch.  Treat like above for now.
+	          // Need more research.  Treat like above for now.
 
 	          save_audio_config_p->achan[chan].upsample = 4;
 	        }
@@ -832,7 +832,7 @@ int demod_init (struct audio_s *pa)
  * Global In:	save_audio_config_p->adev[ACHAN2ADEV(chan)].bits_per_sample - So we know whether to 
  *			read 1 or 2 bytes from audio stream.
  *
- * Description:	Grab 1 or two btyes depending on data source.
+ * Description:	Grab 1 or two bytes depending on data source.
  *
  *		When processing stereo, the caller will call this
  *		at twice the normal rate to obtain alternating left 
@@ -847,7 +847,7 @@ __attribute__((hot))
 int demod_get_sample (int a)		
 {
 	int x1, x2;
-	signed short sam;	/* short to force sign extention. */
+	signed short sam;	/* short to force sign extension. */
 
 
 	assert (save_audio_config_p->adev[a].bits_per_sample == 8 || save_audio_config_p->adev[a].bits_per_sample == 16);

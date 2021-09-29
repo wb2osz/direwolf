@@ -126,7 +126,7 @@
 	This is documented in the User Guide, section called,
 		"Hamlib PTT Example 2: Use GPIO of USB audio adapter.  (e.g. DMK URI)"
 
-	It's rather involved and the explantion doesn't cover the case of multiple
+	It's rather involved and the explanation doesn't cover the case of multiple
 	USB-Audio adapters.  It would be nice to have a little script which lists all
 	of the USB-Audio adapters and the corresponding /dev/hidraw device.
 	( We now have it.  The included "cm108" application. )
@@ -914,7 +914,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_LPT) {
 
 	        /* Can't open the same device more than once so we */
-	        /* need more logic to look for the case of mutiple radio */
+	        /* need more logic to look for the case of multiple radio */
 	        /* channels using different pins of the LPT port. */
 
 	        /* Did some earlier channel use the same ptt device name? */

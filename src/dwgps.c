@@ -90,7 +90,7 @@ static dw_mutex_t s_gps_mutex;
  *
  * Name:        dwgps_init
  *
- * Purpose:    	Intialize the GPS interface.
+ * Purpose:    	Initialize the GPS interface.
  *
  * Inputs:	pconfig		Configuration settings.  This might include
  *				serial port name for direct connect and host

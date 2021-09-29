@@ -322,7 +322,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * Future project?  Rather than shifting the samples,
  * it might be faster to add another variable to keep
  * track of the most recent sample and change the 
- * indexing in the later loops that multipy and add.
+ * indexing in the later loops that multiply and add.
  */
 
 	/* Scale to nice number for convenience. */
@@ -478,7 +478,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  *
  * Returns:	None
  *
- * Descripton:	A PLL is used to sample near the centers of the data bits.
+ * Description:	A PLL is used to sample near the centers of the data bits.
  *
  *		D->data_clock_pll is a SIGNED 32 bit variable.
  *		When it overflows from a large positive value to a negative value, we

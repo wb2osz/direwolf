@@ -96,7 +96,7 @@
  * Each one of these can have multiple slicers, at
  * different levels, to compensate for different
  * amplitudes of the AFSK tones.
- * Intially used same number as subchannels but
+ * Initially used same number as subchannels but
  * we could probably trim this down a little
  * without impacting performance.
  */

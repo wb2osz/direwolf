@@ -273,7 +273,7 @@ void hdlc_rec2_block (rrbb_t block)
 	}
 
 /*
- * Not successful with frame in orginal form.
+ * Not successful with frame in original form.
  * See if we can "fix" it.
  */
 	if (try_to_fix_quick_now (block, chan, subchan, slice, alevel)) {

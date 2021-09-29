@@ -94,7 +94,7 @@ static void * read_gpsd_thread (void *arg);
  *
  * Name:        dwgpsd_init
  *
- * Purpose:    	Intialize the GPS interface.
+ * Purpose:    	Initialize the GPS interface.
  *
  * Inputs:	pconfig		Configuration settings.  This includes
  *				host name or address for network connection.
@@ -191,7 +191,7 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 
 	if (strlen(pconfig->gpsd_host) == 0) {
 
-	  /* Nothing to do.  Leave initial fix value of errror. */
+	  /* Nothing to do.  Leave initial fix value of error. */
 	  return (0);
 	}	  
 

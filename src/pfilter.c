@@ -116,7 +116,7 @@ typedef struct pfstate_s {
 
 /*
  * Are we processing APRS or connected mode?
- * This determines whch types of filters are available.
+ * This determines which types of filters are available.
  */
 	int is_aprs;
 
@@ -220,7 +220,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate.from_chan = from_chan;
 	pfstate.to_chan = to_chan;
 
-	/* Copy filter string, changing any control characers to spaces. */
+	/* Copy filter string, changing any control characters to spaces. */
 
 	strlcpy (pfstate.filter_str, filter, sizeof(pfstate.filter_str));
 
@@ -776,7 +776,7 @@ static int parse_filter_spec (pfstate_t *pf)
  *		-1 = error detected
  *
  * Description:	Same function is used for all of these because they are so similar.
- *		Look for exact match to any of the specifed strings.
+ *		Look for exact match to any of the specified strings.
  *		All of them allow wildcarding with single * at the end.
  *
  *------------------------------------------------------------------------------*/
@@ -967,7 +967,7 @@ static int filt_t (pfstate_t *pf)
 	      if (strncmp(infop, ":BOM", 4) == 0) return (1);
 /*
  * Or we can have an object.
- * It's not exactly clear how to distiguish this from other objects.
+ * It's not exactly clear how to distinguish this from other objects.
  * It looks like the first 3 characters of the source should be the same
  * as the first 3 characters of the addressee.
  */
@@ -1290,7 +1290,7 @@ static int filt_s (pfstate_t *pf)
  *		-1 = error detected
  *
  * Description: Selection is based on time since last heard on RF, and distance
- *		in terms of digipeater hops and/or phyiscal location.
+ *		in terms of digipeater hops and/or physical location.
  *
  *		i/time
  *		i/time/hops

@@ -407,7 +407,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
  * Calculate constants used for timing.
  * The audio sample rate must be at least a few times the data rate.
  *
- * Baud is an integer so we hack in a fine ajustment for EAS.
+ * Baud is an integer so we hack in a fine adjustment for EAS.
  * Probably makes no difference because the DPLL keeps it in sync.
  *
  * A fraction if a Hz would make no difference for the filters.
@@ -849,7 +849,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
  * If we adjust it too quickly, the clock will have too much jitter.
  * If we adjust it too slowly, it will take too long to lock on to a new signal.
  *
- * Be a little more agressive about adjusting the PLL
+ * Be a little more aggressive about adjusting the PLL
  * phase when searching for a signal.  Don't change it as much when
  * locked on to a signal.
  *
