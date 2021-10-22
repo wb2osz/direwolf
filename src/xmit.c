@@ -766,7 +766,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 					// machine, that the transmission opportunity has arrived."
 
 	pre_flags = MS_TO_BITS(xmit_txdelay[chan] * 10, chan) / 8;
-	num_bits =  hdlc_send_flags (chan, pre_flags, 0);
+	num_bits =  layer2_preamble_postamble (chan, pre_flags, 0, save_audio_config_p);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("xmit_thread: t=%.3f, txdelay=%d [*10], pre_flags=%d, num_bits=%d\n", dtime_now()-time_ptt, xmit_txdelay[chan], pre_flags, num_bits);
@@ -867,7 +867,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
  */
 
 	post_flags = MS_TO_BITS(xmit_txtail[chan] * 10, chan) / 8;
-	nb = hdlc_send_flags (chan, post_flags, 1);
+	nb = layer2_preamble_postamble (chan, post_flags, 1, save_audio_config_p);
 	num_bits += nb;
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -962,8 +962,6 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 
 static int send_one_frame (int c, int p, packet_t pp)
 {
-	unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
-	int flen;
 	char stemp[1024];	/* max size needed? */
 	int info_len;
 	unsigned char *pinfo;
@@ -1007,10 +1005,10 @@ static int send_one_frame (int c, int p, packet_t pp)
 	ax25_format_addrs (pp, stemp);
 	info_len = ax25_get_info (pp, &pinfo);
 	text_color_set(DW_COLOR_XMIT);
-#if 0
+#if 0						// FIXME - enable this?
 	dw_printf ("[%d%c%s%s] ", c,
 			p==TQ_PRIO_0_HI ? 'H' : 'L',
-			save_audio_config_p->fx25_xmit_enable ? "F" : "",
+			save_audio_config_p->achan[c].fx25_strength ? "F" : "",
 			ts);
 #else
 	dw_printf ("[%d%c%s] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L', ts);
@@ -1064,9 +1062,6 @@ static int send_one_frame (int c, int p, packet_t pp)
 /*
  * Transmit the frame.
  */
-	flen = ax25_pack (pp, fbuf);
-	assert (flen >= 1 && flen <= (int)(sizeof(fbuf)));
-
 	int send_invalid_fcs2 = 0;
 
 	if (save_audio_config_p->xmit_error_rate != 0) {
@@ -1079,7 +1074,7 @@ static int send_one_frame (int c, int p, packet_t pp)
 	  }
 	}
 
-	nb = hdlc_send_frame (c, fbuf, flen, send_invalid_fcs2, save_audio_config_p->fx25_xmit_enable);
+	nb = layer2_send_frame (c, pp, send_invalid_fcs2, save_audio_config_p);
 
 // Optionally send confirmation to AGW client app if monitoring enabled.
 

@@ -13,7 +13,11 @@ Dire Wolf now includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error
 
 ![](fx25.png)
 
-Dire Wolf is a modern software replacement for the old 1980's style TNC built with special hardware.
+Version 1.7 adds [IL2P](https://en.wikipedia.org/wiki/Improved_Layer_2_Protocol), a different method of FEC with less overhead.
+
+
+
+### Dire Wolf is a modern software replacement for the old 1980's style TNC built with special hardware. ###
 
 Without any additional software, it can perform as:
 

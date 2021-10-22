@@ -16,6 +16,9 @@ void multi_modem_process_sample (int c, int audio_sample);
 
 int multi_modem_get_dc_average (int chan);
 
+// Deprecated.  Replace with ...packet
 void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries, int is_fx25);
+
+void multi_modem_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, int is_fx25);
 
 #endif

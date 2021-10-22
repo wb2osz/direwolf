@@ -87,7 +87,15 @@ Divide audio sample by n for first channel.
 
 .TP
 .BI "-X " "n"
-1 to enable FX.25 transmit.
+1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.
+
+.TP
+.BI "-I " "n"
+Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.
+
+.TP
+.BI "-i " "n"
+Enable IL2P transmit, inverted polarity.  n=1 is recommended.  0 uses weaker FEC.
 
 .TP
 .BI "-d " "x"

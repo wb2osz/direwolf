@@ -60,6 +60,13 @@ list(APPEND direwolf_SOURCES
   hdlc_rec2.c
   hdlc_send.c
   igate.c
+  il2p_codec.c
+  il2p_scramble.c
+  il2p_rec.c
+  il2p_payload.c
+  il2p_init.c
+  il2p_header.c
+  il2p_send.c
   kiss_frame.c
   kiss.c
   kissserial.c
@@ -289,12 +296,20 @@ target_link_libraries(log2gpx
 list(APPEND gen_packets_SOURCES
   gen_packets.c
   ax25_pad.c
+  ax25_pad2.c
   fx25_encode.c
+  fx25_extract.c
   fx25_init.c
   fx25_send.c
   hdlc_send.c
   fcs_calc.c
   gen_tone.c
+  il2p_codec.c
+  il2p_scramble.c
+  il2p_payload.c
+  il2p_init.c
+  il2p_header.c
+  il2p_send.c
   morse.c
   dtmf.c
   textcolor.c
@@ -321,14 +336,22 @@ list(APPEND atest_SOURCES
   demod_9600.c
   dsp.c
   fx25_extract.c
+  fx25_encode.c
   fx25_init.c
   fx25_rec.c
   hdlc_rec.c
   hdlc_rec2.c
+  il2p_codec.c
+  il2p_scramble.c
+  il2p_rec.c
+  il2p_payload.c
+  il2p_init.c
+  il2p_header.c
   multi_modem.c
   rrbb.c
   fcs_calc.c
   ax25_pad.c
+  ax25_pad2.c
   decode_aprs.c
   dwgpsnmea.c
   dwgps.c
@@ -418,6 +441,29 @@ target_link_libraries(kissutil
 
 if(WIN32 OR CYGWIN)
   target_link_libraries(kissutil ws2_32)
+endif()
+
+
+# TNC interoperability testing for AX.25 connected mode.
+# tnctest
+list(APPEND tnctest_SOURCES
+  tnctest.c
+  textcolor.c
+  dtime_now.c
+  serial_port.c
+  )
+
+add_executable(tnctest
+  ${tnctest_SOURCES}
+  )
+
+target_link_libraries(tnctest
+  ${MISC_LIBRARIES}
+  Threads::Threads
+  )
+
+if(WIN32 OR CYGWIN)
+  target_link_libraries(tnctest ws2_32)
 endif()
 
 
@@ -520,6 +566,7 @@ install(TARGETS gen_packets DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS atest DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS ttcalc DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS kissutil DESTINATION ${INSTALL_BIN_DIR})
+install(TARGETS tnctest DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS appserver DESTINATION ${INSTALL_BIN_DIR})
 if(UDEV_FOUND OR WIN32 OR CYGWIN)
   install(TARGETS cm108 DESTINATION ${INSTALL_BIN_DIR})

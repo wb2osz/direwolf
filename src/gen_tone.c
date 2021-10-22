@@ -380,7 +380,14 @@ void tone_gen_put_bit (int chan, int dat)
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("tone_gen_put_bit %d AFSK\n", __LINE__);
 #endif
-	      tone_phase[chan] += dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
+
+	      // v1.7 reversed.
+	      // Previously a data '1' selected the second (usually higher) tone.
+	      // It never really mattered before because we were using NRZI.
+	      // With the addition of IL2P, we need to be more careful.
+	      // A data '1' should be the mark tone.
+
+	      tone_phase[chan] += dat ? f1_change_per_sample[chan] : f2_change_per_sample[chan];
               sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
 	      gen_tone_put_sample (chan, a, sam);
 	      break;

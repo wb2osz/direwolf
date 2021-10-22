@@ -2751,6 +2751,7 @@ unsigned short ax25_m_m_crc (packet_t pp)
 	unsigned char fbuf[AX25_MAX_PACKET_LEN];
 	int flen;
 
+	// TODO: I think this can be more efficient by getting the packet content pointer instead of copying.
 	flen = ax25_pack (pp, fbuf); 
 
 	crc = 0xffff;
@@ -2803,7 +2804,8 @@ unsigned short ax25_m_m_crc (packet_t pp)
  *			
  *------------------------------------------------------------------*/
 
-#define MAXSAFE 500
+//#define MAXSAFE 500
+#define MAXSAFE AX25_MAX_INFO_LEN
 
 void ax25_safe_print (char *pstr, int len, int ascii_only)
 {

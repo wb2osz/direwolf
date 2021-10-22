@@ -585,7 +585,7 @@ static int check_via_path (char *via_path)
  *
  *--------------------------------------------------------------------*/
 
-#define MAXCMDLEN 256
+#define MAXCMDLEN 1200
 
 
 static char *split (char *string, int rest_of_line)
@@ -769,6 +769,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  p_audio_config->achan[channel].num_freq = 1;				
 	  p_audio_config->achan[channel].offset = 0;
+
+	  p_audio_config->achan[channel].layer2_xmit = LAYER2_AX25;
+	  p_audio_config->achan[channel].il2p_max_fec = 1;
+	  p_audio_config->achan[channel].il2p_invert_polarity = 0;
 
 	  p_audio_config->achan[channel].fix_bits = DEFAULT_FIX_BITS;
 	  p_audio_config->achan[channel].sanity_test = SANITY_APRS;
@@ -2252,7 +2256,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *				0 = off, 1 = auto mode, others are suggestions for testing
  *				or special cases.  16, 32, 64 is number of parity bytes to add.
  *				Also set by "-X n" command line option.
- *				Current a global setting.  Could be per channel someday.
+ *				V1.7 changed from global to per-channel setting.
  */
 
 	  else if (strcasecmp(t, "FX25TX") == 0) {
@@ -2265,13 +2269,15 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n < 200) {
-	      p_audio_config->fx25_xmit_enable = n;
+	      p_audio_config->achan[channel].fx25_strength = n;
+	      p_audio_config->achan[channel].layer2_xmit = LAYER2_FX25;
 	    }
 	    else {
-	      p_audio_config->fx25_xmit_enable = 1;
+	      p_audio_config->achan[channel].fx25_strength = 1;
+	      p_audio_config->achan[channel].layer2_xmit = LAYER2_FX25;
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Unreasonable value for FX.25 transmission mode. Using %d.\n", 
-			line, p_audio_config->fx25_xmit_enable);
+			line, p_audio_config->achan[channel].fx25_strength);
    	    }
 	  }
 
@@ -2303,6 +2309,48 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 			line, p_audio_config->fx25_auto_enable);
    	    }
 	  }
+
+/*
+ * IL2PTX  [ + - ] [ 0 1 ]	- Enable IL2P transmission.  Default off.
+ *				"+" means normal polarity. Redundant since it is the default.
+ *					(command line -I for first channel)
+ *				"-" means inverted polarity. Do not use for 1200 bps.
+ *					(command line -i for first channel)
+ *				"0" means weak FEC.  Not recommended.
+ *				"1" means stronger FEC.  "Max FEC."  Default if not specified.
+ */
+
+	  else if (strcasecmp(t, "IL2PTX") == 0) {
+
+	    p_audio_config->achan[channel].layer2_xmit = LAYER2_IL2P;
+	    p_audio_config->achan[channel].il2p_max_fec = 1;
+	    p_audio_config->achan[channel].il2p_invert_polarity = 0;
+
+	    while ((t = split(NULL,0)) != NULL) {
+	      for (char *c = t; *t != '\0'; c++) {
+	        switch (*c) {
+	          case '+':
+	            p_audio_config->achan[channel].il2p_invert_polarity = 0;
+	            break;
+	          case '-':
+	            p_audio_config->achan[channel].il2p_invert_polarity = 1;
+	            break;
+	          case '0':
+	            p_audio_config->achan[channel].il2p_max_fec = 0;
+	            break;
+	          case '1':
+	            p_audio_config->achan[channel].il2p_max_fec = 1;
+	            break;
+	          default:
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: Invalid parameter '%c' fol IL2PTX command.\n", line, *c);
+	            continue;
+	            break;
+	        }
+	      }
+	    }
+	  }
+
 
 /*
  * ==================== APRS Digipeater parameters ====================
@@ -5399,7 +5447,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	while ((t = split(NULL,0)) != NULL) {
 
 	  char keyword[20];
-	  char value[200];
+	  char value[1000];
 	  char *e;
 	  char *p;
 

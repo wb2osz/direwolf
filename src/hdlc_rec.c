@@ -46,6 +46,7 @@
 #include "demod_9600.h"		/* for descramble() */
 #include "ptt.h"
 #include "fx25.h"
+#include "il2p.h"
 
 
 //#define TEST 1				/* Define for unit testing. */
@@ -496,6 +497,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 
 	if (g_audio_p->achan[chan].modem_type != MODEM_AIS) {
 	  fx25_rec_bit (chan, subchan, slice, dbit);
+	  il2p_rec_bit (chan, subchan, slice, raw);	// Note: skip NRZI.
 	}
 
 /*

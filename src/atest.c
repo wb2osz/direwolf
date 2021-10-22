@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -82,6 +82,7 @@
 #include "ptt.h"
 #include "dtime_now.h"
 #include "fx25.h"
+#include "il2p.h"
 #include "hdlc_rec.h"
 
 
@@ -189,6 +190,7 @@ static int h_opt = 0;			// Hexadecimal display of received packet.
 static char P_opt[16] = "";		// Demodulator profiles.
 static int d_x_opt = 1;			// FX.25 debug.
 static int d_o_opt = 0;			// "-d o" option for DCD output control. */	
+static int d_2_opt = 0;			// "-d 2" option for IL2P details. */
 static int dcd_count = 0;
 static int dcd_missing_errors = 0;
 
@@ -389,6 +391,7 @@ int main (int argc, char *argv[])
 	        switch (*p) {
 	           case 'x':  d_x_opt++; break;			// FX.25
 	           case 'o':  d_o_opt++; break;			// DCD output control
+	           case '2':  d_2_opt++; break;			// IL2P debug out
 	           default: break;
 	        }
 	       }
@@ -539,6 +542,7 @@ int main (int argc, char *argv[])
 	}
 
 	fx25_init (d_x_opt);
+	il2p_init (d_2_opt);
 
 	start_time = dtime_now();
 

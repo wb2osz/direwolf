@@ -7,6 +7,8 @@
 
 ### New Features: ###
 
+- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).  Use "-I 1" to enable transmit for first channel.
+
 - Limited support for CM109/CM119 GPIO PTT on Windows.
 
 - Dire Wolf now advertises itself using DNS Service Discovery.  This allows suitable APRS / Packet Radio applications to find a network KISS TNC without knowing the IP address or TCP port.    Thanks to Hessu for providing this.  Currently available only for Linux and Mac OSX.  [Read all about it here.](https://github.com/hessu/aprs-specs/blob/master/TCP-KISS-DNS-SD.md)

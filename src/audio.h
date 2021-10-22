@@ -107,10 +107,11 @@ struct audio_s {
 	float recv_ber;			/* Receive Bit Error Rate (BER). */
 					/* Probability of inverting a bit coming out of the modem. */
 
-	int fx25_xmit_enable;		/* Enable transmission of FX.25.  */
+	//int fx25_xmit_enable;		/* Enable transmission of FX.25.  */
 					/* See fx25_init.c for explanation of values. */
 					/* Initially this applies to all channels. */
 					/* This should probably be per channel. One step at a time. */
+					/* v1.7 - replaced by layer2_xmit==LAYER2_FX25 */
 
 	int fx25_auto_enable;		/* Turn on FX.25 for current connected mode session */
 					/* under poor conditions. */
@@ -155,6 +156,23 @@ struct audio_s {
 					/* Scrambled http://www.amsat.org/amsat/articles/g3ruh/109/fig03.gif */
 					/* Might try MFJ-2400 / CCITT v.26 / Bell 201 someday. */
 					/* No modem.  Might want this for DTMF only channel. */
+
+	    enum layer2_t { LAYER2_AX25 = 0, LAYER2_FX25, LAYER2_IL2P } layer2_xmit;
+
+					// IL2P - New for version 1.7.
+					// New layer 2 with FEC.  Much less overhead than FX.25 but no longer backward compatible.
+					// Only applies to transmit.
+					// Listening for FEC sync word should add negligible overhead so
+					// we leave reception enabled all the time as we do with FX.25.
+					// TODO:  FX.25 should probably be put here rather than global for all channels.
+
+	    int fx25_strength;		// Strength of FX.25 FEC.
+					// 16, 23, 64 for specific number of parity symbols.
+					// 1 for automatic selection based on frame size.
+
+	    int il2p_max_fec;		// 1 for max FEC length, 0 for automatic based on size.
+
+	    int il2p_invert_polarity;	// 1 means invert on transmit.  Receive handles either automatically.
 
 	    enum v26_e { V26_UNSPECIFIED=0, V26_A, V26_B } v26_alternative;
 

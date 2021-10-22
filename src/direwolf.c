@@ -33,7 +33,9 @@
  *			Internet Gateway (IGate)
  *			Ham Radio of Things - IoT with Ham Radio
  *			FX.25 Forward Error Correction.
- *		
+ *			IL2P Forward Error Correction.
+ *			Emergency Alert System (EAS) Specific Area Message Encoding (SAME) receiver.
+ *			AIS receiver for tracking ships.
  *
  *---------------------------------------------------------------*/
 
@@ -123,6 +125,7 @@
 #include "ax25_link.h"
 #include "dtime_now.h"
 #include "fx25.h"
+#include "il2p.h"
 #include "dwsock.h"
 #include "dns_sd_dw.h"
 
@@ -222,6 +225,8 @@ int main (int argc, char *argv[])
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
 	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
+	int d_2_opt = 0;	/* "-d 2" option for IL2P.  Default minimal. Repeat for more detail. */
+
 	int aprstt_debug = 0;	/* "-d d" option for APRStt (think Dtmf) debug. */
 
 	int E_tx_opt = 0;		/* "-E n" Error rate % for clobbering transmit frames. */
@@ -229,6 +234,9 @@ int main (int argc, char *argv[])
 
 	float e_recv_ber = 0.0;		/* Receive Bit Error Rate (BER). */
 	int X_fx25_xmit_enable = 0;	/* FX.25 transmit enable. */
+
+	int I_opt = -1;		/* IL2P transmit, normal polarity, arg is max_fec. */
+	int i_opt = -1;		/* IL2P transmit, inverted polarity, arg is max_fec. */
 
 	char x_opt_mode = ' ';		/* "-x N" option for transmitting calibration tones. */
 	int x_opt_chan = 0;		/* Split into 2 parts.  Mode e.g.  m, a, and optional channel. */
@@ -291,7 +299,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -363,7 +371,20 @@ int main (int argc, char *argv[])
 	text_color_set(DW_COLOR_INFO);
 #endif
 
+// I've seen many references to people running this as root.
+// There is no reason to do that.
+// There is for some privileges to access the audio system, GPIO (if needed for PTT),
+// etc. but ordinary users have those abilities.
+// Giving an applications permission to do things it does not need to do
+// is a huge security risk.
 
+#ifndef __WIN32__
+	if (getuid() == 0 || geteuid() == 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
+	    dw_printf ("Running this as root is an unnecssary security risk.\n");
+	}
+#endif
 
 /*
  * Default location of configuration file is current directory.
@@ -393,7 +414,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:A",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -606,6 +627,7 @@ int main (int argc, char *argv[])
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
 	      case 'x':  d_x_opt++; break;			// FX.25
+	      case '2':  d_2_opt++; break;			// IL2P
 	      case 'd':	 aprstt_debug++; break;			// APRStt (mnemonic Dtmf)
 	      default: break;
 	     }
@@ -692,6 +714,16 @@ int main (int argc, char *argv[])
           case 'X':
 
 	    X_fx25_xmit_enable = atoi(optarg);
+            break;
+
+          case 'I':			// IL2P, normal polarity
+
+	    I_opt = atoi(optarg);
+            break;
+
+          case 'i':			// IL2P, inverted polarity
+
+	    i_opt = atoi(optarg);
             break;
 
 	  case 'A':			// -A 	convert AIS to APRS object
@@ -894,7 +926,45 @@ int main (int argc, char *argv[])
 
 	audio_config.recv_ber = e_recv_ber;
 
-	audio_config.fx25_xmit_enable = X_fx25_xmit_enable;
+	if (X_fx25_xmit_enable > 0) {
+	    if (I_opt != -1 || i_opt != -1) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Can't mix -X with -I or -i.\n");
+	        exit (EXIT_FAILURE);
+	    }
+	    audio_config.achan[0].fx25_strength = X_fx25_xmit_enable;
+	    audio_config.achan[0].layer2_xmit = LAYER2_FX25;
+	}
+
+	if (I_opt != -1 && i_opt != -1) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Can't use both -I and -i at the same time.\n");
+	  exit (EXIT_FAILURE);
+	}
+
+	if (I_opt >= 0) {
+	    audio_config.achan[0].layer2_xmit = LAYER2_IL2P;
+	    audio_config.achan[0].il2p_max_fec = (I_opt > 0);
+	    if (audio_config.achan[0].il2p_max_fec == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("It is highly recommended that 1, rather than 0, is used with -I for best results.\n");
+	    }
+	    audio_config.achan[0].il2p_invert_polarity = 0;	// normal
+	}
+
+	if (i_opt >= 0) {
+	    audio_config.achan[0].layer2_xmit = LAYER2_IL2P;
+	    audio_config.achan[0].il2p_max_fec = (i_opt > 0);
+	    if (audio_config.achan[0].il2p_max_fec == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("It is highly recommended that 1, rather than 0, is used with -i for best results.\n");
+	    }
+	    audio_config.achan[0].il2p_invert_polarity = 1;	// invert for transmit
+	    if (audio_config.achan[0].baud == 1200) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Using -i with 1200 bps is a bad idea.  Use -I instead.\n");
+	    }
+	}
 
 
 /*
@@ -915,10 +985,11 @@ int main (int argc, char *argv[])
 	}
 
 /*
- * Initialize the demodulator(s) and HDLC decoder.
+ * Initialize the demodulator(s) and layer 2 decoder (HDLC, IL2P).
  */
 	multi_modem_init (&audio_config);
 	fx25_init (d_x_opt);
+	il2p_init (d_2_opt);
 
 /*
  * Initialize the touch tone decoder & APRStt gateway.
@@ -1573,7 +1644,9 @@ static void usage (char **argv)
 	dw_printf ("    -P xxx         Modem Profiles.\n");
 	dw_printf ("    -A             Convert AIS positions to APRS Object Reports.\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
-	dw_printf ("    -X n           1 to enable FX.25 transmit.\n");
+	dw_printf ("    -X n           1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.\n");
+	dw_printf ("    -I n           Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.\n");
+	dw_printf ("    -i n           Enable IL2P transmit, inverted polarity.  n=1 is recommended.  0 uses weaker FEC.\n");
 	dw_printf ("    -d             Debug options:\n");
 	dw_printf ("       a             a = AGWPE network protocol client.\n");
 	dw_printf ("       k             k = KISS serial port or pseudo terminal client.\n");
@@ -1591,6 +1664,7 @@ static void usage (char **argv)
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif
 	dw_printf ("       x             x = FX.25 increase verbose level.\n");
+	dw_printf ("       2             2 = IL2P.\n");
 	dw_printf ("       d             d = APRStt (DTMF to APRS object translation).\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
