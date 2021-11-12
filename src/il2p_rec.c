@@ -131,7 +131,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	      text_color_set (DW_COLOR_INFO);
 	      // FIXME - this pops up occasionally with random noise.  Find better way to convey information.
 	      // This also happens for each slicer - to noisy.
-	      dw_printf ("IL2P header has reverse polarity\n");
+	      //dw_printf ("IL2P header has reverse polarity\n");
 	      F->polarity = 1;
 	      F->state = IL2P_HEADER;
 	      F->bc = 0;
