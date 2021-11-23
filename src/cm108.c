@@ -304,7 +304,7 @@ static void usage(void)
 	dw_printf ("which ones can be used for GPIO PTT.\n");
 #endif
 	dw_printf ("\n");
-	dw_printf ("Specify the HID device path to test the PTT fuction.\n");
+	dw_printf ("Specify the HID device path to test the PTT function.\n");
 	dw_printf ("Its state should change once per second.\n");
 #if __WIN32__
 	dw_printf ("You might need to quote the path depending on the command processor.\n");

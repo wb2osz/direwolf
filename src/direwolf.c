@@ -382,7 +382,7 @@ int main (int argc, char *argv[])
 	if (getuid() == 0 || geteuid() == 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
-	    dw_printf ("Running this as root is an unnecssary security risk.\n");
+	    dw_printf ("Running this as root is an unnecessary security risk.\n");
 	}
 #endif
 
