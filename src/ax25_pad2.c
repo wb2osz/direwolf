@@ -102,7 +102,9 @@
  *
  *			RR note:	It seems that some implementations put a hint
  *					in the "RR" reserved bits.
- *					http://www.tapr.org/pipermail/ax25-layer2/2005-October/000297.html
+ *					http://www.tapr.org/pipermail/ax25-layer2/2005-October/000297.html (now broken)
+ *					https://elixir.bootlin.com/linux/latest/source/net/ax25/ax25_addr.c#L237
+ *
  *					The RR bits can also be used for "DAMA" which is
  *					some sort of channel access coordination scheme.
  *					http://internet.freepage.de/cgi-bin/feets/freepage_ext/41030x030A/rewrite/hennig/afu/afudoc/afudama.html

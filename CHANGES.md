@@ -7,7 +7,7 @@
 
 ### New Features: ###
 
-- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).  Use "-I 1" to enable transmit for first channel.
+- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).  Use "-I 1" on command line to enable transmit for first channel.  Compatible with Nino TNC for 1200 and 9600 bps.
 
 - Limited support for CM109/CM119 GPIO PTT on Windows.
 

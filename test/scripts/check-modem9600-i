@@ -1,0 +1,18 @@
+@CUSTOM_SHELL_SHABANG@
+
+@GEN_PACKETS_BIN@ -B9600 -I1 -n 100 -o test96-il2p-I1.wav
+@ATEST_BIN@ -B9600 -L72 -G76 test96-il2p-I1.wav
+@ATEST_BIN@ -B9600 -P+ -L76 -G80 test96-il2p-I1.wav
+
+@GEN_PACKETS_BIN@ -B9600 -I0 -n 100 -o test96-il2p-I0.wav
+@ATEST_BIN@ -B9600 -L64 -G68 test96-il2p-I0.wav
+
+
+@GEN_PACKETS_BIN@ -B9600 -i1 -n 100 -o test96-il2p-i1.wav
+@ATEST_BIN@ -B9600 -L70 -G74 test96-il2p-i1.wav
+@ATEST_BIN@ -B9600 -P+ -L73 -G77 test96-il2p-i1.wav
+
+@GEN_PACKETS_BIN@ -B9600 -i0 -n 100 -o test96-il2p-i0.wav
+@ATEST_BIN@ -B9600 -L67 -G71 test96-il2p-i0.wav
+
+

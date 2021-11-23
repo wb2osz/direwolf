@@ -360,7 +360,10 @@ void tone_gen_put_bit (int chan, int dat)
 	  bit_count[chan] = 0;
 	}
 
-	if (save_audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE) {
+	// Would be logical to have MODEM_BASEBAND for IL2P rather than checking here.  But...
+	// That would mean putting in at least 3 places and testing all rather than just one.
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE &&
+	    save_audio_config_p->achan[chan].layer2_xmit != LAYER2_IL2P) {
 	  int x;
 
 	  x = (dat ^ (lfsr[chan] >> 16) ^ (lfsr[chan] >> 11)) & 1;

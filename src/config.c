@@ -4522,6 +4522,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  * In version 1.2 we allow 0 to disable listening.
  */
+// FIXME:  complain if extra parameter e.g. port as in KISSPORT
 
 	  else if (strcasecmp(t, "AGWPORT") == 0) {
 	    int n;

@@ -431,11 +431,17 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	  TUNE("TUNE_PRE_FILTER_TAPS", D->pre_filter_taps, "pre_filter_taps", "%d")
 
+// TODO:  Size comes out to 417 for 1200 bps with 48000 sample rate.
+// The message is upsetting.  Can we handle this better?
+
 	  if (D->pre_filter_taps > MAX_FILTER_SIZE) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("Calculated pre filter size of %d is too large.\n", D->pre_filter_taps);
-	    dw_printf ("Decrease the audio sample rate or increase the decimation factor or\n");
-	    dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n", MAX_FILTER_SIZE);
+	    dw_printf ("Warning: Calculated pre filter size of %d is too large.\n", D->pre_filter_taps);
+	    dw_printf ("Decrease the audio sample rate or increase the decimation factor.\n");
+	    dw_printf ("You can use -D2 or -D3, on the command line, to down-sample the audio rate\n");
+	    dw_printf ("before demodulating.  This greatly decreases the CPU requirements with little\n");
+	    dw_printf ("impact on the decoding performance.  This is useful for a slow ARM processor,\n");
+	    dw_printf ("such as with a Raspberry Pi model 1.\n");
 	    D->pre_filter_taps = (MAX_FILTER_SIZE - 1) | 1;
 	  }
 

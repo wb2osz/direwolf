@@ -1094,6 +1094,8 @@ int audio_get (int a)
 	          dw_printf ("This is most likely caused by the CPU being too slow to keep up with the audio stream.\n");
 	          dw_printf ("Use the \"top\" command, in another command window, to look at CPU usage.\n");
 	          dw_printf ("This might be a temporary condition so we will attempt to recover a few times before giving up.\n");
+	          dw_printf ("If using a very slow CPU, try reducing the CPU load by using -P- command\n");
+	          dw_printf ("line option for 9600 bps or -D3 for slower AFSK .\n");
 	        }
 
 	        audio_stats (a, 
