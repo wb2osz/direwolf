@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -60,10 +60,6 @@
 static struct audio_s          *save_audio_config_p;
 
 
-// TODO: temp experiment.
-
-
-static int zerostuff = 1;	// temp experiment.
 
 // Current state of all the decoders.
 
@@ -676,12 +672,6 @@ int demod_init (struct audio_s *pa)
 	        strlcpy (save_audio_config_p->achan[chan].profiles, "+", sizeof(save_audio_config_p->achan[chan].profiles));
 	      }
 
-
-#ifdef TUNE_ZEROSTUFF
-	      zerostuff = TUNE_ZEROSTUFF;
-#endif
-
-
 /*
  * We need a minimum number of audio samples per bit time for good performance.
  * Easier to check here because demod_9600_init might have an adjusted sample rate.
@@ -696,26 +686,32 @@ int demod_init (struct audio_s *pa)
 
 	      if (save_audio_config_p->achan[chan].upsample == 0) {
 
-	        if (ratio < 5) {
+	        if (ratio < 4) {
 
-	          // example: 44100 / 9600 is 4.59
-	          // Big improvement with x2.
-	          // x4 seems to work the best.
-	          // The other parameters are not as touchy.
-	          // Might reduce on ARM if it takes too much CPU power.
+	           // This is extreme.
+		   // No one should be using a sample rate this low but
+		   // amazingly a recording with 22050 rate can be decoded.
+	           // 3 and 4 are the same.  Need more tests.
 
 	          save_audio_config_p->achan[chan].upsample = 4;
+	        }
+	        else if (ratio < 5) {
+
+	          // example: 44100 / 9600 is 4.59
+	          // 3 is slightly better than 2 or 4.
+
+	          save_audio_config_p->achan[chan].upsample = 3;
 	        }
 	        else if (ratio < 10) {
 
-	          // 48000 / 9600 is 5.00
-	          // Need more research.  Treat like above for now.
+	          // example: 48000 / 9600 = 5
+	          // 3 is slightly better than 2 or 4.
 
-	          save_audio_config_p->achan[chan].upsample = 4;
+	          save_audio_config_p->achan[chan].upsample = 3;
 	        }
 	        else if (ratio < 15) {
 
-	          // ...
+	          // ... guessing
 
 	          save_audio_config_p->achan[chan].upsample = 2;
 	        }
@@ -786,7 +782,8 @@ int demod_init (struct audio_s *pa)
 	      }
 
 	      demod_9600_init (save_audio_config_p->achan[chan].modem_type,
-			save_audio_config_p->achan[chan].upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+			save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+			save_audio_config_p->achan[chan].upsample,
 			save_audio_config_p->achan[chan].baud, D);
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
@@ -924,7 +921,7 @@ __attribute__((hot))
 void demod_process_sample (int chan, int subchan, int sam)
 {
 	float fsam;
-	int k;
+	//int k;
 
 
 	struct demodulator_state_s *D;
@@ -1016,47 +1013,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 	  case MODEM_AIS:
 	  default:
 	
-	    if (zerostuff) {
-	      /* Literature says this is better if followed */
-	      /* by appropriate low pass filter. */
-	      /* So far, both are same in tests with different */
-	      /* optimal low pass filter parameters. */
-
-	      for (k=1; k<save_audio_config_p->achan[chan].upsample; k++) {
-	        demod_9600_process_sample (chan, 0, D);
-	      }
-	      demod_9600_process_sample (chan, sam * save_audio_config_p->achan[chan].upsample, D);
-	    }
-	    else {
-
-	      /* Linear interpolation. */
-	      static int prev_sam;
-
-	      switch (save_audio_config_p->achan[chan].upsample) {
-	        case 1:
-	          demod_9600_process_sample (chan, sam, D);
-	          break;
-	        case 2:
-	          demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
-	          demod_9600_process_sample (chan, sam, D);
-	          break;
-                case 3:
-                  demod_9600_process_sample (chan, (2 * prev_sam + sam) / 3, D);
-                  demod_9600_process_sample (chan, (prev_sam + 2 * sam) / 3, D);
-                  demod_9600_process_sample (chan, sam, D);
-                  break;
-                case 4:
-                  demod_9600_process_sample (chan, (3 * prev_sam + sam) / 4, D);
-                  demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
-                  demod_9600_process_sample (chan, (prev_sam + 3 * sam) / 4, D);
-                  demod_9600_process_sample (chan, sam, D);
-                  break;
-                default:
-                  assert (0);
-                  break;
-	      }
-	      prev_sam = sam;
-	    }
+	    demod_9600_process_sample (chan, sam, save_audio_config_p->achan[chan].upsample, D);
 	    break;
 
 	}  /* switch modem_type */

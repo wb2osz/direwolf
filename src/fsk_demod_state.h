@@ -301,6 +301,8 @@ struct demodulator_state_s
 //										//
 //////////////////////////////////////////////////////////////////////////////////
 
+// TODO: Continue experiments with root raised cosine filter.
+// Either switch to that or take out all the related stuff.
 
 	  struct bb_only_s {
 
@@ -314,8 +316,15 @@ struct demodulator_state_s
 
 		float audio_in[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// Audio samples in.
 
-// FIXME: use lp_filter
-		float rrc_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// RRC Low pass filter.
+
+		float lp_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// Low pass filter.
+
+		// New in 1.7 - Polyphase filter to reduce CPU requirements.
+
+		float lp_polyphase_1[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float lp_polyphase_2[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float lp_polyphase_3[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float lp_polyphase_4[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
 		float lp_1_iir_param;		// very low pass filters to get DC offset.
 		float lp_1_out;
