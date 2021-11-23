@@ -85,7 +85,7 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
 	    out_len = IL2P_HEADER_SIZE + IL2P_HEADER_PARITY;
 
 	    if (e == 0) {
-	        // Sucess. No info part.
+	        // Success. No info part.
 	        return (out_len);
 	    }
 

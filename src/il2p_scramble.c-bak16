@@ -74,7 +74,7 @@ static inline int descramble_bit (int in, int *state)
  *
  * Outputs:	lfsr_state	Current state of transmit LFSR.
  *				This is reset at the start of the packet and is
- *				cummulative across the header and data blocks.
+ *				cumulative across the header and data blocks.
  *
  *--------------------------------------------------------------------------------*/
 
@@ -151,7 +151,7 @@ void il2p_scramble_block (unsigned char *in, unsigned char *out, int len, int *l
  * Purpose:	Reset the RX LFSR register at the beginning of a packet or payload.
  *
  * Outputs:	lfsr_state	Current state of transmit LFSR.
- *				This is cummulative across the payload data blocks.
+ *				This is cumulative across the payload data blocks.
  *
  *--------------------------------------------------------------------------------*/
 

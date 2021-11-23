@@ -615,7 +615,7 @@ void process_rec_data (int my_index, char *data)
  *				  and sent to a common function to check that they
  *				  all arrived in order.
  *
- * Global Out:	is_connected	- Updated when connected/disconnected notfications are received.
+ * Global Out:	is_connected	- Updated when connected/disconnected notifications are received.
  *
  * Description:	Perform any necessary configuration for the TNC then wait
  *		for responses and process them.
@@ -943,7 +943,7 @@ static void * tnc_thread_net (void *arg)
  *				  and sent to a common function to check that they
  *				  all arrived in order.
  *
- * Global Out:	is_connected	- Updated when connected/disconnected notfications are received.
+ * Global Out:	is_connected	- Updated when connected/disconnected notifications are received.
  *
  * Description:	Perform any necessary configuration for the TNC then wait
  *		for responses and process them.
@@ -1257,7 +1257,7 @@ static void tnc_send_data (int from, int to, char * data)
 	else {
 
 	  // The assumption is that we are in CONVERS mode.
-	  // The data sould be terminated by carriage return.
+	  // The data should be terminated by carriage return.
 
 	  int timeout = 600;	// 60 sec.  I've seen it take more than 20.
 	  while (timeout > 0 && busy[from]) {

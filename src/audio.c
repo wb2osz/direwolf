@@ -821,7 +821,7 @@ static int poll_sndio (struct sio_hdl *hdl, int events)
 	  revents = sio_revents (hdl, pfds);
 	} while (!(revents & (events | POLLHUP)));
 
-	/* unrecoverable error occured */
+	/* unrecoverable error occurred */
 	if (revents & POLLHUP) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("waited for %s, POLLHUP received\n", (events & POLLIN) ? "POLLIN" : "POLLOUT");

@@ -628,7 +628,7 @@ dwfix_t dwgpsnmea_gpgga (char *sentence, int quiet, double *odlat, double *odlon
 	char *pew;			/* East/West */
 	char *pfix;			/* 0=invalid, 1=GPS fix, 2=DGPS fix */
 	char *pnum_sat;			/* Number of satellites */
-	char *phdop;			/* Horiz. Dilution fo Precision */
+	char *phdop;			/* Horiz. Dilution of Precision */
 	char *paltitude;		/* Altitude, above mean sea level */
 	char *palt_u;			/* Units for Altitude, typically M for meters. */
 	char *pheight;			/* Height above ellipsoid */

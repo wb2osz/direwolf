@@ -1010,7 +1010,7 @@ void multi_modem_process_rec_packet (int chan, int subchan, int slice, packet_t 
 	assert (strcmp(text, (char*)pinfo) == 0);
 
 	dw_printf ("Number of symbols corrected: %d\n", retries);
-	if (polarity == 2) {	// expecting errors corrrected.
+	if (polarity == 2) {	// expecting errors corrected.
 	    assert (retries == 10);
 	}
 	else {	// should be no errors.

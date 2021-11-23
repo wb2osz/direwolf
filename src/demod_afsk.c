@@ -582,7 +582,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
  *
  * First, let's take a look at Track 1 of the TNC test CD.  Here the receiver
  * has a flat response.  We find the mark/space strength ratios very from 0.53 to 1.38
- * with a median of 0.81.  This in in line with expections because most
+ * with a median of 0.81.  This in in line with expectations because most
  * transmitters add pre-emphasis to boost the higher audio frequencies.
  * Track 2 should more closely resemble what comes out of the speaker on a typical
  * transceiver.  Here we see a ratio from 1.73 to 3.81 with a median of 2.48.
@@ -700,7 +700,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	      // Rather than trying to find the best threshold location, use multiple 
 	      // slicer thresholds in parallel.
 	      // The best slicing point will vary from packet to packet but should
-	      // remain abount the same or a given packet.
+	      // remain about the same for a given packet.
 
 	      // We are not performing the AGC step here but still want the envelope
 	      // for caluculating the confidence level (or quality) of the sample.

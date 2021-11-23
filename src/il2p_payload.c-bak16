@@ -125,7 +125,7 @@ int il2p_payload_compute (il2p_payload_properties_t *p, int payload_size, int ma
  *		0 for no blocks.  (i.e. size zero)
  *		Number of bytes generated.  Maximum IL2P_MAX_ENCODED_SIZE.
  *
- * Note:	I interpretted the protocol spec as saying the LFSR state is retained
+ * Note:	I interpreted the protocol spec as saying the LFSR state is retained
  *		between data blocks.  During interoperability testing, I found that
  *		was not the case.  It is reset for each data block.
  *
