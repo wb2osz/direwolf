@@ -299,7 +299,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "B", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "C", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -382,7 +382,7 @@ int main (int argc, char *argv[])
 	if (getuid() == 0 || geteuid() == 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
-	    dw_printf ("Running this as root is an unnecssary security risk.\n");
+	    dw_printf ("Running this as root is an unnecessary security risk.\n");
 	}
 #endif
 
@@ -776,7 +776,7 @@ int main (int argc, char *argv[])
 	if (n_opt != 0) {
 	  audio_config.adev[0].num_channels = n_opt;
 	  if (n_opt == 2) {
-	    audio_config.achan[1].medium = MEDIUM_RADIO;
+	    audio_config.chan_medium[1] = MEDIUM_RADIO;
 	  }
 	}
 
@@ -1027,7 +1027,7 @@ int main (int argc, char *argv[])
  */
 
 	if (x_opt_mode != ' ') {
-	  if (audio_config.achan[x_opt_chan].medium == MEDIUM_RADIO) {
+	  if (audio_config.chan_medium[x_opt_chan] == MEDIUM_RADIO) {
 		if (audio_config.achan[x_opt_chan].mark_freq
 				&& audio_config.achan[x_opt_chan].space_freq) {
 			int max_duration = 60;
@@ -1183,8 +1183,8 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	int h;
 	char display_retries[32];
 
-	assert (chan >= 0 && chan < MAX_CHANS);
-	assert (subchan >= -1 && subchan < MAX_SUBCHANS);
+	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);		// TOTAL for virtual channels
+	assert (subchan >= -2 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SLICERS);
 	assert (pp != NULL);	// 1.1J+
      
@@ -1220,8 +1220,11 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("\n");
 
-	if (( ! q_h_opt ) && alevel.rec >= 0) {    /* suppress if "-q h" option */
+// The HEARD line.
 
+	if (( ! q_h_opt ) && alevel.rec >= 0) {    /* suppress if "-q h" option */
+// FIXME: rather than checking for ichannel, how about checking medium==radio
+	 if (chan != audio_config.igate_vchannel) {	// suppress if from ICHANNEL
 	  if (h != -1 && h != AX25_SOURCE) {
 	    dw_printf ("Digipeater ");
 	  }
@@ -1264,6 +1267,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	    dw_printf ("%s audio level = %s  %s  %s\n", heard, alevel_text, display_retries, spectrum);
 	  }
+	 }
 	}
 
 	/* Version 1.2:   Cranking the input level way up produces 199. */
@@ -1277,7 +1281,8 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too high.  Reduce so most stations are around 50.\n");
 	}
-	else if (alevel.rec < 5) {
+// FIXME: rather than checking for ichannel, how about checking medium==radio
+	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too low.  Increase so most stations are around 50.\n");
@@ -1305,6 +1310,10 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	if (subchan == -1) {
 	  text_color_set(DW_COLOR_REC);
 	  dw_printf ("[%d.dtmf%s] ", chan, ts);
+	}
+	else if (subchan == -2) {
+	  text_color_set(DW_COLOR_REC);
+	  dw_printf ("[%d.is%s] ", chan, ts);
 	}
 	else {
 	  if (ax25_is_aprs(pp)) {
@@ -1511,6 +1520,16 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	    kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);
 	    ax25_delete (ao_pp);
 	  }
+	}
+
+/*
+ * If it is from the ICHANNEL, we are done.
+ * Don't digipeat.  Don't IGate.
+ * Don't do anything with it after printing and sending to client apps.
+ */
+
+	if (chan == audio_config.igate_vchannel) {
+	    return;
 	}
 
 /* 

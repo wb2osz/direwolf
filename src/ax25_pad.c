@@ -511,6 +511,13 @@ packet_t ax25_from_text (char *monitor, int strict)
 
 	  // printf ("DEBUG: get digi loop, num addr = %d, address = '%s'\n", k, pa);// FIXME
 
+	  // Hack for q construct, from APRS-IS, so it does not cause panic later.
+
+	  if ( ! strict && pa[0] == 'q' && pa[1] == 'A') {
+	    pa[0] = 'Q';
+	    pa[2] = toupper(pa[2]);
+	  }
+
 	  if ( ! ax25_parse_addr (k, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Failed to create packet from text.  Bad digipeater address\n");

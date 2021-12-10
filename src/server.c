@@ -1538,9 +1538,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		count = 0;
 		for (j=0; j<MAX_CHANS; j++) {
-	          if (save_audio_config_p->achan[j].medium == MEDIUM_RADIO ||
-	              save_audio_config_p->achan[j].medium == MEDIUM_IGATE ||
-	              save_audio_config_p->achan[j].medium == MEDIUM_NETTNC) {
+	          if (save_audio_config_p->chan_medium[j] == MEDIUM_RADIO ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_IGATE ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC) {
 		    count++;
 		  }
 		}
@@ -1548,7 +1548,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		for (j=0; j<MAX_CHANS; j++) {
 
-	          switch (save_audio_config_p->achan[j].medium) {
+	          switch (save_audio_config_p->chan_medium[j]) {
 
 	            case MEDIUM_RADIO:
 	              {
@@ -1827,7 +1827,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        // Connected mode can only be used with internal modems.
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 		  ok = 1;
 	          dlq_register_callsign (cmd.hdr.call_from, chan, client);
 	        }
@@ -1856,7 +1856,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        // Connected mode can only be used with internal modems.
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	          dlq_unregister_callsign (cmd.hdr.call_from, chan, client);
 	        }
 		else {

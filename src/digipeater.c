@@ -154,8 +154,8 @@ void digipeater (int from_chan, packet_t pp)
 	// Network TNC is OK for UI frames where we don't care about timing.
 
 	if ( from_chan < 0 || from_chan >= MAX_CHANS ||
-	     (save_audio_config_p->achan[from_chan].medium != MEDIUM_RADIO &&
-	      save_audio_config_p->achan[from_chan].medium != MEDIUM_NETTNC)) {
+	     (save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO &&
+	      save_audio_config_p->chan_medium[from_chan] != MEDIUM_NETTNC)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("APRS digipeater: Did not expect to receive on invalid channel %d.\n", from_chan);
 	}

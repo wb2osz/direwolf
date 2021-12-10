@@ -233,7 +233,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	dw_printf ("dlq_rec_frame (chan=%d, pp=%p, ...)\n", chan, pp);
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);	// TOTAL to include virtual channels.
 
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);

@@ -610,7 +610,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	    /* Verify that the radio channel number is valid. */
 	    /* Any sort of medium should be OK here. */
 
-	    if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium == MEDIUM_NONE) {
+	    if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", chan);
 	      dw_printf ("\n");

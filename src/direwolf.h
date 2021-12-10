@@ -64,7 +64,15 @@
  * and make sure they handle undefined channels correctly.
  */
 
-#define MAX_CHANS ((MAX_ADEVS) * 2)
+#define MAX_RADIO_CHANS ((MAX_ADEVS) * 2)
+
+#define MAX_CHANS MAX_RADIO_CHANS	// TODO: Replace all former  with latter to avoid confusion with following.
+
+#define MAX_TOTAL_CHANS 16		// v1.7 allows additional virtual channels which are connected
+					// to something other than radio modems.
+					// Total maximum channels is based on the 4 bit KISS field.
+					// Someone with very unusual requirements could increase this and
+					// use only the AGW network protocol.
 
 /*
  * Maximum number of rigs.

@@ -172,7 +172,7 @@ void multi_modem_init (struct audio_s *pa)
 	hdlc_rec_init (save_audio_config_p);
 
 	for (chan=0; chan<MAX_CHANS; chan++) {
-	  if (save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	  if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	    if (save_audio_config_p->achan[chan].baud <= 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Internal error, chan=%d, %s, %d\n", chan, __FILE__, __LINE__);

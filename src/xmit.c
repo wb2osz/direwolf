@@ -278,7 +278,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 
 	for (j=0; j<MAX_CHANS; j++) {
 
-	  if (p_modem->achan[j].medium == MEDIUM_RADIO) {
+	  if (p_modem->chan_medium[j] == MEDIUM_RADIO) {
 #if __WIN32__
 	    xmit_th[j] = (HANDLE)_beginthreadex (NULL, 0, xmit_thread, (void*)(ptrdiff_t)j, 0, NULL);
 	    if (xmit_th[j] == NULL) {

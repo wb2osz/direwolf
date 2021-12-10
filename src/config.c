@@ -736,6 +736,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	memset (p_audio_config, 0, sizeof(struct audio_s));
 
+	p_audio_config->igate_vchannel = -1;		// none.
+
 	/* First audio device is always available with defaults. */
 	/* Others must be explicitly defined before use. */
 
@@ -755,7 +757,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	for (channel=0; channel<MAX_CHANS; channel++) {
 	  int ot, it;
 
-	  p_audio_config->achan[channel].medium = MEDIUM_NONE;	/* One or both channels will be */
+	  p_audio_config->chan_medium[channel] = MEDIUM_NONE;	/* One or both channels will be */
 								/* set to radio when corresponding */
 								/* audio device is defined. */
 	  p_audio_config->achan[channel].modem_type = MODEM_AFSK;			
@@ -808,7 +810,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	/* First channel should always be valid. */
 	/* If there is no ADEVICE, it uses default device in mono. */
 
-	p_audio_config->achan[0].medium = MEDIUM_RADIO;
+	p_audio_config->chan_medium[0] = MEDIUM_RADIO;
 
 	memset (p_digi_config, 0, sizeof(struct digi_config_s));	// APRS digipeater
 	p_digi_config->dedupe_time = DEFAULT_DEDUPE;
@@ -1031,7 +1033,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->adev[adevice].defined = 1;
 	
 	    /* First channel of device is valid. */
-	    p_audio_config->achan[ADEVFIRSTCHAN(adevice)].medium = MEDIUM_RADIO;
+	    p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice)] = MEDIUM_RADIO;
 
 	    strlcpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in));
 	    strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));
@@ -1086,7 +1088,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  p_audio_config->adev[adevice].defined = 1;
 
 		  /* First channel of device is valid. */
-		  p_audio_config->achan[ADEVFIRSTCHAN(adevice)].medium = MEDIUM_RADIO;
+		  p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice)] = MEDIUM_RADIO;
 
 		  strlcpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in));
 	  }
@@ -1113,7 +1115,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 		  p_audio_config->adev[adevice].defined = 1;
 
 		  /* First channel of device is valid. */
-		  p_audio_config->achan[ADEVFIRSTCHAN(adevice)].medium = MEDIUM_RADIO;
+		  p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice)] = MEDIUM_RADIO;
 
 		  strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));		  
 	  }
@@ -1160,9 +1162,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	      /* Set valid channels depending on mono or stereo. */
 
-	      p_audio_config->achan[ADEVFIRSTCHAN(adevice)].medium = MEDIUM_RADIO;
+	      p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice)] = MEDIUM_RADIO;
 	      if (n == 2) {
-	        p_audio_config->achan[ADEVFIRSTCHAN(adevice) + 1].medium = MEDIUM_RADIO;
+	        p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice) + 1] = MEDIUM_RADIO;
 	      }
 	    }
 	    else {
@@ -1176,7 +1178,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 /*
- * CHANNEL 		- Set channel for following commands.
+ * CHANNEL n		- Set channel for channel-specific commands.
  */
 
 	  else if (strcasecmp(t, "CHANNEL") == 0) {
@@ -1192,7 +1194,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	      channel = n;
 
-	      if (p_audio_config->achan[n].medium != MEDIUM_RADIO) {
+	      if (p_audio_config->chan_medium[n] != MEDIUM_RADIO) {
 
 	        if ( ! p_audio_config->adev[ACHAN2ADEV(n)].defined) {
 	          text_color_set(DW_COLOR_ERROR);
@@ -1210,6 +1212,44 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: Channel number must in range of 0 to %d.\n", line, MAX_CHANS-1);
    	    }
+	  }
+
+/*
+ * ICHANNEL n			- Define IGate virtual channel.
+ *
+ *	This allows a client application to talk to to APRS-IS
+ *	by using a channel number outside the normal range for modems.
+ *	In the future there might be other typs of virtual channels.
+ *	This does not change the current channel number used by MODEM, PTT, etc.
+ */
+
+	  else if (strcasecmp(t, "ICHANNEL") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing virtual channel number for ICHANNEL command.\n", line);
+	      continue;
+	    }
+	    int ichan = atoi(t);
+            if (ichan >= MAX_CHANS && ichan < MAX_TOTAL_CHANS) {
+
+	      if (p_audio_config->chan_medium[ichan] == MEDIUM_NONE) {
+
+	        p_audio_config->chan_medium[ichan] = MEDIUM_IGATE;
+
+	        // This is redundant but saves the time of searching through all
+	        // the channels for each packet.
+	        p_audio_config->igate_vchannel = ichan;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: ICHANNEL can't use %d because it is already in use.\n", line, ichan);
+	      }
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: ICHANNEL number must in range of %d to %d.\n", line, MAX_CHANS, MAX_TOTAL_CHANS-1);
+	    }
 	  }
 
 /*
@@ -2388,8 +2428,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    // Channels specified must be radio channels or network TNCs.
 
-	    if (p_audio_config->achan[from_chan].medium != MEDIUM_RADIO &&
-	        p_audio_config->achan[from_chan].medium != MEDIUM_NETTNC) {
+	    if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
+	        p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -2416,8 +2456,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    if (p_audio_config->achan[to_chan].medium != MEDIUM_RADIO &&
-	        p_audio_config->achan[to_chan].medium != MEDIUM_NETTNC) {
+	    if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
+	        p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
@@ -2545,7 +2585,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    // Only radio channels are valid for regenerate.
 
-	    if (p_audio_config->achan[from_chan].medium != MEDIUM_RADIO) {
+	    if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -2571,7 +2611,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 							MAX_CHANS-1, line);
 	      continue;
 	    }
-	    if (p_audio_config->achan[to_chan].medium != MEDIUM_RADIO) {
+	    if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
@@ -2622,7 +2662,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    // There is discussion about this in the document called
 	    // Why-is-9600-only-twice-as-fast-as-1200.pdf
 
-	    if (p_audio_config->achan[from_chan].medium != MEDIUM_RADIO) {
+	    if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n",
 							line, from_chan);
@@ -2649,7 +2689,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 							MAX_CHANS-1, line);
 	      continue;
 	    }
-	    if (p_audio_config->achan[to_chan].medium != MEDIUM_RADIO) {
+	    if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n",
 							line, to_chan);
@@ -2740,14 +2780,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        continue;
 	      }
 
-	      if (p_audio_config->achan[from_chan].medium != MEDIUM_RADIO &&
-		  p_audio_config->achan[from_chan].medium != MEDIUM_NETTNC) {
+	      if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
 	        continue;
 	      }
-	      if (p_audio_config->achan[from_chan].medium == MEDIUM_IGATE) {
+	      if (p_audio_config->chan_medium[from_chan] == MEDIUM_IGATE) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Use 'IG' rather than %d for FROM-channel.\n",
 							line, from_chan);
@@ -2772,14 +2812,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 							MAX_CHANS-1, line);
 	        continue;
 	      }
-	      if (p_audio_config->achan[to_chan].medium != MEDIUM_RADIO &&
-		  p_audio_config->achan[to_chan].medium != MEDIUM_NETTNC) {
+	      if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
 	        continue;
 	      }
-	      if (p_audio_config->achan[to_chan].medium == MEDIUM_IGATE) {
+	      if (p_audio_config->chan_medium[to_chan] == MEDIUM_IGATE) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Use 'IG' rather than %d for TO-channel.\n",
 							line, to_chan);
@@ -2838,7 +2878,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    // DO NOT allow a network TNC here.
 	    // Must be internal modem to have necessary knowledge about channel status.
 
-            if (p_audio_config->achan[from_chan].medium != MEDIUM_RADIO) {
+            if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n",
 							line, from_chan);
@@ -2859,7 +2899,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 							MAX_CHANS-1, line);
 	      continue;
 	    }
-            if (p_audio_config->achan[to_chan].medium != MEDIUM_RADIO) {
+            if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n",
 							line, to_chan);
@@ -4020,7 +4060,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    // I suppose we need internal modem channel here.
 	    // otherwise a DTMF decoder would not be available.
 
-	    if (p_audio_config->achan[r].medium != MEDIUM_RADIO) {
+	    if (p_audio_config->chan_medium[r] != MEDIUM_RADIO) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TTOBJ DTMF receive channel %d is not valid.\n", 
 							line, r);
@@ -4046,8 +4086,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	          dw_printf ("Config file: Transmit channel must be in range of 0 to %d on line %d.\n", MAX_CHANS-1, line);
 	          x = -1;
 	        }
-	        else if (p_audio_config->achan[x].medium != MEDIUM_RADIO &&
-			 p_audio_config->achan[x].medium != MEDIUM_NETTNC) {
+	        else if (p_audio_config->chan_medium[x] != MEDIUM_RADIO &&
+			 p_audio_config->chan_medium[x] != MEDIUM_NETTNC) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Config file, line %d: TTOBJ transmit channel %d is not valid.\n", line, x);
 	          x = -1;
@@ -5366,7 +5406,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 /* When IGate is enabled, all radio channels must have a callsign associated. */
 
 	  if (strlen(p_igate_config->t2_login) > 0 &&
-	      (p_audio_config->achan[i].medium == MEDIUM_RADIO || p_audio_config->achan[i].medium == MEDIUM_NETTNC)) {
+	      (p_audio_config->chan_medium[i] == MEDIUM_RADIO || p_audio_config->chan_medium[i] == MEDIUM_NETTNC)) {
 
 	    if (strcmp(p_audio_config->achan[i].mycall, "NOCALL") == 0  || strcmp(p_audio_config->achan[i].mycall, "N0CALL") == 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -5392,7 +5432,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	if (strlen(p_igate_config->t2_login) > 0) {
 	  for (j=0; j<MAX_CHANS; j++) {
-	    if (p_audio_config->achan[j].medium == MEDIUM_RADIO || p_audio_config->achan[j].medium == MEDIUM_NETTNC) {
+	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO || p_audio_config->chan_medium[j] == MEDIUM_NETTNC) {
 	      if (p_digi_config->filter_str[MAX_CHANS][j] == NULL) {
 	        p_digi_config->filter_str[MAX_CHANS][j] = strdup("i/60");
 	      }
@@ -5485,7 +5525,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else if (value[0] == 'r' || value[0] == 'R') {
 	       int n = atoi(value+1);
-	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->achan[n].medium == MEDIUM_NONE) {
+	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
 	         text_color_set(DW_COLOR_ERROR);
 	         dw_printf ("Config file, line %d: Simulated receive on channel %d is not valid.\n", line, n);
 	         continue;
@@ -5495,7 +5535,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else if (value[0] == 't' || value[0] == 'T' || value[0] == 'x' || value[0] == 'X') {
 	      int n = atoi(value+1);
-	      if ( n < 0 || n >= MAX_CHANS || p_audio_config->achan[n].medium == MEDIUM_NONE) {
+	      if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
 	        continue;
@@ -5506,7 +5546,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else {
 	       int n = atoi(value);
-	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->achan[n].medium == MEDIUM_NONE) {
+	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
 	         text_color_set(DW_COLOR_ERROR);
 	         dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
 	         continue;
@@ -5729,7 +5769,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 
 	if (b->sendto_type == SENDTO_XMIT) {
 
-	  if ( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || p_audio_config->achan[b->sendto_chan].medium == MEDIUM_NONE) {
+	  if ( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_NONE) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, b->sendto_chan);
 	    return (0);

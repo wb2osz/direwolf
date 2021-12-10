@@ -152,7 +152,7 @@ void hdlc_rec_init (struct audio_s *pa)
 	for (ch = 0; ch < MAX_CHANS; ch++)
 	{
 
-	  if (pa->achan[ch].medium == MEDIUM_RADIO) {
+	  if (pa->chan_medium[ch] == MEDIUM_RADIO) {
 
 	    num_subchan[ch] = pa->achan[ch].num_subchan;
 

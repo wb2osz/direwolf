@@ -132,7 +132,7 @@ void cdigipeater (int from_chan, packet_t pp)
 	// Connected mode is allowed only for channels with internal modem.
 	// It probably wouldn't matter for digipeating but let's keep that rule simple and consistent.
 
-	if ( from_chan < 0 || from_chan >= MAX_CHANS || save_audio_config_p->achan[from_chan].medium != MEDIUM_RADIO) {
+	if ( from_chan < 0 || from_chan >= MAX_CHANS || save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("cdigipeater: Did not expect to receive on invalid channel %d.\n", from_chan);
 	  return;

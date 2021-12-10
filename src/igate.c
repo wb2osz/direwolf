@@ -100,11 +100,13 @@
 #include "version.h"
 #include "digipeater.h"
 #include "tq.h"
+#include "dlq.h"
 #include "igate.h"
 #include "latlong.h"
 #include "pfilter.h"
 #include "dtime_now.h"
 #include "mheard.h"
+
 
 
 #if __WIN32__
@@ -1469,7 +1471,7 @@ static void * igate_recv_thread (void *arg)
  *
  * Future: might have ability to configure multiple transmit
  * channels, each with own client side filtering and via path.
- * Loop here over all configured channels.
+ * If so, loop here over all configured channels.
  */
 	    text_color_set(DW_COLOR_REC);
 	    dw_printf ("\n[ig>tx] ");		// formerly just [ig]
@@ -1504,6 +1506,60 @@ static void * igate_recv_thread (void *arg)
 	    if (to_chan >= 0) {
 	      maybe_xmit_packet_from_igate ((char*)message, to_chan);
 	    }
+
+
+/*
+ * New in 1.7:  If ICHANNEL was specified, send packet to client app as specified channel.
+ */
+	    if (save_audio_config_p->igate_vchannel >= 0) {
+
+	      int ichan = save_audio_config_p->igate_vchannel;
+
+	      // Try to parse it into a packet object.
+	      // This will contain "q constructs" and we might see an address
+	      // with two alphnumeric characters in the SSID so we must use
+	      // the non-strict parsing.
+
+	      // Possible problem:  Up to 8 digipeaters are allowed in radio format.
+	      // There is a potential of finding a larger number here.
+
+	      packet_t pp3 = ax25_from_text((char*)message, 0);	// 0 means not strict
+	      if (pp3 != NULL) {
+
+	        // Should we remove the VIA path?
+
+	        // For example, we might get something like this from the server.
+	        // Lower case 'q' and non-numeric SSID are not valid for AX.25 over the air.
+	        // K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000
+
+	        // Should we try to retain all information and pass that along, to the best of our ability,
+	        // to the client app, or should we remove the via path so it looks like this?
+	        // K1USN-1>APWW10:T#479,100,048,002,500,000,10000000
+
+	        // For now, keep it intact and see if it causes problems.  Easy to remove like this:
+	        // while (ax25_get_num_repeaters(pp3) > 0) {
+	        //   ax25_remove_addr (pp3, AX25_REPEATER_1);
+	        // }
+
+	        alevel_t alevel;
+	        memset (&alevel, 0, sizeof(alevel));
+	        alevel.mark = -2;	// FIXME: Do we want some other special case?
+	        alevel.space = -2;
+
+	        int subchan = -2;	// FIXME: -1 is special case for APRStt.
+					// See what happens with -2 and follow up on this.
+					// Do we need something else here?
+		int slice = 0;
+	        int is_fx25 = 0;
+	        char spectrum[] = "APRS-IS";
+	        dlq_rec_frame (ichan, subchan, slice, pp3, alevel, is_fx25, RETRY_NONE, spectrum);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("ICHANNEL %d: Could not parse message from APRS-IS server.\n", ichan);
+	        dw_printf ("%s\n", message);
+	      }
+	    }  // end ICHANNEL option
 	  }
 
 	}  /* while (1) */
@@ -1538,9 +1594,14 @@ static void * igate_recv_thread (void *arg)
  *		Duplicate removal will drop the original if there is no
  *		corresponding digipeated version.
  *
+ *
+ *		This was an idea that came up in one of the discussion forums.
+ *		I rushed in without thinking about it very much.
+ *
  * 		In retrospect, I don't think this was such a good idea.
  *		It would be of value only if there is no other IGate nearby
  *		that would report on the original transmission.
+ *		I wonder if anyone would notice if this silently disappeared.
  *
  *--------------------------------------------------------------------*/
 

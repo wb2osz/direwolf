@@ -102,7 +102,7 @@ int demod_init (struct audio_s *pa)
 
 	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	 if (save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	 if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 
 	  char *p;
 	  char just_letters[16];
@@ -804,10 +804,23 @@ int demod_init (struct audio_s *pa)
 
 	  }  /* switch on modulation type. */
     
-	 }  /* if channel number is valid */
+	 }  /* if channel medium is radio */
+
+// FIXME dw_printf ("-------- end of loop for chn %d \n", chan);
 
 	}  /* for chan ... */
 
+	// Now the virtual channels.  FIXME:  could be single loop.
+
+	for (chan = MAX_CHANS; chan < MAX_TOTAL_CHANS; chan++) {
+
+// FIXME dw_printf ("-------- virtual channel loop %d \n", chan);
+
+	  if (chan == save_audio_config_p->igate_vchannel) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Channel %d: IGate virtual channel.\n", chan);
+	  }
+	}
 
         return (0);
 

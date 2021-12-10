@@ -164,7 +164,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 
 	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	  if (audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	  if (audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 
 	    int a = ACHAN2ADEV(chan);
 
@@ -295,7 +295,7 @@ void tone_gen_put_bit (int chan, int dat)
 
 	assert (save_audio_config_p != NULL);
 
-	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Invalid channel %d for tone generation.\n", chan);
 	  return;

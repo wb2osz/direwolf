@@ -119,32 +119,39 @@ struct audio_s {
 					/* I put it here, rather than with the rest of the link layer */
 					/* parameters because it is really a part of the HDLC layer */
 					/* and is part of the KISS TNC functionality rather than our data link layer. */
+					/* Future: not used yet. */
+
 
 	char timestamp_format[40];	/* -T option */
 					/* Precede received & transmitted frames with timestamp. */
 					/* Command line option uses "strftime" format string. */
 
 
-	/* Properties for each channel, common to receive and transmit. */
-	/* Can be different for each radio channel. */
 
 	/* originally a "channel" was always connected to an internal modem. */
 	/* In version 1.6, this is generalized so that a channel (as seen by client application) */
 	/* can be connected to something else.  Initially, this will allow application */
 	/* access to the IGate.  Later we might have network TNCs or other internal functions. */
 
+	// Properties for all channels.
+
+	enum medium_e chan_medium[MAX_TOTAL_CHANS];
+					// MEDIUM_NONE for invalid.
+					// MEDIUM_RADIO for internal modem.  (only possibility earlier)
+					// MEDIUM_IGATE allows application access to IGate.
+					// MEDIUM_NETTNC for external TNC via TCP.
+
+	int igate_vchannel;		/* Virtual channel mapped to APRS-IS. */
+					/* -1 for none. */
+					/* Redundant but it makes things quicker and simpler */
+					/* than always searching thru above. */
+
+	/* Properties for each radio channel, common to receive and transmit. */
+	/* Can be different for each radio channel. */
 
 	struct achan_param_s {
 
-	    // Originally there was a boolean, called "valid", to indicate that the
-	    // channel is valid.  This has been replaced with the new "medium" which
-	    // will allow channels to correspond to things other than internal modems.
-
-	    enum medium_e medium;	// MEDIUM_NONE for invalid.
-					// MEDIUM_RADIO for internal modem.  (only possibility earlier)
-					// MEDIUM_IGATE allows application access to IGate.
-
-
+	    // What else should be moved out of structure and enlarged when NETTNC is implemented.  ???
 	    char mycall[AX25_MAX_ADDR_LEN];      /* Call associated with this radio channel. */
                                 	/* Could all be the same or different. */
 

@@ -620,9 +620,9 @@ int main (int argc, char *argv[])
 	my_audio_config.adev[0].bits_per_sample = format.wbitspersample;
  	my_audio_config.adev[0].num_channels = format.nchannels;
 
-	my_audio_config.achan[0].medium = MEDIUM_RADIO;
+	my_audio_config.chan_medium[0] = MEDIUM_RADIO;
 	if (format.nchannels == 2) {
-	  my_audio_config.achan[1].medium = MEDIUM_RADIO;
+	  my_audio_config.chan_medium[1] = MEDIUM_RADIO;
 	}
 
 	text_color_set(DW_COLOR_INFO);
