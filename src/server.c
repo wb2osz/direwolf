@@ -1042,7 +1042,7 @@ static char mon_desc (packet_t pp, char *result, int result_size)
 
 	switch (ftype) {
 
-	  case frame_type_I:		snprintf (result, result_size, "<I S%d R%d pid=0x%02X Len=%d %s=%d >",  ns, nr, ax25_get_pid(pp), info_len, pf_text, pf); return ('I');
+	  case frame_type_I:		snprintf (result, result_size, "<I S%d R%d pid=%02X Len=%d %s=%d >",  ns, nr, ax25_get_pid(pp), info_len, pf_text, pf); return ('I');
 
 	  case frame_type_U_UI:		snprintf (result, result_size, "<UI pid=%02X Len=%d %s=%d >", 	ax25_get_pid(pp), info_len, pf_text, pf);  return ('U'); break;
 
