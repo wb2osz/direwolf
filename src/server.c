@@ -868,7 +868,7 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
  */
 	struct {
 	  struct agwpe_s hdr;
-	  char data[1+AX25_MAX_PACKET_LEN];
+	  char data[128+AX25_MAX_PACKET_LEN];	// Add plenty of room for header prefix.
 	} agwpe_msg;
 
 	int err;
@@ -906,7 +906,7 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 
 	    // Add the description with <... >
 
-	    char desc[80];
+	    char desc[120];
 	    agwpe_msg.hdr.datakind = mon_desc (pp, desc, sizeof(desc));
 	    if (own_xmit) {
 	      agwpe_msg.hdr.datakind = 'T';
@@ -921,16 +921,22 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 	    snprintf (ts, sizeof(ts), "[%02d:%02d:%02d]\r", tm->tm_hour, tm->tm_min, tm->tm_sec);
 	    strlcat ((char*)(agwpe_msg.data), ts, sizeof(agwpe_msg.data));
 
-	    // Information if any with \r\r.
+	    // Information if any with \r.
 
 	    unsigned char *pinfo = NULL;
 	    int info_len = ax25_get_info (pp, &pinfo);
+	    int msg_data_len = strlen((char*)(agwpe_msg.data));	// result length so far
+
 	    if (info_len > 0 && pinfo != NULL) {
-	      strlcat ((char*)(agwpe_msg.data), (char*)pinfo, sizeof(agwpe_msg.data));
-	      strlcat ((char*)(agwpe_msg.data), "\r", sizeof(agwpe_msg.data));
+	      // Issue 367: Use of strlcat truncated information part at any nul character.
+	      // Use memcpy instead to preserve binary data, e.g. NET/ROM.
+	      memcpy (agwpe_msg.data + msg_data_len, pinfo, info_len);
+	      msg_data_len += info_len;
+	      agwpe_msg.data[msg_data_len++] = '\r';
 	    }
 
-	    agwpe_msg.hdr.data_len_NETLE = host2netle(strlen(agwpe_msg.data) + 1) /* +1 to include terminating null */ ;
+	    agwpe_msg.data[msg_data_len++] = '\0';	// add nul at end, included in length.
+	    agwpe_msg.hdr.data_len_NETLE = host2netle(msg_data_len);
 
 	    if (debug_client) {
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
