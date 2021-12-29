@@ -148,7 +148,7 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
  * Should add an option to allow changing someday.
  */
 
-	s_gpsnmea_port_fd = serial_port_open (pconfig->gpsnmea_port, 4800);
+	s_gpsnmea_port_fd = serial_port_open (pconfig->gpsnmea_port, pconfig->gpsnmea_speed);
 
 	if (s_gpsnmea_port_fd != MYFDERROR) {
 #if __WIN32__
@@ -182,12 +182,10 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 
 
 /* Return fd to share if waypoint wants same device. */
-/* Currently both are fixed speed at 4800. */
-/* If that ever becomes configurable, that needs to be compared too. */
 
 MYFDTYPE dwgpsnmea_get_fd(char *wp_port_name, int speed)
 {
-	if (strcmp(s_save_configp->gpsnmea_port, wp_port_name) == 0 && speed == 4800) {
+	if (strcmp(s_save_configp->gpsnmea_port, wp_port_name) == 0 && speed == s_save_configp->gpsnmea_speed) {
 	  return (s_gpsnmea_port_fd);
 	}
 	return (MYFDERROR);

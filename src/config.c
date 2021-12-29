@@ -4774,7 +4774,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * GPSNMEA		- Device name for reading from GPS receiver.
+ * GPSNMEA  serial-device  [ speed ]		- Direct connection to GPS receiver.
  */
 	  else if (strcasecmp(t, "gpsnmea") == 0) {
 	    t = split(NULL,0);
@@ -4783,8 +4783,15 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file, line %d: Missing serial port name for GPS receiver.\n", line);
 	      continue;
 	    }
+	    strlcpy (p_misc_config->gpsnmea_port, t, sizeof(p_misc_config->gpsnmea_port));
+
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      int n = atoi(t);
+	      p_misc_config->gpsnmea_speed = n;
+	    }
 	    else {
-	      strlcpy (p_misc_config->gpsnmea_port, t, sizeof(p_misc_config->gpsnmea_port));
+	      p_misc_config->gpsnmea_speed = 4800;	// The standard at one time.
 	    }
 	  }
 

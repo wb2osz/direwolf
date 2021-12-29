@@ -76,7 +76,8 @@ struct misc_config_s {
 
 	char gpsnmea_port[20];	/* Serial port name for reading NMEA sentences from GPS. */
 				/* e.g. COM22, /dev/ttyACM0 */
-				/* Currently no option for setting non-standard speed. */
+
+	int gpsnmea_speed;	/* Speed for above, baud, default 4800. */
 
 	char gpsd_host[20];	/* Host for gpsd server. */
 				/* e.g. localhost, 192.168.1.2 */
