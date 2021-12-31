@@ -58,9 +58,9 @@
 
 
 // An incompatibility was introduced with version 7
-// and again with 9 and again with 10.
+// and again with 9 and again with 10 and again with 11.
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 11
+#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 12
 #error libgps API version might be incompatible.
 #endif
 
@@ -491,7 +491,8 @@ int main (int argc, char *argv[])
 	while (1) {
 	  dwfix_t fix;
 
-	  fix = dwgps_read (&info);
+	  fix = dwgps_read (&info)
+;
 	  text_color_set (DW_COLOR_INFO);
 	  switch (fix) {
 	    case DWFIX_2D:
