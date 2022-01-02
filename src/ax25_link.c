@@ -26,6 +26,10 @@
  *		Establish connections and transfer data in the proper
  *		order with retries.
  *
+ *		Using the term "data link" is rather unfortunate because it causes
+ *		confusion to someone familiar with the OSI networking model.
+ *		This corresponds to the layer 4 transport, not layer 2 data link.
+ *
  * Description:	
  *
  *		Typical sequence for establishing a connection
@@ -824,6 +828,11 @@ static ax25_dlsm_t *get_link_handle (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 // Create new data link state machine.
 
 	p = calloc (sizeof(ax25_dlsm_t), 1);
+	if (p == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	p->magic1 = MAGIC1;
 	p->start_time = dtime_now();
 	p->stream_id = next_stream_id++;
@@ -1493,6 +1502,11 @@ void dl_register_callsign (dlq_item_t *E)
 	}
 
 	r = calloc(sizeof(reg_callsign_t),1);
+	if (r == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	strlcpy (r->callsign, E->addrs[0], sizeof(r->callsign));
 	r->chan = E->chan;
 	r->client = E->client;

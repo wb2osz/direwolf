@@ -1377,9 +1377,14 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 #define isT(c) ((c) == ' ' || (c) == '>' || (c) == ']' || (c) == '`' || (c) == '\'')
 
-// Last updated Sept. 2016 for TH-D74A
+// Last Updated Dec. 2021
+
+// This does not change very often but I'm wondering if we could simply parse
+// http://www.aprs.org/aprs12/mic-e-types.txt similar to how we use tocalls.txt.
 
 	if (isT(*pfirst)) {
+
+// "legacy" formats.
 	
 	  if      (*pfirst == ' '                                       )  { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
 
@@ -1390,6 +1395,8 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == ']'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
 	  else if (*pfirst == ']'                                       )  { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
 
+// ` should be used for message capable devices.
+
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ' ')  { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '"')  { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '#')  { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
@@ -1398,11 +1405,15 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ')')  { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '(')  { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '0')  { strlcpy (A->g_mfr, "Yaesu FT3D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '3')  { strlcpy (A->g_mfr, "Yaesu FT5D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '1')  { strlcpy (A->g_mfr, "Yaesu FTM-300D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '(' && *plast == '5')  { strlcpy (A->g_mfr, "Anytone D578UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '`'                                       )  { strlcpy (A->g_mfr, "Mic-Emsg", sizeof(A->g_mfr)); pfirst++; }
+	  else if (*pfirst == '`'  && *(plast-1) == '(' && *plast == '5')  { strlcpy (A->g_mfr, "Anytone D578UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'                                       )  { strlcpy (A->g_mfr, "Generic Mic-Emsg", sizeof(A->g_mfr)); pfirst++; }
+
+// ' should be used for trackers (not message capable).
 
 	  else if (*pfirst == '\'' && *(plast-1) == '(' && *plast == '8')  { strlcpy (A->g_mfr, "Anytone D878UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
@@ -1412,13 +1423,13 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '4')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7400 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '8')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7800 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
-	  else if (*pfirst == '\''                                      )  { strlcpy (A->g_mfr, "McTrackr", sizeof(A->g_mfr)); pfirst++; }
+	  else if (*pfirst == '\''                                      )  { strlcpy (A->g_mfr, "Generic McTrackr", sizeof(A->g_mfr)); pfirst++; }
 
 	  else if (                   *(plast-1) == '\\'                )  { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (                   *(plast-1) == '/'                 )  { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (                   *(plast-1) == '^'                 )  { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (                   *(plast-1) == '*'                 )  { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (                   *(plast-1) == '~'                 )  { strlcpy (A->g_mfr, "OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (                   *(plast-1) == '~'                 )  { strlcpy (A->g_mfr, "Unknown OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	}
 
 /*
@@ -3486,6 +3497,8 @@ time_t get_timestamp (decode_aprs_t *A, char *p)
 	time_t ts;
 
 	ts = time(NULL);
+	// FIXME: use gmtime_r instead.
+	// Besides not being thread safe, gmtime could possibly return null.
 	ptm = gmtime(&ts);
 
 	pdhm = (void *)p;
@@ -4211,9 +4224,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
 	  }
 
-// TODO:  Would like to restrict to even length something like this:  ([!-{][!-{]){2,7}
-
-	  e = regcomp (&base91_tel_re, "\\|([!-{]{4,14})\\|", REG_EXTENDED);
+	  e = regcomp (&base91_tel_re, "\\|(([!-{][!-{]){2,7})\\|", REG_EXTENDED);
 	  if (e) {
 	    regerror (e, &base91_tel_re, emsg, sizeof(emsg));
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
@@ -4411,20 +4422,20 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 
 /*
  * Telemetry data, in base 91 compressed format appears as 2 to 7 pairs
- * of base 91 digits, surrounded by | at start and end.
+ * of base 91 digits, ! thru {, surrounded by | at start and end.
  */
 
 
 	if (regexec (&base91_tel_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 
-	  char tdata[30];	/* Should be 4 to 14 characters. */
+	  char tdata[30];	/* Should be even number of 4 to 14 characters. */
 
-          //dw_printf("compressed telemetry start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
+	  //dw_printf("compressed telemetry start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
 	  substr_se (tdata, A->g_comment, match[1].rm_so, match[1].rm_eo);
 
-          //dw_printf("compressed telemetry data = \"%s\"\n", tdata);
+	  //dw_printf("compressed telemetry data = \"%s\"\n", tdata);
 
 	  telemetry_data_base91 (A->g_src, tdata, A->g_telemetry, sizeof(A->g_telemetry));
 
@@ -4442,6 +4453,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  *
  * It surprised me to see this in a MIC-E message.
  * MIC-E has resolution of .01 minute so it would make sense to have it as an option.
+ * We also find an example in  http://www.aprs.org/aprs12/mic-e-examples.txt
+ *	'abc123R/'123}FFF.FFFMHztext.../A=123456...!DAO! Mv
  */
 
 	if (regexec (&dao_re, A->g_comment, MAXMATCH, match, 0) == 0) 
@@ -4451,7 +4464,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  int a = A->g_comment[match[0].rm_so+2];
 	  int o = A->g_comment[match[0].rm_so+3];
 
-          //dw_printf("start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
+	  dw_printf("DAO start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
 
 /*
@@ -4503,7 +4516,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  */
 
 /*
- * Here is an interesting case.
+ * Here are a couple situations where it is seen.
  *
  *	W8SAT-1>T2UV0P:`qC<0x1f>l!Xu\'"69}WMNI EDS Response Unit #1|+/%0'n|!w:X!|3
  *
@@ -4520,12 +4533,25 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * Comment earlier points out that MIC-E format has resolution of 0.01 minute,
  * same as non-compressed format, so the DAO does work out, after thinking
  * about it for a while.
+ * We also find a MIC-E example with !DAO! here:  http://www.aprs.org/aprs12/mic-e-examples.txt
+ *
+ * Another one:
+ *
+ *	KS4FUN-12>3X0PRU,W6CX-3,BKELEY,WIDE2*:`2^=l!<0x1c>+/'"48}MT-RTG|%B%p'a|!wqR!|3
+ *
+ *							MIC-E, Red Cross, Special
+ *							N 38 00.2588, W 122 06.3354
+ *							0 MPH, course 100, alt 108 ft
+ *	MT-RTG						comment
+ *	|%B%p'a|					Seq=397, A1=443, A2=610
+ *	!wqR!						DAO
+ *	|3						Byonics TinyTrack3
+ *						
  */
 
 /* 
  * The spec appears to be wrong.  It says '}' is the maximum value when it should be '{'. 
  */
-
 
  	    if (isdigit91(a)) {
 	      A->g_lat += (a - B91_MIN) * 1.1 / 600000.0 * sign(A->g_lat);

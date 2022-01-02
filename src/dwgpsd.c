@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015, 2020  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2020, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -60,7 +60,11 @@
 // An incompatibility was introduced with version 7
 // and again with 9 and again with 10.
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 11
+// release	lib version	API	Raspberry Pi OS
+// 3.22		28		11	bullseye
+// 3.23		29		12
+
+#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 12
 #error libgps API version might be incompatible.
 #endif
 
@@ -364,6 +368,10 @@ static void * read_gpsd_thread (void *arg)
 	    default:
 	    case MODE_NOT_SEEN:
 	    case MODE_NO_FIX:
+	      if (info.fix <= DWFIX_NOT_SEEN) {
+		text_color_set(DW_COLOR_INFO);
+	        dw_printf ("GPSD: No location fix.\n");
+	      }
 	      if (info.fix >= DWFIX_2D) {
 		text_color_set(DW_COLOR_INFO);
 	        dw_printf ("GPSD: Lost location fix.\n");

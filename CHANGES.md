@@ -17,7 +17,11 @@
 
 - The BEACON configuration now recognizes the SOURCE= option.  This replaces the AX.25 source address rather than using the MYCALL value for the channel.  This is useful for sending more than 5 analog telemetry channels.  Use two, or more, source addresses with up to 5 analog channels each.
 
+- For more flexibility, the FX.25 transmit property can now be set individually by channel, rather than having a global setting for all channels.  The -X on the command line applies only to channel 0.  For other channels you need to add a new line to the configuration file.
 
+    > After:   "CHANNEL 1"   (or other channel)
+    >
+    > Add:     "FX25TX 1" (or 16 or 32 or 64)
 
 
 ## Version 1.6  --  October 2020 ##
