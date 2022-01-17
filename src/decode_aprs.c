@@ -1554,7 +1554,8 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	if (p->colon != ':') {
 	  if (! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("APRS Message must begin with : 9 character addressee :\n");
+	    dw_printf("APRS Message must begin with ':' 9 character addressee ':'\n");
+	    dw_printf("Spaces must be added to shorter addressee to make 9 characters.\n");
 	  }
 	  A->g_message_subtype = message_subtype_invalid;
 	  return;
@@ -1567,6 +1568,38 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	i = strlen(addressee) - 1;
 	while (i >= 0 && addressee[i] == ' ') {
 	  addressee[i--] = '\0';
+	}
+
+	// Anytone AT-D878UV 2 plus would pad out station name to 6 characters
+	// before appending the SSID.  e.g.  "AE7MK -5 "
+
+	// Test cases.  First is valid.  Others should produce errors:
+	//
+	// cbeacon sendto=r0  delay=0:10  info=":AE7MK-5  :test0"
+	// cbeacon sendto=r0  delay=0:15  info=":AE7MK-5:test1"
+	// cbeacon sendto=r0  delay=0:20  info=":AE7MK -5 :test2"
+	// cbeacon sendto=r0  delay=0:25  info=":AE7   -5 :test3"
+
+	static regex_t bad_addressee_re;	/* Probably bad addressee. */
+	static int first_time = 1;
+
+	if (first_time) {
+	  char emsg[100];
+	  int e = regcomp (&bad_addressee_re, "[A-Z0-9]+ +-[0-9]", REG_EXTENDED);
+	  if (e) {
+	    regerror (e, &bad_addressee_re, emsg, sizeof(emsg));
+	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
+	  }
+	  first_time = 0;
+	}
+
+#define MAXMATCH_AT 2
+	regmatch_t match[MAXMATCH_AT];
+
+	if (regexec (&bad_addressee_re, addressee, MAXMATCH_AT, match, 0) == 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Malformed addressee with space between station name and SSID.\n");
+	    dw_printf("Please tell message sender this is invalid.\n");
 	}
 
 	strlcpy (A->g_addressee, addressee, sizeof(A->g_addressee));
@@ -4134,6 +4167,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	static regex_t bad_tone_re;	/* Likely tone, not standard format */
 
 	static regex_t base91_tel_re;	/* Base 91 compressed telemetry data. */
+
 
 	int e;
 	char emsg[100];
