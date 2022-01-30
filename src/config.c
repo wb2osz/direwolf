@@ -2397,7 +2397,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 /*
- * DIGIPEAT  from-chan  to-chan  alias-pattern  wide-pattern  [ OFF|DROP|MARK|TRACE ] 
+ * DIGIPEAT  from-chan  to-chan  alias-pattern  wide-pattern  [ OFF|DROP|MARK|TRACE | NOID=alias ]
+ *
+ * NOID is an ugly hack for the specific need of ATGP which needs more that 8 digipeaters.
+ * The via path starts out as HOP7-7,HOP7-7 and we do not want tracing so it does not fill up.
+ * DO NOT put this in the User Guide.  On a need to know basis.
  */
 
 	  else if (strcasecmp(t, "DIGIPEAT") == 0 || strcasecmp(t, "DIGIPEATER") == 0) {
@@ -2521,6 +2525,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	      else if (strcasecmp(t, "TRACE") == 0) {
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
+	        t = split(NULL,0);
+	      }
+	      else if (strncasecmp(t, "NOID=", 5) == 0) {
+	        strlcpy (p_digi_config->noid[from_chan][to_chan], t+5, sizeof(p_digi_config->noid[from_chan][to_chan]));;
 	        t = split(NULL,0);
 	      }
 	    }
@@ -4729,6 +4737,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * KISSCOPY 		- Data from network KISS client is copied to all others.
+ *			  This does not apply to pseudo terminal KISS.
  */
 
 	  else if (strcasecmp(t, "KISSCOPY") == 0) {
@@ -5633,6 +5642,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	  }
 	  else if (strcasecmp(keyword, "ALT") == 0 || strcasecmp(keyword, "ALTITUDE") == 0) {
+
+// TODO: allow units.
 	    b->alt_m = atof(value);
 	  }
 	  else if (strcasecmp(keyword, "ZONE") == 0) {

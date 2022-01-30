@@ -73,7 +73,7 @@
 
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *type_filter);
+				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *noid, char *type_filter);
 
 
 /*
@@ -176,6 +176,7 @@ void digipeater (int from_chan, packet_t pp)
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
+				save_digi_config_p->noid[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
@@ -202,6 +203,7 @@ void digipeater (int from_chan, packet_t pp)
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
+				save_digi_config_p->noid[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
@@ -244,6 +246,9 @@ void digipeater (int from_chan, packet_t pp)
  *
  *		preempt		- Option for "preemptive" digipeating.
  *
+ *		noid		- No tracing if this matches alias prefix.
+ *				  Hack added for special needs of ATGP.
+ *
  *		filter_str	- Filter expression string or NULL.
  *		
  * Returns:	Packet object for transmission or NULL.
@@ -260,32 +265,9 @@ void digipeater (int from_chan, packet_t pp)
  *
  *------------------------------------------------------------------------------*/
 
-#define OBSOLETE14 1
-
-
-#ifndef OBSOLETE14
-static char *dest_ssid_path[16] = { 	
-			"",		/* Use VIA path */
-			"WIDE1-1",
-			"WIDE2-2",
-			"WIDE3-3",
-			"WIDE4-4",
-			"WIDE5-5",
-			"WIDE6-6",
-			"WIDE7-7",
-			"WIDE1-1",	/* North */
-			"WIDE1-1",	/* South */
-			"WIDE1-1",	/* East */
-			"WIDE1-1",	/* West */
-			"WIDE2-2",	/* North */
-			"WIDE2-2",	/* South */
-			"WIDE2-2",	/* East */
-			"WIDE2-2"  };	/* West */
-#endif
-				  
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *filter_str)
+				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *noid, char *filter_str)
 {
 	char source[AX25_MAX_ADDR_LEN];
 	int ssid;
@@ -322,15 +304,6 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  * Note that this modifies the input.  But only once!
  * Otherwise we don't want to modify the input because this could be called multiple times.
  */
-
-#ifndef OBSOLETE14		// Took it out in 1.4
-
-	if (ax25_get_num_repeaters(pp) == 0 && (ssid = ax25_get_ssid(pp, AX25_DESTINATION)) > 0) {
-	  ax25_set_addr(pp, AX25_REPEATER_1, dest_ssid_path[ssid]);
-	  ax25_set_ssid(pp, AX25_DESTINATION, 0);
-	  /* Continue with general case, below. */
-	}
-#endif
 
 
 /* 
@@ -510,6 +483,26 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	err = regexec(wide,repeater,0,NULL,0);
 	if (err == 0) {
 
+// Special hack added for ATGP to behave like UIFLOOD NOID in some TNCs.
+// More than 8 digipeater hops are required so tracing is disabled.
+
+	  if (strlen(noid) > 0 && strncasecmp(repeater, noid, strlen(noid)) == 0) {
+
+	    if (ssid >= 1 && ssid <= 7) {
+	      packet_t result;
+
+	      result = ax25_dup (pp);
+	      assert (result != NULL);
+
+	      if (ssid == 1) {
+	        ax25_set_h (result, r);
+	      }
+	      ax25_set_ssid(result, r, ssid-1);	// could be zero.
+
+	      return (result);
+	    }
+	  }
+
 /*
  * If ssid == 1, we simply replace the repeater with my call and
  *	mark it as being used.
@@ -627,6 +620,7 @@ static int failed;
 
 static enum preempt_e preempt = PREEMPT_OFF;
 
+static 	char config_noid[AX25_MAX_ADDR_LEN] = "HOP";
 
 
 static void test (char *in, char *out)
@@ -639,6 +633,7 @@ static void test (char *in, char *out)
 	unsigned char frame[AX25_MAX_PACKET_LEN];
 	int frame_len;
 	alevel_t alevel;
+
 
 	dw_printf ("\n");
 
@@ -689,9 +684,9 @@ static void test (char *in, char *out)
 	text_color_set(DW_COLOR_REC);
 	dw_printf ("Rec\t%s\n", rec);
 
-//TODO:											Add filtering to test.
-//											V
-	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, NULL);
+//TODO:										  	             Add filtering to test.
+//											             V
+	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, config_noid, NULL);
 	
 	if (result != NULL) {
 
@@ -740,7 +735,7 @@ int main (int argc, char *argv[])
 	  exit (1);
 	}
 
-	e = regcomp (&wide_re, "^WIDE[1-7]-[1-7]$|^TRACE[1-7]-[1-7]$|^MA[1-7]-[1-7]$", REG_EXTENDED|REG_NOSUB);
+	e = regcomp (&wide_re, "^WIDE[1-7]-[1-7]$|^TRACE[1-7]-[1-7]$|^MA[1-7]-[1-7]$|^HOP[1-7]-[1-7]$", REG_EXTENDED|REG_NOSUB);
 	if (e != 0) {
 	  regerror (e, &wide_re, message, sizeof(message));
 	  text_color_set(DW_COLOR_ERROR);
@@ -830,11 +825,8 @@ int main (int argc, char *argv[])
  */
 
 	test (	"W1ABC>TEST-3:",
-#ifndef OBSOLETE14
-		"W1ABC>TEST,WB2OSZ-9*,WIDE3-2:");
-#else
 		"");
-#endif
+
 	test (	"W1DEF>TEST-3,WIDE2-2:",
 		"W1DEF>TEST-3,WB2OSZ-9*,WIDE2-1:");
 
@@ -844,17 +836,17 @@ int main (int argc, char *argv[])
  * The 4th case might be controversial.
  */
 
-	test (	"W1XYZ>TEST,R1*,WIDE3-2:info1",
-		"W1XYZ>TEST,R1,WB2OSZ-9*,WIDE3-1:info1");
+	test (	"W1XYZ>TESTD,R1*,WIDE3-2:info1",
+		"W1XYZ>TESTD,R1,WB2OSZ-9*,WIDE3-1:info1");
 
-	test (	"W1XYZ>TEST,R2*,WIDE3-2:info1",
+	test (	"W1XYZ>TESTD,R2*,WIDE3-2:info1",
 		"");
 
-	test (	"W1XYZ>TEST,R3*,WIDE3-2:info1",
+	test (	"W1XYZ>TESTD,R3*,WIDE3-2:info1",
 		"");
 
-	test (	"W1XYZ>TEST,R1*,WB2OSZ-9:has explicit routing",
-		"W1XYZ>TEST,R1,WB2OSZ-9*:has explicit routing");
+	test (	"W1XYZ>TESTD,R1*,WB2OSZ-9:has explicit routing",
+		"W1XYZ>TESTD,R1,WB2OSZ-9*:has explicit routing");
 
 
 /*
@@ -930,6 +922,25 @@ int main (int argc, char *argv[])
 
 	test (	"WB2OSZ-15>TEST14,WIDE1-1,WIDE1-1:stuff",
 		"WB2OSZ-15>TEST14,WB2OSZ-9*,WIDE1-1:stuff");
+
+// New in 1.7 - ATGP Hack
+
+	preempt = PREEMPT_OFF;	// Shouldn't make a difference here.
+
+	test (	"W1ABC>TEST51,HOP7-7,HOP7-7:stuff1",
+		"W1ABC>TEST51,HOP7-6,HOP7-7:stuff1");
+
+	test (	"W1ABC>TEST52,HOP7-1,HOP7-7:stuff2",
+		"W1ABC>TEST52,HOP7*,HOP7-7:stuff2");
+
+	test (	"W1ABC>TEST52,HOP7*,HOP7-7:stuff3",
+		"W1ABC>TEST52,HOP7*,HOP7-6:stuff3");
+
+	test (	"W1ABC>TEST52,HOP7*,HOP7-1:stuff4",
+		"W1ABC>TEST52,HOP7,HOP7*:stuff4");
+
+	test (	"W1ABC>TEST52,HOP7,HOP7*:stuff",
+		"");
 
 
 

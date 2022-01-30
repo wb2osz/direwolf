@@ -561,6 +561,8 @@ int audio_open (struct audio_s *pa)
  */
 	       case AUDIO_IN_TYPE_SOUNDCARD:
 
+		 // Use InitializeCriticalSectionAndSpinCount to avoid exceptions in low memory situations?
+
 	         InitializeCriticalSection (&(A->in_cs));
 
 	         err = waveInOpen (&(A->audio_in_handle), in_dev_no[a], &wf, (DWORD_PTR)in_callback, a, CALLBACK_FUNCTION);
