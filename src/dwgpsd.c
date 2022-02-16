@@ -20,7 +20,7 @@
 
 /*------------------------------------------------------------------
  *
- * Module:      dwgps.c
+ * Module:      dwgpsd.c
  *
  * Purpose:   	Interface to location data, i.e. GPS receiver.
  *		
@@ -401,13 +401,15 @@ static void * read_gpsd_thread (void *arg)
 
 	  if (/*gpsdata.stupid_status >= STATUS_FIX &&*/ gpsdata.fix.mode >= MODE_2D) {
 
-	    info.dlat = isfinite(gpsdata.fix.latitude) ? gpsdata.fix.latitude : G_UNKNOWN;
-	    info.dlon = isfinite(gpsdata.fix.longitude) ? gpsdata.fix.longitude : G_UNKNOWN;
+#define GOOD(x) (isfinite(x) && ! isnan(x))
+
+	    info.dlat = GOOD(gpsdata.fix.latitude) ? gpsdata.fix.latitude : G_UNKNOWN;
+	    info.dlon = GOOD(gpsdata.fix.longitude) ? gpsdata.fix.longitude : G_UNKNOWN;
 	    // When stationary, track is NaN which is not finite.
-	    info.track = isfinite(gpsdata.fix.track) ? gpsdata.fix.track : G_UNKNOWN;
-	    info.speed_knots = isfinite(gpsdata.fix.speed) ? (MPS_TO_KNOTS * gpsdata.fix.speed) : G_UNKNOWN;
+	    info.track = GOOD(gpsdata.fix.track) ? gpsdata.fix.track : G_UNKNOWN;
+	    info.speed_knots = GOOD(gpsdata.fix.speed) ? (MPS_TO_KNOTS * gpsdata.fix.speed) : G_UNKNOWN;
 	    if (gpsdata.fix.mode >= MODE_3D) {
-	      info.altitude = isfinite(gpsdata.fix.stupid_altitude) ? gpsdata.fix.stupid_altitude : G_UNKNOWN;
+	      info.altitude = GOOD(gpsdata.fix.stupid_altitude) ? gpsdata.fix.stupid_altitude : G_UNKNOWN;
 	    }
 	    // Otherwise keep last known altitude when we downgrade from 3D to 2D fix.
 	    // Caller knows altitude is outdated if info.fix == DWFIX_2D.
