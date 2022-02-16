@@ -263,6 +263,11 @@ void kissnet_init (struct misc_config_s *mc)
 	for (int i = 0; i < MAX_KISS_TCP_PORTS; i++) {
 	  if (mc->kiss_port[i] != 0) {
 	    struct kissport_status_s *kps = calloc(sizeof(struct kissport_status_s), 1);
+	    if (kps == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("FATAL ERROR: Out of memory.\n");
+	      exit (EXIT_FAILURE);
+	    }
 
 	    kps->tcp_port = mc->kiss_port[i];
 	    kps->chan = mc->kiss_chan[i];

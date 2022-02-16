@@ -98,11 +98,11 @@ struct misc_config_s {
 
 	int waypoint_formats;	/* Which sentence formats should be generated? */
 
-#define WPT_FORMAT_NMEA_GENERIC 0x01		/* N	$GPWPT */
-#define WPT_FORMAT_GARMIN       0x02		/* G	$PGRMW */
-#define WPT_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
-#define WPT_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
-#define WPT_FORMAT_AIS          0x10		/* A	!AIVDM */
+#define WPL_FORMAT_NMEA_GENERIC 0x01		/* N	$GPWPL */
+#define WPL_FORMAT_GARMIN       0x02		/* G	$PGRMW */
+#define WPL_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
+#define WPL_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
+#define WPL_FORMAT_AIS          0x10		/* A	!AIVDM */
 
 
 	int log_daily_names;	/* True to generate new log file each day. */

@@ -350,6 +350,11 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	  }
 
 	  mptr = calloc(sizeof(mheard_t),1);
+	  if (mptr == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("FATAL ERROR: Out of memory.\n");
+	    exit (EXIT_FAILURE);
+	  }
 	  strlcpy (mptr->callsign, source, sizeof(mptr->callsign));
 	  mptr->count = 1;
 	  mptr->chan = chan;
@@ -485,6 +490,11 @@ void mheard_save_is (char *ptext)
 	  }
 
 	  mptr = calloc(sizeof(mheard_t),1);
+	  if (mptr == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("FATAL ERROR: Out of memory.\n");
+	    exit (EXIT_FAILURE);
+	  }
 	  strlcpy (mptr->callsign, source, sizeof(mptr->callsign));
 	  mptr->count = 1;
 	  mptr->last_heard_is = now;

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -556,6 +556,7 @@ static const char ssid_to_sym[16] = {
 	  'v' 	/* 15 - Van */
 	};
 
+
 void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, char *symbol)
 {
 	char *p;
@@ -663,16 +664,30 @@ void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, ch
  * Chapter 20, "Symbol in the Source Address SSID"
  */
 
-	p = strchr (src, '-');
-	if (p != NULL) 
-	{
-	  int ssid;
+// January 2022 - Every time this shows up, it confuses people terribly.
+// e.g. An APRS "message" shows up with Bus or Motorcycle in the description.
 
-	  ssid = atoi(p+1);
-	  if (ssid >= 1 && ssid <= 15) {
-	    *symtab = '/';		/* All in Primary table. */
-	    *symbol = ssid_to_sym[ssid];
-	    return;
+// The position and object formats all contain a proper symbol and table.
+// There doesn't seem to be much reason to have a symbol for something without
+// a postion because it would not show up on a map.
+// This just seems to be a remnant of something used long ago and no longer needed.
+// The protocol spec mentions a "MIM tracker" but I can't find any references to it.
+
+// If this was completely removed, no one would probably ever notice.
+// The only possible useful case I can think of would be someone sending a
+// NMEA string directly from a GPS receiver and wanting to keep the destination field
+// for the system type.
+
+	if (dti == '$') {
+
+	  p = strchr (src, '-');
+	  if (p != NULL) {
+	    int ssid = atoi(p+1);
+	    if (ssid >= 1 && ssid <= 15) {
+	      *symtab = '/';		/* All in Primary table. */
+	      *symbol = ssid_to_sym[ssid];
+	      return;
+	    }
 	  }
 	}
 

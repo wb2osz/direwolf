@@ -882,7 +882,7 @@ static void * tnc_thread_net (void *arg)
 	        // Expected message.   Make sure it is expected sequence and send reply.
 	        int n = atoi(data);
 	        char reply[80];
-	        sprintf (reply, "%04d reply\r", n);
+	        snprintf (reply, sizeof(reply), "%04d reply\r", n);
 	        tnc_send_data (my_index, 1 - my_index, reply);
 
 		// HACK!
@@ -896,7 +896,7 @@ static void * tnc_thread_net (void *arg)
 		if (n == 1 && max_count > 1) {
 	          int j;
 	          for (j = 1; j <= 26; j++) {
-	            sprintf (reply, "%.*s\r", j, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+	            snprintf (reply, sizeof(reply), "%.*s\r", j, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 	            tnc_send_data (my_index, 1 - my_index, reply);
 	          }   
 	        }
@@ -992,7 +992,7 @@ static void * tnc_thread_serial (void *arg)
 
 // do any necessary set up here. such as setting mycall
 
-	sprintf (cmd, "mycall %s\r", tnc_address[my_index]);
+	snprintf (cmd, sizeof(cmd), "mycall %s\r", tnc_address[my_index]);
 	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
 	SLEEP_MS (200);
 
@@ -1094,7 +1094,7 @@ static void * tnc_thread_serial (void *arg)
 	      // Expected message.   Make sure it is expected sequence and send reply.
 	      int n = atoi(result);
 	      char reply[80];
-	      sprintf (reply, "%04d reply\r", n);
+	      snprintf (reply, sizeof(reply), "%04d reply\r", n);
 	      tnc_send_data (my_index, 1 - my_index, reply);
 	    }
 
@@ -1151,7 +1151,7 @@ static void tnc_connect (int from, int to)
 	    SLEEP_MS (200);
 	  }
 
-	  sprintf (cmd, "connect %s\r", tnc_address[to]);
+	  snprintf (cmd, sizeof(cmd), "connect %s\r", tnc_address[to]);
 	  serial_port_write (serial_fd[from], cmd, strlen(cmd));
 	}
 

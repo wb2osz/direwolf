@@ -88,7 +88,11 @@ rrbb_t rrbb_new (int chan, int subchan, int slice, int is_scrambled, int descram
 	assert (slice >= 0 && slice < MAX_SLICERS);
 
 	result = malloc(sizeof(struct rrbb_s));
-
+	if (result == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	result->magic1 = MAGIC1;
 	result->chan = chan;
 	result->subchan = subchan;

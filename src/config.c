@@ -4896,19 +4896,19 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      for ( ; *t != '\0' ; t++ ) {
 	        switch (toupper(*t)) {
 	          case 'N':
-	            p_misc_config->waypoint_formats |= WPT_FORMAT_NMEA_GENERIC;
+	            p_misc_config->waypoint_formats |= WPL_FORMAT_NMEA_GENERIC;
 	            break;
 	          case 'G':
-	            p_misc_config->waypoint_formats |= WPT_FORMAT_GARMIN;
+	            p_misc_config->waypoint_formats |= WPL_FORMAT_GARMIN;
 	            break;
 	          case 'M':
-	            p_misc_config->waypoint_formats |= WPT_FORMAT_MAGELLAN;
+	            p_misc_config->waypoint_formats |= WPL_FORMAT_MAGELLAN;
 	            break;
 	          case 'K':
-	            p_misc_config->waypoint_formats |= WPT_FORMAT_KENWOOD;
+	            p_misc_config->waypoint_formats |= WPL_FORMAT_KENWOOD;
 	            break;
 	          case 'A':
-	            p_misc_config->waypoint_formats |= WPT_FORMAT_AIS;
+	            p_misc_config->waypoint_formats |= WPL_FORMAT_AIS;
 	            break;
 	          case ' ':
 	          case ',':
@@ -5470,6 +5470,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * Returns 1 for success, 0 for serious error.
  */
 
+// FIXME: provide error messages when non applicable option is used for particular beacon type.
+// e.g.  IBEACON DELAY=1 EVERY=1 SENDTO=IG OVERLAY=R SYMBOL="igate" LAT=37^44.46N LONG=122^27.19W COMMENT="N1KOL-1 IGATE"
+// Just ignores overlay, symbol, lat, long, and comment.
+
 static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_s *p_audio_config)
 {
 	char *t;
@@ -5643,8 +5647,28 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  }
 	  else if (strcasecmp(keyword, "ALT") == 0 || strcasecmp(keyword, "ALTITUDE") == 0) {
 
-// TODO: allow units.
-	    b->alt_m = atof(value);
+	    char *unit = strpbrk(value, "abcedfghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
+	    if (unit != NULL) {
+	      float meters = 0;
+	      for (int j=0; j<NUM_UNITS && meters == 0; j++) {
+	        if (strcasecmp(units[j].name, unit) == 0) {
+	          meters = units[j].meters;
+	        }
+	      }
+	      if (meters == 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Unrecognized unit '%s' for altitude.  Using meter.\n", line, unit);
+	        dw_printf ("Try using singular form.  e.g.  ft or foot rather than feet.\n");
+	        b->alt_m = atof(value);
+	      }
+	      else {
+	        // valid unit
+	        b->alt_m = atof(value) * meters;
+	      }
+	    } else {
+	      // no unit specified
+	      b->alt_m = atof(value);
+	    }
 	  }
 	  else if (strcasecmp(keyword, "ZONE") == 0) {
 	    strlcpy(zone, value, sizeof(zone));
