@@ -614,6 +614,21 @@ static void * beacon_thread (void *arg)
 	        /* i.e. Don't take relative to now in case there was some delay. */
 
 	        bp->next += bp->every;
+
+	        // https://github.com/wb2osz/direwolf/pull/301
+	        // https://github.com/wb2osz/direwolf/pull/301
+	        // This happens with a portable system with no Internet connection.
+	        // On reboot, the time is in the past.
+	        // After time gets set from GPS, all beacons from that interval are sent.
+	        // FIXME:  This will surely break time slotted scheduling.
+
+	        /* craigerl: if next beacon is scheduled in the past, then set next beacon relative to now (happens when NTP pushes clock AHEAD) */
+	        /* fixme: if NTP sets clock BACK an hour, this thread will sleep for that hour */
+	        if ( bp->next < now ) {
+	            bp->next = now + bp->every;
+	            text_color_set(DW_COLOR_INFO);
+	            dw_printf("\nSystem clock appears to have jumped forward.  Beacon schedule updated.\n\n");
+	        }
 	      }
 
 	    }  /* if time to send it */
