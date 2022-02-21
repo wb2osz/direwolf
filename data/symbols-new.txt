@@ -1,6 +1,5 @@
-APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      17 Jun 2018
+APRS SYMBOL OVERLAY and EXTENSION TABLES in APRS 1.2      17 Mar 2021
 ------------------------------------------------------------------------
-
 
 BACKGROUND:  Since October 2007, overlay characters (36/symbol) are
 allowed on all symbols.  This allows thousands of uniquely specified
@@ -9,7 +8,9 @@ But the master symbol document,  http://aprs.org/symbols/symbolsX.txt,
 only has one line per symbol.  So this added overlay list below gives 
 us thousands of new symbol codes.
 
-17 Jun19: Added several overlays for RAIL symbol
+17 Mar 21 Added L& for LORA Igate
+24 Jun18: Updated CAR symbols 
+17 Jun18: Added several overlays for RAIL symbol
 03 Apr17: Added Methane Hazard symbol "MH"
 13 Feb17: Added Ez = Emergency Power (shelter), Cars: P> = Plugin
           S> = Solar powered. Moved Ham club C- to Buildings Ch.
@@ -211,14 +212,18 @@ CARS: #> (Vehicles)
 /> = normal car (side view)
 \> = Top view and symbol POINTS in direction of travel
 #> = Reserve overlays 1-9 for numbered cars (new Aug 2014)
-B> = Battery (was E for electric)
+3> = Model 3 (Tesla)
+B> = BEV - Battery EV(was E for electric)
+D> = DIY - Do it yourself 
 E> = Ethanol (was electric)
 F> = Fuelcell or hydrogen 
-H> = Homemade
-P> = Plugin-hybrid
+H> = Hybrid
+L> = Leaf
+P> = PHEV - Plugin-hybrid
 S> = Solar powered
 T> = Tesla  (temporary)
-V> = GM Volt (temporary)
+V> = Volt (temporary)
+X> = Model X
 
 CIVIL DEFENSE or TRIANGLE: #c
 /c = Incident Command Post
@@ -269,6 +274,7 @@ FE = (F overlay) Fog                  was \{
 GATEWAYS: #&
 /& = HF Gateway  <= the original primary table definition
 I& = Igate Generic (please use more specific overlay)
+L& - Lora Igate
 R& = Receive only IGate (do not send msgs back to RF)
 P& = PSKmail node
 T& = TX igate with path set to 1 hop only)
@@ -339,17 +345,17 @@ I; = Islands on the air
 S; = Summits on the air
 W; = WOTA
 
-POWER or ENERGY: #%  
+POWER and ENERGY: #%  
 /% = DX cluster  <= the original primary table definition
 C% = Coal
 E% = Emergency  (new Aug 2014)
-G% = Geothermal
+G% = Gas Turbine
 H% = Hydroelectric
 N% = Nuclear
 P% = Portable (new Aug 2014)
 R% = Renewable (hydrogen etc fuels)
 S% = Solar
-T% = Turbine
+T% = Thermal (geo)
 W% = Wind
 
 RAIL Symbols: #=
