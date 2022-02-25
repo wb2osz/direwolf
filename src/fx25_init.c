@@ -410,19 +410,25 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
     return NULL; /* Can't have more roots than symbol values! */
 
   rs = (struct rs *)calloc(1,sizeof(struct rs));
+  if (rs == NULL) {
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
+  }
   rs->mm = symsize;
   rs->nn = (1<<symsize)-1;
 
-  rs->alpha_to = (DTYPE *)malloc(sizeof(DTYPE)*(rs->nn+1));
+  rs->alpha_to = (DTYPE *)calloc((rs->nn+1),sizeof(DTYPE));
   if(rs->alpha_to == NULL){
-    free(rs);
-    return NULL;
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
   }
-  rs->index_of = (DTYPE *)malloc(sizeof(DTYPE)*(rs->nn+1));
+  rs->index_of = (DTYPE *)calloc((rs->nn+1),sizeof(DTYPE));
   if(rs->index_of == NULL){
-    free(rs->alpha_to);
-    free(rs);
-    return NULL;
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
   }
 
   /* Generate Galois field lookup tables */
@@ -446,14 +452,13 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
   }
 
   /* Form RS code generator polynomial from its roots */
-  rs->genpoly = (DTYPE *)malloc(sizeof(DTYPE)*(nroots+1));
+  rs->genpoly = (DTYPE *)calloc((nroots+1),sizeof(DTYPE));
   if(rs->genpoly == NULL){
-    free(rs->alpha_to);
-    free(rs->index_of);
-    free(rs);
-    return NULL;
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
   }
-  rs->fcr = fcr;
+ rs->fcr = fcr;
   rs->prim = prim;
   rs->nroots = nroots;
 

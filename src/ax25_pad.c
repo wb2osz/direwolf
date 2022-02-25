@@ -350,8 +350,9 @@ void ax25_delete (packet_t this_p)
  *		strict	- True to enforce rules for packets sent over the air.
  *			  False to be more lenient for packets from IGate server.
  *
- *			  Messages from an IGate server can have longer 
- *		 	  addresses after qAC.  Up to 9 observed so far. 
+ *			  Packets from an IGate server can have longer
+ *		 	  addresses after qAC.  Up to 9 observed so far.
+ *			  The SSID can be 2 alphanumeric characters, not just 1 to 15.
  *
  *			  We can just truncate the name because we will only
  *			  end up discarding it.    TODO:  check on this.
@@ -740,6 +741,7 @@ packet_t ax25_dup (packet_t copy_from)
  *				  alphanumeric characters for the SSID.
  *				  We also get messages like this from a server.
  *					KB1POR>APU25N,TCPIP*,qAC,T2NUENGLD:...
+ *					K1BOS-B>APOSB,TCPIP,WR2X-2*:...
  *
  *				  2 (extra true) will complain if * is found at end.
  *
@@ -1983,6 +1985,7 @@ void ax25_format_addrs (packet_t this_p, char *result)
 	}
 
 	ax25_get_addr_with_ssid (this_p, AX25_SOURCE, stemp);
+	// FIXME:  For ALL strcat: Pass in sizeof result and use strlcat.
 	strcat (result, stemp);
 	strcat (result, ">");
 

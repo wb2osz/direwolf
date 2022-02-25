@@ -235,7 +235,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate.is_aprs = is_aprs;
 
 	if (is_aprs) {
-	  decode_aprs (&pfstate.decoded, pp, 1);
+	  decode_aprs (&pfstate.decoded, pp, 1, 0);
 	}
 
 	next_token(&pfstate);

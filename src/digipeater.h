@@ -1,5 +1,4 @@
 
-
 #ifndef DIGIPEATER_H
 #define DIGIPEATER_H 1
 
@@ -38,11 +37,10 @@ struct digi_config_s {
 
 	enum preempt_e { PREEMPT_OFF, PREEMPT_DROP, PREEMPT_MARK, PREEMPT_TRACE } preempt[MAX_CHANS][MAX_CHANS];
 
-	// NOID is an ugly hack for the specific need of ATGP which needs more that 8 digipeaters.
-	// The via path starts out as HOP7-7,HOP7-7 and we do not want tracing so it does not fill up.
+	// ATGP is an ugly hack for the specific need of ATGP which needs more that 8 digipeaters.
 	// DO NOT put this in the User Guide.  On a need to know basis.
 
-	char noid[MAX_CHANS][MAX_CHANS][AX25_MAX_ADDR_LEN];
+	char atgp[MAX_CHANS][MAX_CHANS][AX25_MAX_ADDR_LEN];
 
 	char *filter_str[MAX_CHANS+1][MAX_CHANS+1];
 						// NULL or optional Packet Filter strings such as "t/m".

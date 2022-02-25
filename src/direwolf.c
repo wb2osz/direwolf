@@ -299,7 +299,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -322,6 +322,7 @@ int main (int argc, char *argv[])
 
 
 #if __WIN32__
+	//setlinebuf (stdout);   setvbuf???
 	SetConsoleCtrlHandler ((PHANDLER_ROUTINE)cleanup_win, TRUE);
 #else
 	setlinebuf (stdout);
@@ -1425,7 +1426,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // we still want to decode it for logging and other processing.
 	  // Just be quiet about errors if "-qd" is set.
 
-	  decode_aprs (&A, pp, q_d_opt);
+	  decode_aprs (&A, pp, q_d_opt, 0);
 
 	  if ( ! q_d_opt ) {
 

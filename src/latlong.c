@@ -121,6 +121,7 @@ void latitude_to_str (double dlat, int ambiguity, char *slat)
 	// Assumes slat can hold 8 characters + nul.
 	// Degrees must be exactly 2 digits, with leading zero, if needed.
 
+	// FIXME: Should pass in sizeof slat and use snprintf
 	sprintf (slat, "%02d%s%c", ideg, smin, hemi);
 
 	if (ambiguity >= 1) {
@@ -197,6 +198,7 @@ void longitude_to_str (double dlong, int ambiguity, char *slong)
 	// Assumes slong can hold 9 characters + nul.
 	// Degrees must be exactly 3 digits, with leading zero, if needed.
 
+	// FIXME: Should pass in sizeof slong and use snprintf
 	sprintf (slong, "%03d%s%c", ideg, smin, hemi);
 
 /*
@@ -372,6 +374,7 @@ void latitude_to_nmea (double dlat, char *slat, char *hemi)
 	  ideg++;
 	}
 
+	// FIXME: Should pass in sizeof slat and use snprintf
 	sprintf (slat, "%02d%s", ideg, smin);
 
 } /* end latitude_to_str */
@@ -433,6 +436,7 @@ void longitude_to_nmea (double dlong, char *slong, char *hemi)
 	  ideg++;
 	}
 
+	// FIXME: Should pass in sizeof slong and use snprintf
 	sprintf (slong, "%03d%s", ideg, smin);
 
 } /* end longitude_to_nmea */

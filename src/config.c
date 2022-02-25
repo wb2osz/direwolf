@@ -2397,10 +2397,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 /*
- * DIGIPEAT  from-chan  to-chan  alias-pattern  wide-pattern  [ OFF|DROP|MARK|TRACE | NOID=alias ]
+ * DIGIPEAT  from-chan  to-chan  alias-pattern  wide-pattern  [ OFF|DROP|MARK|TRACE | ATGP=alias ]
  *
- * NOID is an ugly hack for the specific need of ATGP which needs more that 8 digipeaters.
- * The via path starts out as HOP7-7,HOP7-7 and we do not want tracing so it does not fill up.
+ * ATGP is an ugly hack for the specific need of ATGP which needs more that 8 digipeaters.
  * DO NOT put this in the User Guide.  On a need to know basis.
  */
 
@@ -2527,8 +2526,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
 	        t = split(NULL,0);
 	      }
-	      else if (strncasecmp(t, "NOID=", 5) == 0) {
-	        strlcpy (p_digi_config->noid[from_chan][to_chan], t+5, sizeof(p_digi_config->noid[from_chan][to_chan]));;
+	      else if (strncasecmp(t, "ATGP=", 5) == 0) {
+	        strlcpy (p_digi_config->atgp[from_chan][to_chan], t+5, sizeof(p_digi_config->atgp[from_chan][to_chan]));;
 	        t = split(NULL,0);
 	      }
 	    }
@@ -3221,7 +3220,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing latitude for TTGRID command.\n", line);
+	      dw_printf ("Line %d: Missing minimum latitude for TTGRID command.\n", line);
 	      continue;
 	    }
 	    tl->grid.lat0 = parse_ll(t,LAT,line);
@@ -3231,7 +3230,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing longitude for TTGRID command.\n", line);
+	      dw_printf ("Line %d: Missing minimum longitude for TTGRID command.\n", line);
 	      continue;
 	    }
 	    tl->grid.lon0 = parse_ll(t,LON,line);
@@ -3241,7 +3240,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing latitude for TTGRID command.\n", line);
+	      dw_printf ("Line %d: Missing maximum latitude for TTGRID command.\n", line);
 	      continue;
 	    }
 	    tl->grid.lat9 = parse_ll(t,LAT,line);
@@ -3251,12 +3250,15 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Missing longitude for TTGRID command.\n", line);
+	      dw_printf ("Line %d: Missing maximum longitude for TTGRID command.\n", line);
 	      continue;
 	    }
-	    tl->grid.lon0 = parse_ll(t,LON,line);
+	    tl->grid.lon9 = parse_ll(t,LON,line);
 
 	    /* temp debugging */
+
+	    // dw_printf ("CONFIG TTGRID min %f %f\n", tl->grid.lat0, tl->grid.lon0);
+	    // dw_printf ("CONFIG TTGRID max %f %f\n", tl->grid.lat9, tl->grid.lon9);
 
 	    //for (j=0; j<p_tt_config->ttloc_len; j++) {
 	    //  dw_printf ("debug ttloc %d/%d %s\n", j, p_tt_config->ttloc_size, 

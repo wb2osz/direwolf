@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -140,6 +140,11 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *		quiet	- Suppress error messages.
  *
+ *		third_party - True when parsing a third party header.
+ *			(decode_aprs is called recursively.)
+ *			This is mostly found when an IGate transmits a message
+ *			that came via APRS-IS.
+ *
  * Outputs:	A->	g_symbol_table, g_symbol_code,
  *			g_lat, g_lon, 
  *			g_speed_mph, g_course, g_altitude_ft,
@@ -151,15 +156,18 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *------------------------------------------------------------------*/
 
-void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
+void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 {
+	//dw_printf ("DEBUG decode_aprs quiet=%d, third_party=%d\n", quiet, third_party);
 
-	char dest[AX25_MAX_ADDR_LEN];
+	//char dest[AX25_MAX_ADDR_LEN];
 	unsigned char *pinfo;
 	int info_len;
 
 
   	info_len = ax25_get_info (pp, &pinfo);
+
+	//dw_printf ("DEBUG decode_aprs info=\"%s\"\n", pinfo);
 
 	memset (A, 0, sizeof (*A));
 
@@ -200,16 +208,26 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 	if (*pinfo == '}') {
 
+	  //dw_printf ("DEBUG decode_aprs recursively process third party header\n");
+
+	  // This must not be strict because the addresses in third party payload doesn't
+	  // need to adhere to the AX.25 address format (i.e. 6 upper case alphanumeric.)
+	  // SSID can be 2 alphanumeric characters.
+	  // Addresses can include lower case, e.g. q contruct.
+
+	  // e.g.  WR2X-2>APRS,WA1PLE-13*:}
+	  //		K1BOS-B>APOSB,TCPIP,WR2X-2*:@122015z4221.42ND07111.93W&/A=000000SharkRF openSPOT3 MMDVM446.025 MA/SW
+
 	  packet_t pp_payload = ax25_from_text ((char*)pinfo+1, 0);
 	  if (pp_payload != NULL) {
-	    decode_aprs (A, pp_payload, quiet);
+	    decode_aprs (A, pp_payload, quiet, 1);	// 1 means used recursively
 	    ax25_delete (pp_payload);
 	    return;
 	  }
 	  else {
 	    strlcpy (A->g_msg_type, "Third Party Header: Unable to parse payload.", sizeof(A->g_msg_type));
 	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
-	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
+	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, A->g_dest);
 	  }
 	}
 
@@ -218,7 +236,10 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
  */
 	
 	ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
-	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, dest);
+	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, A->g_dest);
+
+	//dw_printf ("DEBUG decode_aprs source=%s, dest=%s\n", A->g_src, A->g_dest);
+
 
 /*
  * Report error if the information part contains a nul character.
@@ -260,7 +281,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	    break;
 
 	  default:
-	    decode_tocall (A, dest);
+	    decode_tocall (A, A->g_dest);
 	    break;
 	}
 
@@ -316,7 +337,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 	      break;
 
 
-	    case ':':		/* Message: for one person, a group, or a bulletin. */
+	    case ':':		/* "Message" (special APRS meaning): for one person, a group, or a bulletin. */
 				/* Directed Station Query */
 				/* Telemetry metadata. */
 
@@ -402,7 +423,17 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 	if (A->g_symbol_table == ' ' || A->g_symbol_code == ' ') {
 
-	  symbols_from_dest_or_src (*pinfo, A->g_src, dest, &A->g_symbol_table, &A->g_symbol_code);
+	  // A symbol on a "message" makes no sense and confuses people.
+	  // Third party too.  Set from the payload.
+	  // Maybe eliminate for a couple others.
+
+	  //dw_printf ("DEBUG decode_aprs@end1 third_party=%d, symbol_table=%c, symbol_code=%c, *pinfo=%c\n", third_party, A->g_symbol_table, A->g_symbol_code, *pinfo);
+
+	  if (*pinfo != ':' && *pinfo != '}') {
+	    symbols_from_dest_or_src (*pinfo, A->g_src, A->g_dest, &A->g_symbol_table, &A->g_symbol_code);
+	  }
+
+	  //dw_printf ("DEBUG decode_aprs@end2 third_party=%d, symbol_table=%c, symbol_code=%c, *pinfo=%c\n", third_party, A->g_symbol_table, A->g_symbol_code, *pinfo);
 	}
 	
 } /* end decode_aprs */
@@ -410,8 +441,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet)
 
 void decode_aprs_print (decode_aprs_t *A) {
 
-	char stemp[200];
-	//char tmp2[2];
+	char stemp[500];
 	double absll;
 	char news;
 	int deg;
@@ -419,11 +449,10 @@ void decode_aprs_print (decode_aprs_t *A) {
 	char s_lat[30];
 	char s_lon[30];
 	int n;
-	char symbol_description[100];
 
 /*
  * First line has:
- * - message type 
+ * - packet type
  * - object name
  * - symbol
  * - manufacturer/application
@@ -432,28 +461,53 @@ void decode_aprs_print (decode_aprs_t *A) {
  */
 	strlcpy (stemp, A->g_msg_type, sizeof(stemp));
 
+	//dw_printf ("DEBUG decode_aprs_print stemp1=%s\n", stemp);
+
 	if (strlen(A->g_name) > 0) {
 	  strlcat (stemp, ", \"", sizeof(stemp));
 	  strlcat (stemp, A->g_name, sizeof(stemp));
 	  strlcat (stemp, "\"", sizeof(stemp));
 	}
 
+	//dw_printf ("DEBUG decode_aprs_print stemp2=%s\n", stemp);
+
+	//dw_printf ("DEBUG decode_aprs_print symbol_code=%c=0x%02x\n", A->g_symbol_code, A->g_symbol_code);
+
 	if (A->g_symbol_code != ' ') {
-	  symbols_get_description (A->g_symbol_table, A->g_symbol_code, symbol_description, sizeof(symbol_description));	
+	  char symbol_description[100];
+	  symbols_get_description (A->g_symbol_table, A->g_symbol_code, symbol_description, sizeof(symbol_description));
+	
+	  //dw_printf ("DEBUG decode_aprs_print symbol_description_description=%s\n", symbol_description);
+
 	  strlcat (stemp, ", ", sizeof(stemp));
 	  strlcat (stemp, symbol_description, sizeof(stemp));
 	}
 
+	//dw_printf ("DEBUG decode_aprs_print stemp3=%s mfr=%s\n", stemp, A->g_mfr);
+
 	if (strlen(A->g_mfr) > 0) {
-	  strlcat (stemp, ", ", sizeof(stemp));
-	  strlcat (stemp, A->g_mfr, sizeof(stemp));
+	  if (strcmp(A->g_dest, "APRS") == 0) {
+	    strlcat (stemp, "\nUse of \"APRS\" in the destination field is obsolete.", sizeof(stemp));
+	    strlcat (stemp, "  You can help to improve the quality of APRS signals.", sizeof(stemp));
+	    strlcat (stemp, "\nTell the sender (", sizeof(stemp));
+	    strlcat (stemp, A->g_src, sizeof(stemp));
+	    strlcat (stemp, ") to use the proper product code from", sizeof(stemp));
+	    strlcat (stemp, " http://www.aprs.org/aprs11/tocalls.txt", sizeof(stemp));
+	  }
+	  else {
+	    strlcat (stemp, ", ", sizeof(stemp));
+	    strlcat (stemp, A->g_mfr, sizeof(stemp));
+	  }
 	}
+
+	//dw_printf ("DEBUG decode_aprs_print stemp4=%s\n", stemp);
 
 	if (strlen(A->g_mic_e_status) > 0) {
 	  strlcat (stemp, ", ", sizeof(stemp));
 	  strlcat (stemp, A->g_mic_e_status, sizeof(stemp));
 	}
 
+	//dw_printf ("DEBUG decode_aprs_print stemp5=%s\n", stemp);
 
 	if (A->g_power > 0) {
 	  char phg[100];
@@ -1120,7 +1174,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  char sym_table_id;
 	} *p;
 
-	char dest[10];
+	char dest[12];
 	int ch;
 	int n;
 	int offset;
@@ -1379,7 +1433,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 // Last Updated Dec. 2021
 
-// This does not change very often but I'm wondering if we could simply parse
+// This does not change very often but I'm wondering if we could parse
 // http://www.aprs.org/aprs12/mic-e-types.txt similar to how we use tocalls.txt.
 
 	if (isT(*pfirst)) {
@@ -1511,13 +1565,18 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficients
  *		:xxxxxxxxx:BITS.		Telemetry metadata, Bit Sense/Project Name
  *		:xxxxxxxxx:?			Directed Station Query
- *		:xxxxxxxxx:ack			Message acknowledged (received)
- *		:xxxxxxxxx:rej			Message rejected (unable to accept)
+ *		:xxxxxxxxx:ackNNNN		Message acknowledged (received)
+ *		:xxxxxxxxx:rejNNNNN		Message rejected (unable to accept)
  *
  *		:xxxxxxxxx: ...			Message with no message number.
  *						(Text may not contain the { character because
  *						 it indicates beginning of optional message number.)
- *		:xxxxxxxxx: ... {num		Message with message number.
+ *		:xxxxxxxxx: ... {NNNNN		Message with message number, 1 to 5 alphanumeric.
+ *		:xxxxxxxxx: ... {mm}		Message with new style message number.
+ *		:xxxxxxxxx: ... {mm}aa		Message with new style message number and ack.
+ *
+ *
+ * Reference:	See new message id style:  http://www.aprs.org/aprs11/replyacks.txt
  *
  *------------------------------------------------------------------*/
 
@@ -1528,8 +1587,10 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char dti;			/* : */
 	  char addressee[9];
 	  char colon;			/* : */
-	  char message[73];		/* 0-67 characters for message */
-					/* Optional { followed by 1-5 characters for message number */
+	  char message[256-1-9-1];	/* Officially up to 67 characters for message text. */
+					/* Relaxing seemingly arbitrary restriction here; it doesn't need to fit on a punched card. */
+					/* Wouldn't surprize me if others did not pay attention to the limit. */
+					/* Optional { followed by 1-5 alphanumeric characters for message number */
 
 					/* If the first character is '?' it is a Directed Station Query. */
 	} *p;
@@ -1651,25 +1712,84 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 /* ack or rej?  Message number is required for these. */
 
-	else if (strncmp(p->message,"ack",3) == 0) {
+	else if (strncasecmp(p->message,"ack",3) == 0) {
+	  if (strncmp(p->message,"ack",3) != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("ERROR: \"%s\" must be lower case \"ack\"\n", p->message);
+	  }
 	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "ACK message %s for \"%s\"", A->g_message_number, addressee);
+	  if (strlen(A->g_message_number) == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("ERROR: Message number is missing after \"ack\".\n");
+	  }
+	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
 	}
-	else if (strncmp(p->message,"rej",3) == 0) {
+	else if (strncasecmp(p->message,"rej",3) == 0) {
+	  if (strncmp(p->message,"rej",3) != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("ERROR: \"%s\" must be lower case \"rej\"\n", p->message);
+	  }
 	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "REJ message %s for \"%s\"", A->g_message_number, addressee);
+	  if (strlen(A->g_message_number) == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("ERROR: Message number is missing after \"rej\".\n");
+	  }
+	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
 	}
 
-/* message number is optional here. */
+// Message to a particular station or a bulletin.
+// message number is optional here.
+// Test cases.  Wrap in third party too.
+// A>B::WA1XYX-15:Howdy y'all
+// A>B::WA1XYX-15:Howdy y'all{12345
+// A>B::WA1XYX-15:Howdy y'all{12}
+// A>B::WA1XYX-15:Howdy y'all{12}34
+// A>B::WA1XYX-15:Howdy y'all{toolong
+// X>Y:}A>B::WA1XYX-15:Howdy y'all
+// X>Y:}A>B::WA1XYX-15:Howdy y'all{12345
+// X>Y:}A>B::WA1XYX-15:Howdy y'all{12}
+// X>Y:}A>B::WA1XYX-15:Howdy y'all{12}34
+// X>Y:}A>B::WA1XYX-15:Howdy y'all{toolong
 
 	else {
+	  // Look for message number.
 	  char *pno = strchr(p->message, '{');
 	  if (pno != NULL) {
+	    *pno = '\0';
+	    int mlen = strlen(pno+1);
+	    if (mlen < 1 || mlen > 5) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Message number \"%s\" has length outside range of 1 to 5.\n", pno+1);
+	    }
 	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+	    // TODO: Complain if not alphanumeric.
+
+	    char ack[8] = "";
+
+	    if (mlen >= 3 && A->g_message_number[2] == '}') {
+	      //  New (1999) style.
+	      A->g_message_number[2] = '\0';
+	      strlcpy (ack, A->g_message_number + 3, sizeof(ack));
+	    }
+
+	    if (strlen(ack) > 0) {
+	      // With ACK.  Message number should be 2 characters.
+	      snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message, number \"%s\", from \"%s\" to \"%s\", with ACK for \"%s\"", A->g_message_number, A->g_src, addressee, ack);
+	    }
+	    else {
+	      // Message number can be 1-5 characters.
+	      snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message, number \"%s\", from \"%s\" to \"%s\"", A->g_message_number, A->g_src, addressee);
+	    }
 	  }
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message %s for \"%s\"", A->g_message_number, addressee);
+	  else {
+	    // No message number.
+	    snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message, with no number, from \"%s\" to \"%s\"", A->g_src, addressee);
+	  }
+
 	  A->g_message_subtype = message_subtype_message;
 
 	  /* No location so don't use  process_comment () */
@@ -2389,10 +2509,12 @@ static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet)
 
 static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
 {
-	if (strncmp(info, "{tt", 3) == 0) {		// Historical.  Should probably use DT.
+	if (strncmp(info, "{tt", 3) == 0 ||		// Historical.
+		strncmp(info, "{DT", 3) == 0) {		// Official after registering {D*
 	  aprs_raw_touch_tone (A, info, ilen);
 	}
-	else if (strncmp(info, "{mc", 3) == 0) {	// Historical.  Should probably use DM.
+	else if (strncmp(info, "{mc", 3) == 0 ||	// Historical.
+		strncmp(info, "{DM", 3) == 0) {		// Official after registering {D*
 	  aprs_morse_code (A, info, ilen);
 	}
 	else if (info[0] == '{' && info[1] == USER_DEF_USER_ID && info[2] == USER_DEF_TYPE_AIS) {
@@ -4993,7 +5115,7 @@ int main (int argc, char *argv[])
 	        ax25_safe_print ((char *)pinfo, info_len, 1);	// Display non-ASCII to hexadecimal.
 	        dw_printf ("\n");
 
-	        decode_aprs (&A, pp, 0);			// Extract information into structure.
+	        decode_aprs (&A, pp, 0, 0);			// Extract information into structure.
 
 	        decode_aprs_print (&A);			// Now print it in human readable format.
 
@@ -5014,7 +5136,7 @@ int main (int argc, char *argv[])
 	      if (pp != NULL) {
 	        decode_aprs_t A;
 
-	        decode_aprs (&A, pp, 0);	// Extract information into structure.
+	        decode_aprs (&A, pp, 0, 0);	// Extract information into structure.
 
 	        decode_aprs_print (&A);		// Now print it in human readable format.
 

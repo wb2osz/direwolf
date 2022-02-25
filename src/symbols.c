@@ -352,10 +352,22 @@ void symbols_init (void)
 	char stuff[200];
 	int j;
 
+// Feb. 2022 - Noticed that some lines have - rather than =.
+
+// LD = LIght Rail or Subway (new Aug 2014)
+// SD = Seaport Depot (new Aug 2014)
+// DIGIPEATERS
+// /# - Generic digipeater
+// 1# - WIDE1-1 digipeater
+
+
 #define GOOD_LINE(x) (strlen(x) > 6 && \
 			(x[COL1_OVERLAY] == '/' || x[COL1_OVERLAY] == '\\' || isupper(x[COL1_OVERLAY]) || isdigit(x[COL1_OVERLAY])) \
 			&& x[COL2_SYMBOL] >= '!' && x[COL2_SYMBOL] <= '~' \
-			&& x[COL3_SP] == ' ' && x[COL4_EQUAL] == '=' && x[COL5_SP] == ' ' && x[COL6_DESC] != ' ')
+			&& x[COL3_SP] == ' ' \
+			&& (x[COL4_EQUAL] == '=' || x[COL4_EQUAL] == '-') \
+			&& x[COL5_SP] == ' ' \
+			&& x[COL6_DESC] != ' ')
 
 	if (new_sym_ptr != NULL) {
 	  return;			/* was called already. */

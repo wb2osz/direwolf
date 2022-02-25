@@ -1283,13 +1283,26 @@ static int parse_location (char *e)
 
 	      lat0 = tt_config.ttloc_ptr[ipat].grid.lat0;
 	      lat9 = tt_config.ttloc_ptr[ipat].grid.lat9;
+	      double yrange = lat9 - lat0;
 	      y = atof(ystr);
-	      m_latitude = lat0 + y * (lat9-lat0) / (pow(10., strlen(ystr)) - 1.);
-
+	      double user_y_max = round(pow(10., strlen(ystr)) - 1.);	// e.g. 999 for 3 digits
+	      m_latitude = lat0 + yrange * y / user_y_max;
+#if 0
+	      dw_printf ("TTLOC_GRID LAT min=%f, max=%f, range=%f\n", lat0, lat9, yrange);
+	      dw_printf ("TTLOC_GRID LAT user_y=%f, user_y_max=%f\n", y, user_y_max);
+	      dw_printf ("TTLOC_GRID LAT min + yrange * user_y / user_y_range = %f\n", m_latitude);
+#endif
 	      lon0 = tt_config.ttloc_ptr[ipat].grid.lon0;
 	      lon9 = tt_config.ttloc_ptr[ipat].grid.lon9;
+	      double xrange = lon9 - lon0;
 	      x = atof(xstr);
-	      m_longitude = lon0 + x * (lon9-lon0) / (pow(10., strlen(xstr)) - 1.);
+	      double user_x_max = round(pow(10., strlen(xstr)) - 1.);
+	      m_longitude = lon0 + xrange * x / user_x_max;
+#if 0
+	      dw_printf ("TTLOC_GRID LON min=%f, max=%f, range=%f\n", lon0, lon9, xrange);
+	      dw_printf ("TTLOC_GRID LON user_x=%f, user_x_max=%f\n", x, user_x_max);
+	      dw_printf ("TTLOC_GRID LON min + xrange * user_x / user_x_range = %f\n", m_longitude);
+#endif
 
 	      m_dao[2] = e[0];
 	      m_dao[3] = e[1];
@@ -1972,6 +1985,7 @@ static const struct {
 													/* Latitude comes out ok, 37.9137 -> 55.82 min. */
 													/* Longitude -81.1254 -> 8.20 min */
 	{ "B21234*A67979#",	"679",    "12", "7A", "", "", "12.3400", "56.1200", "!TB2!" },
+
 	{ "B533686*A67979#",	"679",    "12", "7A", "", "", "37.9222", "81.1143", "!TB5!" },
 
 // TODO: should test other coordinate systems.

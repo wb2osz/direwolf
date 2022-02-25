@@ -73,7 +73,7 @@
 
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *noid, char *type_filter);
+				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *atgp, char *type_filter);
 
 
 /*
@@ -176,7 +176,7 @@ void digipeater (int from_chan, packet_t pp)
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
-				save_digi_config_p->noid[from_chan][to_chan],
+				save_digi_config_p->atgp[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
@@ -203,7 +203,7 @@ void digipeater (int from_chan, packet_t pp)
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
-				save_digi_config_p->noid[from_chan][to_chan],
+				save_digi_config_p->atgp[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
@@ -246,7 +246,7 @@ void digipeater (int from_chan, packet_t pp)
  *
  *		preempt		- Option for "preemptive" digipeating.
  *
- *		noid		- No tracing if this matches alias prefix.
+ *		atgp		- No tracing if this matches alias prefix.
  *				  Hack added for special needs of ATGP.
  *
  *		filter_str	- Filter expression string or NULL.
@@ -267,7 +267,7 @@ void digipeater (int from_chan, packet_t pp)
 
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *noid, char *filter_str)
+				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *atgp, char *filter_str)
 {
 	char source[AX25_MAX_ADDR_LEN];
 	int ssid;
@@ -483,22 +483,34 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	err = regexec(wide,repeater,0,NULL,0);
 	if (err == 0) {
 
-// Special hack added for ATGP to behave like UIFLOOD NOID in some TNCs.
-// More than 8 digipeater hops are required so tracing is disabled.
+// Special hack added for ATGP to behave like some combination of options in some old TNC
+// so the via path does not continue to grow and exceed the 8 available positions.
 
-	  if (strlen(noid) > 0 && strncasecmp(repeater, noid, strlen(noid)) == 0) {
+	  if (strlen(atgp) > 0 && strncasecmp(repeater, atgp, strlen(atgp)) == 0) {
 
 	    if (ssid >= 1 && ssid <= 7) {
 	      packet_t result;
 
+	      // Usual routine for digipeater.
+
 	      result = ax25_dup (pp);
 	      assert (result != NULL);
 
-	      if (ssid == 1) {
+	      ssid = ssid - 1;
+	      ax25_set_ssid(result, r, ssid);	// could be zero.
+	      if (ssid == 0) {
 	        ax25_set_h (result, r);
 	      }
-	      ax25_set_ssid(result, r, ssid-1);	// could be zero.
 
+	      // Now remove all used digi addresses, insert own, and mark it used.
+
+///////////////////////////////////////////// LOOK HERE/////////////////////////////////////////////
+
+	      while (ax25_get_num_addr(result) >= 3 && ax25_get_h(result,AX25_REPEATER_1) == 1) {
+	        ax25_remove_addr (result, AX25_REPEATER_1);
+	      }
+	      ax25_insert_addr (result, AX25_REPEATER_1, mycall_xmit);
+	      ax25_set_h (result, AX25_REPEATER_1);
 	      return (result);
 	    }
 	  }
@@ -620,7 +632,7 @@ static int failed;
 
 static enum preempt_e preempt = PREEMPT_OFF;
 
-static 	char config_noid[AX25_MAX_ADDR_LEN] = "HOP";
+static 	char config_atgp[AX25_MAX_ADDR_LEN] = "HOP";
 
 
 static void test (char *in, char *out)
@@ -686,7 +698,7 @@ static void test (char *in, char *out)
 
 //TODO:										  	             Add filtering to test.
 //											             V
-	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, config_noid, NULL);
+	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, config_atgp, NULL);
 	
 	if (result != NULL) {
 
@@ -928,18 +940,18 @@ int main (int argc, char *argv[])
 	preempt = PREEMPT_OFF;	// Shouldn't make a difference here.
 
 	test (	"W1ABC>TEST51,HOP7-7,HOP7-7:stuff1",
-		"W1ABC>TEST51,HOP7-6,HOP7-7:stuff1");
+		"W1ABC>TEST51,WB2OSZ-9*,HOP7-6,HOP7-7:stuff1");
 
-	test (	"W1ABC>TEST52,HOP7-1,HOP7-7:stuff2",
-		"W1ABC>TEST52,HOP7*,HOP7-7:stuff2");
+	test (	"W1ABC>TEST52,ABCD*,HOP7-1,HOP7-7:stuff2",
+		"W1ABC>TEST52,WB2OSZ-9*,HOP7-7:stuff2");
 
 	test (	"W1ABC>TEST52,HOP7*,HOP7-7:stuff3",
-		"W1ABC>TEST52,HOP7*,HOP7-6:stuff3");
+		"W1ABC>TEST52,WB2OSZ-9*,HOP7-6:stuff3");
 
 	test (	"W1ABC>TEST52,HOP7*,HOP7-1:stuff4",
-		"W1ABC>TEST52,HOP7,HOP7*:stuff4");
+		"W1ABC>TEST52,WB2OSZ-9*:stuff4");
 
-	test (	"W1ABC>TEST52,HOP7,HOP7*:stuff",
+	test (	"W1ABC>TEST52,HOP7,HOP7*:stuff5",
 		"");
 
 

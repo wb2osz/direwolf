@@ -107,6 +107,7 @@ void hex_dump (unsigned char *p, int len)
 	offset = 0;
 	while (len > 0) {
 	  n = len < 16 ? len : 16;
+	  // FIXME:  Is there some reason not to use dw_printf here?
 	  printf ("  %03x: ", offset);
 	  for (i=0; i<n; i++) {
 	    printf (" %02x", p[i]);

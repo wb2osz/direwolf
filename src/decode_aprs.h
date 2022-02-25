@@ -26,9 +26,11 @@ typedef struct decode_aprs_s {
 
         char g_src[AX25_MAX_ADDR_LEN];
 
-        char g_msg_type[60];		/* APRS data type.  Telemetry descriptions get pretty long. */
+        char g_dest[AX25_MAX_ADDR_LEN];
+
+        char g_msg_type[80];		/* APRS data type description.  Telemetry descriptions get pretty long. */
 					/* Putting msg in the name was a poor choice because  */
-					/* "message" has a specific meaning.  Rename it someday. */
+					/* "message" has a specific meaning.  Rename it to data_type someday.  FIXME */
 
         char g_symbol_table;		/* The Symbol Table Identifier character selects one */
 					/* of the two Symbol Tables, or it may be used as */
@@ -77,7 +79,9 @@ typedef struct decode_aprs_s {
 				message_subtype_directed_query
 		} g_message_subtype;	/* Various cases of the overloaded "message." */
 
-	char g_message_number[8];	/* Message number.  Should be 1 - 5 characters if used. */
+	char g_message_number[8];	/* Message number.  Should be 1 - 5 alphanumeric characters if used. */
+					/* Addendum 1.1 has new format {mm} or {mm}aa with only two */
+					/* characters for message number and an ack riding piggyback. */
 
         float g_speed_mph;		/* Speed in MPH.  */
 					/* The APRS transmission uses knots so watch out for */
@@ -140,7 +144,7 @@ typedef struct decode_aprs_s {
 
 
 
-extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet);
+extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party);
 
 extern void decode_aprs_print (decode_aprs_t *A);
 
