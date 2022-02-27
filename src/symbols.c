@@ -319,7 +319,7 @@ static const char *search_locations[] = {
 typedef struct new_sym_s {
 	char overlay;
 	char symbol;
-	char description[NEW_SYM_DESC_LEN+1];
+	char *description;
 } new_sym_t;
 
 static new_sym_t *new_sym_ptr = NULL;	/* Dynamically allocated array. */
@@ -418,7 +418,7 @@ void symbols_init (void)
 	    }
 	    new_sym_ptr[new_sym_len].overlay = stuff[COL1_OVERLAY];
 	    new_sym_ptr[new_sym_len].symbol = stuff[COL2_SYMBOL];
-	    strncpy(new_sym_ptr[new_sym_len].description, stuff+COL6_DESC, NEW_SYM_DESC_LEN);
+	    new_sym_ptr[new_sym_len].description = strdup(stuff+COL6_DESC);
 	    new_sym_len++;
 	  }
 	}

@@ -174,10 +174,10 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	A->g_quiet = quiet;
 
 	if (isprint(*pinfo)) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
 	}
 	else {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "ERROR!!! Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!! Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
 	}
 
 	A->g_symbol_table = '/';	/* Default to primary table. */
@@ -225,7 +225,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	    return;
 	  }
 	  else {
-	    strlcpy (A->g_msg_type, "Third Party Header: Unable to parse payload.", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Third Party Header: Unable to parse payload.", sizeof(A->g_data_type_desc));
 	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
 	    ax25_get_addr_with_ssid (pp, AX25_DESTINATION, A->g_dest);
 	  }
@@ -459,7 +459,7 @@ void decode_aprs_print (decode_aprs_t *A) {
  * - mic-e status
  * - power/height/gain, range
  */
-	strlcpy (stemp, A->g_msg_type, sizeof(stemp));
+	strlcpy (stemp, A->g_data_type_desc, sizeof(stemp));
 
 	//dw_printf ("DEBUG decode_aprs_print stemp1=%s\n", stemp);
 
@@ -799,7 +799,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 	} *q;
 
 
-	strlcpy (A->g_msg_type, "Position", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Position", sizeof(A->g_data_type_desc));
 
 	p = (struct aprs_ll_pos_s *)info;
 	q = (struct aprs_compressed_pos_s *)info;
@@ -813,7 +813,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Weather Report", sizeof(A->g_data_type_desc));
 	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
@@ -832,7 +832,7 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* compressed data so we don't expect a 7 byte "data */
 	    /* extension" for them. */
 
-	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Weather Report", sizeof(A->g_data_type_desc));
 	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
@@ -902,7 +902,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	} *q;
 
 
-	strlcpy (A->g_msg_type, "Position with time", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Position with time", sizeof(A->g_data_type_desc));
 
 	time_t ts = 0;
 
@@ -921,7 +921,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Weather Report", sizeof(A->g_data_type_desc));
 	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
@@ -942,7 +942,7 @@ static void aprs_ll_pos_time (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* compressed data so we don't expect a 7 byte "data */
 	    /* extension" for them. */
 
-	    strlcpy (A->g_msg_type, "Weather Report", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Weather Report", sizeof(A->g_data_type_desc));
 	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
@@ -997,7 +997,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	  (void) dwgpsnmea_gprmc ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &speed_knots, &(A->g_course));
 	  A->g_speed_mph = DW_KNOTS_TO_MPH(speed_knots);
-	  strlcpy (A->g_msg_type, "Raw GPS data", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Raw GPS data", sizeof(A->g_data_type_desc));
 	}
 	else if (strncmp((char*)info, "$GPGGA,", 7) == 0 ||
 	         strncmp((char*)info, "$GNGGA,", 7) == 0)
@@ -1007,7 +1007,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	  (void) dwgpsnmea_gpgga ((char*)info, A->g_quiet, &(A->g_lat), &(A->g_lon), &alt_meters, &num_sat);
 	  A->g_altitude_ft = DW_METERS_TO_FEET(alt_meters);
-	  strlcpy (A->g_msg_type, "Raw GPS data", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Raw GPS data", sizeof(A->g_data_type_desc));
 	}
 
 	// TODO (low): add a few other sentence types.
@@ -1184,7 +1184,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	const char *cust_text[8] = {"Emergency", "Custom-6", "Custom-5", "Custom-4", "Custom-3", "Custom-2", "Custom-1", "Custom-0" }; 
 	unsigned char *pfirst, *plast;
 
-	strlcpy (A->g_msg_type, "MIC-E", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "MIC-E", sizeof(A->g_data_type_desc));
 
 	p = (struct aprs_mic_e_s *)info;
 
@@ -1540,7 +1540,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		ilen 	- Information field length.
  *		quiet	- suppress error messages.
  *
- * Outputs:	A->g_msg_type		Text description for screen display.
+ * Outputs:	A->g_data_type_desc		Text description for screen display.
  *
  *		A->g_addressee		To whom is it addressed.
  *					Could be a specific station, alias, bulletin, etc.
@@ -1600,7 +1600,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	p = (struct aprs_message_s *)info;
 
-	strlcpy (A->g_msg_type, "APRS Message", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "APRS Message", sizeof(A->g_data_type_desc));
 	A->g_message_subtype = message_subtype_message;			/* until found otherwise */
 
 	if (ilen < 11) {
@@ -1678,22 +1678,22 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
  */
 
 	if (strncmp(p->message,"PARM.",5) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Parameter Name Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Parameter Name Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_parm;
 	  telemetry_name_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"UNIT.",5) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Unit/Label Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Unit/Label Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_unit;
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Equation Coefficients Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Equation Coefficients Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_eqns;
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
 	else if (strncmp(p->message,"BITS.",5) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_bits;
 	  telemetry_bit_sense_message (addressee, p->message+5, quiet);
 	}
@@ -1704,7 +1704,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	else if (p->message[0] == '?') {
 
-	  strlcpy (A->g_msg_type, "Directed Station Query", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Directed Station Query", sizeof(A->g_data_type_desc));
 	  A->g_message_subtype = message_subtype_directed_query;
 
 	  aprs_directed_station_query (A, addressee, p->message+1, quiet);
@@ -1723,7 +1723,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      dw_printf("ERROR: Message number is missing after \"ack\".\n");
 	  }
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
 	}
 	else if (strncasecmp(p->message,"rej",3) == 0) {
@@ -1737,7 +1737,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      dw_printf("ERROR: Message number is missing after \"rej\".\n");
 	  }
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
 	}
 
@@ -1778,16 +1778,16 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	    if (strlen(ack) > 0) {
 	      // With ACK.  Message number should be 2 characters.
-	      snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message, number \"%s\", from \"%s\" to \"%s\", with ACK for \"%s\"", A->g_message_number, A->g_src, addressee, ack);
+	      snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "APRS Message, number \"%s\", from \"%s\" to \"%s\", with ACK for \"%s\"", A->g_message_number, A->g_src, addressee, ack);
 	    }
 	    else {
 	      // Message number can be 1-5 characters.
-	      snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message, number \"%s\", from \"%s\" to \"%s\"", A->g_message_number, A->g_src, addressee);
+	      snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "APRS Message, number \"%s\", from \"%s\" to \"%s\"", A->g_message_number, A->g_src, addressee);
 	    }
 	  }
 	  else {
 	    // No message number.
-	    snprintf (A->g_msg_type, sizeof(A->g_msg_type), "APRS Message, with no number, from \"%s\" to \"%s\"", A->g_src, addressee);
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "APRS Message, with no number, from \"%s\" to \"%s\"", A->g_src, addressee);
 	  }
 
 	  A->g_message_subtype = message_subtype_message;
@@ -1866,11 +1866,11 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	}
 
  	if (p->live_killed == '*')
-	  strlcpy (A->g_msg_type, "Object", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Object", sizeof(A->g_data_type_desc));
 	else if (p->live_killed == '_')
-	  strlcpy (A->g_msg_type, "Killed Object", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Killed Object", sizeof(A->g_data_type_desc));
 	else
-	  strlcpy (A->g_msg_type, "Object - invalid live/killed", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Object - invalid live/killed", sizeof(A->g_data_type_desc));
 
 	ts = get_timestamp (A, p->time_stamp);
 
@@ -1883,7 +1883,7 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* In this case, we expect 7 byte "data extension" */
 	    /* for the wind direction and speed. */
 
-	    strlcpy (A->g_msg_type, "Weather Report with Object", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Weather Report with Object", sizeof(A->g_data_type_desc));
 	    weather_data (A, p->comment, TRUE);
 	  } 
 	  else {
@@ -1902,7 +1902,7 @@ static void aprs_object (decode_aprs_t *A, unsigned char *info, int ilen)
 	    /* of weather report and object with compressed */
 	    /* position. */
 
-	    strlcpy (A->g_msg_type, "Weather Report with Object", sizeof(A->g_msg_type));
+	    strlcpy (A->g_data_type_desc, "Weather Report with Object", sizeof(A->g_data_type_desc));
 	    weather_data (A, q->comment, FALSE);
 	  } 
 	  else {
@@ -1983,15 +1983,15 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 	}
 
 	if (p->name[i] == '!')
-	  strlcpy (A->g_msg_type, "Item", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Item", sizeof(A->g_data_type_desc));
 	else if (p->name[i] == '_')
-	  strlcpy (A->g_msg_type, "Killed Item", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Killed Item", sizeof(A->g_data_type_desc));
 	else {
 	  if ( ! A->g_quiet) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Item name too long or not followed by ! or _.\n");
 	  }
-	  strlcpy (A->g_msg_type, "Object - invalid live/killed", sizeof(A->g_msg_type));
+	  strlcpy (A->g_data_type_desc, "Object - invalid live/killed", sizeof(A->g_data_type_desc));
 	}
 
 	ppos = p->name + i + 1;
@@ -2035,7 +2035,7 @@ static void aprs_item (decode_aprs_t *A, unsigned char *info, int ilen)
 static void aprs_station_capabilities (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strlcpy (A->g_msg_type, "Station Capabilities", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Station Capabilities", sizeof(A->g_data_type_desc));
 
 	// 	process_comment() not applicable here because it 
 	//	extracts information found in certain formats.
@@ -2122,7 +2122,7 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
 	} *ps;
 
 
-	strlcpy (A->g_msg_type, "Status Report", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Status Report", sizeof(A->g_data_type_desc));
 
 	pt = (struct aprs_status_time_s *)info;
 	pm4 = (struct aprs_status_m4_s *)info;
@@ -2303,7 +2303,7 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
 	double lat, lon;
 	float radius;
 
-	strlcpy (A->g_msg_type, "General Query", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "General Query", sizeof(A->g_data_type_desc));
 
 /*
  * First make a copy because we will modify it while parsing it.
@@ -2485,7 +2485,7 @@ static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char
 static void aprs_telemetry (decode_aprs_t *A, char *info, int ilen, int quiet) 
 {
 
-	strlcpy (A->g_msg_type, "Telemetry", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Telemetry", sizeof(A->g_data_type_desc));
 
 	telemetry_data_original (A->g_src, info, quiet, A->g_telemetry, sizeof(A->g_telemetry), A->g_comment, sizeof(A->g_comment));
 
@@ -2522,7 +2522,7 @@ static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
 	  float knots, course;
 	  float alt_meters;
 
-	  ais_parse (info+3, 0, A->g_msg_type, sizeof(A->g_msg_type), A->g_name, sizeof(A->g_name),
+	  ais_parse (info+3, 0, A->g_data_type_desc, sizeof(A->g_data_type_desc), A->g_name, sizeof(A->g_name),
 			&lat, &lon, &knots, &course, &alt_meters, &(A->g_symbol_table), &(A->g_symbol_code),
 			A->g_comment, sizeof(A->g_comment));
 
@@ -2534,10 +2534,10 @@ static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
 	  strcpy (A->g_mfr, "");
 	}
 	else if (strncmp(info, "{{", 2) == 0) {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Experimental");
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "User-Defined Experimental");
 	}
 	else {
-	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Data");
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "User-Defined Data");
 	}
 
 } /* end aprs_user_defined */
@@ -2562,7 +2562,7 @@ static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
 static void aprs_raw_touch_tone (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strlcpy (A->g_msg_type, "Raw Touch Tone Data", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Raw Touch Tone Data", sizeof(A->g_data_type_desc));
 
 	/* Just copy the info field without the message type. */
 
@@ -2593,7 +2593,7 @@ static void aprs_raw_touch_tone (decode_aprs_t *A, char *info, int ilen)
 static void aprs_morse_code (decode_aprs_t *A, char *info, int ilen) 
 {
 
-	strlcpy (A->g_msg_type, "Morse Code Data", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Morse Code Data", sizeof(A->g_data_type_desc));
 
 	/* Just copy the info field without the message type. */
 
@@ -2633,7 +2633,7 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
 	} *p;
 
 
-	strlcpy (A->g_msg_type, "Positionless Weather Report", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Positionless Weather Report", sizeof(A->g_data_type_desc));
 
 	//time_t ts = 0;
 
@@ -3038,7 +3038,7 @@ static void aprs_ultimeter (decode_aprs_t *A, char *info, int ilen)
 
 	int n;
 
-	strlcpy (A->g_msg_type, "Ultimeter", sizeof(A->g_msg_type));
+	strlcpy (A->g_data_type_desc, "Ultimeter", sizeof(A->g_data_type_desc));
 
 	if (*info == '$')
  	{

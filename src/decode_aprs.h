@@ -28,9 +28,7 @@ typedef struct decode_aprs_s {
 
         char g_dest[AX25_MAX_ADDR_LEN];
 
-        char g_msg_type[80];		/* APRS data type description.  Telemetry descriptions get pretty long. */
-					/* Putting msg in the name was a poor choice because  */
-					/* "message" has a specific meaning.  Rename it to data_type someday.  FIXME */
+        char g_data_type_desc[100];	/* APRS data type description.  Telemetry descriptions get pretty long. */
 
         char g_symbol_table;		/* The Symbol Table Identifier character selects one */
 					/* of the two Symbol Tables, or it may be used as */
