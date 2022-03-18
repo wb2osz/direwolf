@@ -399,6 +399,42 @@ a good modem here and providing a result when it is received.
 
 */
 
+/***********************************************************************************
+ *
+ * Name:	eotd_rec_bit
+ *
+ * Purpose:	Extract EOTD trasmissions from a stream of bits.
+ *
+ * Inputs:	chan	- Channel number.
+ *
+ *		subchan	- This allows multiple demodulators per channel.
+ *
+ *		slice	- Allows multiple slicers per demodulator (subchannel).
+ *
+ *		raw 	- One bit from the demodulator.
+ *			  should be 0 or 1.
+ *
+ *		future_use - Not implemented yet.  PSK already provides it.
+ *	
+ *
+ * Description:	This is called once for each received bit.
+ *		For each valid transmission, process_rec_frame()
+ *		is called for further processing.
+ *
+ ***********************************************************************************/
+
+
+static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
+{
+	struct hdlc_state_s *H;
+
+/*
+ * Different state information for each channel / subchannel / slice.
+ */
+	H = &hdlc_state[chan][subchan][slice];
+fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+	return;
+} // end eotd_rec_bit
 
 /***********************************************************************************
  *
@@ -462,6 +498,13 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	  eas_rec_bit (chan, subchan, slice, raw, not_used_remove);
 	  return;
 	}
+
+// EOTD does not use HDLC.
+
+	if (g_audio_p->achan[chan].modem_type == MODEM_EOTD) {
+          eotd_rec_bit (chan, subchan, slice, raw, not_used_remove);
+          return;
+        }
 
 /*
  * Different state information for each channel / subchannel / slice.
@@ -564,7 +607,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	    if (actual_fcs == expected_fcs) {
 	      alevel_t alevel = demod_get_audio_level (chan, subchan);
 
-	      multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE, 0);   /* len-2 to remove FCS. */
+	      :ulti_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE, 0);   /* len-2 to remove FCS. */
 	    }
 	    else {
 
@@ -801,6 +844,7 @@ int hdlc_rec_data_detect_any (int chan)
 	return (0);
 
 } /* end hdlc_rec_data_detect_any */
+
 
 /* end hdlc_rec.c */
 

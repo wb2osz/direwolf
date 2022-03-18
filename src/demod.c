@@ -134,6 +134,7 @@ int demod_init (struct audio_s *pa)
 
 	    case MODEM_AFSK:
 	    case MODEM_EAS:
+            case MODEM_EOTD: // TODO DET
 
 	      if (save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
 		if (save_audio_config_p->achan[chan].fix_bits != RETRY_NONE) {
@@ -969,6 +970,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 
 	  case MODEM_AFSK:
 	  case MODEM_EAS:
+          case MODEM_EOTD:
 
 	    if (save_audio_config_p->achan[chan].decimate > 1) {
 
@@ -1086,7 +1088,8 @@ alevel_t demod_get_audio_level (int chan, int subchan)
 	alevel.rec = (int) (( D->alevel_rec_peak - D->alevel_rec_valley ) * 50.0f + 0.5f);
 
 	if (save_audio_config_p->achan[chan].modem_type == MODEM_AFSK ||
-	    save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
+	    save_audio_config_p->achan[chan].modem_type == MODEM_EAS ||
+	    save_audio_config_p->achan[chan].modem_type == MODEM_EOTD) {
 
 	  /* For AFSK, we have mark and space amplitudes. */
 
