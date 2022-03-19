@@ -1,5 +1,5 @@
-//
-//    This file is part of Dire Wolf, an amateur radio packet TNC.
+////
+////    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
 //    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
@@ -111,6 +111,10 @@ struct hdlc_state_s {
 	int eas_plus_found;		/* "+" seen, indicating end of geographical area list. */
 
 	int eas_fields_after_plus;	/* Number of "-" characters after the "+". */
+
+	uint32_t eotd_acc;		/* Accumulate last recent 32 bits for EOTD. */
+
+	int eotd_gathering;		/* Decoding in progress - valid frame. */
 };
 
 static struct hdlc_state_s hdlc_state[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
@@ -423,6 +427,8 @@ a good modem here and providing a result when it is received.
  *
  ***********************************************************************************/
 
+#define PREAMBLE_AND_BARKER_CODE	0x55555712
+#define EOTD_MAX_LEN			8
 
 static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
@@ -432,7 +438,59 @@ static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_
  * Different state information for each channel / subchannel / slice.
  */
 	H = &hdlc_state[chan][subchan][slice];
+
 fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+	  //dw_printf ("slice %d = %d\n", slice, raw);
+
+// Accumulate most recent 32 bits in MSB-first order.
+
+	H->eotd_acc <<= 1;
+	H->eotd_acc |= raw;
+
+	int done = 0;
+
+	if (!H->eotd_gathering && H->eotd_acc == PREAMBLE_AND_BARKER_CODE) {
+	  dw_printf ("Barker Code Found\n");
+	  H->olen = 0;
+	  H->eotd_gathering = 1;
+	  H->frame_len = 0;
+	}
+	else if (H->eotd_gathering) {
+	  H->olen++;
+	
+	/* Hack to skip 'dummy' 64th bit */
+	  if (H->olen == 7 && H->frame_len == 7) {
+fprintf(stderr, "Special case!\n");
+		H->eotd_acc <<= 1;
+		H->olen++;
+	  }
+
+	  if (H->olen == 8) {
+	    H->olen = 0;
+	    char ch = H->eotd_acc & 0xff;
+	    H->frame_buf[H->frame_len++] = ch;
+	    H->frame_buf[H->frame_len] = '\0';
+	    //dw_printf ("frame_buf = %s\n", H->frame_buf);
+
+	    if (H->frame_len == EOTD_MAX_LEN) {		// FIXME: look for other places with max length
+	      done = 1;
+for (int ii=0; ii < EOTD_MAX_LEN; ii++) {fprintf(stderr, "%02x ", H->frame_buf[ii]); } fprintf(stderr, "\n");
+	    }
+	  }
+	}
+
+	if (done) {
+#ifdef DEBUG_E
+	  dw_printf ("frame_buf %d = %s\n", slice, H->frame_buf);
+#endif
+	  alevel_t alevel = demod_get_audio_level (chan, subchan);
+	  multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len, alevel, 0, 0);
+
+	  H->eotd_acc = 0;
+	  H->eotd_gathering = 0;
+	  H->olen = 0;
+	  H->frame_len = 0;
+	}
 	return;
 } // end eotd_rec_bit
 
