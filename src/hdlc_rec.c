@@ -439,7 +439,9 @@ static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_
  */
 	H = &hdlc_state[chan][subchan][slice];
 
+#ifdef DETDEBUG
 fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+#endif
 	  //dw_printf ("slice %d = %d\n", slice, raw);
 
 // Accumulate most recent 32 bits in MSB-first order.
@@ -460,7 +462,9 @@ fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, ra
 	
 	/* Hack to skip 'dummy' 64th bit */
 	  if (H->olen == 7 && H->frame_len == 7) {
+#ifdef DETDEBUG
 fprintf(stderr, "Special case!\n");
+#endif
 		H->eotd_acc <<= 1;
 		H->olen++;
 	  }
@@ -474,7 +478,9 @@ fprintf(stderr, "Special case!\n");
 
 	    if (H->frame_len == EOTD_MAX_LEN) {		// FIXME: look for other places with max length
 	      done = 1;
+#ifdef DETDEBUG
 for (int ii=0; ii < EOTD_MAX_LEN; ii++) {fprintf(stderr, "%02x ", H->frame_buf[ii]); } fprintf(stderr, "\n");
+#endif
 	    }
 	  }
 	}

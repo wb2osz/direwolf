@@ -61,9 +61,10 @@
 
 void eotd_to_nmea (unsigned char *eotd, int eotd_len, char *nmea, int nmea_size)
 {
+	*nmea = '\0';
 	for (int i = 0; i < eotd_len; i++) {
 		char temp[32];
 		snprintf(temp, sizeof(temp), "%d=%02x ", i, eotd[i]);
-		strlcpy(nmea, temp, nmea_size);
+		strlcat(nmea, temp, nmea_size);
 	}
 }
