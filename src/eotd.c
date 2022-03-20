@@ -46,6 +46,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
+#include <time.h>
 
 #include "textcolor.h"
 #include "eotd.h"
@@ -61,7 +62,9 @@
 
 void eotd_to_nmea (unsigned char *eotd, int eotd_len, char *nmea, int nmea_size)
 {
+	time_t now = time(NULL);
 	*nmea = '\0';
+	strcat(nmea, ctime(&now));
 	for (int i = 0; i < eotd_len; i++) {
 		char temp[32];
 		snprintf(temp, sizeof(temp), "%d=%02x ", i, eotd[i]);
