@@ -429,6 +429,7 @@ a good modem here and providing a result when it is received.
 
 #define PREAMBLE_AND_BARKER_CODE	0x55555712
 #define EOTD_MAX_LEN			8
+#define DUMMY_BIT_HACK
 
 static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
@@ -439,8 +440,8 @@ static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_
  */
 	H = &hdlc_state[chan][subchan][slice];
 
-#ifdef DETDEBUG
-fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+#ifdef EOTD_DEBUG
+dw_printf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 #endif
 	  //dw_printf ("slice %d = %d\n", slice, raw);
 
@@ -452,7 +453,9 @@ fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, ra
 	int done = 0;
 
 	if (!H->eotd_gathering && H->eotd_acc == PREAMBLE_AND_BARKER_CODE) {
+#ifdef EOTD_DEBUG
 	  dw_printf ("Barker Code Found\n");
+#endif
 	  H->olen = 0;
 	  H->eotd_gathering = 1;
 	  H->frame_len = 0;
@@ -460,15 +463,13 @@ fprintf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, ra
 	else if (H->eotd_gathering) {
 	  H->olen++;
 	
+#ifdef DUMMY_BIT_HACK
 	/* Hack to skip 'dummy' 64th bit */
 	  if (H->olen == 7 && H->frame_len == 7) {
-#ifdef DETDEBUG
-fprintf(stderr, "Special case!\n");
-#endif
 		H->eotd_acc <<= 1;
 		H->olen++;
 	  }
-
+#endif
 	  if (H->olen == 8) {
 	    H->olen = 0;
 	    char ch = H->eotd_acc & 0xff;
@@ -478,8 +479,8 @@ fprintf(stderr, "Special case!\n");
 
 	    if (H->frame_len == EOTD_MAX_LEN) {		// FIXME: look for other places with max length
 	      done = 1;
-#ifdef DETDEBUG
-for (int ii=0; ii < EOTD_MAX_LEN; ii++) {fprintf(stderr, "%02x ", H->frame_buf[ii]); } fprintf(stderr, "\n");
+#ifdef EOTD_DEBUG
+for (int ii=0; ii < EOTD_MAX_LEN; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
 #endif
 	    }
 	  }

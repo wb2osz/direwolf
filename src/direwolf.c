@@ -768,7 +768,7 @@ int main (int argc, char *argv[])
 	    audio_config.achan[0].baud = 1200;
             audio_config.achan[0].mark_freq = 1200;
             audio_config.achan[0].space_freq = 1800;
-	    strlcpy (audio_config.achan[0].profiles, "D", sizeof(audio_config.achan[0].profiles));
+	    // strlcpy (audio_config.achan[0].profiles, "D", sizeof(audio_config.achan[0].profiles));
 	  }
           else {
             audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
