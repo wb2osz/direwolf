@@ -72,7 +72,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 int             m, n, length, k, t, d;
 int             p[21];
@@ -81,71 +80,6 @@ int             recd[1048576], data[1048576], bb[548576];
 int             seed;
 int             numerr, errpos[1024], decerror = 0;
 
-int real_data[][45] = {
-	{ 1,1,1,1,0,0,0,0,
-	  0,1,0,1,1,0,1,0,
-	  0,1,1,0,1,0,1,0,
-	  0,1,1,0,1,0,1,0,
-	  0,0,0,0,0,0,0,1,
-	  0,1,1,0,0},
-
-//	0=f0 1=81 2=52 3=6b 4=71 5=a5 6=63 7=08
-	{ 1,1,1,1,0,0,0,0,
-	  1,0,0,0,0,0,0,1,
-	  0,1,0,1,0,0,1,0,
-	  0,1,1,0,1,0,1,1,
-	  0,1,1,1,0,0,0,1,
-	  1,0,1,0,0},
-
-//	0=f0 1=85 2=50 3=6a 4=01 5=e5 6=6e 7=84
-	{ 1,1,1,1,0,0,0,0,
-	  1,0,0,0,0,1,0,1,
-	  0,1,0,1,0,0,0,0,
-	  0,1,1,0,1,0,1,0,
-	  0,0,0,0,0,0,0,1,
-	  1,1,1,0,0},
-
-//	0=f0 1=85 2=59 3=5a 4=01 5=e5 6=6e 7=84
-	{ 1,1,1,1,0,0,0,0,
-	  1,0,0,0,0,1,0,1,
-	  0,1,0,1,1,0,1,0,
-	  0,0,0,0,0,0,0,1,
-	  1,1,1,0,0},
-
-//	0=f1 1=34 2=50 3=1a 4=01 5=e5 6=66 7=fe
-	{ 1,1,1,1,0,0,0,1,
-	  0,0,1,1,0,1,0,0,
-	  0,1,0,1,0,0,0,0,
-	  0,0,0,1,1,0,1,0,
-	  0,0,0,0,0,0,0,1,
-	  1,1,1,0,0},
-//	0=f0 1=eb 2=10 3=ea 4=01 5=6e 6=54 7=1c
-	{ 1,1,1,1,0,0,0,0,
-	  1,1,1,0,1,0,1,1,
-	  0,0,0,1,0,0,0,0,
-	  1,1,1,0,1,0,1,0,
-	  0,0,0,0,0,0,0,1,
-	  0,1,1,0,1},
-
-//	0=f0 1=ea 2=5c 3=ea 4=01 5=6e 6=55 7=0e
-	{ 1,1,1,1,0,0,0,0,
-	  1,1,1,0,1,0,1,0,
-	  0,1,0,1,1,1,0,0,
-	  1,1,1,0,1,0,1,0,
-	  0,0,0,0,0,0,0,1,
-	  0,1,1,0,1},
-};
-
-int expected[][18] = {
-	{ 0,1,1, 0,0,1,1, 0,0,1,1, 1,1,0,1, 0,0,0 },
-	{ 1,0,1, 0,1,1,0, 0,0,1,1, 0,0,0,0, 1,0,0 },
-//orig	{ 1,0,1, 0,1,1,0, 1,1,1,0, 1,0,0,0, 0,1,0 },
-	{ 1,0,1, 0,0,0,0, 0,1,1,0, 1,0,0,0, 0,1,0 }, // CORRECTED
-	{ 1,0,1, 0,1,1,0, 1,1,1,0, 1,0,0,0, 0,1,0 },
-	{ 1,0,1, 0,1,1,0, 0,1,1,0, 1,1,1,1, 1,1,1 },
-	{ 1,1,0, 0,1,0,1, 0,1,0,0, 0,0,0,1, 1,1,0 },
-	{ 1,1,0, 0,1,0,1, 0,1,0,1, 0,0,0,0, 1,1,1 },
-};
 
 void 
 read_p()
@@ -581,16 +515,12 @@ int main()
 	generate_gf();          /* Construct the Galois Field GF(2**m) */
 	gen_poly();             /* Compute the generator polynomial of BCH code */
 
-#ifdef TEST
-for (int count = 0; count < sizeof(real_data) / sizeof(*real_data); count++) {
-	memcpy(data, real_data[count], sizeof(*real_data));
-#else
 	/* Randomly generate DATA */
 	seed = 131073;
 	srandom(seed);
 	for (i = 0; i < k; i++)
 		data[i] = ( random() & 65536 ) >> 16;
-#endif
+
 	encode_bch();           /* encode data */
 
 	/*
@@ -623,9 +553,8 @@ for (int count = 0; count < sizeof(real_data) / sizeof(*real_data); count++) {
 	printf("r(x) = ");
 	for (i = 0; i < length; i++) {
 		printf("%1d", recd[i]);
-if (i == length - k - 1) printf(" ");
-		//if (i && ((i % 50) == 0))
-			//printf("\n");
+		if (i && ((i % 50) == 0))
+			printf("\n");
 	}
 	printf("\n");
 
@@ -649,18 +578,6 @@ if (i == length - k - 1) printf(" ");
 	}
 	printf("\n");
 
-	int flag = 0;
-printf("n=%d, k=%d, length=%d\n", n, k, length);
-#ifdef TEST
-	for (int jj = 0; jj < n - k; jj++) {
-		if (expected[count][jj] != recd[jj]) {
-			printf("bit %d: expected %d calc: %d\n", jj, expected[count][jj], recd[jj]);
-			flag++;
-		}
-	}
-	printf("%d ERRORS.\n", flag);
-#endif
-
 	/*
 	 * DECODING ERRORS? we compare only the data portion
 	 */
@@ -671,7 +588,4 @@ printf("n=%d, k=%d, length=%d\n", n, k, length);
 	   printf("There were %d decoding errors in message positions\n", decerror);
 	else
 	   printf("Succesful decoding\n");
-#ifdef TEST
-  }
-#endif
 }
