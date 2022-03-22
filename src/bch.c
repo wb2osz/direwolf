@@ -505,10 +505,29 @@ void bytes_to_bits(int *bytes, int *bit_dest, int num_bits) {
 	}
 }
 
+void bits_to_bytes(int *bits, int *byte_dest, int num_bits) {
+
+	int index;
+
+	for (int i = 0; i < num_bits; i++) {
+		index = i / 8;
+		if (i % 8 == 0) {
+			byte_dest[index] = 0;
+		}
+
+		byte_dest[index] <<= 1;
+		byte_dest[index] |= bits[i] & 0x01;
+	}
+
+	byte_dest[index] <<= 8 - (num_bits % 8);
+}
+	
+
 void dump_bch(bch_t *bch) {
 	printf("m: %d length: %d t: %d n: %d k: %d\n", bch->m, bch->length, bch->t, bch->n, bch->k);
 }
 
+#undef TEST_BYTES_TO_BITS
 #define TEST_APPLY
 
 int main()
@@ -551,7 +570,17 @@ int main()
 			printf("%d ", bits[i]);
 		}
 		printf("\n");
+
+		int temp[8];
+		bits_to_bytes(bits, temp, 63);
+		printf("bits_to_bytes pkt [%d]\n", count);
+		for (int i = 0; i < 8; i++) {
+			printf("%02x ", temp[i]);
+		}
+		printf("\n");
+
 #endif
+
 #ifdef TEST_GENERATE	
 		int bch_code[18];
 		generate_bch(&bch, bits, bch_code);
@@ -563,13 +592,9 @@ int main()
 #endif	
 #ifdef TEST_APPLY
 		int recv[63];
-		// backwards, for now
-		for (int i = 0; i < 45; i++) {
-			recv[i + 18] = bits[i];
-		}
-	
-		for (int i = 0; i < 18; i++) {
-			recv[i] = bits[i + 45];
+
+		for (int i = 0; i < 63; i++) {
+			recv[i] = bits[i];
 		}
 	
 		printf("rearranged packet [%d]: ", count);
@@ -579,12 +604,23 @@ int main()
 		printf("\n");
 	
 		int corrected = apply_bch(&bch, recv);
-	
-		printf("corrected [%d] packet: ", corrected);
-		for (int i = 0; i < 63; i++) {
-			printf("%d ", recv[i]);
+
+		if (corrected >= 0) {
+			printf("corrected [%d] packet: ", corrected);
+			for (int i = 0; i < 63; i++) {
+				printf("%d ", recv[i]);
+			}
+			printf("\n");
+
+			int temp[8];
+			bits_to_bytes(recv, temp, 63);
+
+			printf("corrected [%d] DATA: ", count);
+			for (int i = 0; i < 8; i++) {
+				printf("%02x ", temp[i]);
+			}
+			printf("\n");
 		}
-		printf("\n");
 #endif
 	}
 }
