@@ -127,6 +127,7 @@ int main (int argc, char *argv[])
 
 
 	if (server_sock == -1) {
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -154,6 +155,7 @@ int main (int argc, char *argv[])
 
 	  if (n != sizeof(mon_cmd)) {
 	    printf ("Read error, received %d command bytes.\n", n);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -164,6 +166,7 @@ int main (int argc, char *argv[])
 
 	    if (n != mon_cmd.data_len) {
 	      printf ("Read error, client received %d data bytes when %d expected.  Terminating.\n", n, mon_cmd.data_len);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 	  }
@@ -364,12 +367,14 @@ static int connect_to_server (char *hostname, char *port)
 	err = WSAStartup (MAKEWORD(2,2), &wsadata);
 	if (err != 0) {
 	    printf("WSAStartup failed: %d\n", err);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	}
 
 	if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
           printf("Could not find a usable version of Winsock.dll\n");
           WSACleanup();
+	  dw_printf ("\e[0m\e\n\e[0J\e");
           exit (1);
 	}
 #endif
@@ -394,6 +399,7 @@ static int connect_to_server (char *hostname, char *port)
 	  printf ("Can't get address for server %s, %s\n", hostname, gai_strerror(err));
 #endif
 	  freeaddrinfo(ai_head);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
       	  exit (1);
 	}
 

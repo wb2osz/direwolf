@@ -987,6 +987,7 @@ int main ()
 	assert (memcmp(din, dout, 512) == 0);
 
 	dw_printf ("Quick KISS test passed OK.\n");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 }
 

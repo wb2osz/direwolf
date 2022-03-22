@@ -94,6 +94,7 @@ int main (int argc, char *argv[])
 	  fprintf (stderr, "Conversion to USNG failed:\n%s\n", message);
 	}
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (0);
 }
 
@@ -112,5 +113,6 @@ static void usage (void)
 	fprintf (stderr, "Example:\n");
 	fprintf (stderr, "\tll2utm 42.662139 -71.365553\n");
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (1);
 }

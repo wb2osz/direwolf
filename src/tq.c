@@ -155,6 +155,7 @@ void tq_init (struct audio_s *audio_config_p)
 	    if (wake_up_event[c] == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("tq_init: CreateEvent: can't create transmit wake up event, c=%d", c);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }	
 	  }
@@ -173,6 +174,7 @@ void tq_init (struct audio_s *audio_config_p)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("tq_init: pthread_cond_init c=%d err=%d", c, err);
 	      perror ("");
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 
@@ -333,6 +335,7 @@ void tq_append (int chan, int prio, packet_t pp)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("tq_append: pthread_cond_signal err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -526,6 +529,7 @@ void lm_data_request (int chan, int prio, packet_t pp)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("lm_data_request: pthread_cond_signal err=%d", err);
 	      perror ("");
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 
@@ -673,6 +677,7 @@ void lm_seize_request (int chan)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("lm_seize_request: pthread_cond_signal err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -763,6 +768,7 @@ void tq_wait_while_empty (int chan)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("tq_wait_while_empty (%d): pthread_cond_wait err=%d", chan, err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 

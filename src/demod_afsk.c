@@ -267,6 +267,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Invalid filter profile = %c\n", profile);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	}
 
@@ -352,6 +353,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -362,6 +364,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -374,6 +377,7 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 

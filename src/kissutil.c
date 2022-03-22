@@ -269,12 +269,14 @@ int main (int argc, char *argv[])
 	    if ( ! S_ISDIR(s.st_mode)) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Receive queue location, %s, is not a directory.\n", receive_output);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	    }
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
             dw_printf ("Receive queue location, %s, does not exist.\n", receive_output);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (EXIT_FAILURE);
 	  }
 	}
@@ -293,6 +295,7 @@ int main (int argc, char *argv[])
 	}
 	if (tnc_th == NULL) {
 	  printf ("Internal error: Could not create TNC listen thread.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 #else
@@ -304,6 +307,7 @@ int main (int argc, char *argv[])
 	}
 	if (e != 0) {
 	  perror("Internal error: Could not create TNC listen thread.");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 #endif
@@ -362,6 +366,7 @@ int main (int argc, char *argv[])
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf("Can't access transmit queue directory %s.  Quitting.\n", transmit_from);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	    }
 	    SLEEP_SEC (1);
@@ -625,6 +630,7 @@ static THREAD_F tnc_listen_net (void *arg)
 	if (err < 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Network interface failure.  Can't go on.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 	
@@ -639,6 +645,7 @@ static THREAD_F tnc_listen_net (void *arg)
 	if (server_sock == -1) {
 	  text_color_set(DW_COLOR_ERROR);
 	  // Should have been a message already.  What else is there to say?
+	  dw_printf ("\e[0m\e\n\e[0J\e");
  	  exit (EXIT_FAILURE);
 	}
 
@@ -669,6 +676,7 @@ static THREAD_F tnc_listen_net (void *arg)
 
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("Read error from TCP KISS TNC.  Terminating.\n");
+	dw_printf ("\e[0m\e\n\e[0J\e");
  	exit (EXIT_FAILURE);
 
 } /* end tnc_listen_net */
@@ -707,6 +715,7 @@ static THREAD_F tnc_listen_serial (void *arg)
 	  // More detail such as "permission denied" or "no such device"
 	  dw_printf("%s\n", strerror(errno));
 #endif
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
@@ -720,6 +729,7 @@ static THREAD_F tnc_listen_serial (void *arg)
 
 	  if (ch < 0) {
  	    dw_printf("Read error from serial port KISS TNC.\n");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (EXIT_FAILURE);
 	  }
 
@@ -919,6 +929,7 @@ static void usage(void)
 	dw_printf ("	-o	Receive output queue directory.  Store received frames here.\n");
 	dw_printf ("	-T	Precede received frames with 'strftime' format time stamp.\n");
 	usage2();
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 }
 

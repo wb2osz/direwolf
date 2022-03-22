@@ -418,6 +418,7 @@ void tone_gen_put_bit (int chan, int dat)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("INTERNAL ERROR: %s %d achan[%d].modem_type = %d\n",
 				__FILE__, __LINE__, chan, save_audio_config_p->achan[chan].modem_type);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	  }
 

@@ -935,6 +935,7 @@ int main (int argc, char *argv[])
 	if (errors > 0) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Encode APRS test FAILED with %d errors.\n", errors);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
@@ -960,11 +961,13 @@ int main (int argc, char *argv[])
 	if (errors != 0) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Encode APRS test FAILED with %d errors.\n", errors);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
 	text_color_set (DW_COLOR_REC);
 	dw_printf ("Encode APRS test PASSED with no errors.\n");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 	
 

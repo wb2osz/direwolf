@@ -4805,6 +4805,7 @@ int main (int argc, char *argv[])
 	if (argc >= 2) {
 	  if (freopen (argv[1], "r", stdin) == NULL) {
 	    fprintf(stderr, "Can't open %s for read.\n", argv[1]);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit(1);
 	  }
 	}

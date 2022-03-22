@@ -85,6 +85,7 @@ int main ()
 	    dw_printf ("\n");
 	    dw_printf ("****** Could not open %s ******\n", fname);
 	    dw_printf ("****** Did you generate the test files first? ******\n");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (EXIT_FAILURE);
 	  }
 
@@ -110,12 +111,14 @@ int main ()
 	  dw_printf ("\n");
 	  dw_printf ("\n");
 	  dw_printf ("***** FX25 unit test Success - all tests passed. *****\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_SUCCESS);
 	}
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("\n");
 	dw_printf ("\n");
 	dw_printf ("***** FX25 unit test FAILED.  Only %d/11 tests passed. *****\n", fx25_test_count);
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 
 } // end main 

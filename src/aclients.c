@@ -221,6 +221,7 @@ int main (int argc, char *argv[])
 
 	if (num_clients < 1 || num_clients > MAX_CLIENTS) {
 	  printf ("Specify up to %d TNCs on the command line.\n", MAX_CLIENTS);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -236,6 +237,7 @@ int main (int argc, char *argv[])
 	  p = strtok (stemp, "=");
 	  if (p == NULL) {
 	    printf ("Internal error 1\n");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 	  strlcpy (hostname[j], "localhost", sizeof(hostname[j]));
@@ -243,6 +245,7 @@ int main (int argc, char *argv[])
 	  p = strtok (NULL, "=");
 	  if (p == NULL) {
 	    printf ("Missing description after %s\n", port[j]);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 	  strlcpy (description[j], p, sizeof(description[j]));
@@ -291,6 +294,7 @@ int main (int argc, char *argv[])
 	  }
 	  if (client_th[j] == NULL) {
 	    printf ("Internal error: Could not create client thread %d.\n", j);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 #else
@@ -302,6 +306,7 @@ int main (int argc, char *argv[])
 	  }
 	  if (e != 0) {
 	    perror("Internal error: Could not create client thread.");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 #endif
@@ -438,6 +443,7 @@ static void * client_thread_net (void *arg)
 					hostname[my_index], gai_strerror(err));
 #endif
 	  freeaddrinfo(ai_head);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
       	  exit (1);
 	}
 
@@ -536,6 +542,7 @@ static void * client_thread_net (void *arg)
 
  	  printf("Client %d unable to connect to %s on %s (%s), port %s\n", 
 			my_index, description[my_index], hostname[my_index], ipaddr_str, port[my_index] );
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -563,6 +570,7 @@ static void * client_thread_net (void *arg)
 
 	  if (n != sizeof(mon_cmd)) {
 	    printf ("Read error, client %d received %d command bytes.  Terminating.\n", my_index, n);
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -577,6 +585,7 @@ static void * client_thread_net (void *arg)
 
 	    if (n != mon_cmd.data_len) {
 	      printf ("Read error, client %d received %d data bytes.\n", my_index, n);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 	  }
@@ -682,6 +691,7 @@ static void * client_thread_serial (void *arg)
 	if (fd == MYFDERROR) {
  	  printf("Client %d unable to connect to %s on %s.\n", 
 			my_index, description[my_index], port[my_index] );
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -732,6 +742,7 @@ static void * client_thread_serial (void *arg)
 	if (fd == MYFDERROR) {
  	  printf("Client %d unable to connect to %s on %s.\n", 
 			my_index, description[my_index], port[my_index] );
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -781,6 +792,7 @@ static void * client_thread_serial (void *arg)
 	    if (! ReadFile (fd, &ch, 1, &n, NULL)) {
 	      printf ("Read error on %s.\n", description[my_index]);
 	      CloseHandle (fd);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 	  
@@ -790,6 +802,7 @@ static void * client_thread_serial (void *arg)
 	    if ( ( n = read(fd, & ch, 1)) < 0) {
 	      printf ("Read error on %s.\n", description[my_index]);
 	      close (fd);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 #endif

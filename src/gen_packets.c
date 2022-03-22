@@ -252,6 +252,7 @@ int main(int argc, char **argv)
               if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
                 text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -272,6 +273,7 @@ int main(int argc, char **argv)
               if (modem.achan[0].baud != 100 && (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD)) {
                 text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
 
@@ -343,6 +345,7 @@ int main(int argc, char **argv)
               if (modem.achan[0].mark_freq < 300 || modem.achan[0].mark_freq > 3000) {
                 text_color_set(DW_COLOR_ERROR); 
 	        dw_printf ("Use a more reasonable value in range of 300 - 3000.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -355,6 +358,7 @@ int main(int argc, char **argv)
               if (modem.achan[0].space_freq < 300 || modem.achan[0].space_freq > 3000) {
                 text_color_set(DW_COLOR_ERROR); 
 	        dw_printf ("Use a more reasonable value in range of 300 - 3000.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -379,6 +383,7 @@ int main(int argc, char **argv)
               if (amplitude < 0 || amplitude > 200) {
                 text_color_set(DW_COLOR_ERROR); 
 	        dw_printf ("Amplitude must be in range of 0 to 200.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -392,6 +397,7 @@ int main(int argc, char **argv)
                 text_color_set(DW_COLOR_ERROR); 
 	        dw_printf ("Use a more reasonable audio sample rate in range of %d - %d.\n",
 						MIN_SAMPLES_PER_SEC, MAX_SAMPLES_PER_SEC);
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -410,6 +416,7 @@ int main(int argc, char **argv)
               if (leading_zeros < 8 || leading_zeros > 12000) {
                 text_color_set(DW_COLOR_ERROR); 
 	        dw_printf ("Use a more reasonable value.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -447,6 +454,7 @@ int main(int argc, char **argv)
               if (g_morse_wpm < 5 || g_morse_wpm > 50) {
                 text_color_set(DW_COLOR_ERROR); 
 	        dw_printf ("Morse code speed must be in range of 5 to 50 WPM.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -504,6 +512,7 @@ int main(int argc, char **argv)
           text_color_set(DW_COLOR_ERROR);
           dw_printf ("ERROR: Either -j or -J must be specified when using 2400 bps QPSK.\n");
           usage (argv);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
           exit (1);
 	}
 
@@ -515,6 +524,7 @@ int main(int argc, char **argv)
           text_color_set(DW_COLOR_ERROR); 
           dw_printf ("ERROR: The -o output file option must be specified.\n");
           usage (argv);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
           exit (1);
         }
 
@@ -524,6 +534,7 @@ int main(int argc, char **argv)
         if (err < 0) {
           text_color_set(DW_COLOR_ERROR); 
           dw_printf ("ERROR - Can't open output file.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
           exit (1);
         }
 
@@ -571,6 +582,7 @@ int main(int argc, char **argv)
             if (input_fp == NULL) {
               text_color_set(DW_COLOR_ERROR); 
  	      dw_printf ("Can't open %s for read.\n", argv[optind]);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             text_color_set(DW_COLOR_INFO); 
@@ -706,6 +718,7 @@ static void usage (char **argv)
 	dw_printf ("\n");
         dw_printf ("    Read message from stdin and put quarter volume sound into the file x.wav.\n");
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_FAILURE);
 }
 

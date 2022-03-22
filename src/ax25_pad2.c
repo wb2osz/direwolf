@@ -929,6 +929,7 @@ int main ()
 	dw_printf ("\n----------\n\n");
 	dw_printf ("\nSUCCESS!\n");
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 
 } /* end main */

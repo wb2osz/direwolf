@@ -165,6 +165,7 @@ void recv_init (struct audio_s *pa)
 	    if (xmit_th[a] == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("FATAL: Could not create audio receive thread for device %d.\n", a);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit(1);
 	    }
 #else
@@ -174,6 +175,7 @@ void recv_init (struct audio_s *pa)
 	    if (e != 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("FATAL: Could not create audio receive thread for device %d.\n", a);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit(1);
 	    }
 #endif
@@ -278,6 +280,7 @@ static void * recv_adev_thread (void *arg)
 
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf ("Terminating after audio input failure.\n");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (1);
 }
 

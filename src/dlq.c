@@ -135,6 +135,7 @@ void dlq_init (void)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq_init: pthread_mutex_init err=%d", err);
 	  perror ("");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 #endif
@@ -153,6 +154,7 @@ void dlq_init (void)
 	if (wake_up_event == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq_init: pthread_cond_init: can't create receive wake up event");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -170,6 +172,7 @@ void dlq_init (void)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq_init: pthread_cond_init err=%d", err);
 	  perror ("");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -325,6 +328,7 @@ static void append_to_queue (struct dlq_item_s *pnew)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq append_to_queue: pthread_mutex_lock err=%d", err);
 	  perror ("");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 #endif
@@ -352,6 +356,7 @@ static void append_to_queue (struct dlq_item_s *pnew)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq append_to_queue: pthread_mutex_unlock err=%d", err);
 	  perror ("");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 #endif
@@ -425,6 +430,7 @@ static void append_to_queue (struct dlq_item_s *pnew)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("dlq append_to_queue: pthread_mutex_lock wu err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -433,6 +439,7 @@ static void append_to_queue (struct dlq_item_s *pnew)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("dlq append_to_queue: pthread_cond_signal err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -441,6 +448,7 @@ static void append_to_queue (struct dlq_item_s *pnew)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("dlq append_to_queue: pthread_mutex_unlock wu err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 	}
@@ -991,6 +999,7 @@ int dlq_wait_while_empty (double timeout)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("dlq_wait_while_empty: pthread_mutex_lock wu err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 
@@ -1016,6 +1025,7 @@ int dlq_wait_while_empty (double timeout)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("dlq_wait_while_empty: pthread_mutex_unlock wu err=%d", err);
 	    perror ("");
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 #endif
@@ -1071,6 +1081,7 @@ struct dlq_item_s *dlq_remove (void)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq_remove: pthread_mutex_lock err=%d", err);
 	  perror ("");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 #endif
@@ -1088,6 +1099,7 @@ struct dlq_item_s *dlq_remove (void)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq_remove: pthread_mutex_unlock err=%d", err);
 	  perror ("");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 #endif

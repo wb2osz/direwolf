@@ -194,6 +194,7 @@ void fx25_init ( int debug_level )
 	  if (Tab[i].rs == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
 		dw_printf("FX.25 internal error: init_rs_char failed!\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
 		exit(EXIT_FAILURE);
 	  }
 	}

@@ -815,6 +815,7 @@ int main (int argc, char *argv[])
 	      break;
 	    case DWFIX_NOT_INIT:
 	      dw_printf ("GPS Init failed.\n");
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    case DWFIX_ERROR:
 	    default:

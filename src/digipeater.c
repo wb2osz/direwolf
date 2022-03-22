@@ -737,6 +737,7 @@ int main (int argc, char *argv[])
 	  regerror (e, &alias_re, message, sizeof(message));
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n%s\n\n", message);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -745,6 +746,7 @@ int main (int argc, char *argv[])
 	  regerror (e, &wide_re, message, sizeof(message));
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n%s\n\n", message);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 

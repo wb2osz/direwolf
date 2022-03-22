@@ -685,6 +685,7 @@ int main (int argc, char *argv[])
 	if (argc != 2) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Specify HID path on command line.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 

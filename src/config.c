@@ -1833,6 +1833,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 #if __WIN32__
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: Windows version of direwolf does not support HAMLIB.\n", line);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 #else
 	      text_color_set(DW_COLOR_ERROR);
@@ -1919,6 +1920,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
 	      dw_printf ("See User Guide for details.\n");
 #endif
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 #endif
 	    }
@@ -4219,6 +4221,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
    	      }
 	    }
 	    //dw_printf ("DEBUG  server=%s   port=%d\n", p_igate_config->t2_server_name, p_igate_config->t2_server_port);
+	    //dw_printf ("\e[0m\e\n\e[0J\e");
 	    //exit (0);
 	  }
 
