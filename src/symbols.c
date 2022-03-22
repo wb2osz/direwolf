@@ -298,7 +298,7 @@ static const char *search_locations[] = {
  * Description:	The primary and alternate symbol tables are constant
  *		so they are hardcoded.
  *		However the "new" sysmbols, which give new meanings to
- *		overlayed symbols, are always evolving.
+ *		overlaid symbols, are always evolving.
  *		For maximum flexibility, we will read the
  *		data file at run time rather than compiling it in.
  *
@@ -386,7 +386,7 @@ void symbols_init (void)
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Warning: Could not open 'symbols-new.txt'.\n");
-	  dw_printf ("The \"new\" overlayed character information will not be available.\n");
+	  dw_printf ("The \"new\" overlaid character information will not be available.\n");
 
 	  new_sym_size = 1;	
 	  new_sym_ptr = calloc(new_sym_size, sizeof(new_sym_t));  /* Don't try again. */
@@ -681,7 +681,7 @@ void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, ch
 
 // The position and object formats all contain a proper symbol and table.
 // There doesn't seem to be much reason to have a symbol for something without
-// a postion because it would not show up on a map.
+// a position because it would not show up on a map.
 // This just seems to be a remnant of something used long ago and no longer needed.
 // The protocol spec mentions a "MIM tracker" but I can't find any references to it.
 

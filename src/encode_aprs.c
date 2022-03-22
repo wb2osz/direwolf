@@ -125,7 +125,7 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
  *		height	- Feet.
  *		gain	- dBi.
  *
- * 		course	- Degress, 0 - 360 (360 equiv. to 0).  
+ * 		course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.
  *
@@ -343,7 +343,7 @@ static int phg_data_extension (int power, int height, int gain, char *dir, char 
  *
  * Purpose:     Fill in parts of the course & speed data extension.
  *
- * Inputs: 	course	- Degress, 0 - 360 (360 equiv. to 0).
+ * Inputs: 	course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *
  *		speed	- knots.
@@ -494,7 +494,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *		gain	- dB.  Not clear if it is dBi or dBd.
  *		dir	- Directivity: N, NE, etc., omni.
  *
- *		course	- Degress, 0 - 360 (360 equiv. to 0).
+ *		course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.		// TODO:  should distinguish unknown(not revevant) vs. known zero.
  *
@@ -636,7 +636,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *		gain	- dB.  Not clear if it is dBi or dBd.
  *		dir	- Direction: N, NE, etc., omni.
  *
- *		course	- Degress, 0 - 360 (360 equiv. to 0).
+ *		course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.
  *

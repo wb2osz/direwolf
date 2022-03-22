@@ -102,7 +102,7 @@ typedef struct mheard_s {
 
 	double dlat, dlon;			// Last position.  G_UNKNOWN for unknown.
 
-	int msp;				// Allow message sender positon report.
+	int msp;				// Allow message sender position report.
 						// When non zero, an IS>RF position report is allowed.
 						// Then decremented.
 
@@ -778,7 +778,7 @@ void mheard_set_msp (char *callsign, int num)
  *
  * Inputs:	callsign	- Callsign for station which sent the "message."
  *
- * Returns:	The cound for the specified station.
+ * Returns:	The count for the specified station.
  *		0 if not found.
  *
  *------------------------------------------------------------------*/

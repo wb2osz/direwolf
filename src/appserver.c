@@ -320,7 +320,7 @@ static void poll_timing_test (void)
  *
  *		data		- Should look something like this for incoming:
  *					*** CONNECTED to Station xxx\r
- *				  and ths for my request being accepted:
+ *				  and this for my request being accepted:
  *					*** CONNECTED With Station xxx\r
  *
  *		session_id	- Session id to be used in data transfer and
