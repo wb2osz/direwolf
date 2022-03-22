@@ -254,7 +254,7 @@ int bch_init(bch_t *bch, int m, int length, int t) {
 	printf("This is a (%d, %d, %d) binary BCH code\n", bch->length, bch->k, d);
 
 	/* Compute the generator polynomial */
-	bch->g = malloc(rdncy * sizeof(int));
+	bch->g = malloc((rdncy + 1) * sizeof(int));
 	bch->g[0] = bch->alpha_to[zeros[1]];
 	bch->g[1] = 1;		/* g(x) = (X + zeros[1]) initially */
 	for (ii = 2; ii <= rdncy; ii++) {
@@ -552,18 +552,21 @@ int main()
 	};
 
 	int bits[63];
+	int temp[8];
 	bch_t bch;
 
 	bch_init(&bch, 6, 63, 3);
 
 	for (int count = 0; count < sizeof(test) / sizeof(*test); count++) {
 		bytes_to_bits(test[count], bits, 63);
-#ifdef TEST_BYTES_TO_BITS
-		printf("ORIG pkt [%d]\n", count);
+
+		printf("--------------------------\nORIG pkt [%d] ", count);
 		for (int i = 0; i < 8; i++) {
 			printf("%02x ", test[count][i]);
 		}
 		printf("\n");
+
+#ifdef TEST_BYTES_TO_BITS
 	
 		printf("ORIG pkt[%d] bits\n", count);
 		for (int i = 0; i < 63; i++) {
@@ -571,7 +574,6 @@ int main()
 		}
 		printf("\n");
 
-		int temp[8];
 		bits_to_bytes(bits, temp, 63);
 		printf("bits_to_bytes pkt [%d]\n", count);
 		for (int i = 0; i < 8; i++) {
@@ -590,32 +592,41 @@ int main()
 		}
 		printf("\n");
 #endif	
+
 #ifdef TEST_APPLY
 		int recv[63];
 
 		for (int i = 0; i < 63; i++) {
 			recv[i] = bits[i];
 		}
-	
+/*	
 		printf("rearranged packet [%d]: ", count);
 		for (int i = 0; i < 63; i++) {
 			printf("%d ", recv[i]);
 		}
 		printf("\n");
-	
+
+		bits_to_bytes(recv, temp, 63);
+
+		printf("original [%d] bytes: ", count);
+		for (int i = 0; i < 8; i++) {
+			printf("%02x ", temp[i]);
+		}
+		printf("\n");
+*/	
 		int corrected = apply_bch(&bch, recv);
 
 		if (corrected >= 0) {
+/*
 			printf("corrected [%d] packet: ", corrected);
 			for (int i = 0; i < 63; i++) {
 				printf("%d ", recv[i]);
 			}
 			printf("\n");
-
-			int temp[8];
+*/
 			bits_to_bytes(recv, temp, 63);
 
-			printf("corrected [%d] DATA: ", count);
+			printf("corrected [%d] bytes: ", corrected);
 			for (int i = 0; i < 8; i++) {
 				printf("%02x ", temp[i]);
 			}
