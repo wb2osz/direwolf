@@ -1524,7 +1524,7 @@ static void usage (char **argv)
 	/* I don't know if win32 supports ANSI colour sequences. */
 #else
 	// TODO: Could vary by platform and build options.
-	//dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
+	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
 	//dw_printf ("\e[0m\e\n\e[0J\e");	/* This appears to break the last bit of colour, so it is commented out. */
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
@@ -1535,3 +1535,4 @@ static void usage (char **argv)
 
 
 /* end direwolf.c */
+

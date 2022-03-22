@@ -145,3 +145,4 @@ static void usage (void)
 	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (1);
 }
+

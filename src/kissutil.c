@@ -269,14 +269,14 @@ int main (int argc, char *argv[])
 	    if ( ! S_ISDIR(s.st_mode)) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Receive queue location, %s, is not a directory.\n", receive_output);
-	      dw_printf ("\e[0m\e\n\e[0J\e");
+              dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	    }
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
             dw_printf ("Receive queue location, %s, does not exist.\n", receive_output);
-	    dw_printf ("\e[0m\e\n\e[0J\e");
+            dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (EXIT_FAILURE);
 	  }
 	}
@@ -366,7 +366,7 @@ int main (int argc, char *argv[])
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf("Can't access transmit queue directory %s.  Quitting.\n", transmit_from);
-	      dw_printf ("\e[0m\e\n\e[0J\e");
+              dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	    }
 	    SLEEP_SEC (1);
