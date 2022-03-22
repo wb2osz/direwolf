@@ -75,7 +75,9 @@
 #include <string.h>
 #include "bch.h"
 
-int bch_init(bch_t *bch, int m, int length, int t) {
+#undef DEBUG
+
+int init_bch(bch_t *bch, int m, int length, int t) {
 
 	int p[21], n;
 
@@ -115,14 +117,20 @@ int bch_init(bch_t *bch, int m, int length, int t) {
 	else if (m == 18)	p[7] = 1;
 	else if (m == 19)	p[1] = p[5] = p[6] = 1;
 	else if (m == 20)	p[3] = 1;
-	printf("p(x) = ");
     
 	n = 1;
+#ifdef DEBUG
+	printf("p(x) = ");
+#endif
 	for (int i = 0; i <= m; i++) {
         	n *= 2;
+#ifdef DEBUG
 		printf("%1d", p[i]);
+#endif
         }
+#ifdef DEBUG
 	printf("\n");
+#endif
 	n = n / 2 - 1;
 	bch->n = n;
 	int ninf = (n + 1) / 2 - 1;
@@ -184,10 +192,12 @@ int bch_init(bch_t *bch, int m, int length, int t) {
 	cycle[1][0] = 1;
 	size[1] = 1;
 	jj = 1;			/* cycle set index */
+#ifdef DEBUG
 	if (bch->m > 9)  {
 		printf("Computing cycle sets modulo %d\n", bch->n);
 		printf("(This may take some time)...\n");
 	}
+#endif
 	do {
 		/* Generate the jj-th cycle set */
 		ii = 0;
@@ -247,11 +257,12 @@ int bch_init(bch_t *bch, int m, int length, int t) {
 
     if (bch->k<0)
       {
-         printf("Parameters invalid!\n");
          return -4;
       }
 
+#ifdef DEBUG
 	printf("This is a (%d, %d, %d) binary BCH code\n", bch->length, bch->k, d);
+#endif
 
 	/* Compute the generator polynomial */
 	bch->g = malloc((rdncy + 1) * sizeof(int));
@@ -266,12 +277,13 @@ int bch_init(bch_t *bch, int m, int length, int t) {
 	      bch->g[jj] = bch->g[jj - 1];
 	  bch->g[0] = bch->alpha_to[(bch->index_of[bch->g[0]] + zeros[ii]) % bch->n];
 	}
+#ifdef DEBUG
 	printf("Generator polynomial:\ng(x) = ");
 	for (ii = 0; ii <= rdncy; ii++) {
 	  printf("%d", bch->g[ii]);
 	}
 	printf("\n");
-
+#endif
 	return 0;
 }
 
@@ -303,8 +315,7 @@ void generate_bch(bch_t *bch, int *data, int *bb) {
 }
 
 
-int 
-apply_bch(bch_t *bch, int *recd)
+int apply_bch(bch_t *bch, int *recd)
 /*
  * Simon Rockliff's implementation of Berlekamp's algorithm.
  *
@@ -335,7 +346,9 @@ apply_bch(bch_t *bch, int *recd)
 	t2 = 2 * bch->t;
 
 	/* first form the syndromes */
+#ifdef DEBUG
 	printf("S(x) = ");
+#endif
 	for (i = 1; i <= t2; i++) {
 		s[i] = 0;
 		for (j = 0; j < bch->length; j++)
@@ -349,9 +362,13 @@ apply_bch(bch_t *bch, int *recd)
  */
 		/* convert syndrome from polynomial form to index form  */
 		s[i] = bch->index_of[s[i]];
+#ifdef DEBUG
 		printf("%3d ", s[i]);
+#endif
 	}
+#ifdef DEBUG
 	printf("\n");
+#endif
 
 	if (syn_error) {	/* if there are errors, try to correct them */
 		/*
@@ -451,12 +468,13 @@ apply_bch(bch_t *bch, int *recd)
 			for (i = 0; i <= l[u]; i++)
 				elp[u][i] = bch->index_of[elp[u][i]];
 
+#ifdef DEBUG
 			printf("sigma(x) = ");
 			for (i = 0; i <= l[u]; i++)
 				printf("%3d ", elp[u][i]);
 			printf("\n");
 			printf("Roots: ");
-
+#endif
 			/* Chien search: find roots of the error location polynomial */
 			for (i = 1; i <= l[u]; i++)
 				reg[i] = elp[u][i];
@@ -473,10 +491,14 @@ apply_bch(bch_t *bch, int *recd)
 					root[count] = i;
 					loc[count] = bch->n - i;
 					count++;
+#ifdef DEBUG
 					printf("%3d ", bch->n - i);
+#endif
 				}
 			}
+#ifdef DEBUG
 			printf("\n");
+#endif
 			if (count == l[u]) {
 			/* no. roots = degree of elp hence <= t errors */
 				for (i = 0; i < l[u]; i++)
@@ -484,7 +506,9 @@ apply_bch(bch_t *bch, int *recd)
 				return l[u];
 			}
 			else {	/* elp has degree >t hence cannot solve */
+#ifdef DEBUG
 				printf("Incomplete decoding: errors detected\n");
+#endif
 				return -1;
 			}
 		} else {
@@ -521,15 +545,29 @@ void bits_to_bytes(int *bits, int *byte_dest, int num_bits) {
 
 	byte_dest[index] <<= 8 - (num_bits % 8);
 }
-	
+
+void swap_format(int *bits, int cutoff, int num_bits) {
+	// Do it the easy way
+	int *temp = malloc(num_bits * sizeof(int));
+	for (int i = 0; i < num_bits; i++) {
+		if (i < cutoff) {
+			temp[num_bits - cutoff + i] = bits[i];
+		} else {
+			temp[i - cutoff] = bits[i];
+		}
+	}
+
+	memcpy(bits, temp, num_bits * sizeof(int));
+}
 
 void dump_bch(bch_t *bch) {
 	printf("m: %d length: %d t: %d n: %d k: %d\n", bch->m, bch->length, bch->t, bch->n, bch->k);
 }
 
+#undef MAIN
 #undef TEST_BYTES_TO_BITS
-#define TEST_APPLY
-
+#define TEST_SWAP
+#ifdef MAIN
 int main()
 {
 	int test[][8] = {
@@ -555,7 +593,7 @@ int main()
 	int temp[8];
 	bch_t bch;
 
-	bch_init(&bch, 6, 63, 3);
+	init_bch(&bch, 6, 63, 3);
 
 	for (int count = 0; count < sizeof(test) / sizeof(*test); count++) {
 		bytes_to_bits(test[count], bits, 63);
@@ -593,6 +631,21 @@ int main()
 		printf("\n");
 #endif	
 
+#ifdef TEST_SWAP
+		printf("orig: ");
+		for (int i = 0; i < 63; i++) {
+			printf("%d ", bits[i]);
+		}
+		printf("\n");
+
+		swap_format(bits, 45, 63);
+
+		printf("rev:  ");
+		for (int i = 0; i < 63; i++) {
+			printf("%d ", bits[i]);
+		}
+		printf("\n");
+#endif
 #ifdef TEST_APPLY
 		int recv[63];
 
@@ -635,3 +688,4 @@ int main()
 #endif
 	}
 }
+#endif
