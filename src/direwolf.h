@@ -9,7 +9,6 @@
 #endif
 
 
-
 #ifndef DIREWOLF_H
 #define DIREWOLF_H 1
 
@@ -316,5 +315,6 @@ size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_
 #endif  /* DEBUG_STRL */
 
 #endif	/* BSD or Apple */
+
 
 #endif   /* ifndef DIREWOLF_H */

@@ -604,21 +604,21 @@ int main (int argc, char *argv[])
 	if (format.wformattag != 1) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Sorry, I only understand audio format 1 (PCM).  This file has %d.\n", format.wformattag);
-          dw_printf ("\e[0m\e\n\e[0J\e");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
 	if (format.nchannels != 1 && format.nchannels != 2) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Sorry, I only understand 1 or 2 channels.  This file has %d.\n", format.nchannels);
-          dw_printf ("\e[0m\e\n\e[0J\e");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
 	if (format.wbitspersample != 8 && format.wbitspersample != 16) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Sorry, I only understand 8 or 16 bits per sample.  This file has %d.\n", format.wbitspersample);
-          dw_printf ("\e[0m\e\n\e[0J\e");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
@@ -721,17 +721,17 @@ int main (int argc, char *argv[])
 	if (error_if_less_than != -1 && packets_decoded_total < error_if_less_than) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n * * * TEST FAILED: number decoded is less than %d * * * \n", error_if_less_than);
-          dw_printf ("\e[0m\e\n\e[0J\e");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 	if (error_if_greater_than != -1 && packets_decoded_total > error_if_greater_than) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n * * * TEST FAILED: number decoded is greater than %d * * * \n", error_if_greater_than);
-          dw_printf ("\e[0m\e\n\e[0J\e");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
-        dw_printf ("\e[0m\e\n\e[0J\e");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 }
 
@@ -1023,7 +1023,7 @@ static void usage (void) {
 	dw_printf ("              Try  different combinations of options to compare decoding\n");
 	dw_printf ("              performance.\n");
 
-        dw_printf ("\e[0m\e\n\e[0J\e");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (1);
 }
 

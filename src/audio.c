@@ -1056,7 +1056,7 @@ int audio_get (int a)
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf ("\nEnd of file on stdin.  Exiting.\n");
-                dw_printf ("\e[0m\e\n\e[0J\e");
+	        dw_printf ("\e[0m\e\n\e[0J\e");
 	        exit (0);
 	      }
 	    

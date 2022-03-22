@@ -94,7 +94,7 @@ int main (int argc, char *argv[])
 	      }
 	      else {
 	        fprintf (stderr, "Can't open %s for read.\n", argv[n]);
-		printf ("\e[0m\e\n\e[0J\e");
+	        printf ("\e[0m\e\n\e[0J\e");
 	        exit (1);
 	      }
 	    }

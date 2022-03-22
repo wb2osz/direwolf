@@ -444,7 +444,7 @@ int main (int argc, char *argv[])
             if (B_opt < MIN_BAUD || B_opt > MAX_BAUD) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Use a more reasonable data baud rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
-	      dw_printf ("\e[0m\e\n\e[0J\e");
+              dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             break;
@@ -476,7 +476,7 @@ int main (int argc, char *argv[])
             if (D_opt < 1 || D_opt > 8) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Crazy value for -D. \n");
-	      dw_printf ("\e[0m\e\n\e[0J\e");
+              dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             break;
@@ -487,7 +487,7 @@ int main (int argc, char *argv[])
             if (U_opt < 1 || U_opt > 4) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Crazy value for -U. \n");
-	      dw_printf ("\e[0m\e\n\e[0J\e");
+              dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             break;
@@ -1443,7 +1443,6 @@ static void cleanup_linux (int x)
 	ptt_term ();
 	dwgps_term ();
 	SLEEP_SEC(1);
-	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit(0);
 }
 
@@ -1522,10 +1521,10 @@ static void usage (char **argv)
 #if __WIN32__
 	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
 	/* I don't know if win32 supports ANSI colour sequences. */
+	dw_printf ("\e[0m\e\n\e[0J\e");
 #else
 	// TODO: Could vary by platform and build options.
 	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
-	//dw_printf ("\e[0m\e\n\e[0J\e");	/* This appears to break the last bit of colour, so it is commented out. */
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
 	dw_printf ("\e[0m\e\n\e[0J\e");

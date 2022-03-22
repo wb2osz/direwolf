@@ -252,7 +252,7 @@ int main(int argc, char **argv)
               if (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD) {
                 text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
-	        dw_printf ("\e[0m\e\n\e[0J\e");
+                dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
               break;
@@ -273,7 +273,7 @@ int main(int argc, char **argv)
               if (modem.achan[0].baud != 100 && (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD)) {
                 text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
-	        dw_printf ("\e[0m\e\n\e[0J\e");
+                dw_printf ("\e[0m\e\n\e[0J\e");
                 exit (EXIT_FAILURE);
               }
 
@@ -581,7 +581,7 @@ int main(int argc, char **argv)
             input_fp = fopen(argv[optind], "r");
             if (input_fp == NULL) {
               text_color_set(DW_COLOR_ERROR); 
- 	      dw_printf ("Can't open %s for read.\n", argv[optind]);
+              dw_printf ("Can't open %s for read.\n", argv[optind]);
               dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
