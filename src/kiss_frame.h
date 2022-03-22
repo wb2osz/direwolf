@@ -66,7 +66,7 @@ typedef struct kiss_frame_s {
 
 
 // This is used only for TCPKISS but it put in kissnet.h,
-// there would be a circular dependecy between the two header files.
+// there would be a circular dependency between the two header files.
 // Each KISS TCP port has its own status block.
 
 struct kissport_status_s {

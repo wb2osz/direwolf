@@ -241,7 +241,7 @@ void dns_sd_announce (struct misc_config_s *mc)
         /* Allocate a new client */
         client = avahi_client_new(avahi_simple_poll_get(simple_poll), 0, client_callback, NULL, &error);
 
-        /* Check wether creating the client object succeeded */
+        /* Check whether creating the client object succeeded */
         if (!client) {
             text_color_set(DW_COLOR_ERROR);
             dw_printf(PRINT_PREFIX "Failed to create Avahi client: %s\n", avahi_strerror(error));
