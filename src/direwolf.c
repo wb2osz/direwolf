@@ -1520,7 +1520,7 @@ static void usage (char **argv)
   
 #if __WIN32__
 	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
-	/* I don't know if win32 supports ANSI colour sequences. */
+	// I don't know if win32 supports ANSI colour sequences.
 	dw_printf ("\e[0m\e\n\e[0J\e");
 #else
 	// TODO: Could vary by platform and build options.
