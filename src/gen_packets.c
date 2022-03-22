@@ -718,7 +718,7 @@ static void usage (char **argv)
 	dw_printf ("\n");
         dw_printf ("    Read message from stdin and put quarter volume sound into the file x.wav.\n");
 
-        dw_printf ("\e[0m\e\n\e[0J\e");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_FAILURE);
 }
 
