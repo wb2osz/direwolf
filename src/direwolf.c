@@ -444,6 +444,7 @@ int main (int argc, char *argv[])
             if (B_opt < MIN_BAUD || B_opt > MAX_BAUD) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Use a more reasonable data baud rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+              dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             break;
@@ -475,6 +476,7 @@ int main (int argc, char *argv[])
             if (D_opt < 1 || D_opt > 8) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Crazy value for -D. \n");
+              dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             break;
@@ -485,6 +487,7 @@ int main (int argc, char *argv[])
             if (U_opt < 1 || U_opt > 4) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Crazy value for -U. \n");
+              dw_printf ("\e[0m\e\n\e[0J\e");
               exit (EXIT_FAILURE);
             }
             break;
@@ -597,6 +600,7 @@ int main (int argc, char *argv[])
 			0xc2, 0xb0,
 			0xc3, 0xbc, 0xc3, 0x9f);
 
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (0);
 	    break;
 
@@ -615,6 +619,7 @@ int main (int argc, char *argv[])
 
 	    symbols_init ();
 	    symbols_list ();
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (0);
 	    break;
 
@@ -831,6 +836,7 @@ int main (int argc, char *argv[])
 	if (strlen(l_opt_logdir) > 0 && strlen(L_opt_logfile) > 0) {
           text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Logging options -l and -L can't be used together.  Pick one or the other.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit(1);
 	}
 
@@ -870,6 +876,7 @@ int main (int argc, char *argv[])
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Pointless to continue without audio device.\n");
 	  SLEEP_SEC(5);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -926,6 +933,7 @@ int main (int argc, char *argv[])
 
 	  }
 	  ptt_set (OCTYPE_PTT, chan, 0);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (0);
 	}
 
@@ -977,6 +985,7 @@ int main (int argc, char *argv[])
 	recv_init (&audio_config);
 	recv_process ();
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 }
 
@@ -1412,7 +1421,7 @@ static BOOL cleanup_win (int ctrltype)
 {
 	if (ctrltype == CTRL_C_EVENT || ctrltype == CTRL_CLOSE_EVENT) {
 	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("\nQRT\n");
+	  dw_printf ("\nQRT\e[0m\e\n\e[0J\e");
 	  log_term ();
 	  ptt_term ();
 	  waypoint_term ();
@@ -1429,7 +1438,7 @@ static BOOL cleanup_win (int ctrltype)
 static void cleanup_linux (int x)
 {
 	text_color_set(DW_COLOR_INFO);
-	dw_printf ("\nQRT\n");
+	dw_printf ("\nQRT\e[0m\e\n\e[0J\e");
 	log_term ();
 	ptt_term ();
 	dwgps_term ();
@@ -1511,14 +1520,18 @@ static void usage (char **argv)
   
 #if __WIN32__
 	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
+	// I don't know if win32 supports ANSI colour sequences.
+	dw_printf ("\e[0m\e\n\e[0J\e");
 #else
 	// TODO: Could vary by platform and build options.
 	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_FAILURE);
 }
 
 
 
 /* end direwolf.c */
+

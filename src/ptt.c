@@ -257,6 +257,7 @@ static void get_access_to_gpio (const char *path)
 	  dw_printf ("Can't get properties of %s.\n", path);
 	  dw_printf ("This system is not configured with the GPIO user interface.\n");
 	  dw_printf ("Use a different method for PTT control.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -376,6 +377,7 @@ static void get_access_to_gpio (const char *path)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("This system is not configured with the GPIO user interface.\n");
 	  dw_printf ("Use a different method for PTT control.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -390,6 +392,7 @@ static void get_access_to_gpio (const char *path)
 	  dw_printf (" 3. Configure your user id for sudo without a password.\n");
 	  dw_printf ("\n");
 	  dw_printf ("Read the documentation and try -doo command line option for debugging details.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -452,6 +455,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	  // Not expected.  Above should have obtained permission or exited.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Permissions do not allow access to GPIO.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -464,6 +468,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error writing \"%s\" to %s, errno=%d\n", stemp, gpio_export_path, e);
 	    dw_printf ("%s\n", strerror(e));
+	    dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (1);
 	  }
 	}
@@ -574,6 +579,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR! Could not find Path for gpio number %d.n", gpio_num);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -590,6 +596,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Error opening %s\n", stemp);
 	  dw_printf ("%s\n", strerror(e));
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -610,6 +617,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Error writing initial state to %s\n", stemp);
 	  dw_printf ("%s\n", strerror(e));
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 	close (fd);

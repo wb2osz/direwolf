@@ -115,6 +115,7 @@ int main (int argc, char *argv[])
 	  usage();
 	}
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (0);
 }
 
@@ -141,5 +142,6 @@ static void usage (void)
 	fprintf (stderr, "\tutm2ll 19T 306130 4726010\n");
 	fprintf (stderr, "\tutm2ll 19TCH06132600\n");
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (1);
 }

@@ -256,6 +256,7 @@ void multi_modem_process_sample (int chan, int audio_sample)
 									save_audio_config_p->achan[chan].num_subchan, MAX_SUBCHANS,
 									save_audio_config_p->achan[chan].num_slicers, MAX_SLICERS);
 	  dw_printf ("Please report this message and include a copy of your configuration file.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 

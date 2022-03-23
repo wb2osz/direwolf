@@ -837,6 +837,7 @@ static void * connnect_thread (void *arg)
 	  }
 	}
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit(0);	// Unreachable but stops compiler from complaining
 			// about function not returning a value.
 } /* end connnect_thread */

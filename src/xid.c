@@ -828,6 +828,7 @@ int main (int argc, char *argv[]) {
 	text_color_set (DW_COLOR_REC);
 	dw_printf ("XID test:  Success.\n");	
 	
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (0);
 	
 }

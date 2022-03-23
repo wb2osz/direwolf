@@ -94,6 +94,7 @@ int main (int argc, char *argv[])
 	      }
 	      else {
 	        fprintf (stderr, "Can't open %s for read.\n", argv[n]);
+	        printf ("\e[0m\e\n\e[0J\e");
 	        exit (1);
 	      }
 	    }
@@ -102,6 +103,7 @@ int main (int argc, char *argv[])
 	
 	if (num_things == 0) {
 	  fprintf (stderr, "Nothing to process.\n");
+	  printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -145,6 +147,7 @@ int main (int argc, char *argv[])
  *  GPX file tail.
  */
 	printf ("</gpx>\n");
+	printf ("\e[0m\e\n\e[0J\e");
 
 	exit (0);
 }

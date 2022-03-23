@@ -993,6 +993,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid combination of options.  Exiting.\n");
 	      // Would probably work but haven't thought about it or tested yet.
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (1);
 	    }
 	    else {

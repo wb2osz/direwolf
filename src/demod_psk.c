@@ -446,6 +446,7 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -455,6 +456,7 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -464,6 +466,7 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	  dw_printf ("Decrease the audio sample rate or increase the baud rate or\n");
 	  dw_printf ("recompile the application with MAX_FILTER_SIZE larger than %d.\n",
 							MAX_FILTER_SIZE);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 

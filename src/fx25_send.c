@@ -64,6 +64,7 @@ int main ()
 	for (int i = 100 + CTAG_MIN; i <= 100 + CTAG_MAX; i++) {
 	  fx25_send_frame (0, preload, (int)sizeof(preload)-3, i);
 	}
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit(EXIT_SUCCESS);
 } // end main
 #endif

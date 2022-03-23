@@ -314,6 +314,7 @@ int main (int argc, char *argv[])
 	      if (decimate < 1 || decimate > 8) {
 		text_color_set(DW_COLOR_ERROR);
 		dw_printf ("Unreasonable value for -D.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
 		exit (EXIT_FAILURE);
 	      }
 	      dw_printf ("Divide audio sample rate by %d\n", decimate);
@@ -331,6 +332,7 @@ int main (int argc, char *argv[])
 	      if (upsample < 1 || upsample > 4) {
 		text_color_set(DW_COLOR_ERROR);
 		dw_printf ("Unreasonable value for -U.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
 		exit (EXIT_FAILURE);
 	      }
 	      dw_printf ("Multiply audio sample rate by %d\n", upsample);
@@ -344,6 +346,7 @@ int main (int argc, char *argv[])
 	      if (my_audio_config.achan[0].fix_bits < RETRY_NONE || my_audio_config.achan[0].fix_bits >= RETRY_MAX) {
 		text_color_set(DW_COLOR_ERROR);
 		dw_printf ("Invalid Fix Bits level.\n");
+		dw_printf ("\e[0m\e\n\e[0J\e");
 		exit (EXIT_FAILURE);
 	      }
 	      break;	
@@ -424,6 +427,7 @@ int main (int argc, char *argv[])
         if (my_audio_config.achan[0].baud < MIN_BAUD || my_audio_config.achan[0].baud > MAX_BAUD) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+          dw_printf ("\e[0m\e\n\e[0J\e");
           exit (EXIT_FAILURE);
         }
 
@@ -547,6 +551,7 @@ int main (int argc, char *argv[])
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf ("Couldn't open file for read: %s\n", argv[optind]);
 	  //perror ("more info?");
+          dw_printf ("\e[0m\e\n\e[0J\e");
           exit (EXIT_FAILURE);
         }
 
@@ -561,6 +566,7 @@ int main (int argc, char *argv[])
 	if (strncmp(header.riff, "RIFF", 4) != 0 || strncmp(header.wave, "WAVE", 4) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf ("This is not a .WAV format file.\n");
+          dw_printf ("\e[0m\e\n\e[0J\e");
           exit (EXIT_FAILURE);
 	}
 
@@ -574,11 +580,13 @@ int main (int argc, char *argv[])
 	if (strncmp(chunk.id, "fmt ", 4) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf ("WAV file error: Found \"%4.4s\" where \"fmt \" was expected.\n", chunk.id);
+          dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit(EXIT_FAILURE);
 	}
 	if (chunk.datasize != 16 && chunk.datasize != 18) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf ("WAV file error: Need fmt chunk datasize of 16 or 18.  Found %d.\n", chunk.datasize);
+          dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit(EXIT_FAILURE);
 	}
 
@@ -589,24 +597,28 @@ int main (int argc, char *argv[])
 	if (strncmp(wav_data.data, "data", 4) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf ("WAV file error: Found \"%4.4s\" where \"data\" was expected.\n", wav_data.data);
+          dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit(EXIT_FAILURE);
 	}
 
 	if (format.wformattag != 1) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Sorry, I only understand audio format 1 (PCM).  This file has %d.\n", format.wformattag);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
 	if (format.nchannels != 1 && format.nchannels != 2) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Sorry, I only understand 1 or 2 channels.  This file has %d.\n", format.nchannels);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
 	if (format.wbitspersample != 8 && format.wbitspersample != 16) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Sorry, I only understand 8 or 16 bits per sample.  This file has %d.\n", format.wbitspersample);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
@@ -709,14 +721,17 @@ int main (int argc, char *argv[])
 	if (error_if_less_than != -1 && packets_decoded_total < error_if_less_than) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n * * * TEST FAILED: number decoded is less than %d * * * \n", error_if_less_than);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 	if (error_if_greater_than != -1 && packets_decoded_total > error_if_greater_than) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\n * * * TEST FAILED: number decoded is greater than %d * * * \n", error_if_greater_than);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 }
 
@@ -1008,6 +1023,7 @@ static void usage (void) {
 	dw_printf ("              Try  different combinations of options to compare decoding\n");
 	dw_printf ("              performance.\n");
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (1);
 }
 

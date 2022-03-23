@@ -56,6 +56,7 @@ static void usage()
 	      dw_printf ("        mycall    is required because that is the callsign for  \n");
 	      dw_printf ("                  which the TNC will accept connections. \n");
 	      dw_printf (" \n");
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 }
 
@@ -192,6 +193,7 @@ int main (int argc, char *argv[])
 	if (agwlib_init (tnc_hostname, tnc_port, agwlib_G_ask_port_information) != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Could not attach to network TNC %s:%s.\n", tnc_hostname, tnc_port);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 

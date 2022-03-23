@@ -76,6 +76,7 @@ int main (int argc, char *argv[])
 	if (tnc == MYFDERROR) {
 	  text_color_set (DW_COLOR_ERROR);
           dw_printf ("Can't open serial port to KISS TNC.\n");
+          dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);	// defined in stdlib.h
   	}
 
@@ -105,6 +106,7 @@ int main (int argc, char *argv[])
 	  else if (fix < 0) {
 	    text_color_set (DW_COLOR_ERROR);
             dw_printf ("Can't communicate with GPS receiver.\n");
+            dw_printf ("\e[0m\e\n\e[0J\e");
 	    exit (EXIT_FAILURE);
 	  }
 	  else  {
@@ -120,6 +122,7 @@ int main (int argc, char *argv[])
 	serial_port_write (tnc, "\xc0\xff\xc0", 3);
 
 	SLEEP_MS(100);
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 }
 
@@ -177,6 +180,7 @@ static void walk96 (int fix, double lat, double lon, float knots, float course, 
 	if (pp == NULL) {
 	  text_color_set (DW_COLOR_ERROR);
           dw_printf ("Unexpected error in ax25_from_text.  Quitting.\n");
+          dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);	// defined in stdlib.h
 	}
 

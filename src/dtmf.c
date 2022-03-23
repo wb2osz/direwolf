@@ -448,12 +448,14 @@ static void push_button (int chan, char button, int ms)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\n * Time-out failed, otherwise OK *\n");
 	      dw_printf ("\"%s\"\n", result);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\n *** TEST FAILED ***\n");
 	      dw_printf ("\"%s\"\n", result);
+	      dw_printf ("\e[0m\e\n\e[0J\e");
 	      exit (EXIT_FAILURE);
 	    }
 	    break;
@@ -584,6 +586,7 @@ int main ()
 
 	push_button (c,  '?', 0);
 
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 
 }  /* end main */

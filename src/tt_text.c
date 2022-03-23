@@ -1600,6 +1600,7 @@ int main (int argc, char *argv[])
 	if (argc < 2) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Supply text string on command line.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -1667,6 +1668,7 @@ int main (int argc, char *argv[])
 	if (argc < 2) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("Supply button sequence on command line.\n");
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (1);
 	}
 
@@ -1812,11 +1814,13 @@ int main (int argc, char *argv[])
 
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("\nERROR: %d tests failed.\n", error_count);
+	  dw_printf ("\e[0m\e\n\e[0J\e");
 	  exit (EXIT_FAILURE);
 	}
 
 	text_color_set (DW_COLOR_REC);
 	dw_printf ("\nSUCCESS!  All tests passed.\n");
+	dw_printf ("\e[0m\e\n\e[0J\e");
 	exit (EXIT_SUCCESS);
 
 
