@@ -485,16 +485,23 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 // Special hack added for ATGP to behave like some combination of options in some old TNC
 // so the via path does not continue to grow and exceed the 8 available positions.
+// The strange thing about this is that the used up digipeater is left there but
+// removed by the next digipeater.
 
 	  if (strlen(atgp) > 0 && strncasecmp(repeater, atgp, strlen(atgp)) == 0) {
 
 	    if (ssid >= 1 && ssid <= 7) {
 	      packet_t result;
 
-	      // Usual routine for digipeater.
-
 	      result = ax25_dup (pp);
 	      assert (result != NULL);
+
+	      // First, remove any already used digipeaters.
+
+	      while (ax25_get_num_addr(result) >= 3 && ax25_get_h(result,AX25_REPEATER_1) == 1) {
+	        ax25_remove_addr (result, AX25_REPEATER_1);
+	        r--;
+	      }
 
 	      ssid = ssid - 1;
 	      ax25_set_ssid(result, r, ssid);	// could be zero.
@@ -502,13 +509,8 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	        ax25_set_h (result, r);
 	      }
 
-	      // Now remove all used digi addresses, insert own, and mark it used.
+	      // Insert own call at beginning and mark it used.
 
-///////////////////////////////////////////// LOOK HERE/////////////////////////////////////////////
-
-	      while (ax25_get_num_addr(result) >= 3 && ax25_get_h(result,AX25_REPEATER_1) == 1) {
-	        ax25_remove_addr (result, AX25_REPEATER_1);
-	      }
 	      ax25_insert_addr (result, AX25_REPEATER_1, mycall_xmit);
 	      ax25_set_h (result, AX25_REPEATER_1);
 	      return (result);
@@ -622,7 +624,7 @@ void digi_regen (int from_chan, packet_t pp)
 
 #if DIGITEST
 
-static char mycall[] = "WB2OSZ-9";
+static char mycall[12];
 
 static regex_t alias_re;     
 
@@ -733,6 +735,7 @@ int main (int argc, char *argv[])
 	int e;
 	failed = 0;
 	char message[256];
+	strlcpy(mycall, "WB2OSZ-9", sizeof(mycall));
 
 	dedupe_init (4);
 
@@ -943,17 +946,46 @@ int main (int argc, char *argv[])
 		"W1ABC>TEST51,WB2OSZ-9*,HOP7-6,HOP7-7:stuff1");
 
 	test (	"W1ABC>TEST52,ABCD*,HOP7-1,HOP7-7:stuff2",
-		"W1ABC>TEST52,WB2OSZ-9*,HOP7-7:stuff2");
+		"W1ABC>TEST52,WB2OSZ-9,HOP7*,HOP7-7:stuff2");  // Used up address remains.
 
-	test (	"W1ABC>TEST52,HOP7*,HOP7-7:stuff3",
-		"W1ABC>TEST52,WB2OSZ-9*,HOP7-6:stuff3");
+	test (	"W1ABC>TEST53,HOP7*,HOP7-7:stuff3",
+		"W1ABC>TEST53,WB2OSZ-9*,HOP7-6:stuff3");	// But it gets removed here.
 
-	test (	"W1ABC>TEST52,HOP7*,HOP7-1:stuff4",
-		"W1ABC>TEST52,WB2OSZ-9*:stuff4");
+	test (	"W1ABC>TEST54,HOP7*,HOP7-1:stuff4",
+		"W1ABC>TEST54,WB2OSZ-9,HOP7*:stuff4");		// Remains again here.
 
-	test (	"W1ABC>TEST52,HOP7,HOP7*:stuff5",
+	test (	"W1ABC>TEST55,HOP7,HOP7*:stuff5",
 		"");
 
+// Examples given for desired result.
+
+	strlcpy (mycall, "CLNGMN-1", sizeof(mycall));
+	test (	"W1ABC>TEST60,HOP7-7,HOP7-7:",
+		"W1ABC>TEST60,CLNGMN-1*,HOP7-6,HOP7-7:");
+	test (	"W1ABC>TEST61,ROAN-3*,HOP7-6,HOP7-7:",
+		"W1ABC>TEST61,CLNGMN-1*,HOP7-5,HOP7-7:");
+
+	strlcpy (mycall, "GDHILL-8", sizeof(mycall));
+	test (	"W1ABC>TEST62,MDMTNS-7*,HOP7-1,HOP7-7:",
+		"W1ABC>TEST62,GDHILL-8,HOP7*,HOP7-7:");
+	test (	"W1ABC>TEST63,CAMLBK-9*,HOP7-1,HOP7-7:",
+		"W1ABC>TEST63,GDHILL-8,HOP7*,HOP7-7:");
+
+	strlcpy (mycall, "MDMTNS-7", sizeof(mycall));
+	test (	"W1ABC>TEST64,GDHILL-8*,HOP7*,HOP7-7:",
+		"W1ABC>TEST64,MDMTNS-7*,HOP7-6:");
+
+	strlcpy (mycall, "CAMLBK-9", sizeof(mycall));
+	test (	"W1ABC>TEST65,GDHILL-8,HOP7*,HOP7-7:",
+		"W1ABC>TEST65,CAMLBK-9*,HOP7-6:");
+
+	strlcpy (mycall, "KATHDN-15", sizeof(mycall));
+	test (	"W1ABC>TEST66,MTWASH-14*,HOP7-1:",
+		"W1ABC>TEST66,KATHDN-15,HOP7*:");
+
+	strlcpy (mycall, "SPRNGR-1", sizeof(mycall));
+	test (	"W1ABC>TEST67,CLNGMN-1*,HOP7-1:",
+		"W1ABC>TEST67,SPRNGR-1,HOP7*:");
 
 
 	if (failed == 0) {
