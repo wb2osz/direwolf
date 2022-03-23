@@ -213,7 +213,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	  // This must not be strict because the addresses in third party payload doesn't
 	  // need to adhere to the AX.25 address format (i.e. 6 upper case alphanumeric.)
 	  // SSID can be 2 alphanumeric characters.
-	  // Addresses can include lower case, e.g. q contruct.
+	  // Addresses can include lower case, e.g. q construct.
 
 	  // e.g.  WR2X-2>APRS,WA1PLE-13*:}
 	  //		K1BOS-B>APOSB,TCPIP,WR2X-2*:@122015z4221.42ND07111.93W&/A=000000SharkRF openSPOT3 MMDVM446.025 MA/SW
@@ -1609,7 +1609,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char colon;			/* : */
 	  char message[256-1-9-1];	/* Officially up to 67 characters for message text. */
 					/* Relaxing seemingly arbitrary restriction here; it doesn't need to fit on a punched card. */
-					/* Wouldn't surprize me if others did not pay attention to the limit. */
+					/* Wouldn't surprise me if others did not pay attention to the limit. */
 					/* Optional { followed by 1-5 alphanumeric characters for message number */
 
 					/* If the first character is '?' it is a Directed Station Query. */

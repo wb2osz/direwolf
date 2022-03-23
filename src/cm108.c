@@ -304,7 +304,7 @@ static void usage(void)
 	dw_printf ("which ones can be used for GPIO PTT.\n");
 #endif
 	dw_printf ("\n");
-	dw_printf ("Specify the HID device path to test the PTT fuction.\n");
+	dw_printf ("Specify the HID device path to test the PTT function.\n");
 	dw_printf ("Its state should change once per second.\n");
 #if __WIN32__
 	dw_printf ("You might need to quote the path depending on the command processor.\n");
@@ -854,7 +854,7 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
  *
  * Future:	For our initial implementation we are making the simplifying
  *		restriction of using only one GPIO pin per device and limit
- *		configuratin to PTT only.
+ *		configuration to PTT only.
  *		Longer term, we might want to have DCD, and maybe other
  *		controls thru the same chip.
  *		In this case, we would need to retain bit masks for each

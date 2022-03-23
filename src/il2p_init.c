@@ -157,7 +157,7 @@ void il2p_encode_rs (unsigned char *tx_data, int data_size, int num_parity, unsi
  *				data_size bytes.
  *
  * Returns:	-1 for unrecoverable.
- *		>= 0 for sucess.  Number of symbols corrected.
+ *		>= 0 for success.  Number of symbols corrected.
  *
  *--------------------------------------------------------------*/
 

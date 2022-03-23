@@ -122,7 +122,7 @@ static int get_field (unsigned char *hdr, int bit_num, int lsb_index, int width)
 
 
 // AX.25 'I' and 'UI' frames have a protocol ID which determines how the
-// information part should be interpretted.
+// information part should be interpreted.
 // Here we squeeze the most common cases down to 4 bits.
 // Return -1 if translation is not possible.  Fall back to type 0 header in this case.
 
@@ -299,7 +299,7 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 
 	        if (frame_type == frame_type_U_UI) {
 	            SET_UI(hdr, 1);	// I guess this is how we distinguish 'I' and 'UI'
-					// on the receving end.
+					// on the receiving end.
 	            int pid = encode_pid(pp);
 	            if (pid < 0) return (-1);
 	            SET_PID(hdr, pid);
@@ -320,7 +320,7 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 		//	1	1	1	Not valid (earlier protocol version)
 		//
 		// APRS does not mention how to set these bits and all 4 combinations
-		// are seen in the wild.  Apparently these are ignord on receive and no
+		// are seen in the wild.  Apparently these are ignored on receive and no
 		// one cares.  Here we copy from the C bit in the destination address.
 		// It should be noted that the case of both C bits being the same can't
 		// be represented so the il2p encode/decode bit not produce exactly the

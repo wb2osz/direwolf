@@ -133,7 +133,7 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
  *		upsample	- Factor to upsample the incoming stream.
  *				  After a lot of experimentation, I discovered that
  *				  it works better if the data is upsampled.
- *				  This reduces the jitter for PLL syncronization.
+ *				  This reduces the jitter for PLL synchronization.
  *
  *		baud		- Data rate in bits per second.
  *
@@ -244,7 +244,7 @@ void demod_9600_init (enum modem_t modem_type, int original_sample_rate, int ups
 // Here is the general idea.
 //
 // Suppose the input samples are 1 2 3 4 5 6 7 8 9 ...
-// Filter coefficents are a b c d e f g h i ...
+// Filter coefficients are a b c d e f g h i ...
 //
 // With original sampling rate, the filtering would involve multiplying and adding:
 //
