@@ -731,6 +731,26 @@ void decode_aprs_print (decode_aprs_t *A) {
  * To be part of a valid UTF-8 sequence, it would need to be followed by 10xxxxxx.
  */
 
+// For values 00-7F, ASCII, Unicode, and ISO Latin-1 are all the same.
+// ISO Latin-1 adds 80-FF range with a few common symbols, such as degree, and
+// letters, with diacritical marks, for many European languages.
+// Unicode range 80-FF is called "Latin-1 Supplement."  Exactly the same as ISO Latin-1.
+// For UTF-8, an additional byte is inserted.
+//	Unicode		UTF-8
+//	-------		-----
+//	8x		C2 8x		Insert C2, keep original
+//	9x		C2 9x		"
+//	Ax		C2 Ax		"
+//	Bx		C2 Bx		"
+//	Cx		C3 8x		Insert C3, subtract 40 from original
+//	Dx		C3 9x		"
+//	Ex		C3 Ax		"
+//	Fx		C3 Bx		"
+//
+// Can we use this knowledge to provide guidance on other ISO Latin-1 characters besides degree?
+// Should we?
+// Reference:   https://www.fileformat.info/info/unicode/utf8test.htm
+
 	  if ( ! A->g_quiet) {
 
 	    for (j=0; j<n; j++) {
@@ -3865,6 +3885,9 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	  if (pdext[6] >= '0' && pdext[6] <= '8') {
 	    strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
 	  }
+
+// TODO: look for another 0-9 A-Z followed by a /
+// http://www.aprs.org/aprs12/probes.txt
 
 	  process_comment (A, pdext+7, -1);
 	  return 1;
