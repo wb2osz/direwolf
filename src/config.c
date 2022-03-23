@@ -1694,6 +1694,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_INFO);
               dw_printf ("Line %d: Using a FIX_BITS value greater than %d is not recommended for normal operation.\n",
 			line, DEFAULT_FIX_BITS);
+              dw_printf ("FIX_BITS > 1 was an interesting experiment but turned out to be a bad idea.\n");
+              dw_printf ("Don't be surprised if it takes 100%% CPU, direwolf can't keep up with the audio stream,\n");
+              dw_printf ("and you see messages like \"Audio input device 0 error code -32: Broken pipe\"\n");
 	    }
 
 	    t = split(NULL,0);
@@ -5525,6 +5528,44 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  strlcpy (keyword, t, sizeof(keyword));
 	  strlcpy (value, e+1, sizeof(value));
 
+// QUICK TEMP EXPERIMENT, maybe permanent new feature.
+// Recognize \xnn as hexadecimal value.  Handy for UTF-8 in comment.
+// Maybe recognize the <0xnn> form that we print.
+//
+// # Convert between languages here:  https://translate.google.com/  then
+// # Convert to UTF-8 bytes here: https://codebeautify.org/utf8-converter
+//
+// pbeacon delay=0:05 every=0:30 sendto=R0 lat=12.5N long=69.97W  comment="\xe3\x82\xa2\xe3\x83\x9e\xe3\x83\x81\xe3\x83\xa5\xe3\x82\xa2\xe7\x84\xa1\xe7\xb7\x9a   \xce\xa1\xce\xb1\xce\xb4\xce\xb9\xce\xbf\xce\xb5\xcf\x81\xce\xb1\xcf\x83\xce\xb9\xcf\x84\xce\xb5\xcf\x87\xce\xbd\xce\xb9\xcf\x83\xce\xbc\xcf\x8c\xcf\x82"
+
+	  char temp[256];
+	  int tlen = 0;
+
+	  for (char *p = value; *p != '\0'; ) {
+	    if (p[0] == '\\' && p[1] == 'x' && strlen(p) >= 4 && isxdigit(p[2]) && isxdigit(p[3])) {
+	      int n = 0;
+	      for (int i = 2; i < 4; i++) {
+	        n = n * 16;
+	        if (islower(p[i])) {
+	          n += p[i] - 'a' + 10;
+	        }
+	        else if (isupper(p[i])) {
+	          n += p[i] - 'A' + 10;
+	        }
+	        else {		// must be digit due to isxdigit test above.
+	          n += p[i] - '0';
+	        }
+	      }
+	      temp[tlen++] = n;
+	      p += 4;
+	    }
+	    else {
+	      temp[tlen++] = *p++;
+	    }
+	  }
+	  temp[tlen] = '\0';
+	  strlcpy (value, temp, sizeof(value));
+
+// end
 	  if (strcasecmp(keyword, "DELAY") == 0) {
 	    b->delay = parse_interval(value,line);
 	  }
