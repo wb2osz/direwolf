@@ -193,9 +193,9 @@ static const struct {
 	/*  ;  27  */	{ "NS", "Park/Picnic area" },
 	/*  <  28  */	{ "NT", "ADVISORY (one WX flag)" },
 	/*  =  29  */	{ "NU", "APRStt Touchtone (DTMF users)" },
-	/*  >  30  */	{ "NV", "OVERLAYED CAR" },
+	/*  >  30  */	{ "NV", "OVERLAID CAR" },
 	/*  ?  31  */	{ "NW", "INFO Kiosk  (Blue box with ?)" },
-	/*  @  32  */	{ "NX", "HURICANE/Trop-Storm" },
+	/*  @  32  */	{ "NX", "HURRICANE/Trop-Storm" },
 	/*  A  33  */	{ "AA", "overlayBOX DTMF & RFID & XO" },
 	/*  B  34  */	{ "AB", "Blwng Snow (& future codes)" },
 	/*  C  35  */	{ "AC", "Coast Guard" },
@@ -205,7 +205,7 @@ static const struct {
 	/*  G  39  */	{ "AG", "Snow Shwr (& future ovrlys)" },
 	/*  H  40  */	{ "AH", "Haze (& Overlay Hazards)" },
 	/*  I  41  */	{ "AI", "Rain Shower" },
-	/*  J  42  */	{ "AJ", "Lightening (& future ovrlys)" },
+	/*  J  42  */	{ "AJ", "Lightning (& future ovrlys)" },
 	/*  K  43  */	{ "AK", "Kenwood HT (W)" },
 	/*  L  44  */	{ "AL", "Lighthouse" },
 	/*  M  45  */	{ "AM", "MARS (A=Army,N=Navy,F=AF)" },
@@ -248,12 +248,12 @@ static const struct {
 	/*  r  82  */	{ "SR", "Restrooms" },
 	/*  s  83  */	{ "SS", "OVERLAY SHIP/boat (top view)" },
 	/*  t  84  */	{ "ST", "Tornado" },
-	/*  u  85  */	{ "SU", "OVERLAYED TRUCK" },
-	/*  v  86  */	{ "SV", "OVERLAYED Van" },
+	/*  u  85  */	{ "SU", "OVERLAID TRUCK" },
+	/*  v  86  */	{ "SV", "OVERLAID Van" },
 	/*  w  87  */	{ "SW", "Flooding" },
 	/*  x  88  */	{ "SX", "Wreck or Obstruction ->X<-" },
 	/*  y  89  */	{ "SY", "Skywarn" },
-	/*  z  90  */	{ "SZ", "OVERLAYED Shelter" },
+	/*  z  90  */	{ "SZ", "OVERLAID Shelter" },
 	/*  {  91  */	{ "Q1", "Fog (& future ovrly codes)" },
 	/*  |  92  */	{ "Q2", "TNC Stream Switch" },
 	/*  }  93  */	{ "Q3", "" },
@@ -298,7 +298,7 @@ static const char *search_locations[] = {
  * Description:	The primary and alternate symbol tables are constant
  *		so they are hardcoded.
  *		However the "new" sysmbols, which give new meanings to
- *		overlayed symbols, are always evolving.
+ *		OVERLAID symbols, are always evolving.
  *		For maximum flexibility, we will read the
  *		data file at run time rather than compiling it in.
  *
@@ -386,7 +386,7 @@ void symbols_init (void)
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Warning: Could not open 'symbols-new.txt'.\n");
-	  dw_printf ("The \"new\" overlayed character information will not be available.\n");
+	  dw_printf ("The \"new\" OVERLAID character information will not be available.\n");
 
 	  new_sym_size = 1;	
 	  new_sym_ptr = calloc(new_sym_size, sizeof(new_sym_t));  /* Don't try again. */
