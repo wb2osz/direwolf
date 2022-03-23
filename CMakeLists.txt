@@ -205,10 +205,16 @@ if (C_CLANG OR C_GCC)
   # I also took out -Wextra because it spews out so much noise a serious problem was not noticed.
   # It might go back in someday when I have more patience to clean up all the warnings.
   #
+
+  # TODO:
+  # Try error checking -fsanitize=bounds-strict -fsanitize=leak
+  # Requires libubsan and liblsan, respectively.
+
   ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   if(FREEBSD)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   else()
+    #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE -fsanitize=bounds-strict ${EXTRA_FLAGS}")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
   endif()
   #
