@@ -17,14 +17,24 @@ typedef struct bch bch_t;
 
 int init_bch(bch_t *bch, int m, int length, int t);
 
-void generate_bch(bch_t *bch, int *data, int *bb);
+void generate_bch(bch_t *bch, const int *data, int *bb);
 
-int apply_bch(bch_t *bch, int *recd);
+int apply_bch(const bch_t *bch, int *recd);
 
-void bytes_to_bits(int *bytes, int *bit_dest, int num_bits);
+void bytes_to_bits(const int *bytes, int *bit_dest, int num_bits);
 
-void bits_to_bytes(int *bits, int *byte_dest, int num_bits);
+void bits_to_bytes(const int *bits, int *byte_dest, int num_bits);
 
-void swap_format(int *bits, int cutoff, int num_bits);
+void swap_format(const int *bits, int *dest, int cutoff, int num_bits);
+
+int rotate_byte(int x);
+
+void rotate_bits(const int *in, int *out, int num_bits);
+
+void print_bytes(const char *msg, const int *bytes, int num_bytes);
+
+void print_bits(const char *msg, const int *bits, int num_bits);
+
+void invert_bits(const int *bits, int *dest, int num_bits);
 
 #endif

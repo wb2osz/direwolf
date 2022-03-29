@@ -67,7 +67,7 @@ void eotd_to_nmea (unsigned char *eotd, int eotd_len, char *nmea, int nmea_size)
 	strcat(nmea, ctime(&now));
 	for (int i = 0; i < eotd_len; i++) {
 		char temp[32];
-		snprintf(temp, sizeof(temp), "%d=%02x ", i, eotd[i]);
+		snprintf(temp, sizeof(temp), " %02x", eotd[i]);
 		strlcat(nmea, temp, nmea_size);
 	}
 }

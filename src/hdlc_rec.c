@@ -52,6 +52,8 @@
 
 //#define DEBUG3 1				/* monitor the data detect signal. */
 
+#undef EOTD_DEBUG
+
 
 
 /* 
@@ -427,9 +429,10 @@ a good modem here and providing a result when it is received.
  *
  ***********************************************************************************/
 
-#define PREAMBLE_AND_BARKER_CODE	0x55555712
+#define EOTD_PREAMBLE_AND_BARKER_CODE	0x55555712
+#define HOTD_PREAMBLE_AND_BARKER_CODE	0x558f1129
 #define EOTD_MAX_LEN			8
-#define DUMMY_BIT_HACK
+#undef DUMMY_BIT_HACK
 
 static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
@@ -441,7 +444,7 @@ static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_
 	H = &hdlc_state[chan][subchan][slice];
 
 #ifdef EOTD_DEBUG
-dw_printf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 #endif
 	  //dw_printf ("slice %d = %d\n", slice, raw);
 
@@ -452,9 +455,11 @@ dw_printf(stderr, "chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, 
 
 	int done = 0;
 
-	if (!H->eotd_gathering && H->eotd_acc == PREAMBLE_AND_BARKER_CODE) {
+	if (!H->eotd_gathering &&
+		(H->eotd_acc == EOTD_PREAMBLE_AND_BARKER_CODE ||
+		 H->eotd_acc == HOTD_PREAMBLE_AND_BARKER_CODE)) {
 #ifdef EOTD_DEBUG
-	  dw_printf ("Barker Code Found\n");
+	  dw_printf ("Barker Code Found %x\n", H->eotd_acc);
 #endif
 	  H->olen = 0;
 	  H->eotd_gathering = 1;
