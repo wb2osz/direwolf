@@ -23,20 +23,8 @@
  * File:	eotd.c
  *
  * Purpose:	Functions for processing received EOTD transmissions and
- *		converting to NMEA sentence representation.
+ *		converting to text format.
  *
- * References:	AIVDM/AIVDO protocol decoding by Eric S. Raymond
- *		https://gpsd.gitlab.io/gpsd/AIVDM.html
- *
- *		Sample recording with about 100 messages.  Test with "atest -B AIS xxx.wav"
- *		https://github.com/freerange/ais-on-sdr/wiki/example-data/long-beach-160-messages.wav
- *
- *		Useful on-line decoder for AIS NMEA sentences.
- *		https://www.aggsoft.com/ais-decoder.htm
- *
- * Future?	Add an interface to feed AIS data into aprs.fi.
- *		https://aprs.fi/page/ais_feeding
- *		
  *******************************************************************************/
 
 #include "direwolf.h"
@@ -53,21 +41,21 @@
 
 /*-------------------------------------------------------------------
  *
- * Convert EOTD binary block (from HDLC frame) to NMEA sentence. 
+ * Convert EOTD binary block (from HDLC frame) to text.
  *
  * In:	Pointer to EOTD binary block and number of bytes.
- * Out:	NMEA sentence.  Provide size to avoid string overflow.
+ * Out:	text.
  *
  *--------------------------------------------------------------------*/
 
-void eotd_to_nmea (unsigned char *eotd, int eotd_len, char *nmea, int nmea_size)
+void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 {
 	time_t now = time(NULL);
-	*nmea = '\0';
-	strcat(nmea, ctime(&now));
+	*text = '\0';
+	strcat(text, ctime(&now));
 	for (int i = 0; i < eotd_len; i++) {
 		char temp[32];
 		snprintf(temp, sizeof(temp), " %02x", eotd[i]);
-		strlcat(nmea, temp, nmea_size);
+		strlcat(text, temp, text_size);
 	}
 }

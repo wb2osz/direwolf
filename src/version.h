@@ -19,3 +19,4 @@
 
 #define USER_DEF_TYPE_AIS 'A'		// data type A for AIS NMEA sentence
 #define USER_DEF_TYPE_EAS 'E'		// data type E for EAS broadcasts
+#define USER_DEF_TYPE_EOTD 'T'		// data type T for 'T'rain broadcasts

@@ -432,7 +432,6 @@ a good modem here and providing a result when it is received.
 #define EOTD_PREAMBLE_AND_BARKER_CODE	0x55555712
 #define HOTD_PREAMBLE_AND_BARKER_CODE	0x558f1129
 #define EOTD_MAX_LEN			8
-#undef DUMMY_BIT_HACK
 
 static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
@@ -468,13 +467,6 @@ dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 	else if (H->eotd_gathering) {
 	  H->olen++;
 	
-#ifdef DUMMY_BIT_HACK
-	/* Hack to skip 'dummy' 64th bit */
-	  if (H->olen == 7 && H->frame_len == 7) {
-		H->eotd_acc <<= 1;
-		H->olen++;
-	  }
-#endif
 	  if (H->olen == 8) {
 	    H->olen = 0;
 	    char ch = H->eotd_acc & 0xff;
