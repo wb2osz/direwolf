@@ -114,7 +114,7 @@ struct hdlc_state_s {
 
 	int eas_fields_after_plus;	/* Number of "-" characters after the "+". */
 
-	uint32_t eotd_acc;		/* Accumulate last recent 32 bits for EOTD. */
+	uint64_t eotd_acc;		/* Accumulate last recent 32 bits for EOTD. */
 
 	int eotd_gathering;		/* Decoding in progress - valid frame. */
 };
@@ -429,9 +429,13 @@ a good modem here and providing a result when it is received.
  *
  ***********************************************************************************/
 
-#define EOTD_PREAMBLE_AND_BARKER_CODE	0x55555712
-#define HOTD_PREAMBLE_AND_BARKER_CODE	0x558f1129
-#define EOTD_MAX_LEN			8
+#define EOTD_MAX_BYTES			8
+
+#define EOTD_PREAMBLE_AND_BARKER_CODE	0x48eaaaaa00000000ULL
+#define EOTD_PREAMBLE_MASK		0xffffffff00000000ULL
+
+#define HOTD_PREAMBLE_AND_BARKER_CODE	0x9488f1aa00000000ULL
+#define HOTD_PREAMBLE_MASK		0xffffffff00000000ULL
 
 static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
@@ -447,40 +451,40 @@ dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 #endif
 	  //dw_printf ("slice %d = %d\n", slice, raw);
 
-// Accumulate most recent 32 bits in MSB-first order.
+// Accumulate most recent 32 bits in LSB-first order.
 
-	H->eotd_acc <<= 1;
-	H->eotd_acc |= raw;
+	H->eotd_acc >>= 1;
+	if (raw) {
+	  H->eotd_acc |= 0x8000000000000000UL;
+	}
 
 	int done = 0;
 
 	if (!H->eotd_gathering &&
-		(H->eotd_acc == EOTD_PREAMBLE_AND_BARKER_CODE ||
-		 H->eotd_acc == HOTD_PREAMBLE_AND_BARKER_CODE)) {
+		((H->eotd_acc & EOTD_PREAMBLE_MASK) == EOTD_PREAMBLE_AND_BARKER_CODE ||
+		 (H->eotd_acc & HOTD_PREAMBLE_MASK) == HOTD_PREAMBLE_AND_BARKER_CODE)) {
 #ifdef EOTD_DEBUG
-	  dw_printf ("Barker Code Found %x\n", H->eotd_acc);
+	  dw_printf ("Barker Code Found %llx\n", H->eotd_acc);
 #endif
 	  H->olen = 0;
 	  H->eotd_gathering = 1;
 	  H->frame_len = 0;
+	  H->eotd_acc = 0ULL;
 	}
 	else if (H->eotd_gathering) {
 	  H->olen++;
 	
-	  if (H->olen == 8) {
-	    H->olen = 0;
-	    char ch = H->eotd_acc & 0xff;
-	    H->frame_buf[H->frame_len++] = ch;
-	    H->frame_buf[H->frame_len] = '\0';
-	    //dw_printf ("frame_buf = %s\n", H->frame_buf);
-
-	    if (H->frame_len == EOTD_MAX_LEN) {		// FIXME: look for other places with max length
+	  if (H->olen == EOTD_MAX_BYTES * 8) {
+	      H->frame_len = EOTD_MAX_BYTES;
+	      for (int i = EOTD_MAX_BYTES -1; i >=0; i--) {
+		H->frame_buf[i] = H->eotd_acc & 0xff;
+		H->eotd_acc >>= 8;
+	      }
 	      done = 1;
 #ifdef EOTD_DEBUG
-for (int ii=0; ii < EOTD_MAX_LEN; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
+for (int ii=0; ii < EOTD_MAX_BYTES; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
 #endif
 	    }
-	  }
 	}
 
 	if (done) {
