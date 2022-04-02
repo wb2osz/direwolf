@@ -37,7 +37,12 @@
 #include <time.h>
 
 #include "textcolor.h"
+#include "eotd_defs.h"
 #include "eotd.h"
+
+#define EOTD_RAW
+#define EOTD_TIMESTAMP
+#define EOTD_APPEND_HEX
 
 /*-------------------------------------------------------------------
  *
@@ -48,14 +53,243 @@
  *
  *--------------------------------------------------------------------*/
 
+void add_comma(char *text, int text_size) {
+	strlcat(text, ",", text_size);
+}
+
+void get_chain(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	val = pkt & 0x03ULL;
+
+	strlcat(text, "chain=", text_size);
+
+	strlcat(text, val & 0x02 ? "FIRST+" : "NOT_FIRST+", text_size);
+	strlcat(text, val & 0x01 ? "LAST" : "NOT_LAST", text_size);
+}
+
+void get_dev_batt_stat(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 2;
+	val = pkt & 0x03ULL;
+
+	strlcat(text, "devbat=", text_size);
+
+	switch(val) {
+	  case 3:
+	    strlcat(text, "OK", text_size);
+	    break;
+	  case 2:
+	    strlcat(text, "WEAK", text_size);
+	    break;
+	  case 1:
+	    strlcat(text, "VERY_WEAK", text_size);
+	    break;
+	  case 0:
+	    strlcat(text, "NOT_MONITORED", text_size);
+	    break;
+	}
+}
+
+void get_msg_id_type(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 4;
+	val = pkt & 0x07ULL;
+
+	strlcat(text, "msgid=", text_size);
+
+	switch(val) {
+	  case 0:
+	    strlcat(text, "ONEWAY", text_size);
+	    break;
+
+	  default:
+	    sprintf(temp, "CUSTOM(%d)", val);
+	    strlcat(text, temp, text_size);
+	    break;
+	}
+}
+
+void get_unit_addr_code(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 7;
+	val = pkt & 0x1ffffULL;
+	strlcat(text, "unit_addr=", text_size);
+	sprintf(temp, "%d", val);
+	strlcat(text, temp, text_size);
+}
+
+void get_brake_pressure(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 24;
+	val = pkt & 0x7fULL;
+
+	strlcat(text, "brake_status=", text_size);
+
+	switch (val) {
+	  case 127:
+	    strlcat(text, "GO", text_size);
+	    break;
+
+	  case 126:
+	    strlcat(text, "NO-GO", text_size);
+	    break;
+
+	  default:
+	    if (val < 45) {
+		sprintf(temp, "NO-GO(%d psig)", val);
+	    } else {
+	    	sprintf(temp, "GO(%d psig)", val);
+	    }
+
+	    strlcat(text, temp, text_size);
+	    break;
+	}
+}
+
+void get_disc_bits(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 31;
+	val = pkt & 0xffULL;
+
+	strlcat(text, "disc_bits=", text_size);
+	sprintf(temp, "%02x", val);
+	strlcat(text, temp, text_size);
+}
+
+void get_valve_bit(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 39;
+	val = pkt & 0x01;
+
+	strlcat(text, "valve=", text_size);
+	strlcat(text, val == 0 ? "FAILED" : "OPERATIONAL", text_size); 
+}
+
+void get_confirm_bit(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 40;
+	val = pkt & 0x01;
+
+	strlcat(text, "confirm=", text_size);
+	strlcat(text, val == 0 ? "UPDATE" : "RESPONSE", text_size); 
+}
+
+void get_disc_bit1(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 41;
+	val = pkt & 0x01;
+
+	strlcat(text, "disc_bit_1=", text_size);
+	sprintf(temp, "%d", val);
+	strlcat(text, temp, text_size); 
+}
+
+void get_motion_bit(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 42;
+	val = pkt & 0x01;
+
+	strlcat(text, "motion=", text_size);
+	strlcat(text, val == 0 ? "STOPPED/NOT_MONITORED" : "IN_MOTION", text_size); 
+}
+
+void get_mkr_light_batt_bit(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 43;
+	val = pkt & 0x01;
+
+	strlcat(text, "light_batt=", text_size);
+	strlcat(text, val == 0 ? "OK/NOT_MONITORED" : "WEAK", text_size);
+}
+
+void get_mkr_light_bit(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 44;
+	val = pkt & 0x01;
+
+	strlcat(text, "light=", text_size);
+	strlcat(text, val == 0 ? "OFF/NOT_MONITORED" : "ON", text_size);
+}
+
 void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 {
-	time_t now = time(NULL);
+	assert (eotd_len == EOTD_LENGTH + 1);
+
+	uint64_t pkt = 0ULL;
+
+	for (int i = 0; i < EOTD_LENGTH; i++) {
+		pkt <<= 8;
+		pkt |= eotd[i];
+	}
+
 	*text = '\0';
-	strcat(text, ctime(&now));
-	for (int i = 0; i < eotd_len; i++) {
-		char temp[32];
-		snprintf(temp, sizeof(temp), " %02x", eotd[i]);
+#ifndef EOTD_RAW
+	char eotd_type = eotd[EOTD_LENGTH];
+
+	if (eotd_type == EOTD_TYPE_F2R) {
+		strlcat(text, "FRONT>REAR:", text_size);
+	} else {
+		strlcat(text, "REAR>FRONT:", text_size);
+	}
+		
+#ifdef EOTD_TIMESTAMP
+	time_t now = time(NULL);
+	strlcat(text, "timestamp=", text_size);
+	strlcat(text, ctime(&now), text_size);
+	text[strlen(text) -1] = ','; // zap lf
+#endif
+	get_chain(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_dev_batt_stat(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_msg_id_type(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_unit_addr_code(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_brake_pressure(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_disc_bits(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_valve_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_confirm_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_disc_bit1(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_motion_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_mkr_light_batt_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_mkr_light_bit(pkt, text, text_size);
+#ifdef EOTD_APPEND_HEX
+	char hex[64];
+	add_comma(text, text_size);
+	snprintf(hex, sizeof(hex), "%llx", pkt);
+	strlcat(text, "hex=", text_size);
+	strlcat(text, hex, text_size);
+#endif
+#else
+	char temp[8];
+	for (int i = 0; i < 8; i++) {
+		sprintf(temp, " %02x", eotd[i]);
 		strlcat(text, temp, text_size);
 	}
+#endif
 }

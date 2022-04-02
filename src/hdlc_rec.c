@@ -46,6 +46,7 @@
 #include "demod_9600.h"		/* for descramble() */
 #include "ptt.h"
 #include "fx25.h"
+#include "eotd_defs.h"
 
 
 //#define TEST 1				/* Define for unit testing. */
@@ -115,6 +116,8 @@ struct hdlc_state_s {
 	int eas_fields_after_plus;	/* Number of "-" characters after the "+". */
 
 	uint64_t eotd_acc;		/* Accumulate last recent 32 bits for EOTD. */
+
+	char eotd_type;			/* E for End of train, H for head of train */
 
 	int eotd_gathering;		/* Decoding in progress - valid frame. */
 };
@@ -429,14 +432,6 @@ a good modem here and providing a result when it is received.
  *
  ***********************************************************************************/
 
-#define EOTD_MAX_BYTES			8
-
-#define EOTD_PREAMBLE_AND_BARKER_CODE	0x48eaaaaa00000000ULL
-#define EOTD_PREAMBLE_MASK		0xffffffff00000000ULL
-
-#define HOTD_PREAMBLE_AND_BARKER_CODE	0x9488f1aa00000000ULL
-#define HOTD_PREAMBLE_MASK		0xffffffff00000000ULL
-
 static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
 	struct hdlc_state_s *H;
@@ -451,7 +446,7 @@ dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 #endif
 	  //dw_printf ("slice %d = %d\n", slice, raw);
 
-// Accumulate most recent 32 bits in LSB-first order.
+// Accumulate most recent 64 bits in LSB-first order.
 
 	H->eotd_acc >>= 1;
 	if (raw) {
@@ -466,6 +461,7 @@ dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 #ifdef EOTD_DEBUG
 	  dw_printf ("Barker Code Found %llx\n", H->eotd_acc);
 #endif
+	  H->eotd_type = (H->eotd_acc & EOTD_PREAMBLE_MASK) == EOTD_PREAMBLE_AND_BARKER_CODE ? EOTD_TYPE_R2F : EOTD_TYPE_F2R;
 	  H->olen = 0;
 	  H->eotd_gathering = 1;
 	  H->frame_len = 0;
@@ -474,15 +470,17 @@ dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 	else if (H->eotd_gathering) {
 	  H->olen++;
 	
-	  if (H->olen == EOTD_MAX_BYTES * 8) {
-	      H->frame_len = EOTD_MAX_BYTES;
-	      for (int i = EOTD_MAX_BYTES -1; i >=0; i--) {
+	  if (H->olen == EOTD_LENGTH * 8) {
+	      H->frame_len = EOTD_LENGTH + 1; // appended type
+	      for (int i = EOTD_LENGTH -1; i >=0; i--) {
 		H->frame_buf[i] = H->eotd_acc & 0xff;
 		H->eotd_acc >>= 8;
 	      }
+
+	      H->frame_buf[EOTD_LENGTH] = H->eotd_type;
 	      done = 1;
 #ifdef EOTD_DEBUG
-for (int ii=0; ii < EOTD_MAX_BYTES; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
+for (int ii=0; ii < EOTD_MAX_LENGTH; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
 #endif
 	    }
 	}
