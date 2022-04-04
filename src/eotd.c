@@ -250,10 +250,14 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 	}
 		
 #ifdef EOTD_TIMESTAMP
-	time_t now = time(NULL);
-	strlcat(text, "timestamp=", text_size);
-	strlcat(text, ctime(&now), text_size);
-	text[strlen(text) -1] = ','; // zap lf
+	time_t t = time(NULL);
+	struct tm *now = localtime(&t);
+	char date_buffer[32];
+	strlcat(text, "ts=", text_size);
+	sprintf(date_buffer, "%d-%02d-%02dT%02d:%02d:%02d,",
+		now->tm_year + 1900, now->tm_mon + 1, now->tm_mday,
+		now->tm_hour, now->tm_min, now->tm_sec);
+	strlcat(text, date_buffer, text_size);
 #endif
 	get_chain(pkt, text, text_size);
 	add_comma(text, text_size);
