@@ -1,3 +1,7 @@
+/* BCH processing, library-style. Copyright (2022) David E. Tiller, K4DET
+   This file was adapted from a program written by Robert Morelos-Zaragoza
+   (robert@spectra.eng.hawaii.edu) whose original Copyright appears below.
+*/
 /*
  * File:    bch3.c
  * Title:   Encoder/decoder for binary BCH codes in C (Version 3.1)
@@ -147,7 +151,7 @@ int init_bch(bch_t *bch, int m, int length, int t) {
  *
  * alpha=2 is the primitive element of GF(2**m) 
  */
-	register int    i, mask;
+	register int    mask;
 
 	bch->alpha_to = malloc(n * sizeof(int));
 	bch->index_of = malloc(n * sizeof(int));
@@ -339,7 +343,7 @@ int apply_bch(const bch_t *bch, int *recd)
 {
 	register int    i, j, u, q, t2, count = 0, syn_error = 0;
 	int             elp[1026][1024], d[1026], l[1026], u_lu[1026], s[1025];
-	int             root[200], loc[200], err[1024], reg[201];
+	int             root[200], loc[200], reg[201];
 
 	t2 = 2 * bch->t;
 

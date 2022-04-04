@@ -1,25 +1,60 @@
 #include <stdio.h>
+#include <strings.h>
 #include "bch.h"
+#include "eotd.h"
+#include "eotd_defs.h"
+
+void dump(uint8_t *bytes, char type) {
+			unsigned char eotd[9];
+			for (int i = 0; i < 8; i++) {
+			  eotd[i] = bytes[i] & 0xff;
+			}
+			eotd[8] = type;
+			// Slice packet
+			char buffer[512];
+			eotd_to_text(eotd, 9, buffer, sizeof(buffer));
+			printf("%s\n", buffer);
+};
+
+void rotate_bytes(uint8_t *src, uint8_t *dest, int count) {
+	for (int i = 0; i < count; i++) {
+		dest[count - i - 1] = rotate_byte(src[i]);
+	}
+}
 
 int main(int argc, char **argv) {
 	bch_t bch;
-	int bytes[8];
+	uint8_t bytes[8];
 	int bits[63];
+	int m, length, t;
+	int count = 0;
+	int rev = 0;
+	char type = EOTD_TYPE_R2F;
 
-	init_bch(&bch, 6, 63, 3);
-#ifdef ARGS
-	if (argc != 9) {
-		fprintf(stderr, "Expecting 8 arguments.\n");
+
+	if (argc < 5) {
+		fprintf(stderr, "Expecting 4+ arguments - m, length, t, type (F or R) and optionally rev to reverse the input bytes.\n");
 		return -1;
 	}
 
-	for (int i = 0; i < 8; i++) {
-		sscanf(argv[i + 1], "%x", bytes + i);
+	sscanf(argv[1], "%d", &m);
+	sscanf(argv[2], "%d", &length);
+	sscanf(argv[3], "%d", &t);
+	sscanf(argv[4], "%c", &type);
+
+	if (argc > 5) {
+		if (strcasecmp(argv[5], "rev") == 0) {
+			rev = 1;
+		}
 	}
-#else
+
+	init_bch(&bch, m, length, t);
+
 	while (1) {
 		for (int i = 0; i < 8; i++) {
-			int status = scanf("%x ", bytes + i);
+			int t;
+			int status = scanf("%x ", &t);
+			bytes[i] = t;
 			if (status == EOF) {
 				return 0;
 			}
@@ -28,41 +63,15 @@ int main(int argc, char **argv) {
 				fprintf(stderr, "Error: %d", status);
 			}
 		}
-#endif
-	// UNEEDED
-	// swap_format(bits, 45, 63);
-	bytes_to_bits(bytes, bits, 63);
-	int corrected = apply_bch(&bch, bits);
-	if (corrected >= 0) {
-#ifdef DEBUG
-		printf("%d corrected\n", corrected);
-		for (int i = 0; i < 8; i++) {
-			printf("%02x ", bytes[i]);
+		if (rev) {
+			uint8_t temp[8];
+			rotate_bytes(bytes, temp, 8);
+			memcpy(bytes, temp, 8);
 		}
-		printf("\n");
-#endif
-		bits_to_bytes(bits, bytes, 63);
-		for (int i = 0; i < 8; i++) {
-			printf("%02x ", bytes[i]);
-		}
-		// Slice packet
 
-		printf("chain=%1x,",(bytes[0] >> 6) & 0x03);
-		printf("devst=%1x,",(bytes[0] >> 4) & 0x03);
-		printf("msgid=%1x,",(bytes[0] >> 1) & 0x07);
-		printf("uaddr=%03x,",((bytes[0] & 0x01) << 16) | (bytes[1] << 8) | (bytes[2]));
-		printf("bpres=%d,",(bytes[3] >> 1) & 0x07f);
-		printf("dbit1=%02x,",((bytes[3] & 0x01) << 7) | ((bytes[4] >> 1) & 0x7f));
-		printf("confm=%x,",(bytes[5] >> 7) & 0x01);
-		printf("dbit2=%x,",(bytes[5] >> 6) & 0x01);
-		printf("motdt=%x,",(bytes[5] >> 5) & 0x01);
-		printf("ltbat=%x,",(bytes[5] >> 4) & 0x01);
-		printf("ltsta=%x",(bytes[5] >> 3) & 0x01);
- 		printf("\n");
+	printf("%04d,", count++);
+	dump(bytes, type);
 	}
-#ifndef ARGS
-	}
-#endif
 
 	return 0;
 }

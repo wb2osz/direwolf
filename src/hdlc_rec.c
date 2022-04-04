@@ -55,10 +55,6 @@
 
 //#define DEBUG3 1				/* monitor the data detect signal. */
 
-#undef EOTD_DEBUG
-
-
-
 /* 
  * Minimum & maximum sizes of an AX.25 frame including the 2 octet FCS. 
  */
@@ -418,6 +414,9 @@ int is_eotd_valid(struct hdlc_state_s *H) {
 
 	The apply_bch funtion requires the packet in int[63] format, with the bits arranged
 	in either BCH+ATAD or ATAD+BCH format. Very odd. We'll use the first one.
+
+	The HCB for R2F packets must be XOR-ed with 0EED4 - since we have a leading dummy bit,
+	we XOR with 0EED4 >> 1.
 */
 	static uint8_t r2f_mask[] = {0x07, 0x76, 0xa0 };
 	static bch_t *bch_r2f = NULL;
@@ -459,11 +458,9 @@ int is_eotd_valid(struct hdlc_state_s *H) {
 	} else {
 		temp_bch = bch_r2f;
 		// The HCB needs to be XOR'ed with a special constant.
-print_bytes("IN  BYTES: ", H->frame_buf, H->frame_len);printf("\n");
 		for (int i = 0; i < sizeof(r2f_mask); i++) {
 			H->frame_buf[i] ^= r2f_mask[i];
 		}
-print_bytes("XOR BYTES: ", H->frame_buf, H->frame_len);printf("\n");
 	}
 
 	int crc_len = temp_bch->n - temp_bch->k;
@@ -473,17 +470,13 @@ print_bytes("XOR BYTES: ", H->frame_buf, H->frame_len);printf("\n");
 	// +1 is to skip the dummy/parity bit.
 	rotate_bits(bits + 1 , temp_bits, crc_len);
 	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
-print_bits("BCH+ATAD : ", bits, 64);printf("\n");
 
 	// Note: bits are changed in-place.
 	int corrected = apply_bch(temp_bch, bits + 1);
-printf("Corrected %d\n", corrected);
 	// Put back in HCB+ATAD format
 	rotate_bits(bits + 1, temp_bits, crc_len);
 	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
-print_bits("COR BITS: ", bits, 64);printf("\n");
 	bits_to_bytes(bits, H->frame_buf, 64);
-print_bytes("COR BYTES: ", H->frame_buf, H->frame_len);printf("\n");
 
 	return corrected;
 }
