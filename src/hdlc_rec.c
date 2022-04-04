@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>          // uint64_t
+#include <stdlib.h>
 
 //#include "tune.h"
 #include "demod.h"
@@ -46,6 +47,7 @@
 #include "demod_9600.h"		/* for descramble() */
 #include "ptt.h"
 #include "fx25.h"
+#include "bch.h"
 #include "eotd_defs.h"
 
 
@@ -233,7 +235,6 @@ static int my_rand (void) {
 static void eas_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
 	struct hdlc_state_s *H;
-
 /*
  * Different state information for each channel / subchannel / slice.
  */
@@ -408,6 +409,85 @@ a good modem here and providing a result when it is received.
 
 */
 
+
+int is_eotd_valid(struct hdlc_state_s *H) {
+/*
+	The data as received in the frame buffer is in HCB+ATAD format; that is, the first
+	(leftmost) bit is the dummy bit or odd parity bit (which is the last bit transmitted)
+	followed by the BCH code (LSB first, so HCB) followed by the DATA, LSB first (ATAD).
+
+	The apply_bch funtion requires the packet in int[63] format, with the bits arranged
+	in either BCH+ATAD or ATAD+BCH format. Very odd. We'll use the first one.
+*/
+	static uint8_t r2f_mask[] = {0x07, 0x76, 0xa0 };
+	static bch_t *bch_r2f = NULL;
+	static bch_t *bch_f2r = NULL;
+
+	int bits[64];
+
+	assert(H != NULL);
+	// +1 for 'type' byte at end
+	assert(H->frame_len == EOTD_LENGTH + 1);
+
+	if(bch_r2f == NULL) {
+		bch_r2f = malloc(sizeof(bch_t));
+		int status = init_bch(bch_r2f, 6, 63, 3);
+		if (status != 0) {
+			fprintf(stderr, "BCH_R2F initialization failed: %d", status);
+			free(bch_r2f);
+			bch_r2f = NULL;
+			return status;
+		}
+	}
+
+	if(bch_f2r == NULL) {
+		bch_f2r = malloc(sizeof(bch_t));
+		int status = init_bch(bch_f2r, 6, 63, 6);
+		if (status != 0) {
+			fprintf(stderr, "BCH_F2R initialization failed: %d", status);
+			free(bch_f2r);
+			bch_f2r = NULL;
+			return status;
+		}
+	}
+
+	int temp_bits[64];
+	bch_t *temp_bch;
+
+	if (H->eotd_type == EOTD_TYPE_F2R) {
+		temp_bch = bch_f2r;
+	} else {
+		temp_bch = bch_r2f;
+		// The HCB needs to be XOR'ed with a special constant.
+print_bytes("IN  BYTES: ", H->frame_buf, H->frame_len);printf("\n");
+		for (int i = 0; i < sizeof(r2f_mask); i++) {
+			H->frame_buf[i] ^= r2f_mask[i];
+		}
+print_bytes("XOR BYTES: ", H->frame_buf, H->frame_len);printf("\n");
+	}
+
+	int crc_len = temp_bch->n - temp_bch->k;
+
+	bytes_to_bits(H->frame_buf, bits, 64);
+
+	// +1 is to skip the dummy/parity bit.
+	rotate_bits(bits + 1 , temp_bits, crc_len);
+	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
+print_bits("BCH+ATAD : ", bits, 64);printf("\n");
+
+	// Note: bits are changed in-place.
+	int corrected = apply_bch(temp_bch, bits + 1);
+printf("Corrected %d\n", corrected);
+	// Put back in HCB+ATAD format
+	rotate_bits(bits + 1, temp_bits, crc_len);
+	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
+print_bits("COR BITS: ", bits, 64);printf("\n");
+	bits_to_bytes(bits, H->frame_buf, 64);
+print_bytes("COR BYTES: ", H->frame_buf, H->frame_len);printf("\n");
+
+	return corrected;
+}
+
 /***********************************************************************************
  *
  * Name:	eotd_rec_bit
@@ -480,17 +560,19 @@ dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
 	      H->frame_buf[EOTD_LENGTH] = H->eotd_type;
 	      done = 1;
 #ifdef EOTD_DEBUG
-for (int ii=0; ii < EOTD_MAX_LENGTH; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
+for (int ii=0; ii < EOTD_LENGTH; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
 #endif
 	    }
 	}
 
 	if (done) {
 #ifdef DEBUG_E
-	  dw_printf ("frame_buf %d = %s\n", slice, H->frame_buf);
+	  dw_printf ("frame_buf %d = %*s\n", slice, H->frame_len, H->frame_buf);
 #endif
-	  alevel_t alevel = demod_get_audio_level (chan, subchan);
-	  multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len, alevel, 0, 0);
+	  if (is_eotd_valid(H) >= 0) {
+	  	alevel_t alevel = demod_get_audio_level (chan, subchan);
+	  	multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len, alevel, 0, 0);
+	  }
 
 	  H->eotd_acc = 0;
 	  H->eotd_gathering = 0;

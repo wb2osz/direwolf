@@ -518,7 +518,7 @@ int apply_bch(const bch_t *bch, int *recd)
 }
 
 /* LEFT justified in hex */
-void bytes_to_bits(const int *bytes, int *bit_dest, int num_bits) {
+void bytes_to_bits(const uint8_t *bytes, int *bit_dest, int num_bits) {
 	for (int i = 0; i < num_bits; i++) {
 		int index = i / 8;
 		int bit_pos = 7 - (i % 8);
@@ -527,7 +527,7 @@ void bytes_to_bits(const int *bytes, int *bit_dest, int num_bits) {
 	}
 }
 
-void bits_to_bytes(const int *bits, int *byte_dest, int num_bits) {
+void bits_to_bytes(const int *bits, uint8_t *byte_dest, int num_bits) {
 
 	int index;
 
@@ -540,8 +540,6 @@ void bits_to_bytes(const int *bits, int *byte_dest, int num_bits) {
 		byte_dest[index] <<= 1;
 		byte_dest[index] |= (bits[i] & 0x01);
 	}
-
-	byte_dest[index] <<= 8 - (num_bits % 8);
 }
 
 void swap_format(const int *bits, int *dest, int cutoff, int num_bits) {
@@ -555,8 +553,8 @@ void swap_format(const int *bits, int *dest, int cutoff, int num_bits) {
 	}
 }
 
-int rotate_byte(int x) {
-        int y = 0;
+uint8_t rotate_byte(uint8_t x) {
+        uint8_t y = 0;
 
         for (int i = 0; i < 8; i++) {
                 y <<= 1;
@@ -583,143 +581,16 @@ void dump_bch(const bch_t *bch) {
 	printf("m: %d length: %d t: %d n: %d k: %d\n", bch->m, bch->length, bch->t, bch->n, bch->k);
 }
 
-void print_array(const char *msg, const char *format, const int *bytes, int num_bytes) {
+void print_bytes(const char *msg, const uint8_t *bytes, int num_bytes) {
 	printf("%s", msg);
 	for (int i = 0; i < num_bytes; i++) {
-		printf(format, bytes[i]);
+		printf("%02x ", bytes[i]);
 	}
-}
-
-void print_bytes(const char *msg, const int *bytes, int num_bytes) {
-	print_array(msg, "%02x ", bytes, num_bytes);
 }
 
 void print_bits(const char *msg, const int *bits, int num_bits) {
-	print_array(msg, "%d ", bits, num_bits);
-}
-
-#undef MAIN
-#undef TEST_BYTES_TO_BITS
-#define TEST_SWAP
-#ifdef MAIN
-int main()
-{
-	int test[][8] = {
-/* 0 errors */	{ 0xb2, 0x17, 0xa2, 0xb9, 0x53, 0xdd, 0xc5, 0x52 }, /* perfect random test */
-                { 0xf0, 0x5a, 0x6a, 0x6a, 0x01, 0x63, 0x33, 0xd0 }, /* g001-cut-lenthened_457.938M.wav */
-                { 0xf0, 0x81, 0x52, 0x6b, 0x71, 0xa5, 0x63, 0x08 }, /* 1st in eotd_received_data */
-/* 3 errors */	{ 0xf0, 0x85, 0x50, 0x6a, 0x01, 0xe5, 0x6e, 0x84 }, /* 2nd in eotd_received_data - 3 bad bits */
-/* 0 errors */	{ 0xf0, 0x85, 0x50, 0x6a, 0x01, 0xe5, 0x06, 0x84 }, /* 2nd, but with the bits fixed */
-/* 3 errors */	{ 0xf0, 0x85, 0x59, 0x5a, 0x01, 0xe5, 0x6e, 0x84 }, /* 3rd - 3 bad bits */
-/* 0 errors */	{ 0xb0, 0x85, 0x59, 0x5a, 0x11, 0xe5, 0x6f, 0x84 }, /* 3rd fixed */
-                { 0xf1, 0x34, 0x50, 0x1a, 0x01, 0xe5, 0x66, 0xfe }, /* 4th */
-                { 0xf0, 0xeb, 0x10, 0xea, 0x01, 0x6e, 0x54, 0x1c }, /* 5th */
-                { 0xf0, 0xea, 0x5c, 0xea, 0x01, 0x6e, 0x55, 0x0e }, /* 6th */
-                { 0xe0, 0x21, 0x10, 0x1a, 0x01, 0x32, 0xbc, 0xe4 }, /* Sun Mar 20 05:41:00 2022 */
-                { 0xf0, 0x42, 0x50, 0x5b, 0xcf, 0xd5, 0x64, 0xe4 }, /* Sun Mar 20 12:58:43 2022 */
-                { 0xf0, 0x8c, 0x10, 0xaa, 0x01, 0x73, 0x7b, 0x1a }, /* Sun Mar 20 13:35:48 2022 */
-                { 0xf0, 0x8c, 0x10, 0xb1, 0xc0, 0xe0, 0x90, 0x64 }, /* Sun Mar 20 13:37:05 2022 */
-/* 3 errors */	{ 0xf0, 0x8c, 0x10, 0x6a, 0x01, 0x64, 0x7a, 0xe8 }, /* Sun Mar 20 13:37:48 2022  - 3 bad bits */
-/* 0 errors */	{ 0x50, 0x8c, 0x12, 0x6a, 0x01, 0x64, 0x7a, 0xe8 }, /* Sun Mar 20 13:37:48 2022 with bits fixed */
-	};
-
-	int bits[63];
-	int temp[8];
-	bch_t bch;
-
-	init_bch(&bch, 6, 63, 3);
-
-	for (int count = 0; count < sizeof(test) / sizeof(*test); count++) {
-		bytes_to_bits(test[count], bits, 63);
-
-		printf("--------------------------\nORIG pkt [%d] ", count);
-		for (int i = 0; i < 8; i++) {
-			printf("%02x ", test[count][i]);
-		}
-		printf("\n");
-
-#ifdef TEST_BYTES_TO_BITS
-	
-		printf("ORIG pkt[%d] bits\n", count);
-		for (int i = 0; i < 63; i++) {
-			printf("%d ", bits[i]);
-		}
-		printf("\n");
-
-		bits_to_bytes(bits, temp, 63);
-		printf("bits_to_bytes pkt [%d]\n", count);
-		for (int i = 0; i < 8; i++) {
-			printf("%02x ", temp[i]);
-		}
-		printf("\n");
-
-#endif
-
-#ifdef TEST_GENERATE	
-		int bch_code[18];
-		generate_bch(&bch, bits, bch_code);
-		printf("generated BCH\n");
-		for (int i = 0; i < 18; i++) {
-			printf("%d ", bch_code[i]);
-		}
-		printf("\n");
-#endif	
-
-#ifdef TEST_SWAP
-		printf("orig: ");
-		for (int i = 0; i < 63; i++) {
-			printf("%d ", bits[i]);
-		}
-		printf("\n");
-
-		swap_format(bits, 45, 63);
-
-		printf("rev:  ");
-		for (int i = 0; i < 63; i++) {
-			printf("%d ", bits[i]);
-		}
-		printf("\n");
-#endif
-#ifdef TEST_APPLY
-		int recv[63];
-
-		for (int i = 0; i < 63; i++) {
-			recv[i] = bits[i];
-		}
-/*	
-		printf("rearranged packet [%d]: ", count);
-		for (int i = 0; i < 63; i++) {
-			printf("%d ", recv[i]);
-		}
-		printf("\n");
-
-		bits_to_bytes(recv, temp, 63);
-
-		printf("original [%d] bytes: ", count);
-		for (int i = 0; i < 8; i++) {
-			printf("%02x ", temp[i]);
-		}
-		printf("\n");
-*/	
-		int corrected = apply_bch(&bch, recv);
-
-		if (corrected >= 0) {
-/*
-			printf("corrected [%d] packet: ", corrected);
-			for (int i = 0; i < 63; i++) {
-				printf("%d ", recv[i]);
-			}
-			printf("\n");
-*/
-			bits_to_bytes(recv, temp, 63);
-
-			printf("corrected [%d] bytes: ", corrected);
-			for (int i = 0; i < 8; i++) {
-				printf("%02x ", temp[i]);
-			}
-			printf("\n");
-		}
-#endif
+	printf("%s", msg);
+	for (int i = 0; i < num_bits; i++) {
+		printf("%d ", bits[i]);
 	}
 }
-#endif

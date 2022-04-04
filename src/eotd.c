@@ -40,7 +40,7 @@
 #include "eotd_defs.h"
 #include "eotd.h"
 
-#define EOTD_RAW
+#undef EOTD_RAW
 #define EOTD_TIMESTAMP
 #define EOTD_APPEND_HEX
 
@@ -283,7 +283,11 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 	add_comma(text, text_size);
 	snprintf(hex, sizeof(hex), "%llx", pkt);
 	strlcat(text, "hex=", text_size);
-	strlcat(text, hex, text_size);
+	for (int i = 56; i >= 0; i -= 8) {
+		sprintf(hex, "%02x ", (unsigned char) (pkt >> i) & 0xff);
+		strlcat(text, hex, text_size);
+	}
+	text[strlen(text) - 1] = '\0'; // zap trailing space
 #endif
 #else
 	char temp[8];

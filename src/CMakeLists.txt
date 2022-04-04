@@ -86,6 +86,7 @@ list(APPEND direwolf_SOURCES
   dwgpsd.c
   mheard.c
   eotd.c
+  bch.c
   )
 
 if(LINUX)
@@ -319,6 +320,7 @@ list(APPEND atest_SOURCES
   tt_text.c
   textcolor.c
   eotd.c
+  bch.c
   )
 
 if(WIN32 OR CYGWIN)
