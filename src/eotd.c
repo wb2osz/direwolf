@@ -108,8 +108,8 @@ void get_r2f_msg_id_type(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 	char temp[32];
 
-	pkt >>= 4;
-	val = pkt & 0x07ULL;
+	uint64_t temp_pkt = pkt >> 4;
+	val = temp_pkt & 0x07ULL;
 
 	strlcat(text, "msgid=", text_size);
 
@@ -118,6 +118,14 @@ void get_r2f_msg_id_type(uint64_t pkt, char *text, int text_size) {
 	    strlcat(text, "ONEWAY", text_size);
 	    break;
 
+	  case 7: // TEST button, maybe
+	    // Test the CONFIRM bit
+	    if ((pkt & 0x10000000000ULL) == 0) {
+	      strlcat(text, "TEST/ARM_REQ", text_size);
+	    } else {
+	      strlcat(text, "ARM_CONFIRM", text_size);
+	    }
+	    break;
 	  default:
 	    sprintf(temp, "CUSTOM(%d)", val);
 	    strlcat(text, temp, text_size);
