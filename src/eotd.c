@@ -34,7 +34,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 
 #include "textcolor.h"
 #include "eotd_defs.h"
@@ -359,13 +359,14 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 	}
 		
 #ifdef EOTD_TIMESTAMP
-	time_t t = time(NULL);
-	struct tm *now = localtime(&t);
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	struct tm *now = localtime(&tv.tv_sec);
 	char date_buffer[32];
 	strlcat(text, "ts=", text_size);
-	sprintf(date_buffer, "%d-%02d-%02dT%02d:%02d:%02d,",
+	sprintf(date_buffer, "%d-%02d-%02dT%02d:%02d:%02d.%03d,",
 		now->tm_year + 1900, now->tm_mon + 1, now->tm_mday,
-		now->tm_hour, now->tm_min, now->tm_sec);
+		now->tm_hour, now->tm_min, now->tm_sec, tv.tv_usec / 1000);
 	strlcat(text, date_buffer, text_size);
 #endif
 
