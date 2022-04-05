@@ -57,7 +57,7 @@ void add_comma(char *text, int text_size) {
 	strlcat(text, ",", text_size);
 }
 
-void get_r2f_chain(uint64_t pkt, char *text, int text_size) {
+int get_chain(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	val = pkt & 0x03ULL;
@@ -78,6 +78,8 @@ void get_r2f_chain(uint64_t pkt, char *text, int text_size) {
 		  strlcat(text, "ONLY", text_size);
 		  break;
 	}
+
+	return val;
 }
 
 void get_r2f_dev_batt_stat(uint64_t pkt, char *text, int text_size) {
@@ -250,7 +252,7 @@ void get_r2f_mkr_light_bit(uint64_t pkt, char *text, int text_size) {
 
 void decode_basic_r2f(uint64_t pkt, char *text, int text_size) {
 
-	get_r2f_chain(pkt, text, text_size);
+	strlcat(text, "block=BASIC", text_size);
 	add_comma(text, text_size);
 	get_r2f_dev_batt_stat(pkt, text, text_size);
 	add_comma(text, text_size);
@@ -273,20 +275,6 @@ void decode_basic_r2f(uint64_t pkt, char *text, int text_size) {
 	get_r2f_mkr_light_batt_bit(pkt, text, text_size);
 	add_comma(text, text_size);
 	get_r2f_mkr_light_bit(pkt, text, text_size);
-}
-
-void get_f2r_chain(uint64_t pkt, char *text, int text_size) {
-	uint32_t val;
-
-	val = pkt & 0x03;
-
-	strlcat(text, "chain=", text_size);
-
-	if (val == 3) {
-		strlcat(text, "VALID", text_size);
-	} else {
-		strlcat(text, "INVALID", text_size);
-	}
 }
 
 void get_f2r_msg_id_type(uint64_t pkt, char *text, int text_size) {
@@ -333,15 +321,80 @@ void get_f2r_command(uint64_t pkt, char *text, int text_size) {
 	}
 }
 
+int get_option_format(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 2;
+	val = pkt & 0x01;
+
+	return val;
+}
+
 void decode_basic_f2r(uint64_t pkt, char *text, int text_size) {
 
-	get_f2r_chain(pkt, text, text_size);
+	strlcat(text, "block=BASIC", text_size);
 	add_comma(text, text_size);
 	get_f2r_msg_id_type(pkt, text, text_size);
 	add_comma(text, text_size);
 	get_f2r_unit_addr_code(pkt, text, text_size);
 	add_comma(text, text_size);
 	get_f2r_command(pkt, text, text_size);
+}
+
+void decode_r2f_option_block(uint64_t pkt, char *text, int text_size) {
+
+	int indicator = get_option_format(pkt, text, text_size);
+	if (indicator == 0) {
+		// BINARY
+
+		strlcat(text, "block=OPT_BINARY", text_size);
+		add_comma(text, text_size);
+
+		int type, val;
+		char temp[32];
+
+		pkt >>= 3; // Skip chain and format bits
+
+		for (int i = 0; i < 3; i++ ) {
+			type = pkt & 0x7f;
+			pkt >>= 7;
+			val = pkt & 0x7f;
+			pkt >>= 7;
+
+			// 'No Data' indicator
+			if (type == 0) {
+				continue;
+			}
+
+			sprintf(temp, "TYPE_%c=%d", 'A' + i, type);
+			strlcat(text, temp, text_size);
+			add_comma(text, text_size);
+			sprintf(temp, "VALUE_%c=%d", 'A' + i, val);
+			strlcat(text, temp, text_size);
+			if (i != 2) add_comma(text, text_size);
+		}
+	} else {
+		// ASCII
+		strlcat(text, "block=OPT_ASCII", text_size);
+		add_comma(text, text_size);
+
+		char msg[8] = { 0 };
+
+		pkt >>= 3; // Skip chain and format bits
+
+		for (int i = 0; i < 6; i++) {
+			msg[i] = pkt & 0x7f;
+			pkt >>= 7;
+		}
+
+		strlcat(text, "message=", text_size);
+		strlcat(text, msg, text_size);
+	}
+}
+
+
+void decode_f2r_option_block(uint64_t pkt, char *text, int text_size) {
+	strlcat(text, "TODO: F2R OPTION BLOCK", text_size);
 }
 
 void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
@@ -378,10 +431,22 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 	strlcat(text, date_buffer, text_size);
 #endif
 
-	if (eotd_type == EOTD_TYPE_R2F) {
-		decode_basic_r2f(pkt, text, text_size);
+	int chain = get_chain(pkt, text, text_size);
+	add_comma(text, text_size);
+
+	// check for 'first' block - it's always the basic block
+	if (chain & 0x02) {
+		if (eotd_type == EOTD_TYPE_R2F) {
+			decode_basic_r2f(pkt, text, text_size);
+		} else {
+			decode_basic_f2r(pkt, text, text_size);
+		}
 	} else {
-		decode_basic_f2r(pkt, text, text_size);
+		if (eotd_type == EOTD_TYPE_R2F) {
+			decode_r2f_option_block(pkt, text, text_size);
+		} else {
+			decode_f2r_option_block(pkt, text, text_size);
+		}
 	}
 
 #ifdef EOTD_APPEND_HEX
