@@ -57,18 +57,30 @@ void add_comma(char *text, int text_size) {
 	strlcat(text, ",", text_size);
 }
 
-void get_chain(uint64_t pkt, char *text, int text_size) {
+void get_r2f_chain(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	val = pkt & 0x03ULL;
 
 	strlcat(text, "chain=", text_size);
 
-	strlcat(text, val & 0x02 ? "FIRST+" : "NOT_FIRST+", text_size);
-	strlcat(text, val & 0x01 ? "LAST" : "NOT_LAST", text_size);
+	switch(val) {
+		case 0:
+		  strlcat(text, "MIDDLE", text_size);
+		  break;
+		case 1:
+		  strlcat(text, "LAST", text_size);
+		  break;
+		case 2:
+		  strlcat(text, "FIRST", text_size);
+		  break;
+		case 3:
+		  strlcat(text, "ONLY", text_size);
+		  break;
+	}
 }
 
-void get_dev_batt_stat(uint64_t pkt, char *text, int text_size) {
+void get_r2f_dev_batt_stat(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	pkt >>= 2;
@@ -92,7 +104,7 @@ void get_dev_batt_stat(uint64_t pkt, char *text, int text_size) {
 	}
 }
 
-void get_msg_id_type(uint64_t pkt, char *text, int text_size) {
+void get_r2f_msg_id_type(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 	char temp[32];
 
@@ -113,7 +125,7 @@ void get_msg_id_type(uint64_t pkt, char *text, int text_size) {
 	}
 }
 
-void get_unit_addr_code(uint64_t pkt, char *text, int text_size) {
+void get_r2f_unit_addr_code(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 	char temp[32];
 
@@ -124,7 +136,7 @@ void get_unit_addr_code(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, temp, text_size);
 }
 
-void get_brake_pressure(uint64_t pkt, char *text, int text_size) {
+void get_r2f_brake_pressure(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 	char temp[32];
 
@@ -154,7 +166,7 @@ void get_brake_pressure(uint64_t pkt, char *text, int text_size) {
 	}
 }
 
-void get_disc_bits(uint64_t pkt, char *text, int text_size) {
+void get_r2f_disc_bits(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 	char temp[32];
 
@@ -166,7 +178,7 @@ void get_disc_bits(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, temp, text_size);
 }
 
-void get_valve_bit(uint64_t pkt, char *text, int text_size) {
+void get_r2f_valve_bit(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	pkt >>= 39;
@@ -176,7 +188,7 @@ void get_valve_bit(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, val == 0 ? "FAILED" : "OPERATIONAL", text_size); 
 }
 
-void get_confirm_bit(uint64_t pkt, char *text, int text_size) {
+void get_r2f_confirm_bit(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	pkt >>= 40;
@@ -186,7 +198,7 @@ void get_confirm_bit(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, val == 0 ? "UPDATE" : "RESPONSE", text_size); 
 }
 
-void get_disc_bit1(uint64_t pkt, char *text, int text_size) {
+void get_r2f_disc_bit1(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 	char temp[32];
 
@@ -198,7 +210,7 @@ void get_disc_bit1(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, temp, text_size); 
 }
 
-void get_motion_bit(uint64_t pkt, char *text, int text_size) {
+void get_r2f_motion_bit(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	pkt >>= 42;
@@ -208,7 +220,7 @@ void get_motion_bit(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, val == 0 ? "STOPPED/NOT_MONITORED" : "IN_MOTION", text_size); 
 }
 
-void get_mkr_light_batt_bit(uint64_t pkt, char *text, int text_size) {
+void get_r2f_mkr_light_batt_bit(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	pkt >>= 43;
@@ -218,7 +230,7 @@ void get_mkr_light_batt_bit(uint64_t pkt, char *text, int text_size) {
 	strlcat(text, val == 0 ? "OK/NOT_MONITORED" : "WEAK", text_size);
 }
 
-void get_mkr_light_bit(uint64_t pkt, char *text, int text_size) {
+void get_r2f_mkr_light_bit(uint64_t pkt, char *text, int text_size) {
 	uint32_t val;
 
 	pkt >>= 44;
@@ -226,6 +238,102 @@ void get_mkr_light_bit(uint64_t pkt, char *text, int text_size) {
 
 	strlcat(text, "light=", text_size);
 	strlcat(text, val == 0 ? "OFF/NOT_MONITORED" : "ON", text_size);
+}
+
+void decode_basic_r2f(uint64_t pkt, char *text, int text_size) {
+
+	get_r2f_chain(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_dev_batt_stat(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_msg_id_type(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_unit_addr_code(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_brake_pressure(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_disc_bits(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_valve_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_confirm_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_disc_bit1(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_motion_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_mkr_light_batt_bit(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_r2f_mkr_light_bit(pkt, text, text_size);
+}
+
+void get_f2r_chain(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	val = pkt & 0x03;
+
+	strlcat(text, "chain=", text_size);
+
+	if (val == 3) {
+		strlcat(text, "VALID", text_size);
+	} else {
+		strlcat(text, "INVALID", text_size);
+	}
+}
+
+void get_f2r_msg_id_type(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+
+	pkt >>= 2;
+	val = pkt & 0x07ULL;
+
+	strlcat(text, "msgid=", text_size);
+	strlcat(text, val == 0 ? "VALID" : "INVALID", text_size);
+}
+
+void get_f2r_unit_addr_code(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 5;
+	val = pkt & 0x1ffffULL;
+	strlcat(text, "unit_addr=", text_size);
+	sprintf(temp, "%d", val);
+	strlcat(text, temp, text_size);
+}
+
+void get_f2r_command(uint64_t pkt, char *text, int text_size) {
+	uint32_t val;
+	char temp[32];
+
+	pkt >>= 22;
+	val = pkt & 0xff;
+	strlcat(text, "cmd=", text_size);
+	switch(val) {
+	  case 0x55:
+	    strlcat(text, "STATUS_REQ", text_size);
+	    break;
+
+	  case 0xaa:
+	    strlcat(text, "APPLY_BRAKES", text_size);
+	    break;
+
+	  default:
+	    sprintf(temp, "UNKNOWN(%d)", val);
+	    strlcat(text, temp, text_size);
+	    break;
+	}
+}
+
+void decode_basic_f2r(uint64_t pkt, char *text, int text_size) {
+
+	get_f2r_chain(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_f2r_msg_id_type(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_f2r_unit_addr_code(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_f2r_command(pkt, text, text_size);
 }
 
 void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
@@ -240,9 +348,10 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 	}
 
 	*text = '\0';
-#ifndef EOTD_RAW
+
 	char eotd_type = eotd[EOTD_LENGTH];
 
+#ifndef EOTD_RAW
 	if (eotd_type == EOTD_TYPE_F2R) {
 		strlcat(text, "FRONT>REAR:", text_size);
 	} else {
@@ -259,29 +368,13 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 		now->tm_hour, now->tm_min, now->tm_sec);
 	strlcat(text, date_buffer, text_size);
 #endif
-	get_chain(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_dev_batt_stat(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_msg_id_type(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_unit_addr_code(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_brake_pressure(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_disc_bits(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_valve_bit(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_confirm_bit(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_disc_bit1(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_motion_bit(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_mkr_light_batt_bit(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_mkr_light_bit(pkt, text, text_size);
+
+	if (eotd_type == EOTD_TYPE_R2F) {
+		decode_basic_r2f(pkt, text, text_size);
+	} else {
+		decode_basic_f2r(pkt, text, text_size);
+	}
+
 #ifdef EOTD_APPEND_HEX
 	char hex[64];
 	add_comma(text, text_size);
