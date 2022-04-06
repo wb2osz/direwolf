@@ -134,7 +134,7 @@ int demod_init (struct audio_s *pa)
 
 	    case MODEM_AFSK:
 	    case MODEM_EAS:
-            case MODEM_EOTD: // TODO DET
+            case MODEM_EOTD:
 
 	      if (save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
 		if (save_audio_config_p->achan[chan].fix_bits != RETRY_NONE) {
