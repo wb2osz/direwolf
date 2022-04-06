@@ -34,7 +34,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
-#include <stdint.h>
+#include <inttypes.h>
 #include <sys/time.h>
 
 #include "textcolor.h"
@@ -424,11 +424,11 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	struct tm *now = localtime(&tv.tv_sec);
-	char date_buffer[32];
+	char date_buffer[128];
 	strlcat(text, "ts=", text_size);
-	sprintf(date_buffer, "%d-%02d-%02dT%02d:%02d:%02d.%03d,",
+	sprintf(date_buffer, "%4d-%02d-%02dT%02d:%02d:%02d.%03d,",
 		now->tm_year + 1900, now->tm_mon + 1, now->tm_mday,
-		now->tm_hour, now->tm_min, now->tm_sec, tv.tv_usec / 1000);
+		now->tm_hour, now->tm_min, now->tm_sec, (int) (tv.tv_usec / 1000));
 	strlcat(text, date_buffer, text_size);
 #endif
 
@@ -453,7 +453,6 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 #ifdef EOTD_APPEND_HEX
 	char hex[64];
 	add_comma(text, text_size);
-	snprintf(hex, sizeof(hex), "%llx", pkt);
 	strlcat(text, "hex=", text_size);
 	for (int i = 56; i >= 0; i -= 8) {
 		sprintf(hex, "%02x ", (unsigned char) (pkt >> i) & 0xff);

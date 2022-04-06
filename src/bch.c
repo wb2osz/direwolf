@@ -77,7 +77,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
+#include <inttypes.h>
 #include "bch.h"
 
 int init_bch(bch_t *bch, int m, int length, int t) {
@@ -344,7 +344,7 @@ int apply_bch(const bch_t *bch, int *recd)
 {
 	register int    i, j, u, q, t2, count = 0, syn_error = 0;
 	int             elp[1026][1024], d[1026], l[1026], u_lu[1026], s[1025];
-	int             root[200], loc[200], reg[201];
+	int             loc[200], reg[201];
 
 	t2 = 2 * bch->t;
 
@@ -456,9 +456,9 @@ int apply_bch(const bch_t *bch, int *recd)
 			    d[u + 1] = bch->alpha_to[s[u + 1]];
 			  else
 			    d[u + 1] = 0;
-			    for (i = 1; i <= l[u + 1]; i++)
-			      if ((s[u + 1 - i] != -1) && (elp[u + 1][i] != 0))
-			        d[u + 1] ^= bch->alpha_to[(s[u + 1 - i] 
+			  for (i = 1; i <= l[u + 1]; i++)
+			    if ((s[u + 1 - i] != -1) && (elp[u + 1][i] != 0))
+			      d[u + 1] ^= bch->alpha_to[(s[u + 1 - i] 
 			                      + bch->index_of[elp[u + 1][i]]) % bch->n];
 			  /* put d[u+1] into index form */
 			  d[u + 1] = bch->index_of[d[u + 1]];	
@@ -491,7 +491,6 @@ int apply_bch(const bch_t *bch, int *recd)
 					}
 				if (!q) {	/* store root and error
 						 * location number indices */
-					root[count] = i;
 					loc[count] = bch->n - i;
 					count++;
 #ifdef BCH_DEBUG

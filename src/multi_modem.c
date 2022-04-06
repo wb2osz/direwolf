@@ -346,7 +346,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	else if (save_audio_config_p->achan[chan].modem_type == MODEM_EOTD) {
 	  char text[1024];
           eotd_to_text (fbuf, flen, text, sizeof(text));
-	  char monfmt[1024];
+	  char monfmt[2048];
 	  snprintf (monfmt, sizeof(monfmt), "EOTD>%s%1d%1d:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_EOTD, text);
 	  pp = ax25_from_text (monfmt, 1);
 	}
