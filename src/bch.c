@@ -77,6 +77,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "bch.h"
 
 int init_bch(bch_t *bch, int m, int length, int t) {
