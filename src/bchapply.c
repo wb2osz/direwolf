@@ -63,7 +63,7 @@ printf("data_len=%d, crc_len=%d\n", data_len, crc_len);
 //
 //	THIS IS THE LSB-FIRST VERSION
 //
-fprintf(stderr, "Enter HCB+ATAD _WITH_ the parity bit intact.\n");
+fprintf(stderr, "Enter HCB+ATAD _WITH_ the parity bit intact and XOR already applied.\n");
 	while (1) {
 		for (int i = 0; i < 8; i++) {
 			int temp;

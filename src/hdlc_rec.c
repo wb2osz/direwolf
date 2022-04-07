@@ -50,6 +50,7 @@
 #include "bch.h"
 #include "eotd_defs.h"
 
+//#define EOTD_DEBUG
 
 //#define TEST 1				/* Define for unit testing. */
 
@@ -473,10 +474,19 @@ int is_eotd_valid(struct hdlc_state_s *H) {
 
 	// Note: bits are changed in-place.
 	int corrected = apply_bch(temp_bch, bits + 1);
+
 	// Put back in HCB+ATAD format
 	rotate_bits(bits + 1, temp_bits, crc_len);
 	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
 	bits_to_bytes(bits, H->frame_buf, 64);
+
+	// Put the XOR-ed bits back.
+	if (H->eotd_type == EOTD_TYPE_R2F) {
+		// The HCB needs to be XOR'ed with a special constant.
+		for (int i = 0; i < sizeof(r2f_mask); i++) {
+			H->frame_buf[i] ^= r2f_mask[i];
+		}
+	}
 
 	return corrected;
 }
@@ -515,7 +525,8 @@ static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_
 	H = &hdlc_state[chan][subchan][slice];
 
 #ifdef EOTD_DEBUG
-dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+// dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+dw_printf("%d ", raw);
 #endif
 	  //dw_printf ("slice %d = %d\n", slice, raw);
 
@@ -565,7 +576,12 @@ for (int ii=0; ii < EOTD_LENGTH; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } 
 	  if (is_eotd_valid(H) >= 0) {
 	  	alevel_t alevel = demod_get_audio_level (chan, subchan);
 	  	multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len, alevel, 0, 0);
-	  }
+	  } else {
+#ifdef EOTD_DEBUG
+print_bytes("BCH failed for packet (type byte appended) ", H->frame_buf, H->frame_len);
+#endif
+
+}
 
 	  H->eotd_acc = 0;
 	  H->eotd_gathering = 0;

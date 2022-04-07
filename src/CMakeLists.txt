@@ -278,6 +278,7 @@ list(APPEND gen_packets_SOURCES
   dtmf.c
   textcolor.c
   dsp.c
+  eotd_send.c
   )
 
 add_executable(gen_packets
