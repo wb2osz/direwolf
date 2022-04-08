@@ -255,11 +255,11 @@ void decode_basic_r2f(uint64_t pkt, char *text, int text_size) {
 
 	strlcat(text, "block=BASIC", text_size);
 	add_comma(text, text_size);
+	get_r2f_unit_addr_code(pkt, text, text_size);
+	add_comma(text, text_size);
 	get_r2f_dev_batt_stat(pkt, text, text_size);
 	add_comma(text, text_size);
 	get_r2f_msg_id_type(pkt, text, text_size);
-	add_comma(text, text_size);
-	get_r2f_unit_addr_code(pkt, text, text_size);
 	add_comma(text, text_size);
 	get_r2f_brake_pressure(pkt, text, text_size);
 	add_comma(text, text_size);
@@ -335,9 +335,9 @@ void decode_basic_f2r(uint64_t pkt, char *text, int text_size) {
 
 	strlcat(text, "block=BASIC", text_size);
 	add_comma(text, text_size);
-	get_f2r_msg_id_type(pkt, text, text_size);
-	add_comma(text, text_size);
 	get_f2r_unit_addr_code(pkt, text, text_size);
+	add_comma(text, text_size);
+	get_f2r_msg_id_type(pkt, text, text_size);
 	add_comma(text, text_size);
 	get_f2r_command(pkt, text, text_size);
 }
