@@ -415,9 +415,11 @@ void eotd_to_text (unsigned char *eotd, int eotd_len, char *text, int text_size)
 
 #ifndef EOTD_RAW
 	if (eotd_type == EOTD_TYPE_F2R) {
-		strlcat(text, "FRONT>REAR:", text_size);
+		//strlcat(text, "FRONT>REAR:", text_size);
+		strlcat(text, ":dir-f2r,", text_size);
 	} else {
-		strlcat(text, "REAR>FRONT:", text_size);
+		//strlcat(text, "REAR>FRONT:", text_size);
+		strlcat(text, ":dir=r2f,", text_size);
 	}
 		
 #ifdef EOTD_TIMESTAMP
