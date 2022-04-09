@@ -25,7 +25,6 @@ void rotate_bytes(uint8_t *src, uint8_t *dest, int count) {
 int main(int argc, char **argv) {
 	bch_t bch;
 	uint8_t bytes[8];
-	int bits[63];
 	int m, length, t;
 	int count = 0;
 	int rev = 0;
