@@ -3,10 +3,13 @@
 #include "bch.h"
 
 #define SHOW_BYTES
+#define MAX_LENGTH	64
+
+static uint8_t r2f_mask[] = { 0x07, 0x76, 0xa0 };
 
 int test(bch_t *bch, char *msg, int *bits, int length) {
 	int corrected = 0;
-	int temp_bits[length];
+	int temp_bits[MAX_LENGTH];
 	uint8_t bytes[8];
 
 	memcpy(temp_bits, bits, length * sizeof(int));
@@ -43,7 +46,7 @@ int main(int argc, char **argv) {
 
 
 	if (argc != 4) {
-		fprintf(stderr, "Expecting 3 arguments.\n");
+		fprintf(stderr, "Expecting 3 arguments: m, length, and t.\n");
 		return -1;
 	}
 
@@ -51,7 +54,13 @@ int main(int argc, char **argv) {
 	sscanf(argv[2], "%d", &length);
 	sscanf(argv[3], "%d", &t);
 
-	int orig_bits[length+1];
+	if (length > MAX_LENGTH) {
+		fprintf(stderr, "Max supported length is %d\n", MAX_LENGTH);
+		return -2;
+	}
+
+
+	int orig_bits[MAX_LENGTH+1];
 
 	init_bch(&bch, m, length, t);
 	data_len = bch.k;
@@ -63,12 +72,12 @@ printf("data_len=%d, crc_len=%d\n", data_len, crc_len);
 //
 //	THIS IS THE LSB-FIRST VERSION
 //
-fprintf(stderr, "Enter HCB+ATAD _WITH_ the parity bit intact and XOR already applied.\n");
+fprintf(stderr, "Enter HCB+ATAD _WITH_ the parity bit intact.\n");
+fprintf(stderr, "If 't' is 3, that implies an R2F packet and the given packet will be XOR'ed with 0x0776a0.\n");
 	while (1) {
 		for (int i = 0; i < 8; i++) {
 			int temp;
 			int status = scanf("%x ", &temp);
-			bytes[i] = temp;
 			if (status == EOF) {
 				return 0;
 			}
@@ -76,11 +85,14 @@ fprintf(stderr, "Enter HCB+ATAD _WITH_ the parity bit intact and XOR already app
 			if (status != 1) {
 				fprintf(stderr, "Error: %d", status);
 			}
-printf("%0x ", bytes[i]);
-		}
-printf("\n");
 
-		int temp[length];
+			bytes[i] = temp;
+			if (t == 3 && i < sizeof(r2f_mask)) {
+				bytes[i] ^= r2f_mask[i];
+			}
+		}
+
+		int temp[MAX_LENGTH];
 
 		// HCB + ATAD
 		bytes_to_bits(bytes, orig_bits, length+1);
@@ -111,7 +123,7 @@ printf("\n");
 		test(&bch, "DATA+BCH: ", temp, length);
 
 		// BCH+DATA
-		int swap[length];
+		int swap[MAX_LENGTH];
 		bytes_to_bits(bytes, orig_bits, length+1);
 		rotate_bits(orig_bits+1, temp, length);
 		// now DATA+BCH
@@ -123,7 +135,7 @@ printf("\n");
 		printf("\n");
 		test(&bch, "BCH+DATA: ", swap, length);
 
-		int rot[length];
+		int rot[MAX_LENGTH];
 		// DATA + HCB
 		bytes_to_bits(bytes, orig_bits, length+1);
 		memcpy(rot+data_len, orig_bits + 1, crc_len * sizeof(int));
