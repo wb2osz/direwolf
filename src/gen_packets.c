@@ -480,6 +480,11 @@ int main(int argc, char **argv)
                 dw_printf ("EOTD type must be %c or %c\n", EOTD_TYPE_F2R, EOTD_TYPE_R2F);
 	        exit(EXIT_FAILURE);
 	      }
+
+	      modem.achan[0].mark_freq = 1800;	// NOTE: THIS IS BACKWARDS UNTIL REV 1.7
+	      modem.achan[0].space_freq = 1200;	// backwards, too.
+	      modem.achan[0].baud = 1200;
+
               break;
 
             default:
