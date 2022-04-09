@@ -34,6 +34,7 @@ int main(int argc, char **argv) {
 
 	if (argc < 5) {
 		fprintf(stderr, "Expecting 4+ arguments - m, length, t, type (F or R) and optionally rev to reverse the input bytes.\n");
+		fprintf(stderr, "THE BCH CODE IS NOT VERIFIED!\n");
 		return -1;
 	}
 
