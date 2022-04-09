@@ -474,6 +474,26 @@ if(WIN32 OR CYGWIN)
 endif()
 
 
+list(APPEND pkttest_SOURCES
+  pkttest.c
+  bch.c
+  eotd.c
+  )
+
+add_executable(pkttest
+  ${pkttest_SOURCES}
+  )
+
+list(APPEND bchapply_SOURCES
+  bchapply.c
+  bch.c
+  )
+
+add_executable(bchapply
+  ${bchapply_SOURCES}
+  )
+
+
 install(TARGETS direwolf DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS decode_aprs DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS text2tt DESTINATION ${INSTALL_BIN_DIR})
@@ -487,6 +507,8 @@ install(TARGETS atest DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS ttcalc DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS kissutil DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS appserver DESTINATION ${INSTALL_BIN_DIR})
+install(TARGETS pkttest DESTINATION ${INSTALL_BIN_DIR})
+install(TARGETS bchapply DESTINATION ${INSTALL_BIN_DIR})
 if(UDEV_FOUND)
   install(TARGETS cm108 DESTINATION ${INSTALL_BIN_DIR})
 endif()
