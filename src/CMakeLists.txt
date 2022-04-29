@@ -478,10 +478,16 @@ list(APPEND pkttest_SOURCES
   pkttest.c
   bch.c
   eotd.c
+  textcolor.c
   )
 
 add_executable(pkttest
   ${pkttest_SOURCES}
+  )
+
+target_link_libraries(pkttest
+  ${MISC_LIBRARIES}
+  Threads::Threads
   )
 
 list(APPEND bchapply_SOURCES

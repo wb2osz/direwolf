@@ -1,5 +1,6 @@
 #include <stdio.h>
-#include <strings.h>
+#include <string.h>
+#include <inttypes.h>
 #include "bch.h"
 #include "eotd.h"
 #include "eotd_defs.h"
