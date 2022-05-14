@@ -85,6 +85,8 @@ list(APPEND direwolf_SOURCES
   dwgpsnmea.c
   dwgpsd.c
   mheard.c
+  eotd.c
+  bch.c
   )
 
 if(LINUX)
@@ -276,6 +278,7 @@ list(APPEND gen_packets_SOURCES
   dtmf.c
   textcolor.c
   dsp.c
+  eotd_send.c
   )
 
 add_executable(gen_packets
@@ -317,6 +320,8 @@ list(APPEND atest_SOURCES
   symbols.c
   tt_text.c
   textcolor.c
+  eotd.c
+  bch.c
   )
 
 if(WIN32 OR CYGWIN)
@@ -469,6 +474,32 @@ if(WIN32 OR CYGWIN)
 endif()
 
 
+list(APPEND pkttest_SOURCES
+  pkttest.c
+  bch.c
+  eotd.c
+  textcolor.c
+  )
+
+add_executable(pkttest
+  ${pkttest_SOURCES}
+  )
+
+target_link_libraries(pkttest
+  ${MISC_LIBRARIES}
+  Threads::Threads
+  )
+
+list(APPEND bchapply_SOURCES
+  bchapply.c
+  bch.c
+  )
+
+add_executable(bchapply
+  ${bchapply_SOURCES}
+  )
+
+
 install(TARGETS direwolf DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS decode_aprs DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS text2tt DESTINATION ${INSTALL_BIN_DIR})
@@ -482,6 +513,8 @@ install(TARGETS atest DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS ttcalc DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS kissutil DESTINATION ${INSTALL_BIN_DIR})
 install(TARGETS appserver DESTINATION ${INSTALL_BIN_DIR})
+install(TARGETS pkttest DESTINATION ${INSTALL_BIN_DIR})
+install(TARGETS bchapply DESTINATION ${INSTALL_BIN_DIR})
 if(UDEV_FOUND)
   install(TARGETS cm108 DESTINATION ${INSTALL_BIN_DIR})
 endif()

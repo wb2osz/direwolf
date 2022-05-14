@@ -19,3 +19,6 @@
 
 #define USER_DEF_TYPE_AIS 'A'		// data type A for AIS NMEA sentence
 #define USER_DEF_TYPE_EAS 'E'		// data type E for EAS broadcasts
+#define USER_DEF_TYPE_EOTD 'R'		// data type R for 'Railroad' broadcasts
+#define USER_DEF_TYPE_DTMF 'T'		// 'T' is used without constant in the code.
+

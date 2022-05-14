@@ -1,5 +1,5 @@
-//
-//    This file is part of Dire Wolf, an amateur radio packet TNC.
+////
+////    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
 //    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
 //
@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>          // uint64_t
+#include <stdlib.h>
 
 //#include "tune.h"
 #include "demod.h"
@@ -46,13 +47,14 @@
 #include "demod_9600.h"		/* for descramble() */
 #include "ptt.h"
 #include "fx25.h"
+#include "bch.h"
+#include "eotd_defs.h"
 
+//#define EOTD_DEBUG
 
 //#define TEST 1				/* Define for unit testing. */
 
 //#define DEBUG3 1				/* monitor the data detect signal. */
-
-
 
 /* 
  * Minimum & maximum sizes of an AX.25 frame including the 2 octet FCS. 
@@ -111,6 +113,12 @@ struct hdlc_state_s {
 	int eas_plus_found;		/* "+" seen, indicating end of geographical area list. */
 
 	int eas_fields_after_plus;	/* Number of "-" characters after the "+". */
+
+	uint64_t eotd_acc;		/* Accumulate last recent 32 bits for EOTD. */
+
+	char eotd_type;			/* E for End of train, H for head of train */
+
+	int eotd_gathering;		/* Decoding in progress - valid frame. */
 };
 
 static struct hdlc_state_s hdlc_state[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
@@ -224,7 +232,6 @@ static int my_rand (void) {
 static void eas_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
 {
 	struct hdlc_state_s *H;
-
 /*
  * Different state information for each channel / subchannel / slice.
  */
@@ -400,6 +407,190 @@ a good modem here and providing a result when it is received.
 */
 
 
+int is_eotd_valid(struct hdlc_state_s *H) {
+/*
+	The data as received in the frame buffer is in HCB+ATAD format; that is, the first
+	(leftmost) bit is the dummy bit or odd parity bit (which is the last bit transmitted)
+	followed by the BCH code (LSB first, so HCB) followed by the DATA, LSB first (ATAD).
+
+	The apply_bch funtion requires the packet in int[63] format, with the bits arranged
+	in either BCH+ATAD or ATAD+BCH format. Very odd. We'll use the first one.
+
+	The HCB for R2F packets must be XOR-ed with 0EED4 - since we have a leading dummy bit,
+	we XOR with 0EED4 >> 1.
+*/
+	static uint8_t r2f_mask[] = {0x07, 0x76, 0xa0 };
+	static bch_t *bch_r2f = NULL;
+	static bch_t *bch_f2r = NULL;
+
+	int bits[64];
+
+	assert(H != NULL);
+	// +1 for 'type' byte at end
+	assert(H->frame_len == EOTD_LENGTH + 1);
+
+	if(bch_r2f == NULL) {
+		bch_r2f = malloc(sizeof(bch_t));
+		int status = init_bch(bch_r2f, 6, 63, 3);
+		if (status != 0) {
+			fprintf(stderr, "BCH_R2F initialization failed: %d", status);
+			free(bch_r2f);
+			bch_r2f = NULL;
+			return status;
+		}
+	}
+
+	if(bch_f2r == NULL) {
+		bch_f2r = malloc(sizeof(bch_t));
+		int status = init_bch(bch_f2r, 6, 63, 6);
+		if (status != 0) {
+			fprintf(stderr, "BCH_F2R initialization failed: %d", status);
+			free(bch_f2r);
+			bch_f2r = NULL;
+			return status;
+		}
+	}
+
+	int temp_bits[64];
+	bch_t *temp_bch;
+
+	if (H->eotd_type == EOTD_TYPE_F2R) {
+		temp_bch = bch_f2r;
+	} else {
+		temp_bch = bch_r2f;
+		// The HCB needs to be XOR'ed with a special constant.
+		for (int i = 0; i < sizeof(r2f_mask); i++) {
+			H->frame_buf[i] ^= r2f_mask[i];
+		}
+	}
+
+	int crc_len = temp_bch->n - temp_bch->k;
+
+	bytes_to_bits(H->frame_buf, bits, 64);
+
+	// +1 is to skip the dummy/parity bit.
+	rotate_bits(bits + 1 , temp_bits, crc_len);
+	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
+
+	// Note: bits are changed in-place.
+	int corrected = apply_bch(temp_bch, bits + 1);
+
+	// Put back in HCB+ATAD format
+	rotate_bits(bits + 1, temp_bits, crc_len);
+	memcpy(bits + 1, temp_bits, crc_len * sizeof(int));
+	bits_to_bytes(bits, H->frame_buf, 64);
+
+	// Put the XOR-ed bits back.
+	if (H->eotd_type == EOTD_TYPE_R2F) {
+		// The HCB needs to be XOR'ed with a special constant.
+		for (int i = 0; i < sizeof(r2f_mask); i++) {
+			H->frame_buf[i] ^= r2f_mask[i];
+		}
+	}
+
+	return corrected;
+}
+
+/***********************************************************************************
+ *
+ * Name:	eotd_rec_bit
+ *
+ * Purpose:	Extract EOTD trasmissions from a stream of bits.
+ *
+ * Inputs:	chan	- Channel number.
+ *
+ *		subchan	- This allows multiple demodulators per channel.
+ *
+ *		slice	- Allows multiple slicers per demodulator (subchannel).
+ *
+ *		raw 	- One bit from the demodulator.
+ *			  should be 0 or 1.
+ *
+ *		future_use - Not implemented yet.  PSK already provides it.
+ *	
+ *
+ * Description:	This is called once for each received bit.
+ *		For each valid transmission, process_rec_frame()
+ *		is called for further processing.
+ *
+ ***********************************************************************************/
+
+static void eotd_rec_bit (int chan, int subchan, int slice, int raw, int future_use)
+{
+	struct hdlc_state_s *H;
+
+/*
+ * Different state information for each channel / subchannel / slice.
+ */
+	H = &hdlc_state[chan][subchan][slice];
+
+#ifdef EOTD_DEBUG
+// dw_printf("chan=%d subchan=%d slice=%d raw=%d\n", chan, subchan, slice, raw);
+dw_printf("%d ", raw);
+#endif
+	  //dw_printf ("slice %d = %d\n", slice, raw);
+
+// Accumulate most recent 64 bits in LSB-first order.
+
+	H->eotd_acc >>= 1;
+	if (raw) {
+	  H->eotd_acc |= 0x8000000000000000UL;
+	}
+
+	int done = 0;
+
+	if (!H->eotd_gathering &&
+		((H->eotd_acc & EOTD_PREAMBLE_MASK) == EOTD_PREAMBLE_AND_BARKER_CODE ||
+		 (H->eotd_acc & HOTD_PREAMBLE_MASK) == HOTD_PREAMBLE_AND_BARKER_CODE)) {
+#ifdef EOTD_DEBUG
+	  dw_printf ("Barker Code Found %llx\n", H->eotd_acc);
+#endif
+	  H->eotd_type = (H->eotd_acc & EOTD_PREAMBLE_MASK) == EOTD_PREAMBLE_AND_BARKER_CODE ? EOTD_TYPE_R2F : EOTD_TYPE_F2R;
+	  H->olen = 0;
+	  H->eotd_gathering = 1;
+	  H->frame_len = 0;
+	  H->eotd_acc = 0ULL;
+	}
+	else if (H->eotd_gathering) {
+	  H->olen++;
+	
+	  if (H->olen == EOTD_LENGTH * 8) {
+	      H->frame_len = EOTD_LENGTH + 1; // appended type
+	      for (int i = EOTD_LENGTH -1; i >=0; i--) {
+		H->frame_buf[i] = H->eotd_acc & 0xff;
+		H->eotd_acc >>= 8;
+	      }
+
+	      H->frame_buf[EOTD_LENGTH] = H->eotd_type;
+	      done = 1;
+#ifdef EOTD_DEBUG
+for (int ii=0; ii < EOTD_LENGTH; ii++) {dw_printf("%02x ", H->frame_buf[ii]); } dw_printf("\n");
+#endif
+	    }
+	}
+
+	if (done) {
+#ifdef DEBUG_E
+	  dw_printf ("frame_buf %d = %*s\n", slice, H->frame_len, H->frame_buf);
+#endif
+	  if (is_eotd_valid(H) >= 0) {
+	  	alevel_t alevel = demod_get_audio_level (chan, subchan);
+	  	multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len, alevel, 0, 0);
+	  } else {
+#ifdef EOTD_DEBUG
+print_bytes("BCH failed for packet (type byte appended) ", H->frame_buf, H->frame_len);
+#endif
+
+}
+
+	  H->eotd_acc = 0;
+	  H->eotd_gathering = 0;
+	  H->olen = 0;
+	  H->frame_len = 0;
+	}
+	return;
+} // end eotd_rec_bit
+
 /***********************************************************************************
  *
  * Name:	hdlc_rec_bit
@@ -462,6 +653,13 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	  eas_rec_bit (chan, subchan, slice, raw, not_used_remove);
 	  return;
 	}
+
+// EOTD does not use HDLC.
+
+	if (g_audio_p->achan[chan].modem_type == MODEM_EOTD) {
+          eotd_rec_bit (chan, subchan, slice, raw, not_used_remove);
+          return;
+        }
 
 /*
  * Different state information for each channel / subchannel / slice.
@@ -564,7 +762,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	    if (actual_fcs == expected_fcs) {
 	      alevel_t alevel = demod_get_audio_level (chan, subchan);
 
-	      multi_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE, 0);   /* len-2 to remove FCS. */
+	      :ulti_modem_process_rec_frame (chan, subchan, slice, H->frame_buf, H->frame_len - 2, alevel, RETRY_NONE, 0);   /* len-2 to remove FCS. */
 	    }
 	    else {
 
@@ -801,6 +999,7 @@ int hdlc_rec_data_detect_any (int chan)
 	return (0);
 
 } /* end hdlc_rec_data_detect_any */
+
 
 /* end hdlc_rec.c */
 

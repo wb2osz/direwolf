@@ -76,6 +76,8 @@
 #include "morse.h"
 #include "dtmf.h"
 #include "fx25.h"
+#include "eotd_send.h"
+#include "eotd_defs.h"
 
 
 /* Own random number generator so we can get */
@@ -97,6 +99,10 @@ static int audio_file_close (void);
 static int g_add_noise = 0;
 static float g_noise_level = 0;
 static int g_morse_wpm = 0;		/* Send morse code at this speed. */
+static int g_eotd_type = 0;
+
+static int byte_count;			/* Number of data bytes written to file. */
+					/* Will be written to header when file is closed. */
 
 
 static struct audio_s modem;
@@ -115,6 +121,11 @@ static void send_packet (char *str)
 
 	  morse_send (0, str, g_morse_wpm, 100, 100);
 	}
+        else if (g_eotd_type > 0) {
+	  for (c=0; c<modem.adev[0].num_channels; c++) {
+	    eotd_send_block (c, str, g_eotd_type);
+	  }
+        }
 	else {
 	  pp = ax25_from_text (str, 1);
 	  if (pp == NULL) {
@@ -227,7 +238,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:",
+          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:e:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -460,6 +471,20 @@ int main(int argc, char **argv)
 
               /* Unknown option message was already printed. */
               usage (argv);
+              break;
+
+            case 'e':
+	      g_eotd_type = optarg[0];
+	      if (g_eotd_type != EOTD_TYPE_F2R && g_eotd_type != EOTD_TYPE_R2F) {
+                text_color_set(DW_COLOR_ERROR); 
+                dw_printf ("EOTD type must be %c or %c\n", EOTD_TYPE_F2R, EOTD_TYPE_R2F);
+	        exit(EXIT_FAILURE);
+	      }
+
+	      modem.achan[0].mark_freq = 1800;	// NOTE: THIS IS BACKWARDS UNTIL REV 1.7
+	      modem.achan[0].space_freq = 1200;	// backwards, too.
+	      modem.achan[0].baud = 1200;
+
               break;
 
             default:
@@ -756,9 +781,6 @@ struct wav_header {             /* .WAV file header. */
 static FILE *out_fp = NULL;
 
 static struct wav_header header;
-
-static int byte_count;			/* Number of data bytes written to file. */
-					/* Will be written to header when file is closed. */
 
 
 static int audio_file_open (char *fname, struct audio_s *pa)

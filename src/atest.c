@@ -280,6 +280,9 @@ int main (int argc, char *argv[])
 	      else if (strcasecmp(optarg, "EAS") == 0) {
 	        B_opt = 23456;	// See special case below.
 	      }
+              else if (strcasecmp(optarg, "EOTD") == 0) {
+                B_opt = 34567;
+              }
 	      else {
 	        B_opt = atoi(optarg);
 	      }
@@ -475,6 +478,12 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].space_freq = 1563;	// Actually 1562.5 - logic 0.
 	  strlcpy (my_audio_config.achan[0].profiles, "D", sizeof(my_audio_config.achan[0].profiles));
 	}
+        else if (my_audio_config.achan[0].baud == 34567) {
+	  my_audio_config.achan[0].modem_type = MODEM_EOTD;
+          my_audio_config.achan[0].baud = 1200;
+          my_audio_config.achan[0].mark_freq = 1200;
+          my_audio_config.achan[0].space_freq = 1800;
+        }
 	else {
 	  my_audio_config.achan[0].modem_type = MODEM_SCRAMBLE;
 	  my_audio_config.achan[0].mark_freq = 0;

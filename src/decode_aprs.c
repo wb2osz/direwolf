@@ -2350,6 +2350,9 @@ static void aprs_user_defined (decode_aprs_t *A, char *info, int ilen)
 	  A->g_altitude_ft = DW_METERS_TO_FEET(alt_meters);
 	  strcpy (A->g_mfr, "");
 	}
+	else if (info[0] == '{' && info[1] == USER_DEF_USER_ID && info[2] == USER_DEF_TYPE_EOTD) {
+	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "End-of-Train Device CSV Data");
+	}
 	else if (strncmp(info, "{{", 2) == 0) {
 	  snprintf (A->g_msg_type, sizeof(A->g_msg_type), "User-Defined Experimental");
 	}
