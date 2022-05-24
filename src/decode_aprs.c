@@ -204,6 +204,15 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	A->g_footprint_lon = G_UNKNOWN;
 	A->g_footprint_radius = G_UNKNOWN;
 
+// TODO: Complain if obsolete WIDE or RELAY is found in via path.
+
+// TODO: complain if unused WIDEn is see in path.
+// There is a report of UIDIGI decrementing ssid 1 to 0 and not marking it used.
+// http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2022-May/049397.html
+
+// TODO: Complain if used digi is found after unused.  Should never happen.
+
+
 // If third-party header, try to decode just the payload.
 
 	if (*pinfo == '}') {
@@ -4113,11 +4122,8 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
  * models before getting to the more generic APY.
  */
 
-#if defined(__WIN32__) || defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
 	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), tocall_cmp);
-#else
-	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), (__compar_fn_t)tocall_cmp);
-#endif
+
 	  }
 	  else {
 	    if ( ! A->g_quiet) {
