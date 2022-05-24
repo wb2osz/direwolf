@@ -1710,7 +1710,7 @@ static void usage (char **argv)
 	dw_printf ("\n");
 
 	dw_printf ("After any options, there can be a single command line argument for the source of\n");
-	dw_printf ("received audio.  This can overrides the audio input specified in the configuration file.\n");
+	dw_printf ("received audio.  This can override the audio input specified in the configuration file.\n");
 	dw_printf ("\n");
   
 #if __WIN32__
