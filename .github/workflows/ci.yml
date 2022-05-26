@@ -63,6 +63,15 @@ jobs:
               cmake_extra_flags: ''
             }
           - {
+              name: 'Ubuntu 22.04',
+              os: ubuntu-22.04,
+              cc: 'gcc',
+              cxx: 'g++',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: ''
+            }
+          - {
               name: 'Ubuntu 20.04',
               os: ubuntu-20.04,
               cc: 'gcc',
@@ -74,15 +83,6 @@ jobs:
           - {
               name: 'Ubuntu 18.04',
               os: ubuntu-18.04,
-              cc: 'gcc',
-              cxx: 'g++',
-              arch: 'x86_64',
-              build_type: 'Release',
-              cmake_extra_flags: ''
-            }
-          - {
-              name: 'Ubuntu 16.04',
-              os: ubuntu-16.04,
               cc: 'gcc',
               cxx: 'g++',
               arch: 'x86_64',
