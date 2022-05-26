@@ -34,8 +34,8 @@ jobs:
               cmake_extra_flags: '-G "MinGW Makefiles"'
             }
           - {
-              name: 'Windows Latest MinGW 32bit',
-              os: windows-latest,
+              name: 'Windows 2019 MinGW 32bit',
+              os: windows-2019,
               cc: 'i686-w64-mingw32-gcc',
               cxx: 'i686-w64-mingw32-g++',
               ar: 'i686-w64-mingw32-ar',
@@ -140,7 +140,6 @@ jobs:
             export WINDRES=${{ matrix.config.windres }}
           fi
           cmake --build . --config ${{ matrix.config.build_type }} \
-            ${{ matrix.config.cmake_extra_flags }} \
             ${{ github.event.inputs.cmake_flags }}
       - name: test
         continue-on-error: true
@@ -149,7 +148,6 @@ jobs:
         run: |
           ctest -C ${{ matrix.config.build_type }} \
             --parallel 2 --output-on-failure \
-            ${{ matrix.config.cmake_extra_flags }} \
             ${{ github.event.inputs.cmake_flags }}
       - name: package
         shell: bash
