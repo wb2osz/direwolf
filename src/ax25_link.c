@@ -1998,6 +1998,25 @@ void lm_channel_busy (dlq_item_t *E)
 } /* end lm_channel_busy */
 
 
+/*------------------------------------------------------------------------------
+ *
+ * Name:	is_channel_busy
+ * 
+ * Purpose:	Returns DCD or PTT status for channel
+ *
+ * Inputs:	Channel
+ *
+ * Outputs:	True when busy, false when free
+ *
+ *------------------------------------------------------------------------------*/
+ 
+int is_channel_busy(int chan) 
+{
+	if (ptt_status[chan] || dcd_status[chan])
+	  return 1;
+
+	return 0;
+} /* end is_channel_busy */
 
 
 /*------------------------------------------------------------------------------

@@ -47,6 +47,7 @@
 #include "ptt.h"
 #include "fx25.h"
 #include "il2p.h"
+#include "ax25_link.h"
 
 
 //#define TEST 1				/* Define for unit testing. */
@@ -791,11 +792,27 @@ int hdlc_rec_data_detect_any (int chan)
 {
 
 	int sc;
+	int ch;
+	int il;
 	assert (chan >= 0 && chan < MAX_CHANS);
 
-	for (sc = 0; sc < num_subchan[chan]; sc++) {
-	  if (composite_dcd[chan][sc] != 0)
-	    return (1);
+	if (g_audio_p->achan[chan].interlock > 0) {
+	  // Channel has an interlock number configured, proceed checking interlocked channels
+	  il = g_audio_p->achan[chan].interlock;
+
+	  for (ch = 0; ch < MAX_CHANS; ch++) {
+	    if (g_audio_p->achan[ch].interlock == il) {
+	      // Check DCD and PTT state at data link state machine
+	      if (is_channel_busy(ch))
+	        return (1);
+	    }
+	  }
+	} else {
+	  // No interlock
+	  for (sc = 0; sc < num_subchan[chan]; sc++) {
+	    if (composite_dcd[chan][sc] != 0)
+	      return (1);
+	  }
 	}
 
 	if (get_input(ICTYPE_TXINH, chan) == 1) return (1);

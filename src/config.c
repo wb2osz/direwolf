@@ -780,6 +780,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_audio_config->achan[channel].sanity_test = SANITY_APRS;
 	  p_audio_config->achan[channel].passall = 0;
 
+	  p_audio_config->achan[channel].interlock = 0;
+
 	  for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	    p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_NONE;
 	    strlcpy (p_audio_config->achan[channel].octrl[ot].ptt_device, "", sizeof(p_audio_config->achan[channel].octrl[ot].ptt_device));
@@ -1729,6 +1731,31 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	  }
 
+/*
+ * INTERLOCK  n
+ *
+ * Interlocks channels with the same interlock number (n) to share DCD and PTT signaling.
+ */
+
+	  else if (strcasecmp(t, "INTERLOCK") == 0) {
+	    int n;
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing number for INTERLOCK command.\n", line);
+	      continue;
+	    }
+	    n = atoi(t);
+        if (n >= 0 && n <= MAX_INTERLOCKS) {
+	      p_audio_config->achan[channel].interlock = n;
+	    }
+	    else {
+	      p_audio_config->achan[channel].interlock = 0;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Invalid number for INTERLOCK. Using %d.\n",
+	                  line, p_audio_config->achan[channel].interlock);
+	     }
+	  }
 
 /*
  * PTT 		- Push To Talk signal line.
