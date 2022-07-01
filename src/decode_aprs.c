@@ -1788,7 +1788,6 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  // Look for message number.
 	  char *pno = strchr(p->message, '{');
 	  if (pno != NULL) {
-	    *pno = '\0';
 	    int mlen = strlen(pno+1);
 	    if (mlen < 1 || mlen > 5) {
 	      text_color_set(DW_COLOR_ERROR);
