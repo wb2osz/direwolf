@@ -174,10 +174,10 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	A->g_quiet = quiet;
 
 	if (isprint(*pinfo)) {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!!  Unknown APRS Data Type Indicator \"%c\"", *pinfo);
 	}
 	else {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!! Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!!  Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
 	}
 
 	A->g_symbol_table = '/';	/* Default to primary table. */
@@ -303,7 +303,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 
 	      if (strncmp((char*)pinfo, "!!", 2) == 0)
 	      {
-		aprs_ultimeter (A, (char*)pinfo, info_len);
+		aprs_ultimeter (A, (char*)pinfo, info_len);		// TODO: produce obsolete error.
 	      }
 	      else
 	      {	     
@@ -312,7 +312,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	      break;
 
 
-	    //case '#':		/* Peet Bros U-II Weather station */
+	    //case '#':		/* Peet Bros U-II Weather station */		// TODO: produce obsolete error.
 	    //case '*':		/* Peet Bros U-II Weather station */
 	      //break;
 		
@@ -320,7 +320,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 		
 	      if (strncmp((char*)pinfo, "$ULTW", 5) == 0)
 	      {
-		aprs_ultimeter (A, (char*)pinfo, info_len);
+		aprs_ultimeter (A, (char*)pinfo, info_len);		// TODO: produce obsolete error.
 	      }
 	      else
 	      {
@@ -536,7 +536,13 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  snprintf (rng, sizeof(rng), ", range=%.1f", A->g_range);
 	  strlcat (stemp, rng, sizeof(stemp));
 	}
-	text_color_set(DW_COLOR_DECODED);
+
+	if (strncmp(stemp, "ERROR", 5) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	}
+	else {
+	  text_color_set(DW_COLOR_DECODED);
+	}
 	dw_printf("%s\n", stemp);
 
 /*
@@ -556,7 +562,6 @@ void decode_aprs_print (decode_aprs_t *A) {
  * Any example was checked for each hemihemisphere using
  * http://www.amsat.org/cgi-bin/gridconv
  */
-// FIXME soften language about upper case.
 
 	if (strlen(A->g_maidenhead) > 0) {
 
@@ -1565,7 +1570,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  * Purpose:	Decode "Message Format."
  *		The word message is used loosely all over the place, but it has a very specific meaning here.
  *
- * Inputs:	info 	- Pointer to Information field.
+ * Inputs:	info 	- Pointer to Information field.  Be carefull not to modify it here!
  *		ilen 	- Information field length.
  *		quiet	- suppress error messages.
  *
@@ -1609,7 +1614,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *
  *------------------------------------------------------------------*/
 
-static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int quiet) 
+static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int quiet)
 {
 
 	struct aprs_message_s {
@@ -1619,7 +1624,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char message[256-1-9-1];	/* Officially up to 67 characters for message text. */
 					/* Relaxing seemingly arbitrary restriction here; it doesn't need to fit on a punched card. */
 					/* Wouldn't surprise me if others did not pay attention to the limit. */
-					/* Optional { followed by 1-5 alphanumeric characters for message number */
+					/* Optional '{' followed by 1-5 alphanumeric characters for message number */
 
 					/* If the first character is '?' it is a Directed Station Query. */
 	} *p;
@@ -1751,6 +1756,16 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: Message number is missing after \"ack\".\n");
 	  }
+
+	  // Xastir puts a carriage return on the end.
+	  char *p = strchr(A->g_message_number, '\r');
+	  if (p != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("The APRS protocol specification says nothing about a possible carriage return after the\n");
+	      dw_printf("message id.  Adding CR might prevent proper interoperability with with other applications.\n");
+	      *p = '\0';
+	  }
+ 
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -1765,6 +1780,16 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: Message number is missing after \"rej\".\n");
 	  }
+
+	  // Xastir puts a carriage return on the end.
+	  char *p = strchr(A->g_message_number, '\r');
+	  if (p != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("The APRS protocol specification says nothing about a possible carriage return after the\n");
+	      dw_printf("message id.  Adding CR might prevent proper interoperability with with other applications.\n");
+	      *p = '\0';
+	  }
+
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -1788,13 +1813,23 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  // Look for message number.
 	  char *pno = strchr(p->message, '{');
 	  if (pno != NULL) {
-	    *pno = '\0';
-	    int mlen = strlen(pno+1);
+	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+
+	    // Xastir puts a carriage return on the end.
+	    char *p = strchr(A->g_message_number, '\r');
+	    if (p != NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("The APRS protocol specification says nothing about a possible carriage return after the\n");
+	        dw_printf("message id.  Adding CR might prevent proper interoperability with with other applications.\n");
+	        *p = '\0';
+	    }
+
+	    int mlen = strlen(A->g_message_number);
 	    if (mlen < 1 || mlen > 5) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Message number \"%s\" has length outside range of 1 to 5.\n", pno+1);
+	      dw_printf("Message number \"%s\" has length outside range of 1 to 5.\n", A->g_message_number);
 	    }
-	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+
 	    // TODO: Complain if not alphanumeric.
 
 	    char ack[8] = "";
@@ -1824,6 +1859,11 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  /* No location so don't use  process_comment () */
 
 	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	  // Remove message number when displaying message text.
+	  pno = strchr(A->g_comment, '{');
+	  if (pno != NULL) {
+	    *pno = '\0';
+	  }
 	}
 
 }
@@ -3752,9 +3792,14 @@ time_t get_timestamp (decode_aprs_t *A, char *p)
  *		It is composed of:
  *			a pair of letters in range A to R.
  *			a pair of digits in range of 0 to 9.
- *			a pair of letters in range of A to X.
+ *			an optional pair of letters in range of A to X.
  *
- * 		The APRS spec says that all letters must be transmitted in upper case.
+ *		The spec says:
+ *				"All letters must be transmitted in upper case.
+ *				Letters may be received in upper case or lower case."
+ *
+ *		Typically the second set of letters is written in lower case.
+ *		An earlier version incorrectly produced an error if lower case found.
  *
  *
  * Examples from APRS spec:	
@@ -3775,25 +3820,10 @@ int get_maidenhead (decode_aprs_t *A, char *p)
 
 	  /* We have 4 characters matching the rule. */
 
-	  if (islower(p[0]) || islower(p[1])) {
-	    if ( ! A->g_quiet) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");
-	    }	  
-	  }
-
 	  if (toupper(p[4]) >= 'A' && toupper(p[4]) <= 'X' &&
 	      toupper(p[5]) >= 'A' && toupper(p[5]) <= 'X') {
 
 	    /* We have 6 characters matching the rule. */
-
-	    if (islower(p[4]) || islower(p[5])) {
-	      if ( ! A->g_quiet) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");	
-	      }	  
-	    }
-	  
 	    return 6;
 	  }
 	
@@ -4649,7 +4679,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  int a = A->g_comment[match[0].rm_so+2];
 	  int o = A->g_comment[match[0].rm_so+3];
 
-	  dw_printf("DAO start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
+	  //dw_printf("DAO start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
 
 /*
@@ -5035,7 +5065,9 @@ int main (int argc, char *argv[])
 	    /* Try to process it. */
 
 	    text_color_set(DW_COLOR_REC);
-	    dw_printf("\n%s\n", stuff);	    
+	    dw_printf("\n");
+	    ax25_safe_print (stuff, -1, 0);
+	    dw_printf("\n");
 
 // Do we have monitor format, KISS, or AX.25 frame?
 
