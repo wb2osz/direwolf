@@ -164,7 +164,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 
 	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	  if (audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	  if (audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 
 	    int a = ACHAN2ADEV(chan);
 
@@ -295,7 +295,7 @@ void tone_gen_put_bit (int chan, int dat)
 
 	assert (save_audio_config_p != NULL);
 
-	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Invalid channel %d for tone generation.\n", chan);
 	  return;
@@ -360,7 +360,10 @@ void tone_gen_put_bit (int chan, int dat)
 	  bit_count[chan] = 0;
 	}
 
-	if (save_audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE) {
+	// Would be logical to have MODEM_BASEBAND for IL2P rather than checking here.  But...
+	// That would mean putting in at least 3 places and testing all rather than just one.
+	if (save_audio_config_p->achan[chan].modem_type == MODEM_SCRAMBLE &&
+	    save_audio_config_p->achan[chan].layer2_xmit != LAYER2_IL2P) {
 	  int x;
 
 	  x = (dat ^ (lfsr[chan] >> 16) ^ (lfsr[chan] >> 11)) & 1;
@@ -380,7 +383,14 @@ void tone_gen_put_bit (int chan, int dat)
 	      text_color_set(DW_COLOR_DEBUG);
 	      dw_printf ("tone_gen_put_bit %d AFSK\n", __LINE__);
 #endif
-	      tone_phase[chan] += dat ? f2_change_per_sample[chan] : f1_change_per_sample[chan];
+
+	      // v1.7 reversed.
+	      // Previously a data '1' selected the second (usually higher) tone.
+	      // It never really mattered before because we were using NRZI.
+	      // With the addition of IL2P, we need to be more careful.
+	      // A data '1' should be the mark tone.
+
+	      tone_phase[chan] += dat ? f1_change_per_sample[chan] : f2_change_per_sample[chan];
               sam = sine_table[(tone_phase[chan] >> 24) & 0xff];
 	      gen_tone_put_sample (chan, a, sam);
 	      break;

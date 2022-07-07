@@ -1,7 +1,6 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
-//
-//    Copyright (C) 2011-2014, 2015, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011-2014, 2015, 2017, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -87,6 +86,83 @@
  *
  *---------------------------------------------------------------*/
 
+/*
+	Separate TCP ports per radio:
+
+An increasing number of people are using multiple radios.
+direwolf is capable of handling many radio channels and
+provides cross-band repeating, etc.
+Maybe a single stereo audio interface is used for 2 radios.
+
+                   +------------+    tcp 8001, all channels
+Radio A  --------  |            |  -------------------------- Application A
+                   |  direwolf  |
+Radio B  --------  |            |  -------------------------- Application B
+                   +------------+    tcp 8001, all channels
+
+The KISS protocol has a 4 bit field for the TNC port (which I prefer to
+call channel because port has too many different meanings).
+direwolf handles this fine.  However, most applications were written assuming
+that a TNC could only talk to a single radio.  On reception, they ignore the
+channel in the KISS frame.  For transmit, the channel is always set to 0.
+
+Many people are using the work-around of two separate instances of direwolf.
+
+                   +------------+    tcp 8001, KISS ch 0
+Radio A  --------  |  direwolf  |  -------------------------- Application A
+                   +------------+
+
+                   +------------+    tcp 8002, KISS ch 0
+Radio B  --------  |  direwolf  |  -------------------------- Application B
+                   +------------+
+
+
+Or they might be using a single application that knows how to talk to multiple
+single port TNCs.  But they don't know how to multiplex multiple channels
+thru a single KISS stream.
+
+                   +------------+    tcp 8001, KISS ch 0
+Radio A  --------  |  direwolf  |  ------------------------
+                   +------------+                          \
+                                                            -- Application
+                   +------------+    tcp 8002, KISS ch 0   /
+Radio B  --------  |  direwolf  |  ------------------------
+                   +------------+
+
+Using two different instances of direwolf means more complex configuration
+and loss of cross-channel digipeating.  It is possible to use a stereo
+audio interface but some ALSA magic is required to make it look like two
+independent virtual mono interfaces.
+
+In version 1.7, we add the capability of multiple KISS TCP ports, each for
+a single radio channel.  e.g.
+
+KISSPORT 8001 1
+KISSPORT 8002 2
+
+Now can use a single instance of direwolf.
+
+
+                   +------------+    tcp 8001, KISS ch 0
+Radio A  --------  |            |  -------------------------- Application A
+                   |  direwolf  |
+Radio B  --------  |            |  -------------------------- Application B
+                   +------------+    tcp 8002, KISS ch 0
+
+When receiving, the KISS channel is set to 0.
+ - only radio channel 1 would be sent over tcp port 8001.
+ - only radio channel 2 would be sent over tcp port 8001.
+
+When transmitting, the KISS channel is ignored.
+ - frames from tcp port 8001 are transmitted on radio channel 1.
+ - frames from tcp port 8002 are transmitted on radio channel 2.
+
+Of course, you could also use an application, capable of connecting to
+multiple single radio TNCs.  Separate TCP ports actually go to the
+same direwolf instance.
+
+*/
+
 
 /*
  * Native Windows:	Use the Winsock interface.
@@ -127,25 +203,6 @@
 void hex_dump (unsigned char *p, int len);	// This should be in a .h file.
 
 
-/*
- * Early on we allowed one AGW connection and one KISS TCP connection at a time.
- * In version 1.1, we allowed multiple concurrent client apps to attach with the AGW network protocol.
- * In Version 1.5, we do essentially the same here to allow multiple concurrent KISS TCP clients.
- * The default is a limit of 3 client applications at the same time.
- * You can increase the limit by changing the line below.
- * A larger number consumes more resources so don't go crazy by making it larger than needed.
- */
-
-#define MAX_NET_CLIENTS 3
-
-static int client_sock[MAX_NET_CLIENTS];
-				/* File descriptor for socket for */
-				/* communication with client application. */
-				/* Set to -1 if not connected. */
-				/* (Don't use SOCKET type because it is unsigned.) */
-
-static kiss_frame_t kf[MAX_NET_CLIENTS];
-				/* Accumulated KISS frame and state of decoder. */
 
 
 
@@ -162,6 +219,12 @@ static THREAD_F kissnet_listen_thread (void *arg);
 
 static struct misc_config_s *s_misc_config_p;
 
+
+// Each TCP port has its own status block.
+// There is a variable number so use a linked list.
+
+static struct kissport_status_s *all_ports = NULL;
+
 static int kiss_debug = 0;		/* Print information flowing from and to client. */
 
 void kiss_net_set_debug (int n) 
@@ -177,11 +240,9 @@ void kiss_net_set_debug (int n)
  *
  * Purpose:     Set up a server to listen for connection requests from
  *		an application such as Xastir or APRSIS32.
+ *		This is called once from the main program.
  *
  * Inputs:	mc->kiss_port	- TCP port for server.
- *				  Main program has default of 8000 but allows
- *				  an alternative to be specified on the command line
- *
  *				0 means disable.  New in version 1.2.
  *
  * Outputs:	
@@ -193,8 +254,34 @@ void kiss_net_set_debug (int n)
  *
  *--------------------------------------------------------------------*/
 
+static void kissnet_init_one (struct kissport_status_s *kps);
 
 void kissnet_init (struct misc_config_s *mc)
+{
+	s_misc_config_p = mc;
+
+	for (int i = 0; i < MAX_KISS_TCP_PORTS; i++) {
+	  if (mc->kiss_port[i] != 0) {
+	    struct kissport_status_s *kps = calloc(sizeof(struct kissport_status_s), 1);
+	    if (kps == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("FATAL ERROR: Out of memory.\n");
+	      exit (EXIT_FAILURE);
+	    }
+
+	    kps->tcp_port = mc->kiss_port[i];
+	    kps->chan = mc->kiss_chan[i];
+	    kissnet_init_one (kps);
+
+	    // Add to list.
+	    kps->pnext = all_ports;
+	    all_ports = kps;
+	  }
+	}
+}
+
+
+static void kissnet_init_one (struct kissport_status_s *kps)
 {
 	int client;
 
@@ -206,23 +293,22 @@ void kissnet_init (struct misc_config_s *mc)
 	pthread_t cmd_listen_tid[MAX_NET_CLIENTS];
 	int e;
 #endif
-	s_misc_config_p = mc;
 
-	int kiss_port = mc->kiss_port;		/* default 8001 but easily changed. */
+
 
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("kissnet_init ( %d )\n", kiss_port);
+	dw_printf ("kissnet_init ( tcp port %d, radio chan = %d )\n", kps->tcp_port, kps->chan);
 #endif
 
 	
 	for (client=0; client<MAX_NET_CLIENTS; client++) {
-	  client_sock[client] = -1;
-	  memset (&(kf[client]), 0, sizeof(kf[client]));
+	  kps->client_sock[client] = -1;
+	  memset (&(kps->kf[client]), 0, sizeof(kps->kf[client]));
 	}
 
-	if (kiss_port == 0) {
+	if (kps->tcp_port == 0) {
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Disabled KISS network client port.\n");
 	  return;
@@ -232,17 +318,18 @@ void kissnet_init (struct misc_config_s *mc)
  * This waits for a client to connect and sets client_sock[n].
  */
 #if __WIN32__
-	connect_listen_th = (HANDLE)_beginthreadex (NULL, 0, connect_listen_thread, (void *)(ptrdiff_t)kiss_port, 0, NULL);
+	connect_listen_th = (HANDLE)_beginthreadex (NULL, 0, connect_listen_thread, (void *)kps, 0, NULL);
 	if (connect_listen_th == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Could not create KISS socket connect listening thread\n");
+	  dw_printf ("Could not create KISS socket connect listening thread for tcp port %d, radio chan %d\n", kps->tcp_port, kps->chan);
 	  return;
 	}
 #else
-	e = pthread_create (&connect_listen_tid, NULL, connect_listen_thread, (void *)(ptrdiff_t)kiss_port);
+	e = pthread_create (&connect_listen_tid, NULL, connect_listen_thread, (void *)kps);
 	if (e != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  perror("Could not create KISS socket connect listening thread");
+	  dw_printf ("for tcp port %d, radio chan %d\n", kps->tcp_port, kps->chan);
 	  return;
 	}
 #endif
@@ -254,15 +341,17 @@ void kissnet_init (struct misc_config_s *mc)
  */
 	for (client = 0; client < MAX_NET_CLIENTS; client++) {
 
+	  kps->arg2 = client;
+
 #if __WIN32__
-	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, kissnet_listen_thread, (void*)(ptrdiff_t)client, 0, NULL);
+	  cmd_listen_th[client] = (HANDLE)_beginthreadex (NULL, 0, kissnet_listen_thread, (void*)kps, 0, NULL);
 	  if (cmd_listen_th[client] == NULL) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Could not create KISS command listening thread for client %d\n", client);
 	    return;
 	  }
 #else
-	  e = pthread_create (&(cmd_listen_tid[client]), NULL, kissnet_listen_thread, (void *)(ptrdiff_t)client);
+	  e = pthread_create (&(cmd_listen_tid[client]), NULL, kissnet_listen_thread, (void *)kps);
 	  if (e != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Could not create KISS command listening thread for client %d\n", client);
@@ -271,6 +360,18 @@ void kissnet_init (struct misc_config_s *mc)
 	    return;
 	  }
 #endif
+	  // Wait for new thread to get content of arg2 before reusing it for the next thread create.
+
+	  int timer = 0;
+	  while (kps->arg2 >= 0) {
+	    SLEEP_MS(10);
+	    timer++;
+	    if (timer > 100) {	// 1 second - thread did not start
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("KISS data listening thread did not start for tcp port %d, client slot %d\n", kps->tcp_port, client);
+	      kps->arg2 = -1;		// Keep moving along.
+	    }
+	  }
 	}
 }
 
@@ -281,9 +382,7 @@ void kissnet_init (struct misc_config_s *mc)
  *
  * Purpose:     Wait for a connection request from an application.
  *
- * Inputs:	arg		- TCP port for server.
- *				  Main program has default of 8001 but allows
- *				  an alternative to be specified on the command line
+ * Inputs:	arg		- KISS port status block.
  *
  * Outputs:	client_sock	- File descriptor for communicating with client app.
  *
@@ -296,20 +395,22 @@ void kissnet_init (struct misc_config_s *mc)
 
 static THREAD_F connect_listen_thread (void *arg)
 {
+	struct kissport_status_s *kps = arg;
+
 #if __WIN32__
 
 	struct addrinfo hints;
 	struct addrinfo *ai = NULL;
 	int err;
-	char kiss_port_str[12];
+	char tcp_port_str[12];
 
 	SOCKET listen_sock;  
 	WSADATA wsadata;
 
-	snprintf (kiss_port_str, sizeof(kiss_port_str), "%d", (int)(ptrdiff_t)arg);
+	snprintf (tcp_port_str, sizeof(tcp_port_str), "%d", kps->tcp_port);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-        dw_printf ("DEBUG: kissnet port = %d = '%s'\n", (int)(ptrdiff_t)arg, kiss_port_str);
+        dw_printf ("DEBUG: kissnet port = %d = '%s'\n", (int)(ptrdiff_t)arg, tcp_port_str);
 #endif
 	err = WSAStartup (MAKEWORD(2,2), &wsadata);
 	if (err != 0) {
@@ -332,7 +433,7 @@ static THREAD_F connect_listen_thread (void *arg)
 	hints.ai_protocol = IPPROTO_TCP;
 	hints.ai_flags = AI_PASSIVE;
 
-	err = getaddrinfo(NULL, kiss_port_str, &hints, &ai);
+	err = getaddrinfo(NULL, tcp_port_str, &hints, &ai);
 	if (err != 0) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("getaddrinfo failed: %d\n", err);
@@ -350,14 +451,14 @@ static THREAD_F connect_listen_thread (void *arg)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-    	dw_printf("Binding to port %s ... \n", kiss_port_str);
+	dw_printf("Binding to port %s ... \n", tcp_port_str);
 #endif
 
 	err = bind( listen_sock, ai->ai_addr, (int)ai->ai_addrlen);
 	if (err == SOCKET_ERROR) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf("Bind failed with error: %d\n", WSAGetLastError());		// TODO: provide corresponding text.
-	  dw_printf("Some other application is probably already using port %s.\n", kiss_port_str);
+	  dw_printf("Some other application is probably already using port %s.\n", tcp_port_str);
 	  dw_printf("Try using a different port number with KISSPORT in the configuration file.\n");
           freeaddrinfo(ai);
           closesocket(listen_sock);
@@ -369,7 +470,7 @@ static THREAD_F connect_listen_thread (void *arg)
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
- 	dw_printf("opened KISS socket as fd (%d) on port (%s) for stream i/o\n", listen_sock, kiss_port_str );
+	dw_printf("opened KISS socket as fd (%d) on port (%s) for stream i/o\n", listen_sock, tcp_port_str );
 #endif
 
  	while (1) {
@@ -379,7 +480,7 @@ static THREAD_F connect_listen_thread (void *arg)
 
 	  client = -1;
 	  for (c = 0; c < MAX_NET_CLIENTS && client < 0; c++) {
-	    if (client_sock[c] <= 0) {
+	    if (kps->client_sock[c] <= 0) {
 	      client = c;
 	    }
 	  }
@@ -397,11 +498,16 @@ static THREAD_F connect_listen_thread (void *arg)
 	    }
 	
 	    text_color_set(DW_COLOR_INFO);
-            dw_printf("Ready to accept KISS TCP client application %d on port %s ...\n", client, kiss_port_str);
-         
-            client_sock[client] = accept(listen_sock, NULL, NULL);
+	    if (kps->chan == -1) {
+              dw_printf("Ready to accept KISS TCP client application %d on port %s ...\n", client, tcp_port_str);
+	    }
+	    else {
+              dw_printf("Ready to accept KISS TCP client application %d on port %s (radio channel %d) ...\n", client, tcp_port_str, kps->chan);
+	    }
 
-	    if (client_sock[client] == -1) {
+            kps->client_sock[client] = accept(listen_sock, NULL, NULL);
+
+	    if (kps->client_sock[client] == -1) {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf("Accept failed with error: %d\n", WSAGetLastError());
               closesocket(listen_sock);
@@ -410,10 +516,15 @@ static THREAD_F connect_listen_thread (void *arg)
             }
 
 	    text_color_set(DW_COLOR_INFO);
-	    dw_printf("\nAttached to KISS TCP client application %d ...\n\n", client);
+	    if (kps->chan == -1) {
+	      dw_printf("\nAttached to KISS TCP client application %d on port %s ...\n\n", client, tcp_port_str);
+	    }
+	    else {
+	      dw_printf("\nAttached to KISS TCP client application %d on port %s (radio channel %d) ...\n\n", client, tcp_port_str, kps->chan);
+	    }
 
 	    // Reset the state and buffer.
-	    memset (&(kf[client]), 0, sizeof(kf[client]));
+	    memset (&(kps->kf[client]), 0, sizeof(kps->kf[client]));
 	  }
 	  else {
 	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
@@ -421,12 +532,11 @@ static THREAD_F connect_listen_thread (void *arg)
  	}
 
 
-#else		/* End of Windows case, now Linux. */
+#else		/* End of Windows case, now Linux / Unix / Mac OSX. */
 
 
-    	struct sockaddr_in sockaddr; /* Internet socket address stuct */
+    	struct sockaddr_in sockaddr; /* Internet socket address struct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
-	int kiss_port = (int)(ptrdiff_t)arg;
 	int listen_sock;  
 	int bcopt = 1;
 
@@ -446,19 +556,19 @@ static THREAD_F connect_listen_thread (void *arg)
         setsockopt (listen_sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&bcopt, 4);
 
     	sockaddr.sin_addr.s_addr = INADDR_ANY;
-    	sockaddr.sin_port = htons(kiss_port);
+	sockaddr.sin_port = htons(kps->tcp_port);
     	sockaddr.sin_family = AF_INET;
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-    	dw_printf("Binding to port %d ... \n", kiss_port);
+	dw_printf("Binding to port %d ... \n", kps->tcp_port);
 #endif
 
         if (bind(listen_sock,(struct sockaddr*)&sockaddr,sizeof(sockaddr))  == -1) {
 	  text_color_set(DW_COLOR_ERROR);
           dw_printf("Bind failed with error: %d\n", errno);	
           dw_printf("%s\n", strerror(errno));
-	  dw_printf("Some other application is probably already using port %d.\n", kiss_port);
+	  dw_printf("Some other application is probably already using port %d.\n", kps->tcp_port);
 	  dw_printf("Try using a different port number with KISSPORT in the configuration file.\n");
           return (NULL);
 	}
@@ -477,7 +587,7 @@ static THREAD_F connect_listen_thread (void *arg)
 
 	  client = -1;
 	  for (c = 0; c < MAX_NET_CLIENTS && client < 0; c++) {
-	    if (client_sock[c] <= 0) {
+	    if (kps->client_sock[c] <= 0) {
 	      client = c;
 	    }
 	  }
@@ -492,15 +602,25 @@ static THREAD_F connect_listen_thread (void *arg)
 	    }
 	
 	    text_color_set(DW_COLOR_INFO);
-            dw_printf("Ready to accept KISS TCP client application %d on port %d ...\n", client, kiss_port);
-         
-            client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
+	    if (kps->chan == -1) {
+              dw_printf("Ready to accept KISS TCP client application %d on port %d ...\n", client, kps->tcp_port);
+	    }
+	    else {
+              dw_printf("Ready to accept KISS TCP client application %d on port %d (radio channel %d) ...\n", client, kps->tcp_port, kps->chan);
+	    }
+
+            kps->client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
 	    text_color_set(DW_COLOR_INFO);
-	    dw_printf("\nAttached to KISS TCP client application %d...\n\n", client);
+	    if (kps->chan == -1) {
+	      dw_printf("\nAttached to KISS TCP client application %d on port %d ...\n\n", client, kps->tcp_port);
+	    }
+	    else {
+	      dw_printf("\nAttached to KISS TCP client application %d on port %d (radio channel %d) ...\n\n", client, kps->tcp_port, kps->chan);
+	    }
 
 	    // Reset the state and buffer.
-	    memset (&(kf[client]), 0, sizeof(kf[client]));
+	    memset (&(kps->kf[client]), 0, sizeof(kps->kf[client]));
 	  }
 	  else {
 	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
@@ -517,7 +637,7 @@ static THREAD_F connect_listen_thread (void *arg)
  *
  * Name:        kissnet_send_rec_packet
  *
- * Purpose:     Send a received packet to the client app.
+ * Purpose:     Send a packet, received over the radio, to the client app.
  *
  * Inputs:	chan		- Channel number where packet was received.
  *				  0 = first, 1 = second if any.
@@ -537,119 +657,131 @@ static THREAD_F connect_listen_thread (void *arg)
  *				  it is using a traditional TNC and tries to put it
  *				  into KISS mode.
  *
- *		tcpclient	- It is possible to have more than client attached
+ *		onlykps		- KISS TCP status block pointer or NULL.
+ *
+ *		onlyclient	- It is possible to have more than client attached
  *				  at the same time with TCP KISS.
- *				  When a frame is received from the radio we want it
- *				  to go to all of the clients.  In this case specify -1.
+ *				  Starting with version 1.7 we can have multiple TCP ports.
+ *				  When a frame is received from the radio we normally want it
+ *				  to go to all of the clients.
+ *				  In this case specify NULL for onlykps and -1 tcp client.
  *				  When responding to a command from the client, we want
  *				  to send only to that one client app.  In this case
- *				  use the value 0 .. MAX_NET_CLIENTS-1.
+ *				  a non NULL kps and onlyclient >= 0.
  *
  * Description:	Send message to client(s) if connected.
  *		Disconnect from client, and notify user, if any error.
  *
  *--------------------------------------------------------------------*/
 
-
-void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int flen, int tcpclient)
+void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int flen,
+			struct kissport_status_s *onlykps, int onlyclient)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
 	int kiss_len;
 	int err;
-	int first, last, client;
 
-// Something received over the radio would be sent to all attached clients.
+// Something received over the radio would normally be sent to all attached clients.
 // However, there are times we want to send a response only to a particular client.
 // In the case of a serial port or pseudo terminal, there is only one potential client.
 // so the response would be sent to only one place.  A new parameter has been added for this.
 
-	if (tcpclient >= 0 && tcpclient < MAX_NET_CLIENTS) {
-	  first = tcpclient;
-	  last = tcpclient;
-	}
-	else if (tcpclient == -1) {
-	  first = 0;
-	  last = MAX_NET_CLIENTS - 1;
-	}
-	else {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("KISS TCP: Internal error, kissnet_send_rec_packet, tcpclient = %d.\n", tcpclient);
-	  return;
-	}
+	for (struct kissport_status_s *kps = all_ports; kps != NULL; kps = kps->pnext) {
 
+	  if (onlykps == NULL || kps == onlykps) {
 
-	for (client = first; client <= last; client++) {
+	    for (int client = 0; client < MAX_NET_CLIENTS; client++) {
 
-	  if (client_sock[client] != -1) {
+	      if (onlyclient == -1 || client == onlyclient) {
 
-	    if (flen < 0) {
+	        if (kps->client_sock[client] != -1) {
+
+	          if (flen < 0) {
 
 // A client app might think it is attached to a traditional TNC.
 // It might try sending commands over and over again trying to get the TNC into KISS mode.
 // We recognize this attempt and send it something to keep it happy.
 
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("KISS TCP: Something unexpected from client application.\n");
-	      dw_printf ("Is client app treating this like an old TNC with command mode?\n");
-	      dw_printf ("This can be caused by the application sending commands to put a\n");
-	      dw_printf ("traditional TNC into KISS mode.  It is usually a harmless warning.\n");
-	      dw_printf ("For best results, configure for a KISS-only TNC to avoid this.\n");
-	      dw_printf ("In the case of APRSISCE/32, use \"Simply(KISS)\" rather than \"KISS.\"\n");
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("KISS TCP: Something unexpected from client application.\n");
+	            dw_printf ("Is client app treating this like an old TNC with command mode?\n");
+	            dw_printf ("This can be caused by the application sending commands to put a\n");
+	            dw_printf ("traditional TNC into KISS mode.  It is usually a harmless warning.\n");
+	            dw_printf ("For best results, configure for a KISS-only TNC to avoid this.\n");
+	            dw_printf ("In the case of APRSISCE/32, use \"Simply(KISS)\" rather than \"KISS.\"\n");
 
-	      flen = strlen((char*)fbuf);
-	      if (kiss_debug) {
-	        kiss_debug_print (TO_CLIENT, "Fake command prompt", fbuf, flen);
-	      }
-	      strlcpy ((char *)kiss_buff, (char *)fbuf, sizeof(kiss_buff));
-	      kiss_len = strlen((char *)kiss_buff);
-	    }
-	    else {
-	      unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
+	            flen = strlen((char*)fbuf);
+	            if (kiss_debug) {
+	              kiss_debug_print (TO_CLIENT, "Fake command prompt", fbuf, flen);
+	            }
+	            strlcpy ((char *)kiss_buff, (char *)fbuf, sizeof(kiss_buff));
+	            kiss_len = strlen((char *)kiss_buff);
+	          }
+	          else {
+	            unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
 
-	      assert (flen < (int)(sizeof(stemp)));
+	            assert (flen < (int)(sizeof(stemp)));
 
-	      stemp[0] = (chan << 4) | kiss_cmd;
-	      memcpy (stemp+1, fbuf, flen);
+	            // New in 1.7.
+	            // Previously all channels were sent to everyone.
+	            // We now have tcp ports which carry only a single radio channel.
+	            // The application will see KISS channel 0 regardless of the radio channel.
 
-	      if (kiss_debug >= 2) {
-	        /* AX.25 frame with the CRC removed. */
-	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("\n");
-	        dw_printf ("Packet content before adding KISS framing and any escapes:\n");
-	        hex_dump (fbuf, flen);
-	      }
+	            if (kps->chan == -1) {
+	              // Normal case, all channels.
+	              stemp[0] = (chan << 4) | kiss_cmd;
+	            }
+	            else if (kps->chan == chan) {
+	              // Single radio channel for this port.  Application sees 0.
+	              stemp[0] = (0 << 4) | kiss_cmd;
+	            }
+	            else {
+	              // Skip it.
+	              continue;
+	            }
 
-	      kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
+	            memcpy (stemp+1, fbuf, flen);
 
-	      /* This has the escapes and the surrounding FENDs. */
+	            if (kiss_debug >= 2) {
+	              /* AX.25 frame with the CRC removed. */
+	              text_color_set(DW_COLOR_DEBUG);
+	              dw_printf ("\n");
+	              dw_printf ("Packet content before adding KISS framing and any escapes:\n");
+	              hex_dump (fbuf, flen);
+	            }
 
-	      if (kiss_debug) {
-	        kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
-	      }
-	    }
+	            kiss_len = kiss_encapsulate (stemp, flen+1, kiss_buff);
+
+	            /* This has the escapes and the surrounding FENDs. */
+
+	            if (kiss_debug) {
+	              kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
+	            }
+	          }
 
 #if __WIN32__	
-            err = SOCK_SEND(client_sock[client], (char*)kiss_buff, kiss_len);
-	    if (err == SOCKET_ERROR)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to KISS client %d application.  Closing connection.\n\n", WSAGetLastError(), client);
-	      closesocket (client_sock[client]);
-	      client_sock[client] = -1;
-	      WSACleanup();
-	    }
+                  err = SOCK_SEND(kps->client_sock[client], (char*)kiss_buff, kiss_len);
+	          if (err == SOCKET_ERROR) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("\nError %d sending message to KISS client application %d on port %d.  Closing connection.\n\n", WSAGetLastError(), client, kps->tcp_port);
+	            closesocket (kps->client_sock[client]);
+	            kps->client_sock[client] = -1;
+	            WSACleanup();
+	          }
 #else
-            err = SOCK_SEND (client_sock[client], kiss_buff, kiss_len);
-	    if (err <= 0)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to KISS client %d application.  Closing connection.\n\n", client);
-	      close (client_sock[client]);
-	      client_sock[client] = -1;
-	    }
+                  err = SOCK_SEND (kps->client_sock[client], kiss_buff, kiss_len);
+	          if (err <= 0) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("\nError %d sending message to KISS client application %d on port %d.  Closing connection.\n\n", err, client, kps->tcp_port);
+	            close (kps->client_sock[client]);
+	            kps->client_sock[client] = -1;
+	          }
 #endif
-	  }
-	}
+	        } // frame length >= 0
+	      } // if all clients or the one specifie
+	    } // for each client on the tcp port
+	  } // if all ports or the one specified
+	} // for each tcp port
 	
 } /* end kissnet_send_rec_packet */
 
@@ -661,14 +793,14 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
  * Purpose:     Send data from one network KISS client to all others.
  *
  * Inputs:	in_msg		- KISS frame data without the framing or escapes.
- *				  The first byte is channel (port) and command (should be data).
+ *				  The first byte is channel and command (should be data).
+ *				  Caller no longer cares this byte.  We will clobber it here.
  *
  *		in_len 		- Number of bytes in above.
  *
- *		chan		- Channel.  Redundant because it is also in first byte of kiss_msg.
- *				  Not currently used.
+ *		chan		- Channel.  Use this instead of first byte of in_msg.
  *
- *		cmd		- KISS command nybble.  Redundant because it is in first byte.
+ *		cmd		- KISS command nybble.
  *				  Should be 0 because I'm expecting this only for data.
  *
  *		from_client	- Number of network (TCP) client instance.
@@ -687,52 +819,66 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
  *--------------------------------------------------------------------*/
 
 
-void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, int from_client)
+void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, struct kissport_status_s *from_kps, int from_client)
 {
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
-	int kiss_len;
 	int err;
-	int send_to;
 
-	(void) chan;
-	(void) cmd;
 
 	if (s_misc_config_p->kiss_copy) {
 
-	  for (send_to = 0; send_to < MAX_NET_CLIENTS;  send_to++) {
+	  for (struct kissport_status_s *kps = all_ports; kps != NULL; kps = kps->pnext) {
 
-	    if (send_to != from_client && client_sock[send_to] != -1) {
+	    for (int client = 0; client < MAX_NET_CLIENTS;  client++) {
 
-	      kiss_len = kiss_encapsulate (in_msg, in_len, kiss_buff);
+	      if ( ! ( kps == from_kps && client == from_client ) ) {   // To all but origin.
 
-	      /* This has the escapes and the surrounding FENDs. */
+		if (kps->client_sock[client] != -1) {
 
-	      if (kiss_debug) {
-	        kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
-	      }
+	          if (kps-> chan == -1 || kps->chan == chan) {
+
+	            // Two different cases here:
+	            //  - The TCP port allows all channels, or
+	            //  - The TCP port allows only one channel.  In this case set KISS channel to 0.
+
+	            if (kps->chan == -1) {
+	              in_msg[0] = (chan << 4) | cmd;
+	            }
+	            else {
+	              in_msg[0] = 0 | cmd;	// set channel to zero.
+	            }
+
+	            int kiss_len = kiss_encapsulate (in_msg, in_len, kiss_buff);
+
+	            /* This has the escapes and the surrounding FENDs. */
+
+	            if (kiss_debug) {
+	              kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
+	            }
 
 #if __WIN32__
-              err = SOCK_SEND(client_sock[send_to], (char*)kiss_buff, kiss_len);
-	      if (err == SOCKET_ERROR)
-	      {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("\nError %d copying message to KISS client %d application.  Closing connection.\n\n", WSAGetLastError(), send_to);
-	        closesocket (client_sock[send_to]);
-	        client_sock[send_to] = -1;
-	        WSACleanup();
-	      }
+                    err = SOCK_SEND(kps->client_sock[client], (char*)kiss_buff, kiss_len);
+	            if (err == SOCKET_ERROR) {
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("\nError %d copying message to KISS TCP port %d client %d application.  Closing connection.\n\n", WSAGetLastError(), kps->tcp_port, client);
+	              closesocket (kps->client_sock[client]);
+	              kps->client_sock[client] = -1;
+	              WSACleanup();
+	            }
 #else
-              err = SOCK_SEND (client_sock[send_to], kiss_buff, kiss_len);
-	      if (err <= 0)
-	      {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("\nError copying message to KISS client %d application.  Closing connection.\n\n", send_to);
-	        close (client_sock[send_to]);
-	        client_sock[send_to] = -1;
-	      }
+                    err = SOCK_SEND (kps->client_sock[client], kiss_buff, kiss_len);
+	            if (err <= 0) {
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("\nError copying message to KISS TCP port %d client %d application.  Closing connection.\n\n", kps->tcp_port, client);
+	              close (kps->client_sock[client]);
+	              kps->client_sock[client] = -1;
+	            }
 #endif
-	    } // if origin and destination different.
-	  } // loop over all KISS network clients.
+	          } // Channel is allowed on this port.
+	        } // socket is open
+	      } // if origin and destination different.
+	    } // loop over all KISS network clients for one port.
+	  } // loop over all KISS TCP ports
 	} // Feature enabled.
 
 } /* end kissnet_copy */
@@ -759,20 +905,19 @@ void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, int fro
 /* Return one byte (value 0 - 255) */
 
 
-static int kiss_get (int client)
+static int kiss_get (struct kissport_status_s *kps, int client)
 {
-	unsigned char ch;
-	int n;
 
 	while (1) {
 
-	  while (client_sock[client] <= 0) {
+	  while (kps->client_sock[client] <= 0) {
 	    SLEEP_SEC(1);			/* Not connected.  Try again later. */
 	  }
 
 	  /* Just get one byte at a time. */
 
-	  n = SOCK_RECV (client_sock[client], (char *)(&ch), 1);
+	  unsigned char ch;
+	  int n = SOCK_RECV (kps->client_sock[client], (char *)(&ch), 1);
 
 	  if (n == 1) {
 #if DEBUG9
@@ -792,13 +937,13 @@ static int kiss_get (int client)
 	  }
 
           text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nKISS client application %d has gone away.\n\n", client);
+	  dw_printf ("\nKISS client application %d on TCP port %d has gone away.\n\n", client, kps->tcp_port);
 #if __WIN32__
-	  closesocket (client_sock[client]);
+	  closesocket (kps->client_sock[client]);
 #else
-	  close (client_sock[client]);
+	  close (kps->client_sock[client]);
 #endif
-	  client_sock[client] = -1;
+	  kps->client_sock[client] = -1;
 	}
 }
 
@@ -806,17 +951,19 @@ static int kiss_get (int client)
 
 static THREAD_F kissnet_listen_thread (void *arg)
 {
-	unsigned char ch;
-			
+	struct kissport_status_s *kps = arg;
 
-	int client = (int)(ptrdiff_t)arg;
+	int client = kps->arg2;
+	assert (client >= 0 && client < MAX_NET_CLIENTS);
+
+	kps->arg2 = -1;		// Indicates thread is running so
+				// arg2 can be reused for the next one.
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("kissnet_listen_thread ( client = %d, socket fd = %d )\n", client, client_sock[client]);
+	dw_printf ("kissnet_listen_thread ( tcp_port = %d, client = %d, socket fd = %d )\n", kps->tcp_port, client, kps->client_sock[client]);
 #endif
 
-	assert (client >= 0 && client < MAX_NET_CLIENTS);
 
 
 // So why is kissnet_send_rec_packet mentioned here for incoming from the client app?
@@ -832,8 +979,8 @@ static THREAD_F kissnet_listen_thread (void *arg)
 
 
 	while (1) {
-	  ch = kiss_get(client);
-	  kiss_rec_byte (&(kf[client]), ch, kiss_debug, client, kissnet_send_rec_packet);
+	  unsigned char ch = kiss_get(kps, client);
+	  kiss_rec_byte (&(kps->kf[client]), ch, kiss_debug, kps, client, kissnet_send_rec_packet);
 	}  
 
 #if __WIN32__

@@ -43,7 +43,6 @@
 #include "dsp.h"
 
 
-//#include "fsk_demod_agc.h"	/* for M_FILTER_SIZE, etc. */
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -127,7 +126,7 @@ float window (bp_window_t type, int size, int j)
  *----------------------------------------------------------------*/
 
  
-int gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype, float lp_delay_fract)
+void gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype)
 {
 	int j;
 	float G;
@@ -175,54 +174,7 @@ int gen_lowpass (float fc, float *lp_filter, int filter_size, bp_window_t wtype,
 	  lp_filter[j] = lp_filter[j] / G;
 	}
 
-
-// Calculate the signal delay.
-// If a signal at level 0 steps to level 1, this is the time that it would
-// take for the output to reach 0.5.
-//
-// Examples:
-//
-// Filter has one tap with value of 1.0.
-//	Output is immediate so I would call this delay of 0.
-//
-// Filter coefficients:	0.2, 0.2, 0.2, 0.2, 0.2
-//	"1" inputs	Out
-//	1		0.2
-//	2		0.4
-//	3		0.6
-//
-// In this case, the output does not change immediately.
-// It takes two more samples to reach the half way point
-// so it has a delay of 2.
-
-	float sum = 0;
-	int delay = 0;
-
-	if (lp_delay_fract == 0) lp_delay_fract = 0.5;
-
-        for (j=0; j<filter_size; j++) {
-	  sum += lp_filter[j];
-#if DEBUG1
-	dw_printf ("lp_filter[%d] = %.3f   sum = %.3f   lp_delay_fract = %.3f\n", j, lp_filter[j], sum, lp_delay_fract);
-#endif
-	  if (sum > lp_delay_fract) {
-	    delay = j;
-	    break;
-	  }
-	}
-
-#if DEBUG1
-	  dw_printf ("Low Pass Delay = %d samples\n", delay) ;
-#endif
-
-// Hmmm.  This might have been wasted effort.  The result is always half the number of taps.
-
-	if (delay < 2 || delay > filter_size - 2) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Internal error, %s %d, delay %d for size %d\n", __func__, __LINE__, delay, filter_size);
-	}
-
-	return (delay);
+	return;
 
 }  /* end gen_lowpass */
 
@@ -368,5 +320,87 @@ void gen_ms (int fc, int sps, float *sin_table, float *cos_table, int filter_siz
 
 } /* end gen_ms */
 
+
+
+
+
+/*------------------------------------------------------------------
+ *
+ * Name:        rrc
+ *
+ * Purpose:     Root Raised Cosine function.
+ *		Why do they call it that?
+ *		It's mostly the sinc function with cos windowing to taper off edges faster.
+ *
+ * Inputs:      t		- Time in units of symbol duration.
+ *				  i.e. The centers of two adjacent symbols would differ by 1.
+ *
+ *		a		- Roll off factor, between 0 and 1.
+ *
+ * Returns:	Basically the sinc  (sin(x)/x) function with edges decreasing faster.
+ *		Should be 1 for t = 0 and 0 at all other integer values of t.
+ *		
+ *----------------------------------------------------------------*/
+
+__attribute__((const))
+float rrc (float t, float a)
+{
+	float sinc, window, result;
+
+	if (t > -0.001 && t < 0.001) {
+	  sinc = 1;
+	}
+	else {
+	  sinc = sinf(M_PI * t) / (M_PI * t);
+	}
+
+	if (fabsf(a * t) > 0.499 && fabsf(a * t) < 0.501) {
+	  window = M_PI / 4;
+	}
+	else {
+	  window = cos(M_PI * a * t) / ( 1 - powf(2 * a * t, 2));
+	  // This made nicer looking waveforms for generating signal.
+	  //window = cos(M_PI * a * t);
+	  // Do we want to let it go negative?
+	  // I think this would happen when a > 0.5 / (filter width in symbol times)
+	  if (window < 0) {
+	    //printf ("'a' is too large for range of 't'.\n");
+	    //window = 0;
+	  }
+	}
+
+	result = sinc * window;
+
+#if DEBUGRRC
+	// t should vary from - to + half of filter size in symbols.
+	// Result should be 1 at t=0 and 0 at all other integer values of t.
+
+	printf ("%.3f, %.3f, %.3f, %.3f\n", t, sinc, window, result);
+#endif
+	return (result);
+}
+
+// The Root Raised Cosine (RRC) low pass filter is suppposed to minimize Intersymbol Interference (ISI).
+
+void gen_rrc_lowpass (float *pfilter, int filter_taps, float rolloff, float samples_per_symbol)
+{
+	int k;
+	float t;
+
+	for (k = 0; k < filter_taps; k++) {
+	  t = (k - ((filter_taps - 1.0) / 2.0)) / samples_per_symbol;
+	  pfilter[k] = rrc (t, rolloff);
+	}
+
+	// Scale it for unity gain.
+
+	t = 0;
+	for (k = 0; k < filter_taps; k++) {
+	  t += pfilter[k];
+	}
+	for (k = 0; k < filter_taps; k++) {
+	  pfilter[k] = pfilter[k] / t;
+	}
+}
 
 /* end dsp.c */

@@ -148,7 +148,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	for (c = 0; c < MAX_CHANS; c++) {
 
-	  if (audio_config_p->achan[c].medium == MEDIUM_RADIO) {
+	  if (audio_config_p->chan_medium[c] == MEDIUM_RADIO) {
 
 	    wake_up_event[c] = CreateEvent (NULL, 0, 0, NULL);
 
@@ -167,7 +167,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	  xmit_thread_is_waiting[c] = 0;
 
-	  if (audio_config_p->achan[c].medium == MEDIUM_RADIO) {
+	  if (audio_config_p->chan_medium[c] == MEDIUM_RADIO) {
 	    err = pthread_cond_init (&(wake_up_cond[c]), NULL);
 	    if (err != 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -247,7 +247,7 @@ void tq_append (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium == MEDIUM_NONE) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
 	  dw_printf ("This is probably a client application error, not a problem with direwolf.\n");
@@ -451,7 +451,7 @@ void lm_data_request (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
@@ -609,7 +609,7 @@ void lm_seize_request (int chan)
 #endif
 
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);

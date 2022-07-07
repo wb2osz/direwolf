@@ -83,7 +83,7 @@
 
 //#define DEBUG 1
 
-#define DIGIPEATER_C
+#define DIGIPEATER_C		// Why?
 
 #include "direwolf.h"
 
@@ -91,7 +91,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 
 #include "ax25_pad.h"
 #include "textcolor.h"
@@ -172,7 +172,7 @@ void multi_modem_init (struct audio_s *pa)
 	hdlc_rec_init (save_audio_config_p);
 
 	for (chan=0; chan<MAX_CHANS; chan++) {
-	  if (save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	  if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	    if (save_audio_config_p->achan[chan].baud <= 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Internal error, chan=%d, %s, %d\n", chan, __FILE__, __LINE__);
@@ -345,12 +345,19 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	else {
 	  pp = ax25_from_frame (fbuf, flen, alevel);
 	}
+
+	multi_modem_process_rec_packet (chan, subchan, slice, pp, alevel, retries, is_fx25);
+}
+
+// TODO: Eliminate function above and move code elsewhere?
+
+void multi_modem_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, int is_fx25)
+{
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Unexpected internal problem, %s %d\n", __FILE__, __LINE__);
 	  return;	/* oops!  why would it fail? */
 	}
-
 
 /*
  * If only one demodulator/slicer, and no FX.25 in progress,
@@ -468,7 +475,7 @@ static void pick_best_candidate (int chan)
 	    spectrum[n] = '.';
 	  }
 
-	  /* Begining score depends on effort to get a valid frame CRC. */
+	  /* Beginning score depends on effort to get a valid frame CRC. */
 
 	  if (candidate[chan][j][k].packet_p == NULL) {
 	    candidate[chan][j][k].score = 0;
@@ -487,6 +494,9 @@ static void pick_best_candidate (int chan)
 	    }
 	  }
 	}
+
+	// FIXME: IL2p & FX.25 don't have CRC calculated. Must fill it in first.
+
 
 	/* Bump it up slightly if others nearby have the same CRC. */
 

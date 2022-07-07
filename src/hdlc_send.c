@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2019, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -27,36 +27,36 @@
 #include "gen_tone.h"
 #include "textcolor.h"
 #include "fcs_calc.h"
+#include "ax25_pad.h"
 #include "fx25.h"
+#include "il2p.h"
 
-static void send_control (int, int);
-static void send_data (int, int);
-static void send_bit (int, int);
+static void send_byte_msb_first (int chan, int x, int polarity);
+
+static void send_control_nrzi (int, int);
+static void send_data_nrzi (int, int);
+static void send_bit_nrzi (int, int);
 
 
 
-static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdlc_send_frame" or "hdlc_send_flags"
-
-
+static int number_of_bits_sent[MAX_CHANS];	// Count number of bits sent by "hdlc_send_frame" or "hdlc_send_flags"
 
 
 
 /*-------------------------------------------------------------
  *
- * Name:	hdlc_send
+ * Name:	layer2_send_frame
  *
- * Purpose:	Convert HDLC frames to a stream of bits.
+ * Purpose:	Convert frames to a stream of bits.
+ *		Originally this was for AX.25 only, hence the file name.
+ *		Over time, FX.25 and IL2P were shoehorned in.
  *
  * Inputs:	chan	- Audio channel number, 0 = first.
  *
- *		fbuf	- Frame buffer address.
- *
- *		flen	- Frame length, not including the FCS.
+ *		pp	- Packet object.
  *
  *		bad_fcs	- Append an invalid FCS for testing purposes.
  *			  Applies only to regular AX.25.
- *
- *		fx25_xmit_enable - Just like the name says.
  *
  * Outputs:	Bits are shipped out by calling tone_gen_put_bit().
  *
@@ -65,12 +65,12 @@ static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdl
  *		The required time can be calculated by dividing this
  *		number by the transmit rate of bits/sec.
  *
- * Description:	Convert to stream of bits including:
+ * Description:	For AX.25, send:
  *			start flag
  *			bit stuffed data
  *			calculated FCS
  *			end flag
- *		NRZI encoding
+ *		NRZI encoding for all but the "flags."
  *
  * 
  * Assumptions:	It is assumed that the tone_gen module has been
@@ -81,21 +81,38 @@ static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "hdl
 
 static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs);
 
-// New in 1.6: Option to encapsulate in FX.25.
 
-int hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs, int fx25_xmit_enable)
+int layer2_send_frame (int chan, packet_t pp, int bad_fcs, struct audio_s *audio_config_p)
 {
-	if (fx25_xmit_enable) {
-	  int n = fx25_send_frame (chan, fbuf, flen, fx25_xmit_enable);
+	if (audio_config_p->achan[chan].layer2_xmit == LAYER2_IL2P) {
+
+	  int n = il2p_send_frame (chan, pp, audio_config_p->achan[chan].il2p_max_fec,
+						audio_config_p->achan[chan].il2p_invert_polarity);
+	  if (n > 0) {
+	    return (n);
+	  }
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unable to send IL2p frame.  Falling back to regular AX.25.\n");
+	  // Not sure if we should fall back to AX.25 or not here.
+	}
+	else if (audio_config_p->achan[chan].layer2_xmit == LAYER2_FX25) {
+	  unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
+	  int flen = ax25_pack (pp, fbuf);
+	  int n = fx25_send_frame (chan, fbuf, flen, audio_config_p->achan[chan].fx25_strength);
 	  if (n > 0) {
 	    return (n);
 	  }
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Unable to send FX.25.  Falling back to regular AX.25.\n");
+	  // Definitely need to fall back to AX.25 here because
+	  // the FX.25 frame length is so limited.
 	}
 
+	unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
+	int flen = ax25_pack (pp, fbuf);
 	return (ax25_only_hdlc_send_frame (chan, fbuf, flen, bad_fcs));
 }
+
 
 
 static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, int bad_fcs)
@@ -105,33 +122,31 @@ static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, i
 
 	number_of_bits_sent[chan] = 0;
 
-
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("hdlc_send_frame ( chan = %d, fbuf = %p, flen = %d, bad_fcs = %d)\n", chan, fbuf, flen, bad_fcs);
 	fflush (stdout);
 #endif
 
-
-	send_control (chan, 0x7e);	/* Start frame */
+	send_control_nrzi (chan, 0x7e);	/* Start frame */
 	
 	for (j=0; j<flen; j++) {
-	  send_data (chan, fbuf[j]);
+	  send_data_nrzi (chan, fbuf[j]);
 	}
 
 	fcs = fcs_calc (fbuf, flen);
 
 	if (bad_fcs) {
 	  /* For testing only - Simulate a frame getting corrupted along the way. */
-	  send_data (chan, (~fcs) & 0xff);
-	  send_data (chan, ((~fcs) >> 8) & 0xff);
+	  send_data_nrzi (chan, (~fcs) & 0xff);
+	  send_data_nrzi (chan, ((~fcs) >> 8) & 0xff);
 	}
 	else {
-	  send_data (chan, fcs & 0xff);
-	  send_data (chan, (fcs >> 8) & 0xff);
+	  send_data_nrzi (chan, fcs & 0xff);
+	  send_data_nrzi (chan, (fcs >> 8) & 0xff);
 	}
 
-	send_control (chan, 0x7e);	/* End frame */
+	send_control_nrzi (chan, 0x7e);	/* End frame */
 
 	return (number_of_bits_sent[chan]);
 }
@@ -139,22 +154,25 @@ static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, i
 
 /*-------------------------------------------------------------
  *
- * Name:	hdlc_send_flags
+ * Name:	layer2_preamble_postamble
  *
- * Purpose:	Send HDLC flags before and after the frame.
+ * Purpose:	Send filler pattern before and after the frame.
+ *		For HDLC it is 01111110, for IL2P 01010101.
  *
  * Inputs:	chan	- Audio channel number, 0 = first.
  *
- *		nflags	- Number of flag patterns to send.
+ *		nbytes	- Number of bytes to send.
  *
  *		finish	- True for end of transmission.
  *			  This causes the last audio buffer to be flushed.
+ *
+ *		audio_config_p - Configuration for audio and modems.
  *
  * Outputs:	Bits are shipped out by calling tone_gen_put_bit().
  *
  * Returns:	Number of bits sent.  
  *		There is no bit-stuffing so we would expect this to
- *		be 8 * nflags.
+ *		be 8 * nbytes.
  *		The required time can be calculated by dividing this
  *		number by the transmit rate of bits/sec.
  *
@@ -164,13 +182,11 @@ static int ax25_only_hdlc_send_frame (int chan, unsigned char *fbuf, int flen, i
  *
  *--------------------------------------------------------------*/
 
-int hdlc_send_flags (int chan, int nflags, int finish)
+int layer2_preamble_postamble (int chan, int nbytes, int finish, struct audio_s *audio_config_p)
 {
 	int j;
 	
-
 	number_of_bits_sent[chan] = 0;
-
 
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -178,11 +194,18 @@ int hdlc_send_flags (int chan, int nflags, int finish)
 	fflush (stdout);
 #endif
 
-	/* The AX.25 spec states that when the transmitter is on but not sending data */
-	/* it should send a continuous stream of "flags." */
+	// When the transmitter is on but not sending data, it should be sending
+	// a stream of a filler pattern.
+	// For AX.25, it is the 01111110 "flag" pattern with NRZI and no bit stuffing.
+	// For IL2P, it is 01010101 without NRZI.
 
-	for (j=0; j<nflags; j++) {
-	  send_control (chan, 0x7e);
+	for (j=0; j<nbytes; j++) {
+	  if (audio_config_p->achan[chan].layer2_xmit == LAYER2_IL2P) {
+	    send_byte_msb_first (chan, IL2P_PREAMBLE, audio_config_p->achan[chan].il2p_invert_polarity);
+	  }
+	  else {
+	    send_control_nrzi (chan, 0x7e);
+	  }
 	}
 
 /* Push out the final partial buffer! */
@@ -196,33 +219,54 @@ int hdlc_send_flags (int chan, int nflags, int finish)
 
 
 
+// The next one is only for IL2P.  No NRZI.
+// MSB first, opposite of AX.25.
+
+static void send_byte_msb_first (int chan, int x, int polarity)
+{
+	int i;
+
+	for (i=0; i<8; i++) {
+	  int dbit = (x & 0x80) != 0;
+	  tone_gen_put_bit (chan, (dbit ^ polarity) & 1);
+	  x <<= 1;
+	  number_of_bits_sent[chan]++;
+	}
+}
+
+
+// The following are only for HDLC.
+// All bits are sent NRZI.
+// Data (non flags) use bit stuffing.
+
+
 static int stuff[MAX_CHANS];		// Count number of "1" bits to keep track of when we
 					// need to break up a long run by "bit stuffing."
 					// Needs to be array because we could be transmitting
 					// on multiple channels at the same time.
 
-static void send_control (int chan, int x) 
+static void send_control_nrzi (int chan, int x)
 {
 	int i;
 
 	for (i=0; i<8; i++) {
-	  send_bit (chan, x & 1);
+	  send_bit_nrzi (chan, x & 1);
 	  x >>= 1;
 	}
 	
 	stuff[chan] = 0;
 }
 
-static void send_data (int chan, int x) 
+static void send_data_nrzi (int chan, int x)
 {
 	int i;
 
 	for (i=0; i<8; i++) {
-	  send_bit (chan, x & 1);
+	  send_bit_nrzi (chan, x & 1);
 	  if (x & 1) {
 	    stuff[chan]++;
 	    if (stuff[chan] == 5) {
-	      send_bit (chan, 0);
+	      send_bit_nrzi (chan, 0);
 	      stuff[chan] = 0;
 	    }
 	  } else {
@@ -238,7 +282,7 @@ static void send_data (int chan, int x)
  * data 0 bit -> invert signal.
  */
 
-static void send_bit (int chan, int b)
+static void send_bit_nrzi (int chan, int b)
 {
 	static int output[MAX_CHANS];
 

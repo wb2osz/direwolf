@@ -108,10 +108,11 @@ struct audio_s {
 	float recv_ber;			/* Receive Bit Error Rate (BER). */
 					/* Probability of inverting a bit coming out of the modem. */
 
-	int fx25_xmit_enable;		/* Enable transmission of FX.25.  */
+	//int fx25_xmit_enable;		/* Enable transmission of FX.25.  */
 					/* See fx25_init.c for explanation of values. */
 					/* Initially this applies to all channels. */
 					/* This should probably be per channel. One step at a time. */
+					/* v1.7 - replaced by layer2_xmit==LAYER2_FX25 */
 
 	int fx25_auto_enable;		/* Turn on FX.25 for current connected mode session */
 					/* under poor conditions. */
@@ -119,32 +120,39 @@ struct audio_s {
 					/* I put it here, rather than with the rest of the link layer */
 					/* parameters because it is really a part of the HDLC layer */
 					/* and is part of the KISS TNC functionality rather than our data link layer. */
+					/* Future: not used yet. */
+
 
 	char timestamp_format[40];	/* -T option */
 					/* Precede received & transmitted frames with timestamp. */
 					/* Command line option uses "strftime" format string. */
 
 
-	/* Properties for each channel, common to receive and transmit. */
-	/* Can be different for each radio channel. */
 
 	/* originally a "channel" was always connected to an internal modem. */
 	/* In version 1.6, this is generalized so that a channel (as seen by client application) */
 	/* can be connected to something else.  Initially, this will allow application */
 	/* access to the IGate.  Later we might have network TNCs or other internal functions. */
 
+	// Properties for all channels.
+
+	enum medium_e chan_medium[MAX_TOTAL_CHANS];
+					// MEDIUM_NONE for invalid.
+					// MEDIUM_RADIO for internal modem.  (only possibility earlier)
+					// MEDIUM_IGATE allows application access to IGate.
+					// MEDIUM_NETTNC for external TNC via TCP.
+
+	int igate_vchannel;		/* Virtual channel mapped to APRS-IS. */
+					/* -1 for none. */
+					/* Redundant but it makes things quicker and simpler */
+					/* than always searching thru above. */
+
+	/* Properties for each radio channel, common to receive and transmit. */
+	/* Can be different for each radio channel. */
 
 	struct achan_param_s {
 
-	    // Originally there was a boolean, called "valid", to indicate that the
-	    // channel is valid.  This has been replaced with the new "medium" which
-	    // will allow channels to correspond to things other than internal modems.
-
-	    enum medium_e medium;	// MEDIUM_NONE for invalid.
-					// MEDIUM_RADIO for internal modem.  (only possibility earlier)
-					// MEDIUM_IGATE allows application access to IGate.
-
-
+	    // What else should be moved out of structure and enlarged when NETTNC is implemented.  ???
 	    char mycall[AX25_MAX_ADDR_LEN];      /* Call associated with this radio channel. */
                                 	/* Could all be the same or different. */
 
@@ -157,9 +165,26 @@ struct audio_s {
 					/* Might try MFJ-2400 / CCITT v.26 / Bell 201 someday. */
 					/* No modem.  Might want this for DTMF only channel. */
 
+	    enum layer2_t { LAYER2_AX25 = 0, LAYER2_FX25, LAYER2_IL2P } layer2_xmit;
+
+					// IL2P - New for version 1.7.
+					// New layer 2 with FEC.  Much less overhead than FX.25 but no longer backward compatible.
+					// Only applies to transmit.
+					// Listening for FEC sync word should add negligible overhead so
+					// we leave reception enabled all the time as we do with FX.25.
+					// TODO:  FX.25 should probably be put here rather than global for all channels.
+
+	    int fx25_strength;		// Strength of FX.25 FEC.
+					// 16, 23, 64 for specific number of parity symbols.
+					// 1 for automatic selection based on frame size.
+
+	    int il2p_max_fec;		// 1 for max FEC length, 0 for automatic based on size.
+
+	    int il2p_invert_polarity;	// 1 means invert on transmit.  Receive handles either automatically.
+
 	    enum v26_e { V26_UNSPECIFIED=0, V26_A, V26_B } v26_alternative;
 
-					// Original implementaion used alternative A for 2400 bbps PSK.
+					// Original implementation used alternative A for 2400 bbps PSK.
 					// Years later, we discover that MFJ-2400 used alternative B.
 					// It's likely the others did too.  it also works a little better.
 					// Default to MFJ compatible and print warning if user did not
@@ -241,15 +266,17 @@ struct audio_s {
 
 	        ptt_method_t ptt_method; /* none, serial port, GPIO, LPT, HAMLIB, CM108. */
 
-	        char ptt_device[100];	/* Serial device name for PTT.  e.g. COM1 or /dev/ttyS0 */
+	        char ptt_device[128];	/* Serial device name for PTT.  e.g. COM1 or /dev/ttyS0 */
 					/* Also used for HAMLIB.  Could be host:port when model is 1. */
 					/* For years, 20 characters was plenty then we start getting extreme names like this: */
 					/* /dev/serial/by-id/usb-FTDI_Navigator__CAT___2nd_PTT__00000000-if00-port0 */
 					/* /dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0 */
 					/* Issue 104, changed to 100 bytes in version 1.5. */
 
-					/* This same field is also used for CM108 GPIO PTT which will */
-					/* have a name like /dev/hidraw1. */
+					/* This same field is also used for CM108/CM119 GPIO PTT which will */
+					/* have a name like /dev/hidraw1 for Linux or */
+					/* \\?\hid#vid_0d8c&pid_0008&mi_03#8&39d3555&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030} */
+					/* for Windows.  Largest observed was 95 but add some extra to be safe. */
 			
 	        ptt_line_t ptt_line;	/* Control line when using serial port. PTT_LINE_RTS, PTT_LINE_DTR. */
 	        ptt_line_t ptt_line2;	/* Optional second one:  PTT_LINE_NONE when not used. */
@@ -257,12 +284,12 @@ struct audio_s {
 	        int out_gpio_num;	/* GPIO number.  Originally this was only for PTT. */
 					/* It is now more general. */
 					/* octrl array is indexed by PTT, DCD, or CONnected indicator. */
-					/* For CM108, this should be in range of 1-8. */
+					/* For CM108/CM119, this should be in range of 1-8. */
 
 #define MAX_GPIO_NAME_LEN 20	// 12 would cover any case I've seen so this should be safe
 
 		char out_gpio_name[MAX_GPIO_NAME_LEN];
-					/* orginally, gpio number NN was assumed to simply */
+					/* originally, gpio number NN was assumed to simply */
 					/* have the name gpioNN but this turned out not to be */
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
@@ -280,6 +307,8 @@ struct audio_s {
 #ifdef USE_HAMLIB
 
 	        int ptt_model;		/* HAMLIB model.  -1 for AUTO.  2 for rigctld.  Others are radio model. */
+	        int ptt_rate;		/* Serial port speed when using hamlib CAT control for PTT. */
+					/* If zero, hamlib will come up with a default for pariticular rig. */
 #endif
 
 	    } octrl[NUM_OCTYPES];
@@ -298,7 +327,7 @@ struct audio_s {
 		int in_gpio_num;	/* GPIO number */
 
 		char in_gpio_name[MAX_GPIO_NAME_LEN];
-					/* orginally, gpio number NN was assumed to simply */
+					/* originally, gpio number NN was assumed to simply */
 					/* have the name gpioNN but this turned out not to be */
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
@@ -312,7 +341,7 @@ struct audio_s {
 	    int dwait;			/* First wait extra time for receiver squelch. */
 					/* Default 0 units of 10 mS each . */
 
-	    int slottime;		/* Slot time in 10 mS units for persistance algorithm. */
+	    int slottime;		/* Slot time in 10 mS units for persistence algorithm. */
 					/* Typical value is 10 meaning 100 milliseconds. */
 
 	    int persist;		/* Sets probability for transmitting after each */
@@ -350,8 +379,8 @@ struct audio_s {
 #define DEFAULT_ADEVICE	""		/* Mac OSX: Empty string = default audio device. */
 #elif USE_ALSA
 #define DEFAULT_ADEVICE	"default"	/* Use default device for ALSA. */
-#elif __OpenBSD__
-#define DEFAULT_ADEVICE	"default"	/* Use default device for OpenBSD-portaudio. */
+#elif USE_SNDIO
+#define DEFAULT_ADEVICE	"default"	/* Use default device for sndio. */
 #else
 #define DEFAULT_ADEVICE	"/dev/dsp"	/* First audio device for OSS.  (FreeBSD) */
 #endif					

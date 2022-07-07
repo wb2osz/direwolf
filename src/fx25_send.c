@@ -61,7 +61,7 @@ int main ()
 	dw_printf("Run fxrec as second part of test.\n");
 
 	fx25_init (3);
-	for (int i = CTAG_MIN; i <= CTAG_MAX; i++) {
+	for (int i = 100 + CTAG_MIN; i <= 100 + CTAG_MAX; i++) {
 	  fx25_send_frame (0, preload, (int)sizeof(preload)-3, i);
 	}
 	exit(EXIT_SUCCESS);
@@ -115,7 +115,7 @@ int fx25_send_frame (int chan, unsigned char *fbuf, int flen, int fx_mode)
 	if (fx25_get_debug() >= 3) {
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("------\n");
-	  dw_printf ("FX.25 send frame: chan = %d, FX.25 mode = %d\n", chan, fx_mode);
+	  dw_printf ("FX.25[%d] send frame: FX.25 mode = %d\n", chan, fx_mode);
 	  fx_hex_dump (fbuf, flen);
 	}
 
@@ -138,7 +138,7 @@ int fx25_send_frame (int chan, unsigned char *fbuf, int flen, int fx_mode)
 	assert (data[FX25_MAX_DATA] == fence);
 	if (dlen < 0) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("FX.25: Frame length of %d + overhead is too large to encode.\n", flen);
+	  dw_printf ("FX.25[%d]: Frame length of %d + overhead is too large to encode.\n", chan, flen);
 	  return (-1);
 	}
 
@@ -150,7 +150,7 @@ int fx25_send_frame (int chan, unsigned char *fbuf, int flen, int fx_mode)
 
 	if (ctag_num < CTAG_MIN || ctag_num > CTAG_MAX) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("FX.25: Could not find suitable format for requested %d and data length %d.\n", fx_mode, dlen);
+	  dw_printf ("FX.25[%d]: Could not find suitable format for requested %d and data length %d.\n", chan, fx_mode, dlen);
 	  return (-1);
 	}
 
@@ -179,9 +179,9 @@ int fx25_send_frame (int chan, unsigned char *fbuf, int flen, int fx_mode)
 
 	if (fx25_get_debug() >= 3) {
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("FX.25: transmit %d data bytes, ctag number 0x%02x\n", k_data_radio, ctag_num);
+	  dw_printf ("FX.25[%d]: transmit %d data bytes, ctag number 0x%02x\n", chan, k_data_radio, ctag_num);
 	  fx_hex_dump (data, k_data_radio);
-	  dw_printf ("FX.25: transmit %d check bytes:\n", NROOTS);
+	  dw_printf ("FX.25[%d]: transmit %d check bytes:\n", chan, NROOTS);
 	  fx_hex_dump (check, NROOTS);
 	  dw_printf ("------\n");
 	}
@@ -211,6 +211,11 @@ int fx25_send_frame (int chan, unsigned char *fbuf, int flen, int fx_mode)
 	fclose (fp);
 #else
 	// Normal usage.  Send bits to modulator.
+
+// Temp hack for testing.  Corrupt first 8 bytes.
+//	for (int j = 0; j < 16; j++) {
+//	  data[j] = ~ data[j];
+//	}
 
 	for (int k = 0; k < 8; k++) {
 	  unsigned char b = (ctag_value >> (k * 8)) & 0xff;

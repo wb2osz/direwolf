@@ -116,6 +116,10 @@
  * References:	AGWPE TCP/IP API Tutorial
  *		http://uz7ho.org.ua/includes/agwpeapi.htm
  *
+ *		It has disappeared from the original location but you can find it here:
+ *		https://web.archive.org/web/20130807113413/http:/uz7ho.org.ua/includes/agwpeapi.htm
+ *		https://www.on7lds.net/42/sites/default/files/AGWPEAPI.HTM
+ *
  * 		Getting Started with Winsock
  *		http://msdn.microsoft.com/en-us/library/windows/desktop/bb530742(v=vs.85).aspx
  *
@@ -397,7 +401,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 
 	if (msg_len < 36) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("AGWPE message length, %d, is shorter than minumum 36.\n", msg_len);
+	  dw_printf ("AGWPE message length, %d, is shorter than minimum 36.\n", msg_len);
 	}
 	if (msg_len != netle2host(pmsg->data_len_NETLE) + 36) {
 	  text_color_set (DW_COLOR_ERROR);
@@ -666,7 +670,7 @@ static THREAD_F connect_listen_thread (void *arg)
 #else		/* End of Windows case, now Linux */
 
 
-    	struct sockaddr_in sockaddr; /* Internet socket address stuct */
+    	struct sockaddr_in sockaddr; /* Internet socket address struct */
     	socklen_t sockaddr_size = sizeof(struct sockaddr_in);
 	int server_port = (int)(ptrdiff_t)arg;
 	int listen_sock;  
@@ -864,7 +868,7 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
  */
 	struct {
 	  struct agwpe_s hdr;
-	  char data[1+AX25_MAX_PACKET_LEN];
+	  char data[128+AX25_MAX_PACKET_LEN];	// Add plenty of room for header prefix.
 	} agwpe_msg;
 
 	int err;
@@ -902,7 +906,7 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 
 	    // Add the description with <... >
 
-	    char desc[80];
+	    char desc[120];
 	    agwpe_msg.hdr.datakind = mon_desc (pp, desc, sizeof(desc));
 	    if (own_xmit) {
 	      agwpe_msg.hdr.datakind = 'T';
@@ -917,16 +921,22 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 	    snprintf (ts, sizeof(ts), "[%02d:%02d:%02d]\r", tm->tm_hour, tm->tm_min, tm->tm_sec);
 	    strlcat ((char*)(agwpe_msg.data), ts, sizeof(agwpe_msg.data));
 
-	    // Information if any with \r\r.
+	    // Information if any with \r.
 
 	    unsigned char *pinfo = NULL;
 	    int info_len = ax25_get_info (pp, &pinfo);
+	    int msg_data_len = strlen((char*)(agwpe_msg.data));	// result length so far
+
 	    if (info_len > 0 && pinfo != NULL) {
-	      strlcat ((char*)(agwpe_msg.data), (char*)pinfo, sizeof(agwpe_msg.data));
-	      strlcat ((char*)(agwpe_msg.data), "\r", sizeof(agwpe_msg.data));
+	      // Issue 367: Use of strlcat truncated information part at any nul character.
+	      // Use memcpy instead to preserve binary data, e.g. NET/ROM.
+	      memcpy (agwpe_msg.data + msg_data_len, pinfo, info_len);
+	      msg_data_len += info_len;
+	      agwpe_msg.data[msg_data_len++] = '\r';
 	    }
 
-	    agwpe_msg.hdr.data_len_NETLE = host2netle(strlen(agwpe_msg.data) + 1) /* +1 to include terminating null */ ;
+	    agwpe_msg.data[msg_data_len++] = '\0';	// add nul at end, included in length.
+	    agwpe_msg.hdr.data_len_NETLE = host2netle(msg_data_len);
 
 	    if (debug_client) {
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
@@ -1032,7 +1042,7 @@ static char mon_desc (packet_t pp, char *result, int result_size)
 
 	switch (ftype) {
 
-	  case frame_type_I:		snprintf (result, result_size, "<I S%d R%d pid=0x%02X Len=%d %s=%d >",  ns, nr, ax25_get_pid(pp), info_len, pf_text, pf); return ('I');
+	  case frame_type_I:		snprintf (result, result_size, "<I S%d R%d pid=%02X Len=%d %s=%d >",  ns, nr, ax25_get_pid(pp), info_len, pf_text, pf); return ('I');
 
 	  case frame_type_U_UI:		snprintf (result, result_size, "<UI pid=%02X Len=%d %s=%d >", 	ax25_get_pid(pp), info_len, pf_text, pf);  return ('U'); break;
 
@@ -1534,9 +1544,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		count = 0;
 		for (j=0; j<MAX_CHANS; j++) {
-	          if (save_audio_config_p->achan[j].medium == MEDIUM_RADIO ||
-	              save_audio_config_p->achan[j].medium == MEDIUM_IGATE ||
-	              save_audio_config_p->achan[j].medium == MEDIUM_NETTNC) {
+	          if (save_audio_config_p->chan_medium[j] == MEDIUM_RADIO ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_IGATE ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC) {
 		    count++;
 		  }
 		}
@@ -1544,7 +1554,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 		for (j=0; j<MAX_CHANS; j++) {
 
-	          switch (save_audio_config_p->achan[j].medium) {
+	          switch (save_audio_config_p->chan_medium[j]) {
 
 	            case MEDIUM_RADIO:
 	              {
@@ -1823,7 +1833,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        // Connected mode can only be used with internal modems.
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 		  ok = 1;
 	          dlq_register_callsign (cmd.hdr.call_from, chan, client);
 	        }
@@ -1852,7 +1862,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        // Connected mode can only be used with internal modems.
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	          dlq_unregister_callsign (cmd.hdr.call_from, chan, client);
 	        }
 		else {
@@ -1860,7 +1870,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	          dw_printf ("AGW protocol error.  Unregister callsign for invalid channel %d.\n", chan);
 	        }
 	      }
-	      /* No reponse is expected. */
+	      /* No response is expected. */
 	      break;
 
 	    case 'C':				/* Connect, Start an AX.25 Connection  */
@@ -2065,7 +2075,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      // Before disconnecting from another station, it would be good to know
 	      // that it actually received the last message we sent.  For this reason,
 	      // I think it would be good for this to include information frames that were 
-	      // transmitted but not yet acknowleged.
+	      // transmitted but not yet acknowledged.
 	      // You could say that a particular frame is still waiting to be sent even
 	      // if was already sent because it could be sent again if lost previously.
 

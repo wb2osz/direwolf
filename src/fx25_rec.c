@@ -63,7 +63,7 @@ static struct fx_context_s *fx_context[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
 
 static void process_rs_block (int chan, int subchan, int slice, struct fx_context_s *F);
 
-static int my_unstuff (unsigned char * restrict pin, int ilen, unsigned char * restrict frame_buf);
+static int my_unstuff (int chan, int subchan, int slice, unsigned char * restrict pin, int ilen, unsigned char * restrict frame_buf);
 
 //#define FXTEST 1	// Define for standalone test application.
 			// It expects to find files fx01.dat, fx02.dat, ..., fx0b.dat/
@@ -182,7 +182,8 @@ void fx25_rec_bit (int chan, int subchan, int slice, int dbit)
 
 	      if (fx25_get_debug() >= 2) {
 	        text_color_set(DW_COLOR_INFO);
-	        dw_printf ("FX.25: Matched correlation tag 0x%02x with %d bit errors.  Expecting %d data & %d check bytes.\n",
+	        dw_printf ("FX.25[%d.%d]: Matched correlation tag 0x%02x with %d bit errors.  Expecting %d data & %d check bytes.\n",
+			chan, slice,	// ideally subchan too only if applicable
 			c,
 			__builtin_popcountll(F->accum ^ fx25_get_ctag_value(c)),
 			F->k_data_radio, F->nroots);
@@ -257,7 +258,7 @@ int fx25_rec_busy (int chan)
 {
 	assert (chan >= 0 && chan < MAX_CHANS);
 
-	// This could be a litle faster if we knew number of
+	// This could be a little faster if we knew number of
 	// subchannels and slicers but it is probably insignificant.
 
 	for (int i = 0; i < MAX_SUBCHANS; i++) {
@@ -308,7 +309,7 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
 {
 	if (fx25_get_debug() >= 3) {
 	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("FX.25: Received RS codeblock.\n");
+	  dw_printf ("FX.25[%d.%d]: Received RS codeblock.\n", chan, slice);
 	  fx_hex_dump (F->block, FX25_BLOCK_SIZE);
 	}
 	assert (F->block[FX25_BLOCK_SIZE] == FENCE);
@@ -323,10 +324,10 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
 	  if (fx25_get_debug() >= 2) {
 	    text_color_set(DW_COLOR_INFO);
 	    if (derrors == 0) {
-	      dw_printf ("FX.25: FEC complete with no errors.\n"); 
+	      dw_printf ("FX.25[%d.%d]: FEC complete with no errors.\n", chan, slice);
 	    }
 	    else {
-	      dw_printf ("FX.25: FEC complete, fixed %2d errors in byte positions:",derrors); 
+	      dw_printf ("FX.25[%d.%d]: FEC complete, fixed %2d errors in byte positions:", chan, slice, derrors);
 	      for (int k = 0; k < derrors; k++) {
 	        dw_printf (" %d", derrlocs[k]);
 	      }
@@ -335,7 +336,7 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
 	  }
 
 	  unsigned char frame_buf[FX25_MAX_DATA+1];	// Out must be shorter than input.
-	  int frame_len = my_unstuff (F->block, F->dlen, frame_buf);
+	  int frame_len = my_unstuff (chan, subchan, slice, F->block, F->dlen, frame_buf);
 
 	  if (frame_len >= 14 + 1 + 2) {		// Minimum length: Two addresses & control & FCS.
 
@@ -345,7 +346,7 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
 
 	      if (fx25_get_debug() >= 3) {
 	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("FX.25: Extracted AX.25 frame:\n");
+	        dw_printf ("FX.25[%d.%d]: Extracted AX.25 frame:\n", chan, slice);
 	        fx_hex_dump (frame_buf, frame_len);
 	      }
 
@@ -360,7 +361,7 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
 	    } else {
 	      // Most likely cause is defective sender software.
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("FX.25: Bad FCS for AX.25 frame.\n");
+	      dw_printf ("FX.25[%d.%d]: Bad FCS for AX.25 frame.\n", chan, slice);
 	      fx_hex_dump (F->block, F->dlen);
 	      fx_hex_dump (frame_buf, frame_len);
 	    }
@@ -368,14 +369,14 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
 	  else {
 	    // Most likely cause is defective sender software.
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("FX.25: AX.25 frame is shorter than minimum length.\n");
+	    dw_printf ("FX.25[%d.%d]: AX.25 frame is shorter than minimum length.\n", chan, slice);
 	    fx_hex_dump (F->block, F->dlen);
 	    fx_hex_dump (frame_buf, frame_len);
 	  }
 	}
 	else if (fx25_get_debug() >= 2) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("FX.25: FEC failed.  Too many errors.\n");
+	  dw_printf ("FX.25[%d.%d]: FEC failed.  Too many errors.\n", chan, slice);
 	}
 
 } // process_rs_block
@@ -387,7 +388,9 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
  *
  * Purpose:	Remove HDLC it stuffing and surrounding flag delimiters.
  *
- * Inputs:      pin	- "data" part of RS codeblock.
+ * Inputs:      chan, subchan, slice	- For error messages.
+ *
+ *		pin	- "data" part of RS codeblock.
  *			  First byte must be HDLC "flag".
  *			  May be followed by additional flags.
  *			  There must be terminating flag but it might not be byte aligned.
@@ -409,7 +412,7 @@ static void process_rs_block (int chan, int subchan, int slice, struct fx_contex
  *
  ***********************************************************************************/
 
-static int my_unstuff (unsigned char * restrict pin, int ilen, unsigned char * restrict frame_buf)
+static int my_unstuff (int chan, int subchan, int slice, unsigned char * restrict pin, int ilen, unsigned char * restrict frame_buf)
 {
 	unsigned char pat_det = 0;	// Pattern detector.
 	unsigned char oacc = 0;		// Accumulator for a byte out.
@@ -418,7 +421,7 @@ static int my_unstuff (unsigned char * restrict pin, int ilen, unsigned char * r
 	
 	if (*pin != 0x7e) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("FX.25 error: Data section did not start with 0x7e.\n");
+	  dw_printf ("FX.25[%d.%d] error: Data section did not start with 0x7e.\n", chan, slice);
 	  fx_hex_dump (pin, ilen);
 	  return (0);
 	}
@@ -436,7 +439,7 @@ static int my_unstuff (unsigned char * restrict pin, int ilen, unsigned char * r
 
 	    if (pat_det == 0xfe) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("FX.25: Invalid AX.25 frame - Seven '1' bits in a row.\n"); 
+	      dw_printf ("FX.25[%d.%d]: Invalid AX.25 frame - Seven '1' bits in a row.\n", chan, slice);
 	      fx_hex_dump (pin, ilen);
 	      return 0;
 	    }
@@ -451,7 +454,7 @@ static int my_unstuff (unsigned char * restrict pin, int ilen, unsigned char * r
 		}
 	        else {
 	          text_color_set(DW_COLOR_ERROR);
-	          dw_printf ("FX.25: Invalid AX.25 frame - Not a whole number of bytes.\n"); 
+	          dw_printf ("FX.25[%d.%d]: Invalid AX.25 frame - Not a whole number of bytes.\n", chan, slice);
 	          fx_hex_dump (pin, ilen);
 	          return (0);
 	        }
@@ -470,7 +473,7 @@ static int my_unstuff (unsigned char * restrict pin, int ilen, unsigned char * r
 	}	/* end of loop on all bits in block */
 
 	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("FX.25: Invalid AX.25 frame - Terminating flag not found.\n"); 
+	dw_printf ("FX.25[%d.%d]: Invalid AX.25 frame - Terminating flag not found.\n", chan, slice);
 	fx_hex_dump (pin, ilen);
 
 	return (0);	// Should never fall off the end.

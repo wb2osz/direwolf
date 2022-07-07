@@ -10,12 +10,13 @@
 
 #include "config.h"
 
-
+#include "kiss_frame.h"		// for struct kissport_status_s
 
 
 void kisspt_init (struct misc_config_s *misc_config);
 
-void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen, int client);
+void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int flen,
+		struct kissport_status_s *notused1, int notused2);
 
 void kisspt_set_debug (int n);
 

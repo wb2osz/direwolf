@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011, 2012, 2013, 2015, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2015, 2019, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -25,7 +25,8 @@
  *
  * Module:      demod_9600.c
  *
- * Purpose:   	Demodulator for scrambled baseband encoding.
+ * Purpose:   	Demodulator for baseband signal.
+ *		This is used for AX.25 (with scrambling) and IL2P without.
  *		
  * Input:	Audio samples from either a file or the "sound card."
  *
@@ -45,12 +46,14 @@
 #include <ctype.h>
 
 // Fine tuning for different demodulator types.
+// Don't remove this section.  It is here for a reason.
 
-#define DCD_THRESH_ON 32		// Hysteresis: Can miss 0 out of 32 for detecting lock.
-					// This is best for actual on-the-air signals.
-					// Still too many brief false matches.
-#define DCD_THRESH_OFF 8		// Might want a little more fine tuning.
-#define DCD_GOOD_WIDTH 1024		// No more than 1024!!!
+#define DCD_THRESH_ON 32                // Hysteresis: Can miss 0 out of 32 for detecting lock.
+                                        // This is best for actual on-the-air signals.
+                                        // Still too many brief false matches.
+#define DCD_THRESH_OFF 8                // Might want a little more fine tuning.
+#define DCD_GOOD_WIDTH 1024             // No more than 1024!!!
+
 #include "fsk_demod_state.h"		// Values above override defaults.
 
 #include "tune.h"
@@ -125,9 +128,12 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
  *
  * Inputs:      modem_type	- Determines whether scrambling is used.
  *
- *		samples_per_sec	- Number of samples per second.
- *				  Might be upsampled in hopes of
- *				  reducing the PLL jitter.
+ *		samples_per_sec	- Number of samples per second for audio.
+ *
+ *		upsample	- Factor to upsample the incoming stream.
+ *				  After a lot of experimentation, I discovered that
+ *				  it works better if the data is upsampled.
+ *				  This reduces the jitter for PLL synchronization.
  *
  *		baud		- Data rate in bits per second.
  *
@@ -137,10 +143,13 @@ static inline float agc (float in, float fast_attack, float slow_decay, float *p
  *		
  *----------------------------------------------------------------*/
 
-void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, struct demodulator_state_s *D)
+void demod_9600_init (enum modem_t modem_type, int original_sample_rate, int upsample, int baud, struct demodulator_state_s *D)
 {	
 	float fc;
 	int j;
+	if (upsample < 1) upsample = 1;
+	if (upsample > 4) upsample = 4;
+
 
 	memset (D, 0, sizeof(struct demodulator_state_s));
 	D->modem_type = modem_type;
@@ -155,12 +164,13 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
 //	  case 'L':			// upsample x4 with filtering.
 
 
-	    D->lp_filter_len_bits =  1.0;
+	    D->lp_filter_len_bits =  1.0;	// -U4 = 61 	4.59 samples/symbol
 
 	    // Works best with odd number in some tests.  Even is better in others.
-	    //D->lp_filter_size = ((int) (0.5f * ( D->lp_filter_len_bits * (float)samples_per_sec / (float)baud ))) * 2 + 1;
+	    //D->lp_filter_size = ((int) (0.5f * ( D->lp_filter_len_bits * (float)original_sample_rate / (float)baud ))) * 2 + 1;
 
-	    D->lp_filter_size = (int) (( D->lp_filter_len_bits * (float)samples_per_sec / baud) + 0.5f);
+	    // Just round to nearest integer.
+	    D->lp_filter_size = (int) (( D->lp_filter_len_bits * (float)original_sample_rate / baud) + 0.5f);
 
 	    D->lp_window = BP_WINDOW_COSINE;
 
@@ -185,8 +195,11 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
 	dw_printf ("samples per bit = %.1f\n", (double)samples_per_sec / baud);
 #endif
 
+
+	// PLL needs to use the upsampled rate.
+
         D->pll_step_per_sample = 
-		(int) round(TICKS_PER_PLL_CYCLE * (double) baud / (double)samples_per_sec);
+		(int) round(TICKS_PER_PLL_CYCLE * (double) baud / (double)(original_sample_rate * upsample));
 
 
 #ifdef TUNE_LP_WINDOW
@@ -217,13 +230,87 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
 	D->pll_searching_inertia = TUNE_PLL_SEARCHING;
 #endif
 
-	fc = (float)baud * D->lpf_baud / (float)samples_per_sec;
+	// Initial filter (before scattering) is based on upsampled rate.
+
+	fc = (float)baud * D->lpf_baud / (float)(original_sample_rate * upsample);
 
 	//dw_printf ("demod_9600_init: call gen_lowpass(fc=%.2f, , size=%d, )\n", fc, D->lp_filter_size);
 
-	(void)gen_lowpass (fc, D->lp_filter, D->lp_filter_size, D->lp_window, 0);
+	gen_lowpass (fc, D->u.bb.lp_filter, D->lp_filter_size * upsample, D->lp_window);
+
+// New in 1.7 -
+// Use a polyphase filter to reduce the CPU load.
+// Originally I used zero stuffing to upsample.
+// Here is the general idea.
+//
+// Suppose the input samples are 1 2 3 4 5 6 7 8 9 ...
+// Filter coefficients are a b c d e f g h i ...
+//
+// With original sampling rate, the filtering would involve multiplying and adding:
+//
+// 	1a 2b 3c 4d 5e 6f ...
+//
+// When upsampling by 3, each of these would need to be evaluated
+// for each audio sample:
+//
+//	1a 0b 0c 2d 0e 0f 3g 0h 0i ...
+//	0a 1b 0c 0d 2e 0f 0g 3h 0i ...
+//	0a 0b 1c 0d 0e 2f 0g 0h 3i ...
+//
+// 2/3 of the multiplies are always by a stuffed zero.
+// We can do this more efficiently by removing them.
+//
+//	1a       2d       3g       ...
+//	   1b       2e       3h    ...
+//	      1c       2f       3i ...
+//
+// We scatter the original filter across multiple shorter filters.
+// Each input sample cycles around them to produce the upsampled rate.
+//
+//	a d g ...
+//	b e h ...
+//	c f i ...
+//
+// There are countless sources of information DSP but this one is unique
+// in that it is a college course that mentions APRS.
+// https://www2.eecs.berkeley.edu/Courses/EE123
+//
+// Was the effort worthwhile?  Times on an RPi 3.
+//
+// command:   atest -B9600  ~/walkabout9600[abc]-compressed*.wav
+//
+// These are 3 recordings of a portable system being carried out of
+// range and back in again.  It is a real world test for weak signals.
+//
+//	options		num decoded	seconds		x realtime
+//			1.6	1.7	1.6	1.7	1.6	1.7
+//			---	---	---	---	---	---
+//	-P-		171	172	23.928	17.967	14.9	19.9
+//	-P+		180	180	54.688	48.772	6.5	7.3
+//	-P- -F1		177	178	32.686	26.517	10.9	13.5
+//
+// So, it turns out that -P+ doesn't have a dramatic improvement, only
+// around 4%, for drastically increased CPU requirements.
+// Maybe we should turn that off by default, especially for ARM.
+//
+
+	int k = 0;
+	for (int i = 0; i < D->lp_filter_size; i++) {
+	    D->u.bb.lp_polyphase_1[i] = D->u.bb.lp_filter[k++];
+	    if (upsample >= 2) {
+	        D->u.bb.lp_polyphase_2[i] = D->u.bb.lp_filter[k++];
+	        if (upsample >= 3) {
+	            D->u.bb.lp_polyphase_3[i] = D->u.bb.lp_filter[k++];
+	            if (upsample >= 4) {
+	                D->u.bb.lp_polyphase_4[i] = D->u.bb.lp_filter[k++];
+	            }
+	        }
+	    }
+	}
+
 
 	/* Version 1.2: Experiment with different slicing levels. */
+	// Really didn't help that much because we should have a symmetrical signal.
 
 	for (j = 0; j < MAX_SUBCHANS; j++) {
 	  slice_point[j] = 0.02f * (j - 0.5f * (MAX_SUBCHANS-1));
@@ -259,7 +346,7 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
  *		been distorted by going thru voice transceivers not
  *		intended to pass this sort of "audio" signal.
  *
- *		Data is "scrambled" to reduce the amount of DC bias.
+ *		For G3RUH mode, data is "scrambled" to reduce the amount of DC bias.
  *		The data stream must be unscrambled at the receiving end.
  *
  *		We also have a digital phase locked loop (PLL)
@@ -276,6 +363,9 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
  *		of the function to be called for each bit recovered
  *		from the demodulator.  For now, it's simply hard-coded.
  *
+ *		After experimentation, I found that this works better if
+ *		the original signal is upsampled by 2x or even 4x.
+ *
  * References:	9600 Baud Packet Radio Modem Design
  *		http://www.amsat.org/amsat/articles/g3ruh/109.html
  *
@@ -290,40 +380,23 @@ void demod_9600_init (enum modem_t modem_type, int samples_per_sec, int baud, st
 
 inline static void nudge_pll (int chan, int subchan, int slice, float demod_out, struct demodulator_state_s *D);
 
-__attribute__((hot))
-void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D)
-{
+static void process_filtered_sample (int chan, float fsam, struct demodulator_state_s *D);
 
+
+__attribute__((hot))
+void demod_9600_process_sample (int chan, int sam, int upsample, struct demodulator_state_s *D)
+{
 	float fsam;
-	float amp;
-	float demod_out;
 
 #if DEBUG4
 	static FILE *demod_log_fp = NULL;
 	static int log_file_seq = 0;		/* Part of log file name */
 #endif
 
-
 	int subchan = 0;
-	int demod_data;				/* Still scrambled. */
-
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
-
-/* 
- * Filters use last 'filter_size' samples.
- *
- * First push the older samples down. 
- *
- * Finally, put the most recent at the beginning.
- *
- * Future project?  Rather than shifting the samples,
- * it might be faster to add another variable to keep
- * track of the most recent sample and change the 
- * indexing in the later loops that multipy and add.
- */
 
 	/* Scale to nice number for convenience. */
 	/* Consistent with the AFSK demodulator, we'd like to use */
@@ -331,22 +404,33 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 	/* i.e.  input range +-16k becomes +-1 here and is */
 	/* displayed in the heard line as audio level 100. */
 
-	fsam = sam / 16384.0;
+	fsam = (float)sam / 16384.0f;
 
-#if defined(TUNE_ZEROSTUFF) && TUNE_ZEROSTUFF == 0
-// experiment - no filtering.
+	// Low pass filter
+	push_sample (fsam, D->u.bb.audio_in, D->lp_filter_size);
 
-	amp = fsam;
+	fsam = convolve (D->u.bb.audio_in, D->u.bb.lp_polyphase_1, D->lp_filter_size);
+	process_filtered_sample (chan, fsam, D);
+	if (upsample >= 2) {
+	    fsam = convolve (D->u.bb.audio_in, D->u.bb.lp_polyphase_2, D->lp_filter_size);
+	    process_filtered_sample (chan, fsam, D);
+	    if (upsample >= 3) {
+	        fsam = convolve (D->u.bb.audio_in, D->u.bb.lp_polyphase_3, D->lp_filter_size);
+	        process_filtered_sample (chan, fsam, D);
+	        if (upsample >= 4) {
+	            fsam = convolve (D->u.bb.audio_in, D->u.bb.lp_polyphase_4, D->lp_filter_size);
+	            process_filtered_sample (chan, fsam, D);
+	        }
+	    }
+	}
+}
 
-#else
-	push_sample (fsam, D->raw_cb, D->lp_filter_size);
 
-/*
- * Low pass filter to reduce noise yet pass the data. 
- */
+__attribute__((hot))
+static void process_filtered_sample (int chan, float fsam, struct demodulator_state_s *D)
+{
 
-	amp = convolve (D->raw_cb, D->lp_filter, D->lp_filter_size);
-#endif
+	int subchan = 0;
 
 /*
  * Version 1.2: Capture the post-filtering amplitude for display.
@@ -359,18 +443,18 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 
 // TODO:  probably no need for this.  Just use  D->m_peak, D->m_valley
 
-	if (amp >= D->alevel_mark_peak) {
-	  D->alevel_mark_peak = amp * D->quick_attack + D->alevel_mark_peak * (1.0f - D->quick_attack);
+	if (fsam >= D->alevel_mark_peak) {
+	  D->alevel_mark_peak = fsam * D->quick_attack + D->alevel_mark_peak * (1.0f - D->quick_attack);
 	}
 	else {
-	  D->alevel_mark_peak = amp * D->sluggish_decay + D->alevel_mark_peak * (1.0f - D->sluggish_decay);
+	  D->alevel_mark_peak = fsam * D->sluggish_decay + D->alevel_mark_peak * (1.0f - D->sluggish_decay);
 	}
 
-	if (amp <= D->alevel_space_peak) {
-	  D->alevel_space_peak = amp * D->quick_attack + D->alevel_space_peak * (1.0f - D->quick_attack);
+	if (fsam <= D->alevel_space_peak) {
+	  D->alevel_space_peak = fsam * D->quick_attack + D->alevel_space_peak * (1.0f - D->quick_attack);
 	}
 	else {
-	  D->alevel_space_peak = amp * D->sluggish_decay + D->alevel_space_peak * (1.0f - D->sluggish_decay);
+	  D->alevel_space_peak = fsam * D->sluggish_decay + D->alevel_space_peak * (1.0f - D->sluggish_decay);
 	}
 
 /* 
@@ -381,12 +465,14 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  * This works by looking at the minimum and maximum signal peaks
  * and scaling the results to be roughly in the -1.0 to +1.0 range.
  */
+	float demod_out;
+	int demod_data;				/* Still scrambled. */
 
-	demod_out = agc (amp, D->agc_fast_attack, D->agc_slow_decay, &(D->m_peak), &(D->m_valley));
+	demod_out = agc (fsam, D->agc_fast_attack, D->agc_slow_decay, &(D->m_peak), &(D->m_valley));
 
 // TODO: There is potential for multiple decoders with one filter.
 
-//dw_printf ("peak=%.2f valley=%.2f amp=%.2f norm=%.2f\n", D->m_peak, D->m_valley, amp, norm);
+//dw_printf ("peak=%.2f valley=%.2f fsam=%.2f norm=%.2f\n", D->m_peak, D->m_valley, fsam, norm);
 
 	if (D->num_slicers <= 1) {
 
@@ -435,7 +521,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
 
 	    fprintf (demod_log_fp, "%.3f, %.3f, %.3f, %.3f, %.3f, %d, %.2f\n",
 			fsam + 6,
-			amp + 4,
+			fsam + 4,
 			D->m_peak + 4,
 			D->m_valley + 4,
 			demod_out + 2,
@@ -478,7 +564,7 @@ void demod_9600_process_sample (int chan, int sam, struct demodulator_state_s *D
  *
  * Returns:	None
  *
- * Descripton:	A PLL is used to sample near the centers of the data bits.
+ * Description:	A PLL is used to sample near the centers of the data bits.
  *
  *		D->data_clock_pll is a SIGNED 32 bit variable.
  *		When it overflows from a large positive value to a negative value, we

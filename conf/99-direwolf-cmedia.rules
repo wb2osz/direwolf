@@ -3,7 +3,7 @@
 #	$ ls -l /dev/hidraw*
 #	crw------- 1 root root 247, 0 Sep 24 09:40 /dev/hidraw0
 #
-# An ordinary user, trying to acccess it will be denied.
+# An ordinary user, trying to access it will be denied.
 #
 # Unnecessarily running applications as root is generally a bad idea because it makes it too easy
 # to accidentally trash your system.  We need to relax the restrictions so ordinary users can use these devices.

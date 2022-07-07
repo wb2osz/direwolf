@@ -156,7 +156,7 @@ static int calcbufsize(int rate, int chans, int bits)
  * the same device name for more then one connected device
  * (ie two SignaLinks). Appending a Portaudio device index to the
  * the device name ensure we can find the correct one. And if it's not
- * available return the first occurence that matches the device name.
+ * available return the first occurrence that matches the device name.
  *----------------------------------------------------------------*/
 static int searchPADevice(struct adev_s *dev, char *_devName, int reqDeviceNo, int io_flag)
 {
@@ -513,7 +513,7 @@ static int paOutput16CB( const void *inputBuffer, void *outputBuffer,
  *				more restrictive in its capabilities.
  *				It might say, the best I can do is mono, 8 bit, 8000/sec.
  *
- *				The sofware modem must use this ACTUAL information
+ *				The software modem must use this ACTUAL information
  *				that the device is supplying, that could be different
  *				than what the user specified.
  *

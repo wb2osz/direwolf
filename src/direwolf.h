@@ -37,7 +37,6 @@
 
 #endif
 
-
 /*
  * Previously, we could handle only a single audio device.
  * This meant we could have only two radio channels.
@@ -65,7 +64,15 @@
  * and make sure they handle undefined channels correctly.
  */
 
-#define MAX_CHANS ((MAX_ADEVS) * 2)
+#define MAX_RADIO_CHANS ((MAX_ADEVS) * 2)
+
+#define MAX_CHANS MAX_RADIO_CHANS	// TODO: Replace all former  with latter to avoid confusion with following.
+
+#define MAX_TOTAL_CHANS 16		// v1.7 allows additional virtual channels which are connected
+					// to something other than radio modems.
+					// Total maximum channels is based on the 4 bit KISS field.
+					// Someone with very unusual requirements could increase this and
+					// use only the AGW network protocol.
 
 /*
  * Maximum number of rigs.
@@ -97,7 +104,7 @@
  * Each one of these can have multiple slicers, at
  * different levels, to compensate for different
  * amplitudes of the AFSK tones.
- * Intially used same number as subchannels but
+ * Initially used same number as subchannels but
  * we could probably trim this down a little
  * without impacting performance.
  */
@@ -176,6 +183,7 @@
 #define DW_METERS_TO_FEET(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 3.2808399)
 #define DW_FEET_TO_METERS(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.3048)
 #define DW_KM_TO_MILES(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.621371192)
+#define DW_MILES_TO_KM(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 1.609344)
 
 #define DW_KNOTS_TO_MPH(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 1.15077945)
 #define DW_KNOTS_TO_METERS_PER_SEC(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.51444444444)
@@ -278,43 +286,34 @@ char *strsep(char **stringp, const char *delim);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
-// Don't recall why for everyone.
+// Don't recall why I added this for everyone rather than only for Windows.
 char *strcasestr(const char *S, const char *FIND);
 
 
-#if defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
+// cmake determines whether strlcpy and strlcat are available
+// or if we need to supply our own.
 
-// strlcpy and strlcat should be in string.h and the C library.
+#define DEBUG_STRL 1	// Extra Debug version when using our own strlcpy, strlcat.
 
-#else   // Use our own copy
-
-
-// These prevent /usr/include/gps.h from providing its own definition.
-#define HAVE_STRLCAT 1
-#define HAVE_STRLCPY 1
-
-
-#define DEBUG_STRL 1
-
+#ifndef HAVE_STRLCPY	// Need to supply our own.
 #if DEBUG_STRL
-
 #define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz,__FILE__,__func__,__LINE__)
-#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz,__FILE__,__func__,__LINE__)
-
 size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
-size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
-
 #else
-
 #define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz)
-#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz)
-
 size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
-size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
-
 #endif  /* DEBUG_STRL */
+#endif
 
-#endif	/* BSD or Apple */
+#ifndef HAVE_STRLCAT	// Need to supply our own.
+#if DEBUG_STRL
+#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz,__FILE__,__func__,__LINE__)
+size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
+#else
+#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz)
+size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
+#endif  /* DEBUG_STRL */
+#endif
 
 
 #endif   /* ifndef DIREWOLF_H */

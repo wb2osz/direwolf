@@ -6,6 +6,7 @@ set(GEN_PACKETS_BIN "${CMAKE_BINARY_DIR}/src/gen_packets${CMAKE_EXECUTABLE_SUFFI
 set(ATEST_BIN "${CMAKE_BINARY_DIR}/src/atest${CMAKE_EXECUTABLE_SUFFIX}")
 set(FXSEND_BIN "${CMAKE_BINARY_DIR}/test/fxsend${CMAKE_EXECUTABLE_SUFFIX}")
 set(FXREC_BIN "${CMAKE_BINARY_DIR}/test/fxrec${CMAKE_EXECUTABLE_SUFFIX}")
+set(IL2P_TEST_BIN "${CMAKE_BINARY_DIR}/test/il2p_test${CMAKE_EXECUTABLE_SUFFIX}")
 
 if(WIN32)
   set(CUSTOM_SCRIPT_SUFFIX ".bat")
@@ -14,9 +15,12 @@ else()
 endif()
 
 set(TEST_CHECK-FX25_FILE "check-fx25")
+set(TEST_CHECK-IL2P_FILE "check-il2p")
 set(TEST_CHECK-MODEM1200_FILE "check-modem1200")
+set(TEST_CHECK-MODEM1200_IL2P_FILE "check-modem1200-i")
 set(TEST_CHECK-MODEM300_FILE "check-modem300")
 set(TEST_CHECK-MODEM9600_FILE "check-modem9600")
+set(TEST_CHECK-MODEM9600_IL2P_FILE "check-modem9600-i")
 set(TEST_CHECK-MODEM19200_FILE "check-modem19200")
 set(TEST_CHECK-MODEM2400-a_FILE "check-modem2400-a")
 set(TEST_CHECK-MODEM2400-b_FILE "check-modem2400-b")
@@ -32,8 +36,20 @@ configure_file(
   )
 
 configure_file(
+  "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-IL2P_FILE}"
+  "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-IL2P_FILE}${CUSTOM_SCRIPT_SUFFIX}"
+  @ONLY
+  )
+
+configure_file(
   "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-MODEM1200_FILE}"
   "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM1200_FILE}${CUSTOM_SCRIPT_SUFFIX}"
+  @ONLY
+  )
+
+configure_file(
+  "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-MODEM1200_IL2P_FILE}"
+  "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM1200_IL2P_FILE}${CUSTOM_SCRIPT_SUFFIX}"
   @ONLY
   )
 
@@ -46,6 +62,12 @@ configure_file(
 configure_file(
   "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-MODEM9600_FILE}"
   "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM9600_FILE}${CUSTOM_SCRIPT_SUFFIX}"
+  @ONLY
+  )
+
+configure_file(
+  "${CUSTOM_TEST_SCRIPTS_DIR}/${TEST_CHECK-MODEM9600_IL2P_FILE}"
+  "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM9600_IL2P_FILE}${CUSTOM_SCRIPT_SUFFIX}"
   @ONLY
   )
 
@@ -100,61 +122,10 @@ if(WIN32 OR CYGWIN)
   )
 endif()
 
-# Why is there a special atest9 instead of using the normal one?
-
-# Unit test for demodulators
-list(APPEND atest9_SOURCES
-  ${CUSTOM_SRC_DIR}/atest.c
-  ${CUSTOM_SRC_DIR}/ais.c
-  ${CUSTOM_SRC_DIR}/demod.c
-  ${CUSTOM_SRC_DIR}/dsp.c
-  ${CUSTOM_SRC_DIR}/demod_afsk.c
-  ${CUSTOM_SRC_DIR}/demod_psk.c
-  ${CUSTOM_SRC_DIR}/demod_9600.c
-  ${CUSTOM_SRC_DIR}/fx25_extract.c
-  ${CUSTOM_SRC_DIR}/fx25_init.c
-  ${CUSTOM_SRC_DIR}/fx25_rec.c
-  ${CUSTOM_SRC_DIR}/hdlc_rec.c
-  ${CUSTOM_SRC_DIR}/hdlc_rec2.c
-  ${CUSTOM_SRC_DIR}/multi_modem.c
-  ${CUSTOM_SRC_DIR}/rrbb.c
-  ${CUSTOM_SRC_DIR}/fcs_calc.c
-  ${CUSTOM_SRC_DIR}/ax25_pad.c
-  ${CUSTOM_SRC_DIR}/decode_aprs.c
-  ${CUSTOM_SRC_DIR}/dwgpsnmea.c
-  ${CUSTOM_SRC_DIR}/dwgps.c
-  ${CUSTOM_SRC_DIR}/dwgpsd.c
-  ${CUSTOM_SRC_DIR}/serial_port.c
-  ${CUSTOM_SRC_DIR}/latlong.c
-  ${CUSTOM_SRC_DIR}/symbols.c
-  ${CUSTOM_SRC_DIR}/textcolor.c
-  ${CUSTOM_SRC_DIR}/telemetry.c
-  ${CUSTOM_SRC_DIR}/dtime_now.c
-  ${CUSTOM_SRC_DIR}/tt_text.c
-  )
-
 if(WIN32 OR CYGWIN)
   list(REMOVE_ITEM atest9_SOURCES
     ${CUSTOM_SRC_DIR}/dwgpsd.c
     )
-endif()
-
-add_executable(atest9
-  ${atest9_SOURCES}
-  )
-
-target_link_libraries(atest9
-  ${MISC_LIBRARIES}
-  ${REGEX_LIBRARIES}
-  ${GPSD_LIBRARIES}
-  Threads::Threads
-  )
-
-if(WIN32 OR CYGWIN)
-  set_target_properties(atest9
-    PROPERTIES COMPILE_FLAGS "-DUSE_REGEX_STATIC"
-    )
-  target_link_libraries(atest9 ws2_32)
 endif()
 
 
@@ -205,7 +176,7 @@ if(WIN32 OR CYGWIN)
 endif()
 
 
-# Unit test for APRStt tone seqence parsing.
+# Unit test for APRStt tone sequence parsing.
 list(APPEND ttest_SOURCES
   ${CUSTOM_SRC_DIR}/aprs_tt.c
   ${CUSTOM_SRC_DIR}/tt_text.c
@@ -468,6 +439,39 @@ set_target_properties(fxrec
   )
 
 
+# Unit Test IL2P with out modems.
+
+list(APPEND il2p_test_SOURCES
+  ${CUSTOM_SRC_DIR}/il2p_test.c
+  ${CUSTOM_SRC_DIR}/il2p_init.c
+  ${CUSTOM_SRC_DIR}/il2p_rec.c
+  ${CUSTOM_SRC_DIR}/il2p_send.c
+  ${CUSTOM_SRC_DIR}/il2p_codec.c
+  ${CUSTOM_SRC_DIR}/il2p_payload.c
+  ${CUSTOM_SRC_DIR}/il2p_header.c
+  ${CUSTOM_SRC_DIR}/il2p_scramble.c
+  ${CUSTOM_SRC_DIR}/ax25_pad.c
+  ${CUSTOM_SRC_DIR}/ax25_pad2.c
+  ${CUSTOM_SRC_DIR}/fx25_encode.c
+  ${CUSTOM_SRC_DIR}/fx25_extract.c
+  ${CUSTOM_SRC_DIR}/fx25_init.c
+  ${CUSTOM_SRC_DIR}/fcs_calc.c
+  ${CUSTOM_SRC_DIR}/textcolor.c
+  )
+
+add_executable(il2p_test
+  ${il2p_test_SOURCES}
+  )
+
+#FIXME - remove if not needed.
+#set_target_properties(il2p_test
+#  PROPERTIES COMPILE_FLAGS "-DXXXXX"
+#  )
+
+target_link_libraries(il2p_test
+  ${MISC_LIBRARIES}
+  )
+
 # doing ctest on previous programs
 
 add_test(dtest dtest)
@@ -483,17 +487,18 @@ add_test(xidtest xidtest)
 add_test(dtmftest dtmftest)
 
 add_test(check-fx25 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-FX25_FILE}${CUSTOM_SCRIPT_SUFFIX}")
+add_test(check-il2p "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-IL2P_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem1200 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM1200_FILE}${CUSTOM_SCRIPT_SUFFIX}")
+add_test(check-modem1200-i "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM1200_IL2P_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem300 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM300_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem9600 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM9600_FILE}${CUSTOM_SCRIPT_SUFFIX}")
+add_test(check-modem9600-i "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM9600_IL2P_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem19200 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM19200_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem2400-a "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM2400-a_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem2400-b "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM2400-b_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem2400-g "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM2400-g_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 add_test(check-modem4800 "${CUSTOM_TEST_BINARY_DIR}/${TEST_CHECK-MODEM4800_FILE}${CUSTOM_SCRIPT_SUFFIX}")
 
-# TODO  miss the audio file
-# ./atest9 -B 9600 ../walkabout9600.wav | grep "packets decoded in" >atest.out
 
 
 #  -----------------------------  Manual tests and experiments  ---------------------------

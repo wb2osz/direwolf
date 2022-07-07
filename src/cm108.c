@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2017,2019  John Langner, WB2OSZ
+//    Copyright (C) 2017,2019,2021  John Langner, WB2OSZ
 //
 //    Parts of this were adapted from "hamlib" which contains the notice:
 //
@@ -30,9 +30,10 @@
  *		
  * Description:
  *
- *	There is an incresing demand for using the GPIO pins of USB audio devices for PTT.
+ *	There is an increasing demand for using the GPIO pins of USB audio devices for PTT.
  *	We have a few commercial products:
  *
+ *		DINAH		https://hamprojects.info/dinah/
  *		DMK URI		http://www.dmkeng.com/URI_Order_Page.htm
  *		RB-USB RIM	http://www.repeater-builder.com/products/usb-rim-lite.html
  *		RA-35		http://www.masterscommunications.com/products/radio-adapter/ra35.html
@@ -44,14 +45,15 @@
  *		http://www.repeater-builder.com/projects/fob/USB-Fob-Construction.pdf
  *		https://irongarment.wordpress.com/2011/03/29/cm108-compatible-chips-with-gpio/
  *
- *	Usually GPIO 3 is used because it is easier to tack solder a wire to a pin on the end.
+ *	Homebrew plans all use GPIO 3 because it is easier to tack solder a wire to a pin on the end.
+ *	All of the products, that I have seen, also use the same pin so this is the default.
  *	
  *	Soundmodem and hamlib paved the way but didn't get too far.
  *	Dire Wolf 1.3 added HAMLIB support (Linux only) which theoretically allows this in a
  *	painful roundabout way.  This is documented in the User Guide, section called,
  *		 "Hamlib PTT Example 2: Use GPIO of USB audio adapter.  (e.g. DMK URI)"
  *
- *	It's rather involved and the explantion doesn't cover the case of multiple
+ *	It's rather involved and the explanation doesn't cover the case of multiple
  *	USB-Audio adapters.  It is not as straightforward as you might expect.  Here we have
  *	an example of 3 C-Media USB adapters, a SignaLink USB, a keyboard, and a mouse.
  *	
@@ -87,23 +89,28 @@
  *	Dire Wolf version 1.5 makes this much more flexible and easier to use by supporting multiple
  *	sound devices and automatically determining the corresponding HID for the PTT signal. 
  *
+ *	In version 1.7, we add a half-backed solution for Windows.  It's fine for situations
+ *	with a single USB Audio Adapter, but does not automatically handle the multiple device case.
+ *	Manual configuration needs to be used in this case.
+ *
  *---------------------------------------------------------------*/
+
+#include "direwolf.h"
 
 #ifndef USE_CM108
 
 #ifdef CM108_MAIN
 
-#include "direwolf.h"
+
 #include "textcolor.h"
 
 int main (void)
 {
 	text_color_init (0);    // Turn off text color.
 #if defined(__OpenBSD__) || defined(__FreeBSD__)
-	dw_printf ("CM108 PTT support is not available for BSD.\n");
+	dw_printf ("CM108 PTT support is not available for this operating system.\n");
 #else
-	dw_printf ("CM108 PTT support was disabled in Makefile.linux.\n");
-	dw_printf ("It was excluded because /usr/include/libudev.h was missing.\n");
+	dw_printf ("CM108 PTT support was excluded because /usr/include/libudev.h was missing.\n");
 	dw_printf ("Install it with \"sudo apt-get install libudev-dev\" or\n");
 	dw_printf ("\"sudo yum install libudev-devel\" then rebuild.\n");
 #endif
@@ -112,11 +119,8 @@ int main (void)
 
 #endif
 
-#else	// USE_CM108 is defined.
+#else	// USE_CM108 is defined
 
-#include "direwolf.h"
-
-#include <libudev.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
@@ -124,12 +128,18 @@ int main (void)
 #include <string.h>
 #include <regex.h>
 
+#if __WIN32__
+#include <wchar.h>
+#include "hidapi.h"
+#else
+#include <libudev.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>			// ioctl, _IOR
 #include <fcntl.h>
 #include <errno.h>
 #include <linux/hidraw.h>		// for HIDIOCGRAWINFO
+#endif
 
 #include "textcolor.h"
 #include "cm108.h"
@@ -216,6 +226,8 @@ static int cm108_write (char *name, int iomask, int iodata);
 
 // Used to process regular expression matching results.
 
+#ifndef __WIN32__
+
 static void substr_se (char *dest, const char *src, int start, int endp1)
 {
 	int len = endp1 - start;
@@ -229,6 +241,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
 
 } /* end substr_se */
 
+#endif
 
 /*
  * Result of taking inventory of USB soundcards and USB HIDs.
@@ -237,15 +250,17 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
 struct thing_s {
 	int vid;		// vendor id, displayed as four hexadecimal digits.
 	int pid;		// product id, displayed as four hexadecimal digits.
-	char card_number[8];	// Number.  e.g.  2 for plughw:2,0
-	char card_name[32];	// Name, assigned by system (e.g. Device_1) or by udev rule.
+	char card_number[8];	// "Card" Number.  e.g.  2 for plughw:2,0
+	char card_name[32];	// Audio Card Name, assigned by system (e.g. Device_1) or by udev rule.
 	char product[32];	// product name (e.g. manufacturer, model)
 	char devnode_sound[22];	// e.g. /dev/snd/pcmC0D0p
 	char plughw[72];	// Above in more familiar format e.g. plughw:0,0
 				// Oversized to silence a compiler warning.
 	char plughw2[72];	// With name rather than number.
 	char devpath[128];	// Kernel dev path.  Does not include /sys mount point.
-	char devnode_hidraw[17]; // e.g. /dev/hidraw3
+	char devnode_hidraw[128]; // e.g. /dev/hidraw3  -  for Linux - was length 17
+				// The Windows path for a HID looks like this, lengths up to 95 seen.
+				// \\?\hid#vid_0d8c&pid_000c&mi_03#8&164d11c9&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
 	char devnode_usb[25];	// e.g. /dev/bus/usb/001/012
 				// This is what we use to match up audio and HID.
 };
@@ -259,6 +274,13 @@ int cm108_inventory (struct thing_s *things, int max_things);
  *
  * Purpose:	Useful utility to list USB audio and HID devices.
  *
+ * Optional command line arguments:
+ *
+ *		HID path
+ *		GPIO number (default 3)
+ *
+ *		When specified the pin will be set high and low until interrupted.
+ *
  *------------------------------------------------------------------*/
 
 //#define EXTRA 1
@@ -267,17 +289,110 @@ int cm108_inventory (struct thing_s *things, int max_things);
 
 #ifdef CM108_MAIN
 
-int main (void)
+static void usage(void)
+{
+	text_color_set(DW_COLOR_ERROR);
+	dw_printf ("\n");
+	dw_printf ("Usage:    cm108  [ device-path [ gpio-num ] ]\n");
+	dw_printf ("\n");
+	dw_printf ("With no command line arguments, this will produce a list of\n");
+#if __WIN32__
+	dw_printf ("Human Interface Devices (HID) and indicate which ones can be\n");
+	dw_printf ("used for GPIO PTT.\n");
+#else
+	dw_printf ("Audio devices and Human Interface Devices (HID) and indicate\n");
+	dw_printf ("which ones can be used for GPIO PTT.\n");
+#endif
+	dw_printf ("\n");
+	dw_printf ("Specify the HID device path to test the PTT function.\n");
+	dw_printf ("Its state should change once per second.\n");
+#if __WIN32__
+	dw_printf ("You might need to quote the path depending on the command processor.\n");
+#endif
+	dw_printf ("GPIO 3 is the default.  A different number can be optionally specified.\n");
+	exit (EXIT_FAILURE);
+}
+
+int main (int argc, char **argv)
 {
 	struct thing_s things[MAXX_THINGS];
 	int num_things;
 	int i;
 
 	text_color_init (0);    // Turn off text color.
+	text_color_set(DW_COLOR_INFO);
+
+	if (argc >=2) {
+	  char path[128];
+	  strlcpy(path, argv[1], sizeof(path));
+	  int gpio = 3;
+	  if (argc >= 3) {
+	    gpio = atoi(argv[2]);
+	  }
+	  if (gpio < 1 || gpio > 8) {
+	    dw_printf ("GPIO number must be in range of 1 - 8.\n");
+	    usage();
+	    exit (EXIT_FAILURE);
+	  }
+	  int state = 0;
+	  while (1) {
+	    dw_printf ("%d", state);
+	    fflush (stdout);
+	    int err = cm108_set_gpio_pin (path, gpio, state);
+	    if (err != 0) {
+	      dw_printf ("\nWRITE ERROR for USB Audio Adapter GPIO!\n");
+	      usage();
+	      exit (EXIT_FAILURE);
+	    }
+	    SLEEP_SEC(1);
+	    state = ! state;
+	  }
+	}
+
 
 // Take inventory of USB Audio adapters and other HID devices.
 
 	num_things = cm108_inventory (things, MAXX_THINGS);
+
+#if __WIN32__
+
+/////////////////////////////////////////////////////
+// Windows - Remove the sound related columns for now.
+/////////////////////////////////////////////////////
+
+	dw_printf ("    VID  PID   %-*s %-*s"
+						"\n", 	(int)sizeof(things[0].product),	"Product",
+							17, "HID [ptt]"
+							);
+
+	dw_printf ("    ---  ---   %-*s %-*s"
+
+						"\n", 	(int)sizeof(things[0].product),	"-------",
+							17, "---------"
+							);
+	for (i = 0; i < num_things; i++) {
+
+	  dw_printf ("%2s  %04x %04x  %-*s %s"
+
+						"\n",
+							GOOD_DEVICE(things[i].vid,things[i].pid) ? "**" : "  ",
+							things[i].vid, things[i].pid,
+							(int)sizeof(things[i].product),	things[i].product,
+							things[i].devnode_hidraw
+							);
+	}
+	dw_printf ("\n");
+	dw_printf ("** = Can use Audio Adapter GPIO for PTT.\n");
+	dw_printf ("\n");
+
+	// T.B.D. - additional text ???
+
+#else
+
+/////////////////////////////////////////////
+//                Linux
+/////////////////////////////////////////////
+
 
 	dw_printf ("    VID  PID   %-*s %-*s %-*s %-*s %-*s"
 #if EXTRA
@@ -287,7 +402,7 @@ int main (void)
 							(int)sizeof(things[0].devnode_sound), "Sound",
 							(int)sizeof(things[0].plughw)/5, "ADEVICE",
 							(int)sizeof(things[0].plughw2)/4, "ADEVICE",
-							(int)sizeof(things[0].devnode_hidraw), "HID [ptt]"
+							17, "HID [ptt]"
 #if EXTRA
 							, (int)sizeof(things[0].devnode_usb), "USB"
 #endif
@@ -301,14 +416,14 @@ int main (void)
 							(int)sizeof(things[0].devnode_sound), "-----",
 							(int)sizeof(things[0].plughw)/5, "-------",
 							(int)sizeof(things[0].plughw2)/4, "-------",
-							(int)sizeof(things[0].devnode_hidraw), "---------"
+							17, "---------"
 #if EXTRA
 							, (int)sizeof(things[0].devnode_usb), "---"
 #endif
 							);
 	for (i = 0; i < num_things; i++) {
 
-	  dw_printf ("%2s  %04x %04x  %-*s %-*s %-*s %-*s %-*s"
+	  dw_printf ("%2s  %04x %04x  %-*s %-*s %-*s %-*s %s"
 #if EXTRA
 						" %-*s"
 #endif
@@ -319,22 +434,22 @@ int main (void)
 							(int)sizeof(things[i].devnode_sound), things[i].devnode_sound,
 							(int)sizeof(things[0].plughw)/5, things[i].plughw,
 							(int)sizeof(things[0].plughw2)/4, things[i].plughw2,
-							(int)sizeof(things[i].devnode_hidraw), things[i].devnode_hidraw
+							things[i].devnode_hidraw
 #if EXTRA
 							, (int)sizeof(things[i].devnode_usb), things[i].devnode_usb
 #endif
 							);
 	  //dw_printf ("             %-*s\n", (int)sizeof(things[i].devpath), things[i].devpath);
 	}
+	dw_printf ("\n");
+	dw_printf ("** = Can use Audio Adapter GPIO for PTT.\n");
+	dw_printf ("\n");
 
-	static const char *suggested_names[] = {"Fred", "Wilma", "Pebbles", "Dino", "Barney", "Betty", "Bamm_Bamm" };
+	static const char *suggested_names[] = {"Fred", "Wilma", "Pebbles", "Dino", "Barney", "Betty", "Bamm_Bamm", "Chip", "Roxy" };
 	int iname = 0;
 
 	// From example in https://alsa.opensrc.org/Udev
 
-	dw_printf ("\n");
-	dw_printf ("** = Can use Audio Adapter GPIO for PTT.\n");
-	dw_printf ("\n");
 	dw_printf ("Notice that each USB Audio adapter is assigned a number and a name.  These are not predictable so you could\n");
 	dw_printf ("end up using the wrong adapter after adding or removing other USB devices or after rebooting.  You can assign a\n");
 	dw_printf ("name to each USB adapter so you can refer to the same one each time.  This can be based on any characteristics\n");
@@ -372,7 +487,7 @@ int main (void)
 	}
 	dw_printf ("LABEL=\"my_usb_audio_end\"\n");
 	dw_printf ("\n");
-
+#endif
 	return (0);
 }
 
@@ -400,6 +515,47 @@ int main (void)
 
 int cm108_inventory (struct thing_s *things, int max_things)
 {
+	int num_things = 0;
+	memset (things, 0, sizeof(struct thing_s) * max_things);
+
+#if __WIN32__
+
+	struct hid_device_info *devs, *cur_dev;
+
+	if (hid_init()) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("cm108_inventory: hid_init() failed.\n");
+	  return (-1);
+	}
+
+	devs = hid_enumerate(0x0, 0x0);
+	cur_dev = devs;
+	while (cur_dev) {
+#if 0
+	  printf("Device Found\n  type: %04hx %04hx\n  path: %s\n  serial_number: %ls", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path, cur_dev->serial_number);
+	  printf("\n");
+	  printf("  Manufacturer: %ls\n", cur_dev->manufacturer_string);
+	  printf("  Product:      %ls\n", cur_dev->product_string);
+	  printf("  Release:      %hx\n", cur_dev->release_number);
+	  printf("  Interface:    %d\n",  cur_dev->interface_number);
+	  printf("  Usage (page): 0x%hx (0x%hx)\n", cur_dev->usage, cur_dev->usage_page);
+	  printf("\n");
+#endif
+	  if (num_things < max_things && cur_dev->vendor_id != 0x051d) {		// FIXME - remove exception
+	    things[num_things].vid = cur_dev->vendor_id;
+	    things[num_things].pid = cur_dev->product_id;
+	    wcstombs (things[num_things].product, cur_dev->product_string, sizeof(things[num_things].product));
+	    things[num_things].product[sizeof(things[num_things].product) - 1] = '\0';
+	    strlcpy (things[num_things].devnode_hidraw, cur_dev->path, sizeof(things[num_things].devnode_hidraw));
+
+	    num_things++;
+	  }
+	  cur_dev = cur_dev->next;
+	}
+	hid_free_enumeration(devs);
+
+#else // Linux, with udev
+
 	struct udev *udev;
 	struct udev_enumerate *enumerate;
 	struct udev_list_entry *devices, *dev_list_entry;
@@ -410,8 +566,6 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	char const *pattrs_number = NULL;
 	char card_devpath[128] = "";
 
-	int num_things = 0;
-	memset (things, 0, sizeof(struct thing_s) * max_things);
 
 /* 
  * First get a list of the USB audio devices.
@@ -561,6 +715,8 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	  }
 	}
 
+#endif  // end Linux
+
 	return (num_things);
 
 } /* end cm108_inventory */
@@ -584,7 +740,7 @@ int cm108_inventory (struct thing_s *things, int max_things)
  *		ptt_device_size	- Size of result area to avoid buffer overflow.
  *
  * Outputs:	ptt_device	- Device name, something like /dev/hidraw2.
- *				  Will be emptry string if no match found.
+ *				  Will be empty string if no match found.
  *
  * Returns:	none
  *
@@ -594,13 +750,48 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
 {
 	struct thing_s things[MAXX_THINGS];
 	int num_things;
-	int i;
 
 	//dw_printf ("DEBUG: cm108_find_ptt('%s')\n", output_audio_device);
 
 	strlcpy (ptt_device, "", ptt_device_size);
+
+	// Possible improvement: Skip if inventory already taken.
 	num_things = cm108_inventory (things, MAXX_THINGS);
 
+#if __WIN32__
+		//  FIXME - This is just a half baked implementation.
+		//  I have not been able to figure out how to find the connection
+		//  between the audio device and HID in the same package.
+		//  This is fine for a single USB Audio Adapter, good enough for most people.
+		//  Those with multiple devices will need to manually configure PTT device path.
+
+	// Count how many good devices we have.
+
+	int good_devices = 0;
+
+	for (int i = 0; i < num_things; i++) {
+	  if (GOOD_DEVICE(things[i].vid,things[i].pid) ) {
+	    good_devices++;
+	    //dw_printf ("DEBUG: success! returning '%s'\n", things[i].devnode_hidraw);
+	    strlcpy (ptt_device, things[i].devnode_hidraw, ptt_device_size);
+	  }
+	}
+
+	if (good_devices == 0) return;		// None found - caller will print a message.
+
+	if (good_devices == 1) return;		// Success - Only one candidate device.
+
+	text_color_set(DW_COLOR_ERROR);
+	dw_printf ("There are multiple USB Audio Devices with GPIO capability.\n");
+	dw_printf ("Explicitly specify one of them for more predictable results:\n");
+	for (int i = 0; i < num_things; i++) {
+	  if (GOOD_DEVICE(things[i].vid,things[i].pid) ) {
+	    dw_printf ("   \"%s\"\n", things[i].devnode_hidraw);
+	  }
+	}
+	dw_printf ("Run the \"cm108\" utility for more details.\n");
+	text_color_set(DW_COLOR_INFO);
+#else
 	regex_t sound_re;
 	char emsg[100];
 	int e = regcomp (&sound_re, ".+:(CARD=)?([A-Za-z0-9_]+)(,.*)?", REG_EXTENDED);
@@ -625,7 +816,7 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
 	  return;
 	}
 
-	for (i = 0; i < num_things; i++) {
+	for (int i = 0; i < num_things; i++) {
 	  //dw_printf ("DEBUG: i=%d, card_name='%s', card_number='%s'\n", i, things[i].card_name, things[i].card_number);
 	  if (strcmp(num_or_name,things[i].card_name) == 0 || strcmp(num_or_name,things[i].card_number) == 0) {
 	    //dw_printf ("DEBUG: success! returning '%s'\n", things[i].devnode_hidraw);
@@ -638,6 +829,7 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
 	    return;
 	  }
 	}
+#endif
 	
 }  /* end cm108_find_ptt */
 
@@ -649,7 +841,8 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
  *
  * Purpose:	Set one GPIO pin of the CM108 or similar.
  *
- * Inputs:	name		- Name of device such as /dev/hidraw2.
+ * Inputs:	name		- Name of device such as /dev/hidraw2 or
+ *					\\?\hid#vid_0d8c&pid_0008&mi_03#8&39d3555&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
  *
  *		num		- GPIO number, range 1 thru 8.
  *
@@ -661,51 +854,13 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
  *
  * Future:	For our initial implementation we are making the simplifying
  *		restriction of using only one GPIO pin per device and limit
- *		configuratin to PTT only.
+ *		configuration to PTT only.
  *		Longer term, we might want to have DCD, and maybe other
  *		controls thru the same chip.
  *		In this case, we would need to retain bit masks for each
  *		device so new data can be merged with old before sending it out.
  *
  *------------------------------------------------------------------*/
-
-#if TESTCM
-
-// Switch pin between input, output-low, and output-high.
-
-// gcc -DTESTCM=1 -DUSE_CM108 cm108.c textcolor.c misc.a -ludev
-
-int main (int argc, char *argv[])
-{
-#define MODE_IN 0
-#define MODE_OUT 0x04		// GPIO 3 = bit 2
-#define OUT_LOW 0
-#define OUT_HIGH 0x04
-
-	if (argc != 2) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Specify HID path on command line.\n");
-	  exit (1);
-	}
-
-	while (1) {
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("Input-L\n");
-	  cm108_write (argv[1], MODE_IN, OUT_LOW);
-	  sleep(5);
-	  dw_printf ("Input-H\n");
-	  cm108_write (argv[1], MODE_IN, OUT_HIGH);
-	  sleep(5);
-	  dw_printf ("Out-LOW\n");
-	  cm108_write (argv[1], MODE_OUT, OUT_LOW);
-	  sleep(5);
-	  dw_printf ("out-HIGH\n");
-	  cm108_write (argv[1], MODE_OUT, OUT_HIGH);
-	  sleep(5);
-	}
-}
-
-#endif
 
 
 int cm108_set_gpio_pin (char *name, int num, int state)
@@ -758,6 +913,36 @@ int cm108_set_gpio_pin (char *name, int num, int state)
 
 static int cm108_write (char *name, int iomask, int iodata)
 {
+
+#if __WIN32__
+
+	//text_color_set(DW_COLOR_DEBUG);
+	//dw_printf ("TEMP DEBUG cm108_write:  %s %d %d\n", name, iomask, iodata);
+
+	hid_device *handle = hid_open_path(name);
+	if (handle == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Could not open %s for write\n", name);
+	  return (-1);
+	}
+
+	unsigned char io[5];
+	io[0] = 0;
+	io[1] = 0;
+	io[2] = iodata;
+	io[3] = iomask;
+	io[4] = 0;
+
+	int res = hid_write(handle, io, sizeof(io));
+	if (res < 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Write failed to %s\n", name);
+	  return (-1);
+	}
+
+	hid_close(handle);
+
+#else
 	int fd;
 	struct hidraw_devinfo info;
 	char io[5];
@@ -862,6 +1047,8 @@ static int cm108_write (char *name, int iomask, int iodata)
 	}
 
 	close (fd);
+
+#endif
 	return (0);
 
 }  /* end cm108_write */

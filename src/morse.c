@@ -70,7 +70,7 @@ static const struct morse_s {
 	{ 'F', "..-." },
 	{ 'G', "--." },
 	{ 'H', "...." },
-	{ 'I', "." },
+	{ 'I', ".." },
 	{ 'J', ".---" },
 	{ 'K', "-.-" },
 	{ 'L', ".-.." },
@@ -313,7 +313,7 @@ static void morse_tone (int chan, int tu, int wpm) {
 	int f1_change_per_sample;  // How much to advance phase for each audio sample.
 
 
-	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Invalid channel %d for sending Morse Code.\n", chan);
 	  return;
@@ -365,7 +365,7 @@ static void morse_quiet (int chan, int tu, int wpm) {
 	int nsamples;
 	int j;
 
-	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Invalid channel %d for sending Morse Code.\n", chan);
 	  return;
@@ -404,7 +404,7 @@ static void morse_quiet_ms (int chan, int ms) {
 	int nsamples;
 	int j;
 
-	if (save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Invalid channel %d for sending Morse Code.\n", chan);
 	  return;

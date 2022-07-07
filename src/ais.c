@@ -338,7 +338,7 @@ void ais_to_nmea (unsigned char *ais, int ais_len, char *nmea, int nmea_size)
  *
  * Name:        ais_parse
  *
- * Purpose:    	Parse AIS sentence and extract interesing parts.
+ * Purpose:    	Parse AIS sentence and extract interesting parts.
  *
  * Inputs:	sentence	NMEA sentence.
  *
@@ -594,7 +594,7 @@ int ais_parse (char *sentence, int quiet, char *descr, int descr_size, char *mss
  *
  * Returns:	-1		Invalid message type.
  *		0		Good length.
- *		1		Unexpected lenth.
+ *		1		Unexpected length.
  *
  *--------------------------------------------------------------------*/
 

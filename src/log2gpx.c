@@ -258,8 +258,6 @@ static void read_csv(FILE *fp)
 	    float speed = UNKNOWN_VALUE;
 	    float course = UNKNOWN_VALUE;
 	    float alt = UNKNOWN_VALUE;
-	    double freq = UNKNOWN_VALUE;
-	    int offset = UNKNOWN_VALUE;
 	    char stemp[16], desc[32], comment[256];
 
 	    if (pspeed != NULL && strlen(pspeed) > 0) {
@@ -275,7 +273,7 @@ static void read_csv(FILE *fp)
 /* combine freq/offset/tone into one description string. */
 
 	    if (pfreq != NULL && strlen(pfreq) > 0) {
-	      freq = atof(pfreq);
+	      double freq = atof(pfreq);
 	      snprintf (desc, sizeof(desc), "%.3f MHz", freq);
 	    }
 	    else {
@@ -283,7 +281,7 @@ static void read_csv(FILE *fp)
 	    }
 
 	    if (poffset != NULL && strlen(poffset) > 0) {
-	      offset = atoi(poffset);
+	      int offset = atoi(poffset);
 	      if (offset != 0 && offset % 1000 == 0) {
 	        snprintf (stemp, sizeof(stemp), "%+dM", offset / 1000);
 	      }

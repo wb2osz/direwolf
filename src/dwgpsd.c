@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2020, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 
 /*------------------------------------------------------------------
  *
- * Module:      dwgps.c
+ * Module:      dwgpsd.c
  *
  * Purpose:   	Interface to location data, i.e. GPS receiver.
  *		
@@ -55,13 +55,16 @@
 
 #include <gps.h>
 
-// Debian bug report:  direwolf (1.2-1) FTBFS with libgps22 as part of the gpsd transition (#803605):
-// dwgps.c claims to only support GPSD_API_MAJOR_VERSION 5, but also builds successfully with
-// GPSD_API_MAJOR_VERSION 6 provided by libgps22 when the attached patch is applied.
 
-// Also compatible with API 7 & 8 with conditional compilation later.
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 8
+// An incompatibility was introduced with version 7
+// and again with 9 and again with 10.
+
+// release	lib version	API	Raspberry Pi OS
+// 3.22		28		11	bullseye
+// 3.23		29		12
+
+#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 12
 #error libgps API version might be incompatible.
 #endif
 
@@ -95,7 +98,7 @@ static void * read_gpsd_thread (void *arg);
  *
  * Name:        dwgpsd_init
  *
- * Purpose:    	Intialize the GPS interface.
+ * Purpose:    	Initialize the GPS interface.
  *
  * Inputs:	pconfig		Configuration settings.  This includes
  *				host name or address for network connection.
@@ -116,7 +119,7 @@ static void * read_gpsd_thread (void *arg);
  *		  shared region via dwgps_put_data.
  *
  * 		The application calls dwgps_read to get the most 
- 8		recent information.			
+ *		recent information.			
  *
  *--------------------------------------------------------------------*/
 
@@ -126,7 +129,7 @@ static void * read_gpsd_thread (void *arg);
  * Originally, I wanted to use the shared memory interface to gpsd
  * because it is simpler and more efficient.  Just access it when we
  * actually need the data and we don't have a lot of extra unnecessary
- * busy work going on.
+ * busy work going on constantly polling it when we don't need the information.
  *
  * The current version of gpsd, supplied with Raspian (Wheezy), is 3.6 from back in 
  * May 2012, is missing support for the shared memory interface.  
@@ -142,13 +145,28 @@ static void * read_gpsd_thread (void *arg);
  * 	cd gpsd-3.11
  * 	scons prefix=/usr libdir=lib/arm-linux-gnueabihf shm_export=True python=False
  * 	sudo scons udev-install
- * 
+ *
  * For now, we will use the socket interface.  Maybe get back to this again someday.
  *
  * Update:  January 2016.
  *
  *	I'm told that the shared memory interface might work in Raspian, Jessie version.
  *	Haven't tried it yet.
+ *
+ * June 2020:  This is how to build the most recent.
+ *
+ * 	Based on https://www.satsignal.eu/raspberry-pi/UpdatingGPSD.html
+ *
+ * 	git clone https://gitlab.com/gpsd/gpsd.git  gpsd-gitlab
+ * 	cd gpsd-gitlab
+ * 	scons --config=force
+ * 	scons
+ * 	sudo scons install
+ *
+ *	The problem we have here is that the library is put in /usr/local/lib and direwolf
+ *	can't find it there.  Solution  is to define environment variable:
+ *
+ *	export LD_LIBRARY_PATH=/use/local/lib
  */
 
 
@@ -177,7 +195,7 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 
 	if (strlen(pconfig->gpsd_host) == 0) {
 
-	  /* Nothing to do.  Leave initial fix value of errror. */
+	  /* Nothing to do.  Leave initial fix value of error. */
 	  return (0);
 	}	  
 
@@ -232,7 +250,7 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
  *
  *--------------------------------------------------------------------*/
 
-#define TIMEOUT 30
+#define TIMEOUT 15
 
 #if ENABLE_GPSD
 
@@ -255,10 +273,19 @@ static void * read_gpsd_thread (void *arg)
 
 	while (1) {
 
+// Example code found here:
+// https://lists.nongnu.org/archive/html/gpsd-dev/2017-11/msg00001.html
+
           if ( ! gps_waiting(&gpsdata, TIMEOUT * 1000000)) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("GPSD: Timeout waiting for GPS data.\n");
-	    /* Fall thru to read which should get error and bail out. */
+	    dw_printf ("------------------------------------------\n");
+	    dw_printf ("dwgpsd: Timeout waiting for GPS data.\n");
+	    dw_printf ("Is GPSD daemon running?\n");
+	    dw_printf ("Troubleshooting tip:  Try running cgps or xgps.\n");
+	    dw_printf ("------------------------------------------\n");
+	    info.fix = DWFIX_ERROR;
+	    SLEEP_MS(5000);
+	    continue;
 	  }
 
 // https://github.com/wb2osz/direwolf/issues/196
@@ -290,17 +317,61 @@ static void * read_gpsd_thread (void *arg)
 	    break;   // Jump out of loop and terminate thread.
 	  }
 
+#if GPSD_API_MAJOR_VERSION >= 9
+
+// The gps.h revision history says:
+//	 *       mark altitude in gps_fix_t as deprecated and undefined
+// This seems really stupid to me.
+// If it is deprecated and undefined then take it out.  Someone trying to use
+// it would get a compile error and know that something needs to be done.
+// Instead we all just go merrily on our way using a field that is [allegedly] undefined.
+// Why not simply add more variables with different definitions of altitude
+// and keep the original variable working as it always did?
+// If it is truly undefined, as the comment would have us believe, numerous
+// people will WASTE VAST AMOUNTS OF TIME pondering why altitude is now broken in
+// their applications.
+
+#define stupid_altitude altMSL
+#else
+#define stupid_altitude altitude
+#endif
+
+#if GPSD_API_MAJOR_VERSION >= 10
+
+// They did it again.  Whimsical incompatibilities that cause
+// pain and aggravation for everyone trying to use this library.
+//
+//	error: ‘struct gps_data_t’ has no member named ‘status’
+//
+// Yes, I can understand that it is a more logical place but it breaks
+// all existing code that uses this.
+// I'm really getting annoyed about wasting so much time on keeping up with all
+// of these incompatibilities that are completely unnecessary.
+
+#define stupid_status fix.status
+#else
+#define stupid_status status
+#endif
+
+
+	  if (s_debug >= 3) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("gpsdata: status=%d, mode=%d, lat=%.6f, lon=%.6f, track=%.1f, speed=%.1f, alt=%.0f\n",
+	       gpsdata.stupid_status, gpsdata.fix.mode,
+	       gpsdata.fix.latitude, gpsdata.fix.longitude,
+	       gpsdata.fix.track, gpsdata.fix.speed, gpsdata.fix.stupid_altitude);
+	  }
+
+	  // Inform user about change in fix status.
+
 	  switch (gpsdata.fix.mode) {
 	    default:
 	    case MODE_NOT_SEEN:
-	      if (info.fix >= DWFIX_2D) {
-		text_color_set(DW_COLOR_INFO);
-	        dw_printf ("GPSD: Lost location fix.\n");
-	      }
-	      info.fix = DWFIX_NOT_SEEN;
-	      break;
-
 	    case MODE_NO_FIX:
+	      if (info.fix <= DWFIX_NOT_SEEN) {
+		text_color_set(DW_COLOR_INFO);
+	        dw_printf ("GPSD: No location fix.\n");
+	      }
 	      if (info.fix >= DWFIX_2D) {
 		text_color_set(DW_COLOR_INFO);
 	        dw_printf ("GPSD: Lost location fix.\n");
@@ -325,21 +396,27 @@ static void * read_gpsd_thread (void *arg)
 	      break;
 	  }
 
-	    /* Data is available. */
-	    // TODO:  what is gpsdata.status?
 
+// Oct. 2020 - 'status' is always zero for latest version of libgps so we can't use that anymore.
 
-	  if (gpsdata.status >= STATUS_FIX && gpsdata.fix.mode >= MODE_2D) {
+	  if (/*gpsdata.stupid_status >= STATUS_FIX &&*/ gpsdata.fix.mode >= MODE_2D) {
 
-	    info.dlat = isnan(gpsdata.fix.latitude) ? G_UNKNOWN : gpsdata.fix.latitude;
-	    info.dlon = isnan(gpsdata.fix.longitude) ? G_UNKNOWN : gpsdata.fix.longitude;
-	    info.track = isnan(gpsdata.fix.track) ? G_UNKNOWN : gpsdata.fix.track;
-	    info.speed_knots = isnan(gpsdata.fix.speed) ? G_UNKNOWN : (MPS_TO_KNOTS * gpsdata.fix.speed);
+#define GOOD(x) (isfinite(x) && ! isnan(x))
 
+	    info.dlat = GOOD(gpsdata.fix.latitude) ? gpsdata.fix.latitude : G_UNKNOWN;
+	    info.dlon = GOOD(gpsdata.fix.longitude) ? gpsdata.fix.longitude : G_UNKNOWN;
+	    // When stationary, track is NaN which is not finite.
+	    info.track = GOOD(gpsdata.fix.track) ? gpsdata.fix.track : G_UNKNOWN;
+	    info.speed_knots = GOOD(gpsdata.fix.speed) ? (MPS_TO_KNOTS * gpsdata.fix.speed) : G_UNKNOWN;
 	    if (gpsdata.fix.mode >= MODE_3D) {
-	      info.altitude = isnan(gpsdata.fix.altitude) ? G_UNKNOWN : gpsdata.fix.altitude;
+	      info.altitude = GOOD(gpsdata.fix.stupid_altitude) ? gpsdata.fix.stupid_altitude : G_UNKNOWN;
 	    }
+	    // Otherwise keep last known altitude when we downgrade from 3D to 2D fix.
+	    // Caller knows altitude is outdated if info.fix == DWFIX_2D.
 	  }
+	  // Otherwise keep the last known location which is better than totally lost.
+	  // Caller knows location is outdated if info.fix == DWFIX_NO_FIX.
+
 
 	  info.timestamp = time(NULL);
 	  if (s_debug >= 2) {
@@ -373,6 +450,7 @@ void dwgpsd_term (void) {
 
 #if ENABLE_GPSD
 
+	gps_stream (&gpsdata, WATCH_DISABLE, NULL);
 	gps_close (&gpsdata);
 
 #endif

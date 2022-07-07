@@ -61,6 +61,10 @@ Data rate in bits/sec for first channel.  Standard values are 300, 1200, 2400, 4
 4800 bps uses 8PSK based on V.27 standard.
 .P
 9600 bps and up uses K9NG/G3RUH standard.
+.P
+AIS for ship Automatic Identification System.
+.P
+EAS for Emergency Alert System (EAS) Specific Area Message Encoding (SAME).
 .RE
 .RE
 .PD
@@ -80,6 +84,18 @@ Force G3RUH modem regardless of data rate.
 .TP
 .BI "-D " "n"
 Divide audio sample by n for first channel.
+
+.TP
+.BI "-X " "n"
+1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.
+
+.TP
+.BI "-I " "n"
+Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.
+
+.TP
+.BI "-i " "n"
+Enable IL2P transmit, inverted polarity.  n=1 is recommended.  0 uses weaker FEC.
 
 .TP
 .BI "-d " "x"
@@ -112,6 +128,10 @@ h = Hamlib verbose level.  Repeat for more.
 m = Monitor heard station list.
 .P
 f = Packet filtering.
+.P
+x = FX.25 increase verbose level.
+.P
+d = APRStt (DTMF to APRS object conversion).
 .RE
 .RE
 .PD
@@ -125,24 +145,42 @@ Quiet (suppress output). Specify one or more of the following in place of x.
 h = Heard line with the audio level.
 .P
 d = Decoding of APRS packets.
+.P
+x = Silence FX.25 information.
 .RE
 .RE
 .PD
 
 .TP
 .BI "-t " "n"
-Text colors.  1=normal, 0=disabled.
+Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.  Use 9 to test compatibility with your terminal.
+
 
 .TP
 .B "-p " 
 Enable pseudo terminal for KISS protocol.
 
 .TP
-.B "-x " 
+.BI "-x "
 Send Xmit level calibration tones.
+.PD 0
+.RS
+.RS
+a = Alternating mark/space tones.
+.P
+m = steady Mark tone (e.g. 1200 Hz)
+.P
+s = steady Space tone (e.g. 2200 Hz)
+.P
+p = selence (set Ptt only).
+.P
+Optionally add a number to specify radio channel.
+.RE
+.RE
+.PD
 
 .TP
-.B "-U " 
+.B "-u "
 Print UTF-8 test string and exit.
 
 .TP
@@ -153,6 +191,13 @@ Print Symbol tables and exit.
 .BI "-a " "n"
 Report audio device statistics each n seconds.
 
+.TP
+.BI "-T " "fmt"
+Time stamp format for sent and received frames.
+
+.TP
+.BI "-e " "ber"
+Receive Bit Error Rate (BER), e.g. 1e-5
 
 .SH EXAMPLES
 gqrx (2.3 and later) has the ability to send streaming audio through a UDP socket to another application for further processing. 

@@ -187,7 +187,7 @@ int main (int argc, char *argv[])
 	    ax25_format_addrs (pp, result);
 	    info_len = ax25_get_info (pp, (unsigned char **)(&pinfo));
 	    pinfo[info_len] = '\0';
-	    strcat (result, pinfo);
+	    strlcat (result, pinfo, sizeof(result));
 	    for (p=result; *p!='\0'; p++) {
 	      if (! isprint(*p)) *p = ' ';
 	    }

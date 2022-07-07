@@ -55,7 +55,11 @@
  * 		ambiguity	- If 1, 2, 3, or 4, blank out that many trailing digits.
  *
  * Outputs:	slat		- String in format ddmm.mm[NS]
- *				  Should always be exactly 8 characters + NUL.
+ *				  Must always be exactly 8 characters + NUL.
+ *				  Put in leading zeros if necessary.
+ *				  We must have exactly ddmm.mm and hemisphere because
+ *				  the APRS position report has fixed width fields.
+ *				  Trailing digits can be blanked for position ambiguity.
  *
  * Returns:     None
  *
@@ -101,6 +105,12 @@ void latitude_to_str (double dlat, int ambiguity, char *slat)
 	ideg = (int)dlat;
 	dmin = (dlat - ideg) * 60.;
 
+	// dmin is known to be in range of 0 <= dmin < 60.
+
+	// Minutes must be exactly like 99.99 with leading zeros,
+	// if needed, to make it fixed width.
+	// Two digits, decimal point, two digits, nul terminator.
+
 	snprintf (smin, sizeof(smin), "%05.2f", dmin);
 	/* Due to roundoff, 59.9999 could come out as "60.00" */
 	if (smin[0] == '6') {
@@ -108,6 +118,10 @@ void latitude_to_str (double dlat, int ambiguity, char *slat)
 	  ideg++;
 	}
 
+	// Assumes slat can hold 8 characters + nul.
+	// Degrees must be exactly 2 digits, with leading zero, if needed.
+
+	// FIXME: Should pass in sizeof slat and use snprintf
 	sprintf (slat, "%02d%s%c", ideg, smin, hemi);
 
 	if (ambiguity >= 1) {
@@ -135,9 +149,12 @@ void latitude_to_str (double dlat, int ambiguity, char *slat)
  * Inputs:      dlong		- Floating point degrees.
  * 		ambiguity	- If 1, 2, 3, or 4, blank out that many trailing digits.
  *
- * Outputs:	slat		- String in format dddmm.mm[NS]
- *				  Should always be exactly 9 characters + NUL.
- *
+ * Outputs:	slong		- String in format dddmm.mm[NS]
+ *				  Must always be exactly 9 characters + NUL.
+ *				  Put in leading zeros if necessary.
+ *				  We must have exactly dddmm.mm and hemisphere because
+ *				  the APRS position report has fixed width fields.
+ *				  Trailing digits can be blanked for position ambiguity.
  * Returns:     None
  *
  *----------------------------------------------------------------*/
@@ -178,7 +195,12 @@ void longitude_to_str (double dlong, int ambiguity, char *slong)
 	  ideg++;
 	}
 
+	// Assumes slong can hold 9 characters + nul.
+	// Degrees must be exactly 3 digits, with leading zero, if needed.
+
+	// FIXME: Should pass in sizeof slong and use snprintf
 	sprintf (slong, "%03d%s%c", ideg, smin, hemi);
+
 /*
  * The spec says position ambiguity in latitude also
  * applies to longitude automatically.  
@@ -352,6 +374,7 @@ void latitude_to_nmea (double dlat, char *slat, char *hemi)
 	  ideg++;
 	}
 
+	// FIXME: Should pass in sizeof slat and use snprintf
 	sprintf (slat, "%02d%s", ideg, smin);
 
 } /* end latitude_to_str */
@@ -413,6 +436,7 @@ void longitude_to_nmea (double dlong, char *slong, char *hemi)
 	  ideg++;
 	}
 
+	// FIXME: Should pass in sizeof slong and use snprintf
 	sprintf (slong, "%03d%s", ideg, smin);
 
 } /* end longitude_to_nmea */
@@ -903,6 +927,14 @@ int main (int argc, char *argv[])
 	latitude_to_str (45.999830, 4, result);
 	if (strcmp(result, "45  .  N") != 0) { errors++; dw_printf ("Error 1.8: Did not expect \"%s\"\n", result); }
 
+	// Test for leading zeros for small values.  Result must be fixed width.
+
+	latitude_to_str (0.016666666, 0, result);
+	if (strcmp(result, "0001.00N") != 0) { errors++; dw_printf ("Error 1.9: Did not expect \"%s\"\n", result); }
+
+	latitude_to_str (-1.999999, 0, result);
+	if (strcmp(result, "0200.00S") != 0) { errors++; dw_printf ("Error 1.10: Did not expect \"%s\"\n", result); }
+
 /* Longitude to APRS format. */
 
 	longitude_to_str (45.25, 0, result);
@@ -930,6 +962,15 @@ int main (int argc, char *argv[])
 
 	longitude_to_str (45.999830, 4, result);
 	if (strcmp(result, "045  .  E") != 0) { errors++; dw_printf ("Error 2.8: Did not expect \"%s\"\n", result); }
+
+	// Test for leading zeros for small values.  Result must be fixed width.
+
+	longitude_to_str (0.016666666, 0, result);
+	if (strcmp(result, "00001.00E") != 0) { errors++; dw_printf ("Error 2.9: Did not expect \"%s\"\n", result); }
+
+	longitude_to_str (-1.999999, 0, result);
+	if (strcmp(result, "00200.00W") != 0) { errors++; dw_printf ("Error 2.10: Did not expect \"%s\"\n", result); }
+
 
 /* Compressed format. */
 /* Protocol spec example has <*e7 but I got <*e8 due to rounding rather than truncation to integer. */

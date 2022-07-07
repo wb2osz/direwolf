@@ -245,7 +245,7 @@ char dtmf_sample (int c, float input)
  * others in the same group multiplied by some factor.
  *
  * For perfect synthetic signals this needs to be in
- * the range of about 1.33 (very senstive) to 2.15 (very fussy).
+ * the range of about 1.33 (very sensitive) to 2.15 (very fussy).
  *
  * Too low will cause false triggers on random noise.
  * Too high will won't decode less than perfect signals.
@@ -529,7 +529,7 @@ int main ()
 	memset (&my_audio_config, 0, sizeof(my_audio_config));
 	my_audio_config.adev[ACHAN2ADEV(c)].defined = 1;
 	my_audio_config.adev[ACHAN2ADEV(c)].samples_per_sec = 44100;
-	my_audio_config.achan[c].medium = MEDIUM_RADIO;
+	my_audio_config.chan_medium[c] = MEDIUM_RADIO;
 	my_audio_config.achan[c].dtmf_decode = DTMF_DECODE_ON;
 
 	dtmf_init(&my_audio_config, 50);	

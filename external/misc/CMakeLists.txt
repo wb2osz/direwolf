@@ -6,12 +6,31 @@ include_directories(
   )
 
 if(LINUX)
-  list(APPEND misc_SOURCES
-    # Provide our own copy of strlcpy and strlcat
-    # because they are not included with Linux.
-    ${CUSTOM_MISC_DIR}/strlcpy.c
-    ${CUSTOM_MISC_DIR}/strlcat.c
-    )
+# Previously -
+#  list(APPEND misc_SOURCES
+#    # Provide our own copy of strlcpy and strlcat
+#    # because they are not included with Linux.
+#    ${CUSTOM_MISC_DIR}/strlcpy.c
+#    ${CUSTOM_MISC_DIR}/strlcat.c
+#    )
+# It seems that Alpine Linux and Void Linux have strlcpy and
+# strlcat so we need to handle the situation more delicately.
+# When doing it this way, there is probably no reason to
+# distinguish between Linux and BSD-like systems here.
+# If we kept going, the same thing could be done for each
+# of the functions and no OS check would be needed.
+
+  if (NOT HAVE_STRLCPY)
+    list(APPEND misc_SOURCES
+      ${CUSTOM_MISC_DIR}/strlcpy.c
+      )
+  endif()
+
+  if (NOT HAVE_STRLCAT)
+    list(APPEND misc_SOURCES
+      ${CUSTOM_MISC_DIR}/strlcat.c
+      )
+  endif()
 
   add_library(misc STATIC
     ${misc_SOURCES}

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -76,6 +76,7 @@
 #include "morse.h"
 #include "dtmf.h"
 #include "fx25.h"
+#include "il2p.h"
 
 
 /* Own random number generator so we can get */
@@ -123,6 +124,7 @@ static void send_packet (char *str)
 	    return;
 	  }
 	  flen = ax25_pack (pp, fbuf);
+	  (void)flen;
 	  for (c=0; c<modem.adev[0].num_channels; c++)
 	  {
 
@@ -151,12 +153,10 @@ static void send_packet (char *str)
 	      gen_tone_put_sample (c, 0, 0);
 	    }
 #endif
-	    hdlc_send_flags (c, 8, 0);
-	    hdlc_send_flags (c, 8, 0);
-	    hdlc_send_flags (c, 8, 0);
-	    hdlc_send_flags (c, 8, 0);
-	    hdlc_send_frame (c, fbuf, flen, 0, modem.fx25_xmit_enable);
-	    hdlc_send_flags (c, 2, 1);
+
+	    layer2_preamble_postamble (c, 32, 0, &modem);
+	    layer2_send_frame (c, pp, 0, &modem);
+	    layer2_preamble_postamble (c, 2, 1, &modem);
 	  }
 	  ax25_delete (pp);
 	}
@@ -176,6 +176,9 @@ int main(int argc, char **argv)
 	int g_opt = 0;
 	int j_opt = 0;
 	int J_opt = 0;
+	int X_opt = 0;		// send FX.25
+	int I_opt = -1;		// send IL2P rather than AX.25, normal polarity
+	int i_opt = -1;		// send IL2P rather than AX.25, inverted polarity
 
 /*
  * Set up default values for the modem.
@@ -195,7 +198,7 @@ int main(int argc, char **argv)
           modem.achan[chan].baud = DEFAULT_BAUD;                        /* -b option */
 	}
 
-	modem.achan[0].medium = MEDIUM_RADIO;
+	modem.chan_medium[0] = MEDIUM_RADIO;
 
 
 /*
@@ -227,7 +230,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:",
+          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:I:i:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -424,7 +427,7 @@ int main(int argc, char **argv)
             case '2':				/* -2 for 2 channels of sound */
   
               modem.adev[0].num_channels = 2;
-	      modem.achan[1].medium = MEDIUM_RADIO;
+	      modem.chan_medium[1] = MEDIUM_RADIO;
               text_color_set(DW_COLOR_INFO); 
               dw_printf("2 channels of sound rather than 1.\n");
               break;
@@ -453,7 +456,17 @@ int main(int argc, char **argv)
 
             case 'X':
 
-	      modem.fx25_xmit_enable = atoi(optarg);
+	      X_opt = atoi(optarg);
+              break;
+
+            case 'I':			// IL2P, normal polarity
+
+	      I_opt = atoi(optarg);
+              break;
+
+            case 'i':			// IL2P, inverted polarity
+
+	      i_opt = atoi(optarg);
               break;
 
             case '?':
@@ -507,6 +520,43 @@ int main(int argc, char **argv)
           exit (1);
 	}
 
+	if (X_opt > 0) {
+	    if (I_opt != -1 || i_opt != -1) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Can't mix -X with -I or -i.\n");
+	        exit (EXIT_FAILURE);
+	    }
+	    modem.achan[0].fx25_strength = X_opt;
+	    modem.achan[0].layer2_xmit = LAYER2_FX25;
+	}
+
+	if (I_opt != -1 && i_opt != -1) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Can't use both -I and -i at the same time.\n");
+	  exit (EXIT_FAILURE);
+	}
+
+	if (I_opt >= 0) {
+            text_color_set(DW_COLOR_INFO);
+            dw_printf ("Using IL2P normal polarity.\n");
+	    modem.achan[0].layer2_xmit = LAYER2_IL2P;
+	    modem.achan[0].il2p_max_fec = (I_opt > 0);
+	    modem.achan[0].il2p_invert_polarity = 0;	// normal
+	}
+
+	if (i_opt >= 0) {
+            text_color_set(DW_COLOR_INFO);
+            dw_printf ("Using IL2P inverted polarity.\n");
+	    modem.achan[0].layer2_xmit = LAYER2_IL2P;
+	    modem.achan[0].il2p_max_fec = (i_opt > 0);
+	    modem.achan[0].il2p_invert_polarity = 1;	// invert for transmit
+	    if (modem.achan[0].baud == 1200) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Using -i with 1200 bps is a bad idea.  Use -I instead.\n");
+	    }
+	}
+
+
 /*
  * Open the output file.
  */
@@ -536,6 +586,7 @@ int main(int argc, char **argv)
 	// Just use the default of minimal information.
 
 	fx25_init (1);
+	il2p_init (0);		// There are no "-d" options so far but it could be handy here.
 
         assert (modem.adev[0].bits_per_sample == 8 || modem.adev[0].bits_per_sample == 16);
         assert (modem.adev[0].num_channels == 1 || modem.adev[0].num_channels == 2);
@@ -669,7 +720,9 @@ static void usage (char **argv)
 	dw_printf ("  -g            Scrambled baseband rather than AFSK.\n");
 	dw_printf ("  -j            2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("  -J            2400 bps QPSK compatible with MFJ-2400.\n");
-	dw_printf ("  -X n          Generate FX.25 frames. Specify number of check bytes: 16, 32, or 64.\n");
+	dw_printf ("  -X n           1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.\n");
+	dw_printf ("  -I n           Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.\n");
+	dw_printf ("  -i n           Enable IL2P transmit, inverted polarity.  n=1 is recommended.  0 uses weaker FEC.\n");
 	dw_printf ("  -m <number>   Mark frequency.  Default is %d.\n", DEFAULT_MARK_FREQ);
 	dw_printf ("  -s <number>   Space frequency.  Default is %d.\n", DEFAULT_SPACE_FREQ);
 	dw_printf ("  -r <number>   Audio sample Rate.  Default is %d.\n", DEFAULT_SAMPLES_PER_SEC);

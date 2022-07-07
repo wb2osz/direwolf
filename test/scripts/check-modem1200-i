@@ -1,0 +1,4 @@
+@CUSTOM_SHELL_SHABANG@
+
+@GEN_PACKETS_BIN@ -I1 -n 100 -o test12-il2p.wav
+@ATEST_BIN@ -P+ -D1 -L92 -G94 test12-il2p.wav

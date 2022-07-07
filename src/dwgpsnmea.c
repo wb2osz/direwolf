@@ -144,11 +144,9 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 
 /*
  * Open serial port connection.
- * 4800 baud is standard for GPS.
- * Should add an option to allow changing someday.
  */
 
-	s_gpsnmea_port_fd = serial_port_open (pconfig->gpsnmea_port, 4800);
+	s_gpsnmea_port_fd = serial_port_open (pconfig->gpsnmea_port, pconfig->gpsnmea_speed);
 
 	if (s_gpsnmea_port_fd != MYFDERROR) {
 #if __WIN32__
@@ -182,12 +180,10 @@ int dwgpsnmea_init (struct misc_config_s *pconfig, int debug)
 
 
 /* Return fd to share if waypoint wants same device. */
-/* Currently both are fixed speed at 4800. */
-/* If that ever becomes configurable, that needs to be compared too. */
 
 MYFDTYPE dwgpsnmea_get_fd(char *wp_port_name, int speed)
 {
-	if (strcmp(s_save_configp->gpsnmea_port, wp_port_name) == 0 && speed == 4800) {
+	if (strcmp(s_save_configp->gpsnmea_port, wp_port_name) == 0 && speed == s_save_configp->gpsnmea_speed) {
 	  return (s_gpsnmea_port_fd);
 	}
 	return (MYFDERROR);
@@ -266,9 +262,12 @@ static void * read_gpsnmea_thread (void *arg)
 	    }
 	    dwgps_set_data (&info);
 
-	    // TODO: doesn't exist yet - serial_port_close(fd);
+	    serial_port_close(s_gpsnmea_port_fd);
 	    s_gpsnmea_port_fd = MYFDERROR;
 
+	    // TODO: If the open() was in this thread, we could wait a while and
+	    // try to open again.  That would allow recovery if the USB GPS device
+	    // is unplugged and plugged in again.
 	    break;	/* terminate thread. */
 	  }
 
@@ -289,73 +288,53 @@ static void * read_gpsnmea_thread (void *arg)
 	      }
 
 /* Process sentence. */
+// TODO: More general: Ignore the second letter rather than recognizing only GP... and GN...
 
 	      if (strncmp(gps_msg, "$GPRMC", 6) == 0 ||
 		  strncmp(gps_msg, "$GNRMC", 6) == 0) {
 
-		f = dwgpsnmea_gprmc (gps_msg, 0, &info.dlat, &info.dlon, &info.speed_knots, &info.track);
+	        // Here we just tuck away the course and speed.
+	        // Fix and location will be updated by GxGGA.
+
+	        double ignore_dlat;
+	        double ignore_dlon;
+
+		f = dwgpsnmea_gprmc (gps_msg, 0, &ignore_dlat, &ignore_dlon, &info.speed_knots, &info.track);
 
 	        if (f == DWFIX_ERROR) {
-
-		  /* Parse error.  Shouldn't happen.  Better luck next time. */
-	            text_color_set(DW_COLOR_INFO);
+		    /* Parse error.  Shouldn't happen.  Better luck next time. */
+	            text_color_set(DW_COLOR_ERROR);
 	            dw_printf ("GPSNMEA: Error parsing $GPRMC sentence.\n");
 	            dw_printf ("%s\n", gps_msg);
 	        }
-	        else if (f == DWFIX_2D) {
-
-	          if (info.fix != DWFIX_2D && info.fix != DWFIX_3D) {
-
-		    text_color_set(DW_COLOR_INFO);
-	            dw_printf ("GPSNMEA: Location fix is now available.\n");
-
-		    info.fix = DWFIX_2D;   // Don't know if 2D or 3D.  Take minimum.
-	          }
-	  	  info.timestamp = time(NULL);
-	          if (s_debug >= 2) {
-	            text_color_set(DW_COLOR_DEBUG);
-	            dwgps_print ("GPSNMEA: ", &info);
-	          }
-	          dwgps_set_data (&info);
-	        }
-	        else {
-
-	          if (info.fix == DWFIX_2D || info.fix == DWFIX_3D) {
-
-		    text_color_set(DW_COLOR_INFO);
-	            dw_printf ("GPSNMEA: Lost location fix.\n");
-	          }
-	          info.fix = f;		/* lost it. */
-	  	  info.timestamp = time(NULL);
-	          if (s_debug >= 2) {
-	            text_color_set(DW_COLOR_DEBUG);
-	            dwgps_print ("GPSNMEA: ", &info);
-	          }
-	          dwgps_set_data (&info);
-	        }
-
 	      }
+
 	      else if (strncmp(gps_msg, "$GPGGA", 6) == 0 ||
 		       strncmp(gps_msg, "$GNGGA", 6) == 0) {
 		int nsat;
 
 		f = dwgpsnmea_gpgga (gps_msg, 0, &info.dlat, &info.dlon, &info.altitude, &nsat);
 
-	        /* Only switch between 2D & 3D.  */
-	        /* Let GPRMC handle other changes in fix state and data transfer. */
-
 	        if (f == DWFIX_ERROR) {
-
 		    /* Parse error.  Shouldn't happen.  Better luck next time. */
-	            text_color_set(DW_COLOR_INFO);
+	            text_color_set(DW_COLOR_ERROR);
 	            dw_printf ("GPSNMEA: Error parsing $GPGGA sentence.\n");
 	            dw_printf ("%s\n", gps_msg);
 	        }
-	        else if ((f == DWFIX_3D && info.fix == DWFIX_2D) ||
-	                 (f == DWFIX_2D && info.fix == DWFIX_3D)) {
-		  text_color_set(DW_COLOR_INFO);
-	          dw_printf ("GPSNMEA: Location fix is now %dD.\n", (int)f);
-	          info.fix = f;
+	        else  {
+	            if (f != info.fix) {		// Print change in location fix.
+		       text_color_set(DW_COLOR_INFO);
+	               if (f == DWFIX_NO_FIX) dw_printf ("GPSNMEA: Location fix has been lost.\n");
+	               if (f == DWFIX_2D)     dw_printf ("GPSNMEA: Location fix is now 2D.\n");
+	               if (f == DWFIX_3D)     dw_printf ("GPSNMEA: Location fix is now 3D.\n");
+	               info.fix = f;
+	          }
+	          info.timestamp = time(NULL);
+	          if (s_debug >= 2) {
+	            text_color_set(DW_COLOR_DEBUG);
+	            dwgps_print ("GPSNMEA: ", &info);
+	          }
+	          dwgps_set_data (&info);
 	        }	
 	      }
 	    }
@@ -436,7 +415,7 @@ static int remove_checksum (char *sent, int quiet)
  *
  * Name:        dwgpsnmea_gprmc
  *
- * Purpose:    	Parse $GPRMC sentence and extract interesing parts.
+ * Purpose:    	Parse $GPRMC sentence and extract interesting parts.
  *
  * Inputs:	sentence	NMEA sentence.
  *
@@ -446,8 +425,10 @@ static int remove_checksum (char *sent, int quiet)
  *		odlon		longitude
  *		oknots		speed
  *		ocourse		direction of travel.
- *		
+ *
  *					Left undefined if not valid.
+ *
+ * Note:	RMC does not contain altitude.
  *
  * Returns:	DWFIX_ERROR	Parse error.
  *		DWFIX_NO_FIX	GPS is there but Position unknown.  Could be temporary.
@@ -585,7 +566,7 @@ dwfix_t dwgpsnmea_gprmc (char *sentence, int quiet, double *odlat, double *odlon
  *
  * Name:        dwgpsnmea_gpgga
  *
- * Purpose:    	Parse $GPGGA sentence and extract interesing parts.
+ * Purpose:    	Parse $GPGGA sentence and extract interesting parts.
  *
  * Inputs:	sentence	NMEA sentence.
  *
@@ -598,10 +579,13 @@ dwfix_t dwgpsnmea_gprmc (char *sentence, int quiet, double *odlat, double *odlon
  *		
  *					Left undefined if not valid.
  *
+ * Note:	GGA has altitude but not course and speed so we need to use both.
+ *
  * Returns:	DWFIX_ERROR	Parse error.
  *		DWFIX_NO_FIX	GPS is there but Position unknown.  Could be temporary.
  *		DWFIX_2D	Valid position.   We don't know if it is really 2D or 3D.
  *				Take more cautious value so we don't try using altitude.
+ *		DWFIX_3D	Valid 3D position.
  *
  * Examples:	$GPGGA,001429.00,,,,,0,00,99.99,,,,,,*68
  *		$GPGGA,212407.000,4237.1505,N,07120.8602,W,0,00,,,M,,M,,*58
@@ -609,9 +593,6 @@ dwfix_t dwgpsnmea_gprmc (char *sentence, int quiet, double *odlat, double *odlon
  *		$GPGGA,003518.710,4237.1250,N,07120.8327,W,1,03,5.9,33.5,M,-33.5,M,,0000*5B
  *
  *--------------------------------------------------------------------*/
-
-
-// TODO: in progress...
 
 dwfix_t dwgpsnmea_gpgga (char *sentence, int quiet, double *odlat, double *odlon, float *oalt, int *onsat)
 {
@@ -709,8 +690,7 @@ dwfix_t dwgpsnmea_gpgga (char *sentence, int quiet, double *odlat, double *odlon
 	  return (DWFIX_ERROR);
 	}
 
-
-	// TODO: num sat...
+	// TODO: num sat...  Why would we care?
 
 /* 
  * We can distinguish between 2D & 3D fix by presence 
