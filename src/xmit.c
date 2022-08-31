@@ -913,9 +913,19 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 
 	  /* Looks like a bug with the RPi audio system. Never an issue with Ubuntu.  */
 	  /* This runs over randomly sometimes. TODO:  investigate more fully sometime. */
+
 #ifndef __arm__
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Transmit timing error: PTT is on %d mSec too long.\n", -wait_more);
+
+	  /* This also happens with recent Linux distributions with PipeWire audio subsystem */
+	  /* where Wireplumber in its default setting turns off the audio output sink after */
+	  /* several seconds of inactivity, which results in slight delay while warming up again. */
+	  /* See: https://unix.stackexchange.com/questions/676846/how-do-i-disable-audio-sink-suspend-on-idle-using-wireplumber-in-fedora-35-so-th */
+#if USE_ALSA
+	  dw_printf ("If using PipeWIre, make sure your output sinks are not being suspended for inactivity.\n");
+#endif
+
 #endif
 	}
 
