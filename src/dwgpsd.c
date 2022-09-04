@@ -60,7 +60,7 @@
 // An incompatibility was introduced with version 7
 // and again with 9 and again with 10.
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 11
+#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 12
 #error libgps API version might be incompatible.
 #endif
 
