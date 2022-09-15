@@ -245,6 +245,8 @@ struct audio_s {
 
 	    int passall;		/* Allow thru even with bad CRC. */
 
+	/* Interlock channels */
+	    int interlock;		/* Interlock number */
 
 
 	/* Additional properties for transmit. */
@@ -450,6 +452,14 @@ struct audio_s {
 #define DEFAULT_TXDELAY		30
 #define DEFAULT_TXTAIL		10	
 #define DEFAULT_FULLDUP		0
+
+/* 
+ * Interlocks are used to 'bind' channels together to share DCD and PTT signaling.
+ * Useful with several setup types where 2 or more channels shouldn't interfere with eachother.
+ * For example when radios and/or antennas are shared.
+ */
+ 
+#define MAX_INTERLOCKS		8
 
 /* 
  * Note that we have two versions of these in audio.c and audio_win.c.
