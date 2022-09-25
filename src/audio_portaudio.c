@@ -213,7 +213,21 @@ static int pa_devNN(char *deviceStr, char *_devName, size_t length, int *_devNo)
 	while(*cPtr) {
 		cVal = *cPtr++;
 		if(cVal == ':')  break;
-		if(((cVal >= ' ') && (cVal <= '~')) && (count < length)) {
+
+		// See Issue 417.
+		// Originally this copied only printable ASCII characters (space thru ~).
+		// That is a problem for some locales that use UTF-8 characters in the device name.
+		// original: if(((cVal >= ' ') && (cVal <= '~')) && (count < length)) {
+
+		// At first I was thinking we should keep the test for < ' ' but then I
+		// remembered that char type can be signed or unsigned depending on implementation.
+		// If characters are signed then a value above 0x7f would be considered negative.
+
+		// It seems to me that the test for buffer full is off by one.
+		// count could reach length, leaving no room for a nul terminator.
+		// Compare has been changed so count is limited to length minus 1.
+
+		if(count < length - 1) {
 			_devName[count++] = cVal;
 		}
 
@@ -1149,7 +1163,7 @@ int audio_put (int a, int c)
 	static double start = 0, end = 0, diff = 0;
 
 	if(adev[a].outbuf_len == 0)
-		start = dtime_now();
+		start = dtime_monotonic();
 #endif
 
 	if(c >= 0) {
@@ -1178,7 +1192,7 @@ int audio_put (int a, int c)
 #ifdef __TIMED__
 		count += frames;
 		if(c < 0) { // When the Ax25 frames are flushed.
-			end = dtime_now();
+			end = dtime_monotonic();
 			diff = end - start;
 			if(count)
 				dw_printf ("Transfer Time:%3.9f No of Frames:%d Per frame:%3.9f speed:%f\n",
