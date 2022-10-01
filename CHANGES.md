@@ -7,6 +7,9 @@
 
 ### New Features: ###
 
+
+- New variable speed option for gen_packets. For example,  "-v 5,0.1" would generate packets from 5% too slow to 5% too fast with increments of 0.1.  Some implementations might have imprecise timing.  Use this to test how well TNCs tolerate sloppy timing.
+
 - Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).  Use "-I 1" on command line to enable transmit for first channel.  Compatible with Nino TNC for 1200 and 9600 bps.
 
 - Limited support for CM109/CM119 GPIO PTT on Windows.
@@ -17,7 +20,7 @@
 
 - The BEACON configuration now recognizes the SOURCE= option.  This replaces the AX.25 source address rather than using the MYCALL value for the channel.  This is useful for sending more than 5 analog telemetry channels.  Use two, or more, source addresses with up to 5 analog channels each.
 
-- For more flexibility, the FX.25 transmit property can now be set individually by channel, rather than having a global setting for all channels.  The -X on the command line applies only to channel 0.  For other channels you need to add a new line to the configuration file.
+- For more flexibility, the FX.25 transmit property can now be set individually by channel, rather than having a global setting for all channels.  The -X on the command line applies only to channel 0.  For other channels you need to add a new line to the configuration file.  You can specify a specific number of parity bytes (16, 32, 64) or 1 to choose automatically based on packet size.
 
     > After:   "CHANNEL 1"   (or other channel)
     >

@@ -56,7 +56,15 @@
  *			gen_packets -n 100 -o z2.wav
  *			atest z2.wav
  *
- *		
+ *		Variable speed. e.g. 95% to 105% of normal speed.
+ *		Required parameter is max % below and above normal.
+ *		Optionally specify step other than 0.1%.
+ *		Used to test how tolerant TNCs are to senders not
+ *		not using exactly the right baud rate.
+ *
+ *			gen_packets -v 5
+ *			gen_packets -v 5,0.5
+ *
  *------------------------------------------------------------------*/
 
 
@@ -67,6 +75,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 #include "audio.h"
 #include "ax25_pad.h"
@@ -98,6 +107,7 @@ static int audio_file_close (void);
 static int g_add_noise = 0;
 static float g_noise_level = 0;
 static int g_morse_wpm = 0;		/* Send morse code at this speed. */
+
 
 
 static struct audio_s modem;
@@ -179,6 +189,9 @@ int main(int argc, char **argv)
 	int X_opt = 0;		// send FX.25
 	int I_opt = -1;		// send IL2P rather than AX.25, normal polarity
 	int i_opt = -1;		// send IL2P rather than AX.25, inverted polarity
+	double variable_speed_max_error  = 0;	// both in percent
+	double variable_speed_increment = 0.1;
+
 
 /*
  * Set up default values for the modem.
@@ -230,7 +243,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:I:i:",
+          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:I:i:v:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -469,6 +482,16 @@ int main(int argc, char **argv)
 	      i_opt = atoi(optarg);
               break;
 
+            case 'v':			// Variable speed data + an - this percentage
+					// optional comma and increment.
+
+	      variable_speed_max_error = fabs(atof(optarg));
+	      char *q = strchr(optarg, ',');
+	      if (q != NULL) {
+	        variable_speed_increment = fabs(atof(q+1));
+	      }
+	      break;
+
             case '?':
 
               /* Unknown option message was already printed. */
@@ -479,7 +502,7 @@ int main(int argc, char **argv)
 
               /* Should not be here. */
               text_color_set(DW_COLOR_ERROR); 
-              dw_printf("?? getopt returned character code 0%o ??\n", c);
+              dw_printf("?? getopt returned character code 0%o ??\n", (unsigned)c);
               usage (argv);
           }
 	}
@@ -647,9 +670,35 @@ int main(int argc, char **argv)
  */
       	text_color_set(DW_COLOR_INFO); 
       	dw_printf ("built in message...\n");
-	
 
-	if (packet_count > 0)  {
+//
+// Generate packets with variable speed.
+// This overrides any other number of packets or adding noise.
+//
+
+
+	if (variable_speed_max_error != 0) {
+
+	  int normal_speed = modem.achan[0].baud;
+
+          text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Variable speed.\n");
+
+	  for (double speed_error = - variable_speed_max_error;
+			speed_error <= variable_speed_max_error + 0.001;
+			speed_error += variable_speed_increment) {
+
+	    // Baud is int so we get some roundoff.  Make it real?
+	    modem.achan[0].baud = (int)round(normal_speed * (1. + speed_error / 100.));
+	    gen_tone_init (&modem, amplitude/2, 1);
+
+	    char stemp[256];
+	    snprintf (stemp, sizeof(stemp), "WB2OSZ-15>TEST:, speed %+0.1f%%  The quick brown fox jumps over the lazy dog!", speed_error);
+	    send_packet (stemp);
+	  }
+	}	
+
+	else if (packet_count > 0)  {
 
 /*
  * Generate packets with increasing noise level.
@@ -730,6 +779,7 @@ static void usage (char **argv)
 	dw_printf ("  -o <file>     Send output to .wav file.\n");
 	dw_printf ("  -8            8 bit audio rather than 16.\n");
 	dw_printf ("  -2            2 channels (stereo) audio rather than one channel.\n");
+	dw_printf ("  -v max[,incr] Variable speed with specified maximum error and increment.\n");
 //	dw_printf ("  -z <number>   Number of leading zero bits before frame.\n");
 //	dw_printf ("                  Default is 12 which is .01 seconds at 1200 bits/sec.\n");
 
