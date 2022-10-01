@@ -63,6 +63,7 @@
 // release	lib version	API	Raspberry Pi OS
 // 3.22		28		11	bullseye
 // 3.23		29		12
+// 3.24				14			Not tested yet.
 
 #if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 12
 #error libgps API version might be incompatible.
