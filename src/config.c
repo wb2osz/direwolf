@@ -4987,7 +4987,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    	    
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Old style 'BEACON' has been replaced with new commands.\n", line);
-	    dw_printf ("Use PBEACON, OBEACON, or CBEACON instead.\n");
+	    dw_printf ("Use PBEACON, OBEACON, TBEACON, or CBEACON instead.\n");
   
 	  }
 
@@ -5001,6 +5001,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  * New style with keywords for options.
  */
+
+// TODO: maybe add proportional pathing so multiple beacon timing does not need to be manually constructed?
+// http://www.aprs.org/newN/ProportionalPathing.txt
 
 	  else if (strcasecmp(t, "PBEACON") == 0 ||
 		   strcasecmp(t, "OBEACON") == 0 ||
@@ -5455,7 +5458,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  for (j=0; j<MAX_CHANS; j++) {
 	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO || p_audio_config->chan_medium[j] == MEDIUM_NETTNC) {
 	      if (p_digi_config->filter_str[MAX_CHANS][j] == NULL) {
-	        p_digi_config->filter_str[MAX_CHANS][j] = strdup("i/60");
+	        p_digi_config->filter_str[MAX_CHANS][j] = strdup("i/180");
 	      }
 	    }
 	  }
@@ -5822,6 +5825,10 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 
 /*
  * Process symbol now that we have any later overlay.
+ *
+ * FIXME: Someone who used this was surprized to end up with Solar Powser  (S-).
+ *	overlay=S symbol="/-"
+ * We should complain if overlay used with symtab other than \.
  */
 	if (strlen(temp_symbol) > 0) {
 

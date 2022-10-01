@@ -38,9 +38,7 @@
 #endif
 
 /*
- * Previously, we could handle only a single audio device.
- * This meant we could have only two radio channels.
- * In version 1.2, we relax this restriction and allow more audio devices.
+ * Maximum number of audio devices.
  * Three is probably adequate for standard version.
  * Larger reasonable numbers should also be fine.
  *
