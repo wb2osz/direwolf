@@ -203,6 +203,8 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 
 #if ITEST
 
+// TODO:  Add to automated tests.
+
 /* For unit testing. */
 
 int main (int argc, char *argv[])
@@ -1713,7 +1715,14 @@ static void * satgate_delay_thread (void *arg)
  *				K1RI-2>APWW10,WIDE1-1,WIDE2-1,qAS,K1RI:/221700h/9AmA<Ct3_ sT010/002g005t045r000p023P020h97b10148
  *				KC1BOS-2>T3PQ3S,WIDE1-1,WIDE2-1,qAR,W1TG-1:`c)@qh\>/"50}TinyTrak4 Mobile
  *
- *				  Notice how the final address in the header might not
+ *				  This is interesting because the source is not a valid AX.25 address.
+ *				  Non-RF stations can have 2 alphanumeric characters for SSID.
+ *				  In this example, the WHO-IS server is responding to a message.
+ *
+ *				WHO-IS>APJIW4,TCPIP*,qAC,AE5PL-JF::ZL1JSH-9 :Charles Beadfield/New Zealand{583
+ *
+ *
+ *				  Notice how the final digipeater address, in the header, might not
  *				  be a valid AX.25 address.  We see a 9 character address
  *				  (with no ssid) and an ssid of two letters.
  *				  We don't care because we end up discarding them before
@@ -1728,29 +1737,37 @@ static void * satgate_delay_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
+// TODO: Use of "message" here is confusing because that term already
+// has a special meaning for APRS.  This could be an APRS message or
+// some other APRS data type.  Payload is already used.
+
 static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 {
-	packet_t pp3;
-	char payload[AX25_MAX_PACKET_LEN];	/* what is max len? */
-	char src[AX25_MAX_ADDR_LEN];		/* Source address. */
-
-	char *pinfo = NULL;
-	int info_len;
 	int n;
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
-
 /*
- * Try to parse it into a packet object.
- * This will contain "q constructs" and we might see an address
- * with two alphnumeric characters in the SSID so we must use
- * the non-strict parsing.
+ * Try to parse it into a packet object; we need this for the packet filtering.
  *
- * Bug:  Up to 8 digipeaters are allowed in radio format.
- * There is a potential of finding a larger number here.
+ * We use the non-strict option because there the via path can have:
+ *	- station names longer than 6.
+ *	- alphanumeric SSID.
+ *	- lower case for "q constructs.
+ * We don't care about any of those because the via path will be discarded anyhow.
+ *
+ * The other issue, that I did not think of originally, is that the "source"
+ * address might not conform to AX.25 restrictions when it originally came
+ * from a non-RF source.  For example an APRS "message" might be sent to the
+ * "WHO-IS" server, and the reply message would have that for the source address.
+ *
+ * Originally, I used the source address from the packet object but that was
+ * missing the alphanumeric SSID.  This needs to be done differently.
+ *
+ * Potential Bug:  Up to 8 digipeaters are allowed in radio format.
+ * Is there a possibility of finding a larger number here?
  */
-	pp3 = ax25_from_text(message, 0);
+	packet_t pp3 = ax25_from_text(message, 0);
 	if (pp3 == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Could not parse message from server.\n");
@@ -1758,7 +1775,21 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	  return;
 	}
 
-	ax25_get_addr_with_ssid (pp3, AX25_SOURCE, src);
+// Issue 408: The source address might not be valid AX.25 because it
+// came from a non-RF station.  e.g.  some server responding to a message.
+// We need to take source address from original rather than extracting it
+// from the packet object.
+
+	char src[AX25_MAX_ADDR_LEN];		/* Source address. */
+	memset (src, 0, sizeof(src));
+	memcpy (src, message, sizeof(src)-1);
+	char *gt = strchr(src, '>');
+	if (gt != NULL) {
+	    *gt = '\0';
+	}
+
+// FIXME NO!
+	///////ax25_get_addr_with_ssid (pp3, AX25_SOURCE, src);
 
 /*
  * Drop if path contains:
@@ -1770,8 +1801,8 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 
 	  ax25_get_addr_with_ssid (pp3, n + AX25_REPEATER_1, via);
 
-	  if (strcmp(via, "qAX") == 0 ||
-	      strcmp(via, "TCPXX") == 0 ||
+	  if (strcmp(via, "qAX") == 0 ||		// qAX deprecated. http://www.aprs-is.net/q.aspx
+	      strcmp(via, "TCPXX") == 0 ||		// TCPXX deprecated.
 	      strcmp(via, "RFONLY") == 0 ||
 	      strcmp(via, "NOGATE") == 0) {
 
@@ -1807,7 +1838,8 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 // TODO: Not quite this simple.  Should have a function to check for position.
 // $ raw gps could be a position.  @ could be weather data depending on symbol.
 
-	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
+	char *pinfo = NULL;
+	int info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
 
 	int msp_special_case = 0;
 
@@ -1837,12 +1869,6 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	      // Previously there was a debug message here about the packet being dropped by filtering.
 	      // This is now handled better by the "-df" command line option for filtering details.
 
-	      //  TODO: clean up - remove these lines.
-	      //if (s_debug >= 1) {
-	      //  text_color_set(DW_COLOR_INFO);
-	      //  dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
-	      //}
-
 	      ax25_delete (pp3);
 	      return;
 	    }
@@ -1851,13 +1877,15 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 
 
 /*
- * Remove the VIA path.
+ * We want to discard the via path, as received from the APRS-IS, then
+ * replace it with TCPIP and our own call, marked as used.
+ *
  *
  * For example, we might get something like this from the server.
- *	K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
+ *	K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000
  *
- * We want to reduce it to this before wrapping it as third party traffic.
- *	K1USN-1>APWW10:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
+ * We want to transform it to this before wrapping it as third party traffic.
+ *	K1USN-1>APWW10,TCPIP,mycall*:T#479,100,048,002,500,000,10000000
  */
 
 /*
@@ -1885,36 +1913,23 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  *
  * What is the ",I" construct?
  * Do we care here?
- * Is is something new and improved that we should be using in the other direction?
+ * Is it something new and improved that we should be using in the other direction?
  */
 
-	while (ax25_get_num_repeaters(pp3) > 0) {
-	  ax25_remove_addr (pp3, AX25_REPEATER_1);
-	}
+	char payload[AX25_MAX_PACKET_LEN];
+
+	char dest[AX25_MAX_ADDR_LEN];		/* Destination field. */
+	ax25_get_addr_with_ssid (pp3, AX25_DESTINATION, dest);
+	snprintf (payload, sizeof(payload), "%s>%s,TCPIP,%s*:%s",
+				src, dest, save_audio_config_p->achan[to_chan].mycall, pinfo);
 
 
-/* 
- * Replace the VIA path with TCPIP and my call.
- * Mark my call as having been used.
- */
-	ax25_set_addr (pp3, AX25_REPEATER_1, "TCPIP");
-	ax25_set_h (pp3, AX25_REPEATER_1);
-	ax25_set_addr (pp3, AX25_REPEATER_2, save_audio_config_p->achan[to_chan].mycall);
-	ax25_set_h (pp3, AX25_REPEATER_2);
-
-/*
- * Convert to text representation.
- */
-	memset (payload, 0, sizeof(payload));
-
-	ax25_format_addrs (pp3, payload);
-	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
-	(void)(info_len);
-	strlcat (payload, pinfo, sizeof(payload));
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("Tx IGate: payload=%s\n", payload);
+	dw_printf ("Tx IGate: DEBUG payload=%s\n", payload);
 #endif
+
+
 	
 /*
  * Encapsulate for sending over radio if no reason to drop it.
@@ -1931,19 +1946,13 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  */
 	if (ig_to_tx_allow (pp3, to_chan)) {
 	  char radio [2400];
-	  packet_t pradio;
-
 	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
 				save_audio_config_p->achan[to_chan].mycall,
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
 				save_igate_config_p->tx_via,
 				payload);
 
-	  pradio = ax25_from_text (radio, 1);
-
-	  /* Oops.  Didn't have a check for NULL here. */
-	  /* Could this be the cause of rare and elusive crashes in 1.2? */
-
+	  packet_t pradio = ax25_from_text (radio, 1);
 	  if (pradio != NULL) {
 
 #if ITEST

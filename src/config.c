@@ -2864,6 +2864,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * CFILTER  from-chan  to-chan  filter_specification_expression
+ *
+ * Why did I put this here?
+ * What would be a useful use case?  Perhaps block by source or destination?
  */
 
 	  else if (strcasecmp(t, "CFILTER") == 0) {

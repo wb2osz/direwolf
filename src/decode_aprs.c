@@ -140,10 +140,11 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *		quiet	- Suppress error messages.
  *
- *		third_party - True when parsing a third party header.
+ *		third_party_src - Specify when parsing a third party header.
  *			(decode_aprs is called recursively.)
  *			This is mostly found when an IGate transmits a message
  *			that came via APRS-IS.
+ *			NULL when not third party payload.
  *
  * Outputs:	A->	g_symbol_table, g_symbol_code,
  *			g_lat, g_lon, 
@@ -156,11 +157,10 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *------------------------------------------------------------------*/
 
-void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
+void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_src)
 {
-	//dw_printf ("DEBUG decode_aprs quiet=%d, third_party=%d\n", quiet, third_party);
+	//dw_printf ("DEBUG decode_aprs quiet=%d, third_party=%p\n", quiet, third_party_src);
 
-	//char dest[AX25_MAX_ADDR_LEN];
 	unsigned char *pinfo;
 	int info_len;
 
@@ -229,7 +229,12 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 
 	  packet_t pp_payload = ax25_from_text ((char*)pinfo+1, 0);
 	  if (pp_payload != NULL) {
-	    decode_aprs (A, pp_payload, quiet, 1);	// 1 means used recursively
+	    char payload_src[AX25_MAX_ADDR_LEN];
+	    memset(payload_src, 0, sizeof(payload_src));
+	    memcpy(payload_src, (char*)pinfo+1, sizeof(payload_src)-1);
+	    char *q = strchr(payload_src, '>');
+	    if (q != NULL) *q = '\0';
+	    decode_aprs (A, pp_payload, quiet, payload_src);	// 1 means used recursively
 	    ax25_delete (pp_payload);
 	    return;
 	  }
@@ -243,8 +248,12 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 /*
  * Extract source and destination including the SSID.
  */
-	
-	ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
+	if (third_party_src != NULL) {
+	    strlcpy (A->g_src, third_party_src, sizeof(A->g_src));
+	}
+	else {
+	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
+	}
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, A->g_dest);
 
 	//dw_printf ("DEBUG decode_aprs source=%s, dest=%s\n", A->g_src, A->g_dest);
@@ -5176,7 +5185,7 @@ int main (int argc, char *argv[])
 	        ax25_safe_print ((char *)pinfo, info_len, 1);	// Display non-ASCII to hexadecimal.
 	        dw_printf ("\n");
 
-	        decode_aprs (&A, pp, 0, 0);			// Extract information into structure.
+	        decode_aprs (&A, pp, 0, NULL);			// Extract information into structure.
 
 	        decode_aprs_print (&A);			// Now print it in human readable format.
 
@@ -5197,7 +5206,7 @@ int main (int argc, char *argv[])
 	      if (pp != NULL) {
 	        decode_aprs_t A;
 
-	        decode_aprs (&A, pp, 0, 0);	// Extract information into structure.
+	        decode_aprs (&A, pp, 0, NULL);	// Extract information into structure.
 
 	        decode_aprs_print (&A);		// Now print it in human readable format.
 

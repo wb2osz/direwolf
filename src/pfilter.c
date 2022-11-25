@@ -235,7 +235,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate.is_aprs = is_aprs;
 
 	if (is_aprs) {
-	  decode_aprs (&pfstate.decoded, pp, 1, 0);
+	  decode_aprs (&pfstate.decoded, pp, 1, NULL);
 	}
 
 	next_token(&pfstate);
@@ -1278,7 +1278,8 @@ static int filt_s (pfstate_t *pf)
  *
  * Name:	filt_i
  *
- * Purpose:	IGate messaging default behavior.
+ * Purpose:	IGate messaging filter.
+ *		This would make sense only for IS>RF direction.
  *
  * Inputs:	pf	- Pointer to current state information.
  *			  token_str should contain something of format:
@@ -1307,7 +1308,7 @@ static int filt_s (pfstate_t *pf)
  *		The rest is distanced, in kilometers, from given point.
  *		
  *		Examples:
- *			i/60/0		Heard in past 60 minutes directly.
+ *			i/180/0		Heard in past 3 hours directly.
  *			i/45		Past 45 minutes, default max digi hops.
  *			i/180/3		Default time (3 hours), max 3 digi hops.
  *			i/180/8/42.6/-71.3/50.
@@ -1317,13 +1318,17 @@ static int filt_s (pfstate_t *pf)
  *		The basic idea is that we want to transmit a "message" only if the
  *		addressee has been heard recently and is not too far away.
  *
+ *		That is so we can distinguish messages addressed to a specific
+ *		station, and other sundry uses of the addressee field.
+ *
  *		After passing along a "message" we will also allow the next
  *		position report from the sender of the "message."
  *		That is done somewhere else.  We are not concerned with it here.
  *
  *		IMHO, the rules here are too restrictive.
  *
- *		FIXME -explain
+ *		(1) The APRS-IS would send a "message" to my IGate only if the addressee
+ *		    has been heard nearby recently.  180 minutes, I believe.
  *
  *------------------------------------------------------------------------------*/
 
