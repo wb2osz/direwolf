@@ -84,6 +84,8 @@ struct kissport_status_s {
 	// The default is a limit of 3 client applications at the same time.
 	// You can increase the limit by changing the line below.
 	// A larger number consumes more resources so don't go crazy by making it larger than needed.
+	// TODO:  Should this be moved to direwolf.h so max number of audio devices
+	// client apps are in the same place?
 
 #define MAX_NET_CLIENTS 3
 

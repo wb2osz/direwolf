@@ -9,7 +9,7 @@ Why waste $200 and settle for mediocre receive performance from a 1980's technol
 
 ![](tnc-test-cd-results.png)
 
-Dire Wolf now includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless.
+Dire Wolf now includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless. This was originally developed for satellites and is now seeing widespread use on HF.
 
 ![](fx25.png)
 
@@ -80,7 +80,21 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 
 
-- **Standard 300, 1200 & 9600 bps modems and more.**
+- **Modems:**
+
+    300 bps AFSK for HF
+
+    1200 bps AFSK most common for VHF/UHF
+
+    2400 & 4800 bps PSK
+
+    9600 bps GMSK/G3RUH
+
+    AIS reception
+
+    EAS SAME reception
+
+
 
 - **DTMF ("Touch Tone") Decoding and Encoding.**
  

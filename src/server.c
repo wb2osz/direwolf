@@ -176,6 +176,7 @@
  * You can increase the limit by changing the line below.
  * A larger number consumes more resources so don't go crazy by making it larger than needed.
  */
+// FIXME:  Put in direwolf.h rather than in .c file. Change name to reflect AGW vs KISS. Update user guide 5.7.
 
 #define MAX_NET_CLIENTS 3
 

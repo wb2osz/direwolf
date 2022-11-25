@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -23,11 +23,11 @@
  *
  * Name:        atest.c
  *
- * Purpose:     Test fixture for the AFSK demodulator.
+ * Purpose:     Test fixture for the Dire Wolf demodulators.
  *
  * Inputs:	Takes audio from a .WAV file instead of the audio device.
  *
- * Description:	This can be used to test the AFSK demodulator under
+ * Description:	This can be used to test the demodulators under
  *		controlled and reproducible conditions for tweaking.
  *	
  *		For example
@@ -107,7 +107,7 @@ struct wav_header {             /* .WAV file header. */
 					/* 8 bit samples are unsigned bytes */
 					/* in range of 0 .. 255. */
  
- 					/* 16 bit samples are signed short */
+ 					/* 16 bit samples are little endian signed short */
 					/* in range of -32768 .. +32767. */
 
 static struct {
@@ -765,7 +765,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	unsigned char *pinfo;
 	int info_len;
 	int h;
-	char heard[AX25_MAX_ADDR_LEN];
+	char heard[2 * AX25_MAX_ADDR_LEN + 20];
 	char alevel_text[AX25_ALEVEL_TO_TEXT_SIZE];
 
 	packets_decoded_one++;
@@ -809,6 +809,23 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	  dw_printf ("Digipeater ");
 	}
 	ax25_alevel_to_text (alevel, alevel_text);
+
+	/* As suggested by KJ4ERJ, if we are receiving from */
+	/* WIDEn-0, it is quite likely (but not guaranteed), that */
+	/* we are actually hearing the preceding station in the path. */
+
+	if (h >= AX25_REPEATER_2 &&
+	      strncmp(heard, "WIDE", 4) == 0 &&
+	      isdigit(heard[4]) &&
+	      heard[5] == '\0') {
+
+	  char probably_really[AX25_MAX_ADDR_LEN];
+	  ax25_get_addr_with_ssid(pp, h-1, probably_really);
+
+	  strlcat (heard, " (probably ", sizeof(heard));
+	  strlcat (heard, probably_really, sizeof(heard));
+	  strlcat (heard, ")", sizeof(heard));
+	}
 
 	if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
 	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
@@ -877,7 +894,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 
 
-#if 1		// temp experiment  	TODO: remove this.
+#if 0		// temp experiment
 
 #include "decode_aprs.h"
 #include "log.h"
@@ -886,7 +903,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 	  decode_aprs_t A;
 
-	  decode_aprs (&A, pp, 0, 0);
+	  decode_aprs (&A, pp, 0, NULL);
 
 	  // Temp experiment to see how different systems set the RR bits in the source and destination.
 	  // log_rr_bits (&A, pp);

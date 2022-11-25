@@ -107,7 +107,6 @@
 #include "recv.h"
 #include "dtmf.h"
 #include "aprs_tt.h"
-#include "dtime_now.h"
 #include "ax25_link.h"
 
 

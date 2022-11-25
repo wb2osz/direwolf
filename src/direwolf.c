@@ -1426,7 +1426,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // we still want to decode it for logging and other processing.
 	  // Just be quiet about errors if "-qd" is set.
 
-	  decode_aprs (&A, pp, q_d_opt, 0);
+	  decode_aprs (&A, pp, q_d_opt, NULL);
 
 	  if ( ! q_d_opt ) {
 
@@ -1554,10 +1554,14 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	}
 	else { 
 	
-/* Send to Internet server if option is enabled. */
-/* Consider only those with correct CRC. */
-
-	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
+/*
+ * Send to the IGate processing.
+ * Use only those with correct CRC; We don't want to spread corrupted data!
+ * Our earlier "fix bits" hack could allow corrupted information to get thru.
+ * However, if it used FEC mode (FX.25. IL2P), we have much higher level of
+ * confidence that it is correct.
+ */
+	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || is_fx25) ) {
 
 	    igate_send_rec_packet (chan, pp);
 	  }
@@ -1572,24 +1576,23 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 
 /*
- * APRS digipeater.
+ * Send to APRS digipeater.
  * Use only those with correct CRC; We don't want to spread corrupted data!
+ * Our earlier "fix bits" hack could allow corrupted information to get thru.
+ * However, if it used FEC mode (FX.25. IL2P), we have much higher level of
+ * confidence that it is correct.
  */
-
-// TODO: Should also use anything received with FX.25 because it is known to be good.
-// Our earlier "fix bits" hack could allow corrupted information to get thru.
-
-	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
+	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || is_fx25) ) {
 
 	    digipeater (chan, pp);
 	  }
 
 /*
  * Connected mode digipeater.
- * Use only those with correct CRC.
+ * Use only those with correct CRC (or using FEC.)
  */
 
-	  if (retries == RETRY_NONE) {
+	  if (retries == RETRY_NONE || is_fx25) {
 
 	    cdigipeater (chan, pp);
 	  }

@@ -357,6 +357,9 @@ static void get_access_to_gpio (const char *path)
  * We don't have permission.
  * Try a hack which requires that the user be set up to use sudo without a password.
  */
+// FIXME: I think this was a horrible work around for some early release that
+// did not give gpio permission to the pi user.  This should go.
+// Provide recovery instructions when there is a permission failure.
 
 	if (ptt_debug_level >= 2) {
 	  text_color_set(DW_COLOR_ERROR);	// debug message but different color so it stands out.
@@ -494,6 +497,13 @@ void export_gpio(int ch, int ot, int invert, int direction)
  *		matching the pattern "gpio61_*".
  *
  *	We are finally implementing the third choice.
+ */
+
+/*
+ * Then we have the Odroid board with GPIO numbers starting around 480.
+ * Can we simply use those numbers?
+ * Apparently, the export names look like GPIOX.17
+ * https://wiki.odroid.com/odroid-c4/hardware/expansion_connectors#gpio_map_for_wiringpi_library
  */
 
 	struct dirent **file_list;
