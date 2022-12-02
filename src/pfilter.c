@@ -200,6 +200,8 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate_t pfstate;
 	char *p;
 	int result;
+	char * infop = NULL;
+
 
 	assert (from_chan >= 0 && from_chan <= MAX_CHANS);
 	assert (to_chan >= 0 && to_chan <= MAX_CHANS);
@@ -229,6 +231,19 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	  if (iscntrl(*p)) {
 	    *p = ' ';
 	  }
+	}
+
+    (void) ax25_get_info (pp, (unsigned char **)(&infop));
+	assert (infop != NULL);
+	if (*infop == '}') {
+		// We have a 3d party packet, dig inside it to get the actual type.
+		packet_t pp_payload = ax25_from_text ((char*)infop+1, 0);
+		if (pp_payload == NULL) {
+			print_error (&pfstate, "Invalid third party payload\n");
+			return (0);
+		}
+
+		return pfilter(from_chan, to_chan, filter, pp_payload, is_aprs);
 	}
 
 	pfstate.pp = pp;
@@ -868,19 +883,6 @@ static int filt_t (pfstate_t *pf)
 	(void) ax25_get_info (pf->pp, (unsigned char **)(&infop));
 
 	assert (infop != NULL);
-
-	if(*infop == '}') {
-		// We have a 3d party packet, dig inside it to get the actual type.
-		packet_t pp_payload = ax25_from_text ((char*)infop+1, 0);
-		if (pp_payload == NULL) {
-			print_error (pf, "Invalid third party payload\n");
-			return (0);
-		}
-		memset (src, 0, sizeof(src));
-		ax25_get_addr_with_ssid (pp_payload, AX25_SOURCE, src);
-		(void) ax25_get_info (pp_payload, (unsigned char **)(&infop));
-		ax25_delete(pp_payload);
-	}
 
 	for (f = pf->token_str + 2; *f != '\0'; f++) {
 	  switch (*f) {
