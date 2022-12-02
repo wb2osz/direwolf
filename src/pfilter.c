@@ -243,7 +243,9 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 			return (0);
 		}
 
-		return pfilter(from_chan, to_chan, filter, pp_payload, is_aprs);
+		result = pfilter(from_chan, to_chan, filter, pp_payload, is_aprs);
+		ax25_delete(pp_payload);
+		return result;
 	}
 
 	pfstate.pp = pp;
