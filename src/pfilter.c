@@ -871,7 +871,9 @@ static int filt_t (pfstate_t *pf, char * typeChar)
 			print_error (pf, "Invalid third party payload\n");
 			return (0);
 		}
-		(void) ax25_get_info (pf->pp, (unsigned char **)(&infop));
+		memset (src, 0, sizeof(src));
+		ax25_get_addr_with_ssid (pp_payload, AX25_SOURCE, src);
+		(void) ax25_get_info (pp_payload, (unsigned char **)(&infop));
 		ax25_delete(pp_payload);
 		isThirdParty = 1;
 	}
