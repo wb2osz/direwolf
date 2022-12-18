@@ -2,6 +2,8 @@
 
 #ifndef FSK_DEMOD_STATE_H
 
+#include <stdint.h>          // int64_t
+
 #include "rpack.h"
 
 #include "audio.h"		// for enum modem_t
@@ -43,8 +45,9 @@ typedef struct cic_s {
 } cic_t;
 
 
-#define MAX_FILTER_SIZE 404		/* 401 is needed for profile A, 300 baud & 44100. Revisit someday. */
-
+#define MAX_FILTER_SIZE 480		/* 401 is needed for profile A, 300 baud & 44100. Revisit someday. */
+					// Size comes out to 417 for 1200 bps with 48000 sample rate
+					// v1.7 - Was 404.  Bump up to 480.
 
 struct demodulator_state_s
 {
@@ -215,6 +218,12 @@ struct demodulator_state_s
 
 		signed int prev_d_c_pll;		// Previous value of above, before
 							// incrementing, to detect overflows.
+
+		int pll_symbol_count;			// Number symbols during time nudge_total is accumulated.
+		int64_t pll_nudge_total;		// Sum of DPLL nudge amounts.
+							// Both of these are cleared at start of frame.
+							// At end of frame, we can see if incoming
+							// baud rate is a little off.
 
 		int prev_demod_data;			// Previous data bit detected.
 							// Used to look for transitions.
