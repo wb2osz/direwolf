@@ -309,10 +309,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	      D->lp_window = BP_WINDOW_TRUNCATED;
 	    }
 
-	    D->agc_fast_attack = 0.820;		
-	    D->agc_slow_decay = 0.000214;
-	    D->agc_fast_attack = 0.45;		
-	    D->agc_slow_decay = 0.000195;
 	    D->agc_fast_attack = 0.70;		
 	    D->agc_slow_decay = 0.000090;
 
@@ -371,6 +367,9 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 
 	    // For scaling phase shift into normallized -1 to +1 range for mark and space.
 	    D->u.afsk.normalize_rpsam = 1.0 / (0.5 * abs(mark_freq - space_freq) * 2 * M_PI / samples_per_sec);
+
+	    D->agc_fast_attack = 0.70;
+	    D->agc_slow_decay = 0.000090;
 
 	    D->pll_locked_inertia = 0.74;
 	    D->pll_searching_inertia = 0.50;
