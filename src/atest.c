@@ -68,6 +68,7 @@
 #include <string.h>
 #include <time.h>
 #include <getopt.h>
+#include <ctype.h>
 
 
 #define ATEST_C 1
