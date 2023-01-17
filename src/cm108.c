@@ -113,7 +113,7 @@
 
 int main (void)
 {
-	text_color_init (0);    // Turn off text color.
+	text_color_init (0, 0);    // Turn off text color.
 #if defined(__OpenBSD__) || defined(__FreeBSD__)
 	dw_printf ("CM108 PTT support is not available for this operating system.\n");
 #else
@@ -340,7 +340,7 @@ int main (int argc, char **argv)
 	int num_things;
 	int i;
 
-	text_color_init (0);    // Turn off text color.
+	text_color_init (0, 0);    // Turn off text color.
 	text_color_set(DW_COLOR_INFO);
 
 	if (argc >=2) {

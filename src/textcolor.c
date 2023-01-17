@@ -171,14 +171,20 @@ static const char clear_eos[]	= "\e[0J";
  */
 
 static int g_enable_color = 1;
+static FILE *g_dw_printf_dest = 0;
 
-
-void text_color_init (int enable_color)
+void text_color_init (int enable_color, int redirect_output)
 {
-
+	if (redirect_output != 0) {
+	  g_dw_printf_dest = stderr;
+	  enable_color = 0;
+	} else {
+	  g_dw_printf_dest = stdout;
+	}
 
 #if __WIN32__
 
+	g_enable_color = enable_color;
 
 	if (g_enable_color != 0) {
 
@@ -208,7 +214,7 @@ void text_color_init (int enable_color)
 	if (enable_color < 0 || enable_color > MAX_T) {
 	  int t;
 	  for (t = 0; t <= MAX_T; t++) {
-	    text_color_init (t);
+	    text_color_init (t, redirect_output);
 	    printf ("-t %d", t);
 	    if (t) printf ("   [white background]   ");
 	    printf ("\n");
@@ -377,7 +383,7 @@ int dw_printf (const char *fmt, ...)
 
 // TODO: other possible destinations...
 
-	fputs (buffer, stdout);
+	fputs (buffer, g_dw_printf_dest);
 	return (len);
 }
 
@@ -387,7 +393,7 @@ int dw_printf (const char *fmt, ...)
 main () 
 {
 	printf ("Initial condition\n");
-	text_color_init (1);
+	text_color_init (1, 0);
 	printf ("After text_color_init\n");
 	text_color_set(DW_COLOR_INFO); 		printf ("Info\n");
 	text_color_set(DW_COLOR_ERROR); 	printf ("Error\n");

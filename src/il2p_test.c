@@ -53,7 +53,7 @@ static void decode_bitstream(void);
 int main ()
 {
 	int enable_color = 1;
-	text_color_init (enable_color);
+	text_color_init (enable_color, 0);
 
 	int enable_debug_out = 0;
 	il2p_init(enable_debug_out);

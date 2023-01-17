@@ -5330,7 +5330,7 @@ int main (int argc, char *argv[])
 	}
 
 	// If you don't like the text colors, use 0 instead of 1 here.
-	text_color_init(1);
+	text_color_init(1, 0);
 	text_color_set(DW_COLOR_INFO);
 
 	while (fgets(stuff, sizeof(stuff), stdin) != NULL) 

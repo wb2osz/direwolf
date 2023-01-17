@@ -179,7 +179,7 @@ static void trim (char *stuff)
 
 int main (int argc, char *argv[])
 {
-	text_color_init (0);	// Turn off text color.
+	text_color_init (0, 0);	// Turn off text color.
 				// It could interfere with trying to pipe stdout to some other application.
 
 #if __WIN32__

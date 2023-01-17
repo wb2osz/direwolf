@@ -22,7 +22,7 @@ enum dw_color_e { 	DW_COLOR_INFO,		/* black */
 typedef enum dw_color_e dw_color_t;
 
 			
-void text_color_init (int enable_color);
+void text_color_init (int enable_color, int redirect_output);
 void text_color_set (dw_color_t c);
 void text_color_term (void);
 
