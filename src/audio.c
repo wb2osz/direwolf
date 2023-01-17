@@ -129,6 +129,7 @@ static struct adev_s {
 	int outbuf_len;
 
 	enum audio_in_type_e g_audio_in_type;
+	enum audio_out_type_e g_audio_out_type;
 
 	int udp_sock;			/* UDP socket for receiving data */
 
@@ -453,52 +454,63 @@ int audio_open (struct audio_s *pa)
   	    }
 
 /*
- * Output device.  Only "soundcard" is supported at this time. 
+ * Output device.  Only "soundcard" and "stdout" are supported at this time.
  */
+	    if (strcasecmp(pa->adev[a].adevice_out, "stdout") == 0 || strcmp(pa->adev[a].adevice_out, "-") == 0) {
+	      adev[a].g_audio_out_type = AUDIO_OUT_TYPE_STDOUT;
+	    } else {
+	      adev[a].g_audio_out_type = AUDIO_OUT_TYPE_SOUNDCARD;
+	    }
 
+	    switch (adev[a].g_audio_out_type) {
+	      case AUDIO_OUT_TYPE_STDOUT:
+	        adev[a].outbuf_size_in_bytes = 1024;
+	        break;
+
+	      case AUDIO_OUT_TYPE_SOUNDCARD:
 #if USE_ALSA
-	    err = snd_pcm_open (&(adev[a].audio_out_handle), audio_out_name, SND_PCM_STREAM_PLAYBACK, 0);
+	        err = snd_pcm_open (&(adev[a].audio_out_handle), audio_out_name, SND_PCM_STREAM_PLAYBACK, 0);
 
-	    if (err < 0) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Could not open audio device %s for output\n%s\n", 
-			audio_out_name, snd_strerror(err));
-	      if (err == -EBUSY) {
-	        dw_printf ("This means that some other application is using that device.\n");
-	        dw_printf ("The solution is to identify that other application and stop it.\n");
-	      }
-	      return (-1);
-	    }
+	        if (err < 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Could not open audio device %s for output\n%s\n",
+	          audio_out_name, snd_strerror(err));
+	          if (err == -EBUSY) {
+	            dw_printf ("This means that some other application is using that device.\n");
+	            dw_printf ("The solution is to identify that other application and stop it.\n");
+	          }
+	          return (-1);
+	        }
 
-	    adev[a].outbuf_size_in_bytes = set_alsa_params (a, adev[a].audio_out_handle, pa, audio_out_name, "output");
+	        adev[a].outbuf_size_in_bytes = set_alsa_params (a, adev[a].audio_out_handle, pa, audio_out_name, "output");
 
-	    if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
-	      return (-1);
-	    }
+	        if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
+	          return (-1);
+	        }
 
 #elif USE_SNDIO
-	    adev[a].sndio_out_handle = sio_open (audio_out_name, SIO_PLAY, 0);
-	    if (adev[a].sndio_out_handle == NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Could not open audio device %s for output\n",
-			audio_out_name);
-	      return (-1);
-	    }
+	        adev[a].sndio_out_handle = sio_open (audio_out_name, SIO_PLAY, 0);
+	        if (adev[a].sndio_out_handle == NULL) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Could not open audio device %s for output\n",
+	          audio_out_name);
+	          return (-1);
+	        }
 
-	    adev[a].outbuf_size_in_bytes = set_sndio_params (a, adev[a].sndio_out_handle, pa, audio_out_name, "output");
+	        adev[a].outbuf_size_in_bytes = set_sndio_params (a, adev[a].sndio_out_handle, pa, audio_out_name, "output");
 
-	    if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
-	      return (-1);
-	    }
+	        if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
+	          return (-1);
+	        }
 
-	    if (!sio_start (adev[a].sndio_out_handle)) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Could not start audio device %s for output\n",
-			audio_out_name);
-	      return (-1);
-	    }
+	        if (!sio_start (adev[a].sndio_out_handle)) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Could not start audio device %s for output\n",
+	          audio_out_name);
+	          return (-1);
+	        }
 #endif
-
+	    }
 /*
  * Finally allocate buffer for each direction.
  */
@@ -1333,13 +1345,36 @@ int audio_put (int a, int c)
 
 int audio_flush (int a)
 {
-#if USE_ALSA
-	int k;
-	unsigned char *psound;
-	int retries = 10;
-	snd_pcm_status_t *status;
+	switch (adev[a].g_audio_out_type) {
+	  case AUDIO_OUT_TYPE_STDOUT:;
+	    int res;
+	    unsigned char *ptr;
+	    int len;
 
-	assert (adev[a].audio_out_handle != NULL);
+	    ptr = adev[a].outbuf_ptr;
+	    len = adev[a].outbuf_len;
+
+	    while (len > 0) {
+	      res = write(STDOUT_FILENO, ptr, (size_t) len);
+	      if (res <= 0) {
+	        text_color_set(DW_COLOR_INFO);
+	        dw_printf ("\nError writing to stdout.  Exiting.\n");
+	        exit (0);
+	      }
+	      ptr += res;
+	      len -= res;
+	    }
+	    adev[a].outbuf_len = 0;
+	    return 0;
+
+	  case AUDIO_OUT_TYPE_SOUNDCARD:;
+#if USE_ALSA
+	    int k;
+	    unsigned char *psound;
+	    int retries = 10;
+	    snd_pcm_status_t *status;
+
+	    assert (adev[a].audio_out_handle != NULL);
 
 
 /*
@@ -1352,159 +1387,160 @@ int audio_flush (int a)
  */
 
 
-	snd_pcm_status_alloca(&status);
+	    snd_pcm_status_alloca(&status);
 
-	k = snd_pcm_status (adev[a].audio_out_handle, status);
-	if (k != 0) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Audio output get status error.\n%s\n", snd_strerror(k));
-	}
+	    k = snd_pcm_status (adev[a].audio_out_handle, status);
+	    if (k != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Audio output get status error.\n%s\n", snd_strerror(k));
+	    }
 
-	if ((k = snd_pcm_status_get_state(status)) != SND_PCM_STATE_RUNNING) {
+	    if ((k = snd_pcm_status_get_state(status)) != SND_PCM_STATE_RUNNING) {
 
-	  //text_color_set(DW_COLOR_DEBUG);
-	  //dw_printf ("Audio output state = %d.  Try to start.\n", k);
+	      //text_color_set(DW_COLOR_DEBUG);
+	      //dw_printf ("Audio output state = %d.  Try to start.\n", k);
 
-	  k = snd_pcm_prepare (adev[a].audio_out_handle);
+	      k = snd_pcm_prepare (adev[a].audio_out_handle);
 
-	  if (k != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Audio output start error.\n%s\n", snd_strerror(k));
-	  }
-	}
+	      if (k != 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Audio output start error.\n%s\n", snd_strerror(k));
+	      }
+	    }
 
 
-	psound = adev[a].outbuf_ptr;
+	    psound = adev[a].outbuf_ptr;
 
-	while (retries-- > 0) {
+	    while (retries-- > 0) {
 
-	  k = snd_pcm_writei (adev[a].audio_out_handle, psound, adev[a].outbuf_len / adev[a].bytes_per_frame);	
+	      k = snd_pcm_writei (adev[a].audio_out_handle, psound, adev[a].outbuf_len / adev[a].bytes_per_frame);
 #if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("audio_flush(): snd_pcm_writei %d frames returns %d\n",
-				adev[a].outbuf_len / adev[a].bytes_per_frame, k);
-	  fflush (stdout);	
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("audio_flush(): snd_pcm_writei %d frames returns %d\n",
+	      adev[a].outbuf_len / adev[a].bytes_per_frame, k);
+	      fflush (stdout);
 #endif
-	  if (k == -EPIPE) {
+	      if (k == -EPIPE) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Audio output data underrun.\n");
+
+	        /* No problemo.  Recover and go around again. */
+
+	        snd_pcm_recover (adev[a].audio_out_handle, k, 1);
+	      }
+	      else if (k == -ESTRPIPE) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Driver suspended, recovering\n");
+	        snd_pcm_recover(adev[a].audio_out_handle, k, 1);
+	      }
+	      else if (k == -EBADFD) {
+	        k = snd_pcm_prepare (adev[a].audio_out_handle);
+	        if(k < 0) {
+	          dw_printf ("Error preparing after bad state: %s\n", snd_strerror(k));
+	        }
+	      }
+	      else if (k < 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Audio write error: %s\n", snd_strerror(k));
+
+	        /* Some other error condition. */
+	        /* Try again. What do we have to lose? */
+
+	        k = snd_pcm_prepare (adev[a].audio_out_handle);
+	        if(k < 0) {
+	          dw_printf ("Error preparing after error: %s\n", snd_strerror(k));
+	        }
+	      }
+	      else if (k != adev[a].outbuf_len / adev[a].bytes_per_frame) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Audio write took %d frames rather than %d.\n",
+	        k, adev[a].outbuf_len / adev[a].bytes_per_frame);
+
+	        /* Go around again with the rest of it. */
+
+	        psound += k * adev[a].bytes_per_frame;
+	        adev[a].outbuf_len -= k * adev[a].bytes_per_frame;
+	      }
+	      else {
+	        /* Success! */
+	        adev[a].outbuf_len = 0;
+	        return (0);
+	      }
+	    }
+
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Audio output data underrun.\n");
+	    dw_printf ("Audio write error retry count exceeded.\n");
 
-	    /* No problemo.  Recover and go around again. */
-
-	    snd_pcm_recover (adev[a].audio_out_handle, k, 1);
-	  }
-          else if (k == -ESTRPIPE) {
-            text_color_set(DW_COLOR_ERROR);
-            dw_printf ("Driver suspended, recovering\n");
-            snd_pcm_recover(adev[a].audio_out_handle, k, 1);
-          }
-          else if (k == -EBADFD) {
-            k = snd_pcm_prepare (adev[a].audio_out_handle);
-            if(k < 0) {
-              dw_printf ("Error preparing after bad state: %s\n", snd_strerror(k));
-            }
-          }
- 	  else if (k < 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Audio write error: %s\n", snd_strerror(k));
-
-	    /* Some other error condition. */
-	    /* Try again. What do we have to lose? */
-
-            k = snd_pcm_prepare (adev[a].audio_out_handle);
-            if(k < 0) {
-              dw_printf ("Error preparing after error: %s\n", snd_strerror(k));
-            }
-	  }
- 	  else if (k != adev[a].outbuf_len / adev[a].bytes_per_frame) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Audio write took %d frames rather than %d.\n",
- 			k, adev[a].outbuf_len / adev[a].bytes_per_frame);
-	
-	    /* Go around again with the rest of it. */
-
-	    psound += k * adev[a].bytes_per_frame;
-	    adev[a].outbuf_len -= k * adev[a].bytes_per_frame;
-	  }
-	  else {
-	    /* Success! */
 	    adev[a].outbuf_len = 0;
-	    return (0);
-	  }
-	}
-
-	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("Audio write error retry count exceeded.\n");
-
-	adev[a].outbuf_len = 0;
-	return (-1);
+	    return (-1);
 
 #elif USE_SNDIO
 
-	int k;
-	unsigned char *ptr;
-	int len;
+	    int k;
+	    unsigned char *ptr;
+	    int len;
 
-	ptr = adev[a].outbuf_ptr;
-	len = adev[a].outbuf_len;
+	    ptr = adev[a].outbuf_ptr;
+	    len = adev[a].outbuf_len;
 
-	while (len > 0) {
-	  assert (adev[a].sndio_out_handle != NULL);
-	  if (poll_sndio (adev[a].sndio_out_handle, POLLOUT) < 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    perror("Can't write to audio device");
-	    adev[a].outbuf_len = 0;
-	    return (-1);
-	  }
+	    while (len > 0) {
+	      assert (adev[a].sndio_out_handle != NULL);
+	      if (poll_sndio (adev[a].sndio_out_handle, POLLOUT) < 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        perror("Can't write to audio device");
+	        adev[a].outbuf_len = 0;
+	        return (-1);
+	      }
 
-	  k = sio_write (adev[a].sndio_out_handle, ptr, len);
+	      k = sio_write (adev[a].sndio_out_handle, ptr, len);
 #if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("audio_flush(): write %d returns %d\n", len, k);
-	  fflush (stdout);
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("audio_flush(): write %d returns %d\n", len, k);
+	      fflush (stdout);
 #endif
-	  ptr += k;
-	  len -= k;
-	}
+	      ptr += k;
+	      len -= k;
+	    }
 
-	adev[a].outbuf_len = 0;
-	return (0);
+	    adev[a].outbuf_len = 0;
+	    return (0);
 
 #else		/* OSS */
 
-	int k;
-	unsigned char *ptr;	
-	int len;
+	    int k;
+	    unsigned char *ptr;
+	    int len;
 
-	ptr = adev[a].outbuf_ptr;
-	len = adev[a].outbuf_len;
+	    ptr = adev[a].outbuf_ptr;
+	    len = adev[a].outbuf_len;
 
-	while (len > 0) {
-	  assert (adev[a].oss_audio_device_fd > 0);
-	  k = write (adev[a].oss_audio_device_fd, ptr, len);
+	    while (len > 0) {
+	      assert (adev[a].oss_audio_device_fd > 0);
+	      k = write (adev[a].oss_audio_device_fd, ptr, len);
 #if DEBUGx
-	  text_color_set(DW_COLOR_DEBUG);
-	  dw_printf ("audio_flush(): write %d returns %d\n", len, k);
-	  fflush (stdout);	
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("audio_flush(): write %d returns %d\n", len, k);
+	      fflush (stdout);
 #endif
-	  if (k < 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    perror("Can't write to audio device");
+	      if (k < 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        perror("Can't write to audio device");
+	        adev[a].outbuf_len = 0;
+	        return (-1);
+	      }
+	      if (k < len) {
+	        /* presumably full but didn't block. */
+	        usleep (10000);
+	      }
+	      ptr += k;
+	      len -= k;
+	    }
+
 	    adev[a].outbuf_len = 0;
-	    return (-1);
-	  }
-	  if (k < len) {
-	    /* presumably full but didn't block. */
-	    usleep (10000);
-	  }
-	  ptr += k;
-	  len -= k;
-	}
-
-	adev[a].outbuf_len = 0;
-	return (0);
+	    return (0);
 #endif
-
+	}
+	return (0);
 } /* end audio_flush */
 
 
@@ -1546,8 +1582,11 @@ int audio_flush (int a)
 
 void audio_wait (int a)
 {	
-
 	audio_flush (a);
+
+	if (adev[a].g_audio_out_type == AUDIO_OUT_TYPE_STDOUT) {
+	  return;
+	}
 
 #if USE_ALSA
 

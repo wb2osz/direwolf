@@ -43,6 +43,10 @@ enum audio_in_type_e {
 	AUDIO_IN_TYPE_SDR_UDP,
 	AUDIO_IN_TYPE_STDIN };
 
+enum audio_out_type_e {
+	AUDIO_OUT_TYPE_SOUNDCARD,
+	AUDIO_OUT_TYPE_STDOUT };
+
 /* For option to try fixing frames with bad CRC. */
 
 typedef enum retry_e {
