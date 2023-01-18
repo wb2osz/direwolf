@@ -384,6 +384,7 @@ int dw_printf (const char *fmt, ...)
 // TODO: other possible destinations...
 
 	fputs (buffer, g_dw_printf_dest);
+	fflush (g_dw_printf_dest);
 	return (len);
 }
 
