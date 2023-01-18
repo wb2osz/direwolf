@@ -458,6 +458,11 @@ int audio_open (struct audio_s *pa)
  */
 	    if (strcasecmp(pa->adev[a].adevice_out, "stdout") == 0 || strcmp(pa->adev[a].adevice_out, "-") == 0) {
 	      adev[a].g_audio_out_type = AUDIO_OUT_TYPE_STDOUT;
+	      if (!dw_printf_redirected()) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("stdout must only be used with the -O option\n");
+	        return (-1);
+	      }
 	    } else {
 	      adev[a].g_audio_out_type = AUDIO_OUT_TYPE_SOUNDCARD;
 	    }

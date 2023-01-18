@@ -55,4 +55,6 @@ int dw_printf (const char *fmt, ...)
 				__attribute__((format(printf,1,2)));		/* gnu C lib. */
 #endif
 
+int dw_printf_redirected ();
+
 #endif

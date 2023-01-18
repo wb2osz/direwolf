@@ -388,7 +388,10 @@ int dw_printf (const char *fmt, ...)
 	return (len);
 }
 
-
+int dw_printf_redirected ()
+{
+	return g_dw_printf_dest != stdout;
+}
 
 #if TESTC
 main () 
