@@ -277,11 +277,16 @@ int main (int argc, char *argv[])
  * Default will be no colors if stdout is not a terminal (i.e. piped into
  * something else such as "tee") but command line can override this.
  */
+	for (j=1; j<argc; j++) {
+	  if (strcmp(argv[j], "-O") == 0) {
+	    O_opt = 1;
+	  }
+	}
 
 #if __WIN32__
-	t_opt = _isatty(_fileno(stdout)) > 0;
+	t_opt = _isatty(_fileno(O_opt ? stderr : stdout)) > 0;
 #else
-	t_opt = isatty(fileno(stdout));
+	t_opt = isatty(fileno(O_opt ? stderr : stdout));
 #endif
 				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
@@ -292,8 +297,6 @@ int main (int argc, char *argv[])
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
 	    //dw_printf ("DEBUG: text color option = %d.\n", t_opt);
-	  } else if (strcmp(argv[j], "-O") == 0) {
-	    O_opt = 1;
 	  }
 	}
 
