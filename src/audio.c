@@ -226,8 +226,8 @@ int audio_open (struct audio_s *pa)
 #endif
 	int chan;
 	int a;
-	char audio_in_name[30];
-	char audio_out_name[30];
+	char audio_in_name[80];
+	char audio_out_name[80];
 
 
 	save_audio_config_p = pa;
