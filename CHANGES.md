@@ -33,6 +33,8 @@
     >
     > Add:     "FX25TX 1" (or 16 or 32 or 64)
 
+- Two additional color modes added to the -t command line option.  5 uses default background color and basic color commands.  This should obey most terminal emulator color themes.  6 uses the RGB color mode and is stark black background.  -t 2 on Windows implements a dark background mode as well.
+
 
 
 ### Bugs Fixed: ###
