@@ -147,11 +147,13 @@ static struct adev_s {
 	int stream_next;
 
 /*
- * Buffer and index for stdout.
+ * UDP socket for transmitting audio stream.
+ * Buffer and index for stdout or UDP.
  */
-
-	unsigned char stream_out_data[SDR_UDP_BUF_MAXLEN];
+	SOCKET udp_out_sock;
+	char stream_out_data[SDR_UDP_BUF_MAXLEN];
 	int stream_out_next;
+	struct sockaddr_storage udp_dest_addr;
 
 /* For sound output. */
 /* out_wavehdr.dwUser is used to keep track of output buffer state. */
@@ -292,6 +294,7 @@ int audio_open (struct audio_s *pa)
 
 
 	    A->udp_sock = INVALID_SOCKET;
+	    A->udp_out_sock = INVALID_SOCKET;
 
 	    in_dev_no[a] = WAVE_MAPPER;	/* = ((UINT)-1) in mmsystem.h */
 	    out_dev_no[a] = WAVE_MAPPER;
@@ -349,8 +352,7 @@ int audio_open (struct audio_s *pa)
 
 /*
  * Select output device.
- * Only soundcard and stdout at this point.
- * Purhaps we'd like to add UDP for an SDR transmitter.
+ * Soundcard, UDP, and stdout supported.
  */
 	    if (strcasecmp(pa->adev[a].adevice_out, "stdout") == 0 || strcmp(pa->adev[a].adevice_out, "-") == 0) {
 	      A->g_audio_out_type = AUDIO_OUT_TYPE_STDOUT;
@@ -361,6 +363,16 @@ int audio_open (struct audio_s *pa)
 	      }
 	      /* Change - to stdout for readability. */
 	      strlcpy (pa->adev[a].adevice_out, "stdout", sizeof(pa->adev[a].adevice_out));
+	    } else if (strncasecmp(pa->adev[a].adevice_out, "udp:", 4) == 0) {
+	      A->g_audio_out_type = AUDIO_OUT_TYPE_SDR_UDP;
+	      // User must supply address and port
+	      if (strcasecmp(pa->adev[a].adevice_out, "udp:") == 0 ||
+	          strlen(pa->adev[a].adevice_out) < 7 ||
+		  strstr(pa->adev[a].adevice_out+5, ":") == 0) {
+	        text_color_set (DW_COLOR_ERROR);
+		dw_printf ("Destination address and port must be supplied for UDP output\n");
+		return (-1);
+	      }
 	    } else {
 	      A->g_audio_out_type = AUDIO_OUT_TYPE_SOUNDCARD;
 
@@ -524,7 +536,7 @@ int audio_open (struct audio_s *pa)
 
 	    struct adev_s *A = &(adev[a]);
 
-	    /* Display stdin or udp:port if appropriate. */
+	    /* Display stdout or udp:port if appropriate. */
 
 	    if (A->g_audio_out_type != AUDIO_OUT_TYPE_SOUNDCARD) {
 
@@ -599,6 +611,71 @@ int audio_open (struct audio_s *pa)
 	          A->out_wavehdr[n].dwBufferLength = 0;
 	        }
 	        A->out_current = 0;
+
+	      case AUDIO_OUT_TYPE_SDR_UDP:;
+	
+	        WSADATA wsadata;
+	        struct addrinfo ai_out;
+	        struct addrinfo *ai_res;
+	        char udp_outhost[256];
+	        char *udp_outport;
+	        int err, res;
+
+	        err = WSAStartup (MAKEWORD(2,2), &wsadata);
+	        if (err != 0) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf("WSAStartup failed: %d\n", err);
+	            return (-1);
+	        }
+
+	        if (LOBYTE(wsadata.wVersion) != 2 || HIBYTE(wsadata.wVersion) != 2) {
+	          text_color_set(DW_COLOR_ERROR);
+                  dw_printf("Could not find a usable version of Winsock.dll\n");
+                  WSACleanup();
+                  return (-1);
+	        }
+
+	        memset((char *) &ai_out, 0, sizeof(ai_out));
+	        ai_out.ai_socktype = SOCK_DGRAM;
+	        ai_out.ai_protocol = IPPROTO_UDP;
+
+	        strncpy(udp_outhost, pa->adev[a].adevice_out + 4, 255);
+	        udp_outhost[255] = 0;
+	        udp_outport = strstr(udp_outhost, ":");
+	        *udp_outport++ = 0;
+
+	        if (strlen(udp_outport) == 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("UDP output destination port must be supplied\n");
+	          return -1;
+	        }
+
+	        err = getaddrinfo(udp_outhost, udp_outport, &ai_out, &ai_res);
+	        if (err != 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Error parsing/resolving UDP output address\n");
+	          return -1;
+	        }
+
+	        if (ai_res->ai_family == AF_INET6) {
+	          res = sizeof(struct sockaddr_in6);
+	        } else {
+	          res = sizeof(struct sockaddr_in);
+	        }
+
+	        // Create UDP Socket
+
+	        A->udp_out_sock = socket(ai_res->ai_family, SOCK_DGRAM, IPPROTO_UDP);
+	        if (A->udp_out_sock == INVALID_SOCKET) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Couldn't create socket, errno %d\n", WSAGetLastError());
+	          return -1;
+	        }
+
+	        memcpy(&A->udp_dest_addr, ai_res->ai_addr, res);
+	        A->stream_out_next = 0;
+
+	        break;
 
 	      case AUDIO_OUT_TYPE_STDOUT:
 
@@ -1056,6 +1133,8 @@ int audio_put (int a, int c)
 	    }
 	    break;
 
+
+	  case AUDIO_OUT_TYPE_SDR_UDP:
 	  case AUDIO_OUT_TYPE_STDOUT:
 
 	    A->stream_out_data[A->stream_out_next++] = c;
@@ -1095,6 +1174,10 @@ int audio_flush (int a)
 	WAVEHDR *p;
 	MMRESULT e;
 	struct adev_s *A;
+	int res;
+	char *ptr;
+	unsigned int len;
+
 
 	A = &(adev[a]); 
 
@@ -1123,11 +1206,7 @@ int audio_flush (int a)
 	    }
 	    break;
 
-	  case AUDIO_OUT_TYPE_STDOUT:;
-
-	    int res;
-	    unsigned char *ptr;
-	    unsigned int len;
+	  case AUDIO_OUT_TYPE_STDOUT:
 
 	    ptr = A->stream_out_data;
 	    len = A->stream_out_next;
@@ -1145,6 +1224,27 @@ int audio_flush (int a)
 
 	    A->stream_out_next = 0;
 	    break;
+
+	  case AUDIO_OUT_TYPE_SDR_UDP:
+
+	    ptr = A->stream_out_data;
+	    len = A->stream_out_next;
+
+	    while (len > 0) {
+	      res = sendto(A->udp_out_sock, ptr, len, 0, (struct sockaddr *)&A->udp_dest_addr, sizeof(struct sockaddr_storage));
+	      if (res < 0) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("Error %d writing to UDP socket.\n", res);
+	        return (-1);
+	      }
+
+	      ptr += res;
+	      len -= res;
+	    }
+
+	    A->stream_out_next = 0;
+	    break;
+
 	}
 	return (0);
 
