@@ -1,5 +1,12 @@
 # Revision History
 
+## Version 1.9  --  Development Version
+
+## New Features:
+
+- Two additional color modes added to the -t command line option.  5 uses default background color and basic color commands.  This should obey most terminal emulator color themes.  6 uses the RGB color mode and is stark black background.  -t 2 on Windows implements a dark background mode as well.
+
+
 ## Version 1.8  --  October 2025
 
 ### New Documentation:
