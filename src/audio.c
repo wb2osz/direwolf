@@ -527,8 +527,8 @@ int audio_open (struct audio_s *pa)
 	          audio_out_name);
 	          return (-1);
 	        }
-		break;
 #endif
+		break;
 
 	      case AUDIO_OUT_TYPE_SDR_UDP:;
 
