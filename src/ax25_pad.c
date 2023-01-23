@@ -1866,7 +1866,7 @@ packet_t ax25_get_nextp (packet_t this_p)
  *
  * Inputs:	this_p		- Current packet object.
  *
- *		release_time	- Time as returned by dtime_now().
+ *		release_time	- Time as returned by dtime_monotonic().
  *
  *------------------------------------------------------------------------------*/
 
@@ -2923,7 +2923,9 @@ int ax25_alevel_to_text (alevel_t alevel, char text[AX25_ALEVEL_TO_TEXT_SIZE])
 
 	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d(%+d/%+d)", alevel.rec, alevel.mark, alevel.space);
 	}
-	else if (alevel.mark == -1 &&  alevel.space == -1) {		/* PSK - single number. */
+	else if ((alevel.mark == -1 &&  alevel.space == -1) ||		/* PSK */
+		(alevel.mark == -99 &&  alevel.space == -99)) {		/* v. 1.7 "B" FM demodulator. */
+									// ?? Where does -99 come from?
 
 	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d", alevel.rec);
 	}
