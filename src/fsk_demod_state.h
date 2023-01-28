@@ -367,7 +367,7 @@ struct demodulator_state_s
 		// Add a sample to the total when putting it in our array of recent samples.
 		// Subtract it from the total when it gets pushed off the end.
 		// We can also eliminate the need to shift them all down by using a circular buffer.
-		// This only works with integers because float would have cummulated round off errors.
+		// This only works with integers because float would have cumulated round off errors.
 
 		cic_t cic_center1;
 		cic_t cic_above;

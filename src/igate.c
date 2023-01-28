@@ -328,7 +328,7 @@ static int stats_uplink_packets;	/* Number of packets passed along to the IGate 
 					/* server after filtering. */
 
 static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
-					/* including login, packets, and hearbeats. */
+					/* including login, packets, and heartbeats. */
 
 static int stats_downlink_bytes;	/* Total number of bytes from IGate server including */
 					/* packets, heartbeats, other messages. */
@@ -1221,7 +1221,7 @@ static void send_packet_to_server (packet_t pp, int chan)
  * Name:        send_msg_to_server
  *
  * Purpose:     Send something to the IGate server.
- *		This one function should be used for login, hearbeats,
+ *		This one function should be used for login, heartbeats,
  *		and packets.
  *
  * Inputs:	imsg	- Message.  We will add CR/LF here.
