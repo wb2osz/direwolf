@@ -347,7 +347,7 @@ typedef struct ax25_dlsm_s {
 						// Sometimes the flow chart has SAT instead of SRT.
 						// I think that is a typographical error.
 
-	float t1v;				// How long to wait for an acknowlegement before resending.
+	float t1v;				// How long to wait for an acknowledgement before resending.
 						// Value used when starting timer T1, in seconds.
 						// "FRACK" parameter in some implementations.
 						// Typically it might be 3 seconds after frame has been
@@ -6049,7 +6049,7 @@ static void check_need_for_response (ax25_dlsm_t *S, ax25_frame_type_t frame_typ
  *
  * Outputs:	S->srt			New smoothed roundtrip time.
  *
- *		S->t1v			How long to wait for an acknowlegement before resending.
+ *		S->t1v			How long to wait for an acknowledgement before resending.
  *					Value used when starting timer T1, in seconds.
  *					Here it is dynamically adjusted.
  *

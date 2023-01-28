@@ -600,7 +600,7 @@ static void * xmit_thread (void *arg)
 					// I don't know if this in some official specification
 					// somewhere, but it is generally agreed that APRS digipeaters
 					// should send only one frame at a time rather than
-					// bunding multiple frames into a single transmission.
+					// bundling multiple frames into a single transmission.
 					// Discussion here:  http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2021-September/049034.html
 	            break;
 

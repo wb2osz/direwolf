@@ -72,7 +72,7 @@ struct audio_s {
 
 	struct adev_param_s {
 
-	    /* Properites of the sound device. */
+	    /* Properties of the sound device. */
 
 	    int defined;		/* Was device defined? */
 					/* First one defaults to yes. */
@@ -102,7 +102,7 @@ struct audio_s {
 					/* This is the probability, in per cent, of randomly corrupting it. */
 					/* Normally this is 0.  25 would mean corrupt it 25% of the time. */
 
-	int recv_error_rate;		/* Similar but the % probablity of dropping a received frame. */
+	int recv_error_rate;		/* Similar but the % probability of dropping a received frame. */
 
 	float recv_ber;			/* Receive Bit Error Rate (BER). */
 					/* Probability of inverting a bit coming out of the modem. */

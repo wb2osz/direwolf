@@ -194,7 +194,7 @@ int il2p_encode_payload (unsigned char *payload, int payload_size, int max_fec, 
  * Purpose:	Extract original data from encoded payload.
  *
  * Inputs:	received	Array of bytes.  Size is unknown but in practice it
- *				must not exceeed IL2P_MAX_ENCODED_SIZE.
+ *				must not exceed IL2P_MAX_ENCODED_SIZE.
  *		payload_size	0 to 1023.  (IL2P_MAX_PAYLOAD_SIZE)
  *				Expected result size based on header.
  *		max_fec		true for 16 parity symbols, false for automatic.

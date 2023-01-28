@@ -5829,7 +5829,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 /*
  * Process symbol now that we have any later overlay.
  *
- * FIXME: Someone who used this was surprized to end up with Solar Powser  (S-).
+ * FIXME: Someone who used this was surprised to end up with Solar Powser  (S-).
  *	overlay=S symbol="/-"
  * We should complain if overlay used with symtab other than \.
  */
