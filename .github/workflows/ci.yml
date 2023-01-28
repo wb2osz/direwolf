@@ -1,0 +1,170 @@
+name: 'build direwolf'
+
+on:
+  # permit to manually trigger the CI
+  workflow_dispatch:
+    inputs:
+      cmake_flags:
+        description: 'Custom CMAKE flags'
+        required: false
+  push:
+    paths-ignore:
+      - '.github/**'
+  pull_request:
+    paths-ignore:
+      - '.github/**'
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: 'Windows Latest MinGW 64bit',
+              os: windows-latest,
+              cc: 'x86_64-w64-mingw32-gcc',
+              cxx: 'x86_64-w64-mingw32-g++',
+              ar: 'x86_64-w64-mingw32-ar',
+              windres: 'x86_64-w64-mingw32-windres',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: '-G "MinGW Makefiles"'
+            }
+          - {
+              name: 'Windows 2019 MinGW 32bit',
+              os: windows-2019,
+              cc: 'i686-w64-mingw32-gcc',
+              cxx: 'i686-w64-mingw32-g++',
+              ar: 'i686-w64-mingw32-ar',
+              windres: 'i686-w64-mingw32-windres',
+              arch: 'i686',
+              build_type: 'Release',
+              cmake_extra_flags: '-G "MinGW Makefiles"'
+            }
+          - {
+              name: 'macOS latest',
+              os: macos-latest,
+              cc: 'clang',
+              cxx: 'clang++',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: ''
+            }
+          - {
+              name: 'Ubuntu latest Debug',
+              os: ubuntu-latest,
+              cc: 'gcc',
+              cxx: 'g++',
+              arch: 'x86_64',
+              build_type: 'Debug',
+              cmake_extra_flags: ''
+            }
+          - {
+              name: 'Ubuntu 22.04',
+              os: ubuntu-22.04,
+              cc: 'gcc',
+              cxx: 'g++',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: ''
+            }
+          - {
+              name: 'Ubuntu 20.04',
+              os: ubuntu-20.04,
+              cc: 'gcc',
+              cxx: 'g++',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: ''
+            }
+          - {
+              name: 'Ubuntu 18.04',
+              os: ubuntu-18.04,
+              cc: 'gcc',
+              cxx: 'g++',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: ''
+            }
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 8
+      - name: dependency
+        shell: bash
+        run: |
+          # this is not perfect but enought for now
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install libasound2-dev libudev-dev libhamlib-dev gpsd
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            # just to simplify I use homebrew but
+            # we can use macports (latest direwolf is already available as port)
+            brew install portaudio hamlib gpsd
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            # add the folder to PATH
+            echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH
+          fi
+      - name: create build environment
+        run: |
+          cmake -E make_directory ${{github.workspace}}/build
+      - name: configure
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            export CC=${{ matrix.config.cc }}
+            export CXX=${{ matrix.config.cxx }}
+            export AR=${{ matrix.config.ar }}
+            export WINDRES=${{ matrix.config.windres }}
+          fi
+          cmake $GITHUB_WORKSPACE \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config.build_type }} \
+            -DCMAKE_C_COMPILER=${{ matrix.config.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} \
+            -DCMAKE_CXX_FLAGS="-Werror" -DUNITTEST=1 \
+            ${{ matrix.config.cmake_extra_flags }} \
+            ${{ github.event.inputs.cmake_flags }}
+      - name: build
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            export CC=${{ matrix.config.cc }}
+            export CXX=${{ matrix.config.cxx }}
+            export AR=${{ matrix.config.ar }}
+            export WINDRES=${{ matrix.config.windres }}
+          fi
+          cmake --build . --config ${{ matrix.config.build_type }} \
+            ${{ github.event.inputs.cmake_flags }}
+      - name: test
+        continue-on-error: true
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+        run: |
+          ctest -C ${{ matrix.config.build_type }} \
+            --parallel 2 --output-on-failure \
+            ${{ github.event.inputs.cmake_flags }}
+      - name: package
+        shell: bash
+        working-directory: ${{github.workspace}}/build
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ] ||  [ "$RUNNER_OS" == "macOS" ]; then
+            make package
+          fi
+      - name: archive binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: direwolf_${{ matrix.config.os }}_${{ matrix.config.arch }}_${{ github.sha }}
+          path: |
+            ${{github.workspace}}/build/direwolf-*.zip
+            ${{github.workspace}}/build/direwolf.conf
+            ${{github.workspace}}/build/src/*
+            ${{github.workspace}}/build/CMakeCache.txt
+            !${{github.workspace}}/build/src/cmake_install.cmake
+            !${{github.workspace}}/build/src/CMakeFiles
+            !${{github.workspace}}/build/src/Makefile
