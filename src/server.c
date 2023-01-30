@@ -1421,7 +1421,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	}
 
 /*
- * Call to/from fields are 10 bytes but contents must not exceeed 9 characters.
+ * Call to/from fields are 10 bytes but contents must not exceed 9 characters.
  * It's not guaranteed that unused bytes will contain 0 so we
  * don't issue error message in this case. 
  */

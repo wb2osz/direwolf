@@ -1401,7 +1401,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  }
 	}
 
-/* 6th character of destintation indicates east / west. */
+/* 6th character of destination indicates east / west. */
 
 /*
  * Example of apparently invalid encoding.  6th character missing.
@@ -1605,7 +1605,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  * Purpose:	Decode "Message Format."
  *		The word message is used loosely all over the place, but it has a very specific meaning here.
  *
- * Inputs:	info 	- Pointer to Information field.  Be carefull not to modify it here!
+ * Inputs:	info 	- Pointer to Information field.  Be careful not to modify it here!
  *		ilen 	- Information field length.
  *		quiet	- suppress error messages.
  *

@@ -832,7 +832,7 @@ int demod_init (struct audio_s *pa)
  *
  * Name:        demod_get_sample
  *
- * Purpose:     Get one audio sample fromt the specified sound input source.
+ * Purpose:     Get one audio sample from the specified sound input source.
  *
  * Inputs:	a	- Index for audio device.  0 = first.
  *
