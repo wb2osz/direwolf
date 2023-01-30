@@ -5594,7 +5594,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else if (value[0] == 'r' || value[0] == 'R') {
 	       int n = atoi(value+1);
-	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
+	       if (( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
+			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
 	         text_color_set(DW_COLOR_ERROR);
 	         dw_printf ("Config file, line %d: Simulated receive on channel %d is not valid.\n", line, n);
 	         continue;
@@ -5604,7 +5605,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else if (value[0] == 't' || value[0] == 'T' || value[0] == 'x' || value[0] == 'X') {
 	      int n = atoi(value+1);
-	      if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
+	      if (( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
+			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
 	        continue;
@@ -5615,7 +5617,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else {
 	       int n = atoi(value);
-	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
+	       if (( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
+			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
 	         text_color_set(DW_COLOR_ERROR);
 	         dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
 	         continue;
@@ -5864,19 +5867,32 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 
 	if (b->sendto_type == SENDTO_XMIT) {
 
-	  if ( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_NONE) {
+	  if (( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_NONE)
+		&& p_audio_config->chan_medium[b->sendto_chan] != MEDIUM_IGATE) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, b->sendto_chan);
 	    return (0);
 	  }
 
-	  if ( strcmp(p_audio_config->achan[b->sendto_chan].mycall, "") == 0 || 
-	       strcmp(p_audio_config->achan[b->sendto_chan].mycall, "NOCALL") == 0 || 
-	       strcmp(p_audio_config->achan[b->sendto_chan].mycall, "N0CALL") == 0 ) {
+	  if (p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_IGATE) {  // Prevent subscript out of bounds.
+									     // Will be using call from chan 0 later.
+	    if ( strcmp(p_audio_config->achan[0].mycall, "") == 0 || 
+	         strcmp(p_audio_config->achan[0].mycall, "NOCALL") == 0 || 
+	         strcmp(p_audio_config->achan[0].mycall, "N0CALL") == 0 ) {
 
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", b->sendto_chan); 
-	    return (0);
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", 0); 
+	      return (0);
+	    }
+	  } else {
+	    if ( strcmp(p_audio_config->achan[b->sendto_chan].mycall, "") == 0 || 
+	         strcmp(p_audio_config->achan[b->sendto_chan].mycall, "NOCALL") == 0 || 
+	         strcmp(p_audio_config->achan[b->sendto_chan].mycall, "N0CALL") == 0 ) {
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", b->sendto_chan); 
+	      return (0);
+	    }
 	  }
 	}
 

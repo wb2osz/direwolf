@@ -162,6 +162,7 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 	  int chan = g_misc_config_p->beacon[j].sendto_chan;
 
 	  if (chan < 0) chan = 0;	/* For IGate, use channel 0 call. */
+	  if (chan >= MAX_CHANS) chan = 0;	// For ICHANNEL, use channel 0 call.
 
 	  if (g_modem_config_p->chan_medium[chan] == MEDIUM_RADIO ||
 	      g_modem_config_p->chan_medium[chan] == MEDIUM_NETTNC) {
@@ -621,6 +622,7 @@ static void * beacon_thread (void *arg)
 	        // On reboot, the time is in the past.
 	        // After time gets set from GPS, all beacons from that interval are sent.
 	        // FIXME:  This will surely break time slotted scheduling.
+		// TODO: The correct fix will be using monotonic, rather than clock, time.
 
 	        /* craigerl: if next beacon is scheduled in the past, then set next beacon relative to now (happens when NTP pushes clock AHEAD) */
 	        /* fixme: if NTP sets clock BACK an hour, this thread will sleep for that hour */
@@ -805,11 +807,17 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 	      assert (bp->sendto_chan >= 0);
 
-	      strlcpy (mycall, g_modem_config_p->achan[bp->sendto_chan].mycall, sizeof(mycall));
+	      if (g_modem_config_p->chan_medium[bp->sendto_chan] == MEDIUM_IGATE) {	// ICHANNEL uses chan 0 mycall.
+									// TODO: Maybe it should be allowed to have own.
+	        strlcpy (mycall, g_modem_config_p->achan[0].mycall, sizeof(mycall));
+	      }
+	      else {
+	        strlcpy (mycall, g_modem_config_p->achan[bp->sendto_chan].mycall, sizeof(mycall));
+	      }
 	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("MYCALL not set for beacon in config file line %d.\n", bp->lineno);
+	        dw_printf ("MYCALL not set for beacon to chan %d in config file line %d.\n", bp->sendto_chan, bp->lineno);
 		return;
 	      }
 
@@ -1046,7 +1054,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	  	    text_color_set(DW_COLOR_XMIT);
 	  	    dw_printf ("[ig] %s\n", beacon_text);
 
-		    igate_send_rec_packet (0, pp);
+		    igate_send_rec_packet (-1, pp);	// Channel -1 to avoid RF>IS filtering.
 		    ax25_delete (pp);
 	            break;
 
