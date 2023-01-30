@@ -858,6 +858,32 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	    strlcpy (A->g_data_type_desc, "Weather Report", sizeof(A->g_data_type_desc));
 	    weather_data (A, p->comment, TRUE);
+/*
+Here is an interesting case.
+The protocol spec states that a position report with symbol _ is a special case
+and the information part must contain wxnow.txt format weather data.
+But, here we see it being generated like a normal position report.
+
+N8VIM>BEACON,AB1OC-10*,WIDE2-1:!4240.85N/07133.99W_PHG72604/ Pepperell, MA. WX. 442.9+ PL100<0x0d>
+Didn't find wind direction in form c999.
+Didn't find wind speed in form s999.
+Didn't find wind gust in form g999.
+Didn't find temperature in form t999.
+Weather Report, WEATHER Station (blue)
+N 42 40.8500, W 071 33.9900
+, "PHG72604/ Pepperell, MA. WX. 442.9+ PL100"
+
+It seems, to me, that this is a violation of the protocol spec.
+Then, immediately following, we have a positionless weather report in Ultimeter format.
+
+N8VIM>APN391,AB1OC-10*,WIDE2-1:$ULTW006F00CA01421C52275800008A00000102FA000F04A6000B002A<0x0d><0x0a>
+Ultimeter, Kantronics KPC-3 rom versions
+wind 6.9 mph, direction 284, temperature 32.2, barometer 29.75, humidity 76
+
+aprs.fi merges these two together.  Is that anywhere in the protocol spec or
+just a heuristic added after noticing a pair of packets like this?
+*/
+
 	  } 
 	  else {
 	    /* Regular position report. */
@@ -2372,6 +2398,20 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
  *	
  *------------------------------------------------------------------*/
 
+/*
+https://groups.io/g/direwolf/topic/95961245#7357
+
+What APRS queries should DireWolf respond to? Well, it should be configurable whether it responds to queries at all, in case some other application is using DireWolf as a dumb TNC (KISS or AGWPE style) and wants to handle the queries itself.
+
+Assuming query responding is enabled, the following broadcast queries should be supported (if the corresponding data is configured in DireWolf):
+
+?APRS (I am an APRS station)
+?IGATE (I am operating as a I-gate)
+?WX (I am providing local weather data in my beacon)
+
+*/
+
+
 static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quiet) 
 {
 	char *q2;
@@ -2523,6 +2563,28 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
  *		"PING?" contains "?" only to pad it out to exactly 5 characters.
  *
  *------------------------------------------------------------------*/
+
+/*
+https://groups.io/g/direwolf/topic/95961245#7357
+
+The following directed queries (sent as bodies of APRS text messages) would also be useful (if corresponding data configured):
+
+?APRSP (force my current beacon)
+?APRST and ?PING (trace my path to requestor)
+?APRSD (all stations directly heard [no digipeat hops] by local station)
+?APRSO (any Objects/Items originated by this station)
+?APRSH (how often or how many times the specified 3rd station was heard by the queried station)
+?APRSS (immediately send the Status message if configured) (can DireWolf do Status messages?)
+
+Lynn KJ4ERJ and I have implemented a non-standard query which might be useful:
+
+?VER (send the human-readable software version of the queried station)
+
+Hope this is useful. It's just my $.02.
+
+Andrew, KA2DDO
+author of YAAC
+*/
 
 static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet)
 {
