@@ -681,7 +681,7 @@ void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, ch
 
 // The position and object formats all contain a proper symbol and table.
 // There doesn't seem to be much reason to have a symbol for something without
-// a postion because it would not show up on a map.
+// a position because it would not show up on a map.
 // This just seems to be a remnant of something used long ago and no longer needed.
 // The protocol spec mentions a "MIM tracker" but I can't find any references to it.
 

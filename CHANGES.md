@@ -7,6 +7,9 @@
 
 ### New Features: ###
 
+- Additional documentation location to slow down growth of main repository.  [https://github.com/wb2osz/direwolf-doc](https://github.com/wb2osz/direwolf-doc)
+
+- New ICHANNEL configuration option to map a KISS client application channel to APRS-IS. Packets from APRS-IS will be presented to client applications as the specified channel. Packets sent, by client applications, to that channel will go to APRS-IS rather than a radio channel.  Details in ***Internal-Packet-Routing.pdf***.
 
 - New variable speed option for gen_packets. For example,  "-v 5,0.1" would generate packets from 5% too slow to 5% too fast with increments of 0.1.  Some implementations might have imprecise timing.  Use this to test how well TNCs tolerate sloppy timing.
 

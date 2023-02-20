@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2016, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -328,7 +328,7 @@ static int stats_uplink_packets;	/* Number of packets passed along to the IGate 
 					/* server after filtering. */
 
 static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
-					/* including login, packets, and hearbeats. */
+					/* including login, packets, and heartbeats. */
 
 static int stats_downlink_bytes;	/* Total number of bytes from IGate server including */
 					/* packets, heartbeats, other messages. */
@@ -855,6 +855,9 @@ static void * connnect_thread (void *arg)
  * Purpose:     Send a packet to the IGate server
  *
  * Inputs:	chan	- Radio channel it was received on.
+ *			  This is required for the RF>IS filtering.
+ *		          Beaconing (sendto=ig, chan=-1) and a client app sending
+ *			  to ICHANNEL should bypass the filtering.
  *
  *		recv_pp	- Pointer to packet object.
  *			  *** CALLER IS RESPONSIBLE FOR DELETING IT! **
@@ -902,7 +905,12 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  * In that case, the payload will have TCPIP in the path and it will be dropped.
  */
 
-	if (save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
+// Apply RF>IS filtering only if it same from a radio channel.
+// Beacon will be channel -1.
+// Client app to ICHANNEL is outside of radio channel range.
+
+	if (chan >= 0 && chan < MAX_CHANS && 		// in radio channel range
+		save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
 
 	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp, 1) != 1) {
 
@@ -1221,7 +1229,7 @@ static void send_packet_to_server (packet_t pp, int chan)
  * Name:        send_msg_to_server
  *
  * Purpose:     Send something to the IGate server.
- *		This one function should be used for login, hearbeats,
+ *		This one function should be used for login, heartbeats,
  *		and packets.
  *
  * Inputs:	imsg	- Message.  We will add CR/LF here.
@@ -1517,31 +1525,35 @@ static void * igate_recv_thread (void *arg)
 
 	      int ichan = save_audio_config_p->igate_vchannel;
 
-	      // Try to parse it into a packet object.
-	      // This will contain "q constructs" and we might see an address
-	      // with two alphnumeric characters in the SSID so we must use
-	      // the non-strict parsing.
+	      // My original poorly thoughtout idea was to parse it into a packet object,
+	      // using the non-strict option, and send to the client app.
+	      //
+	      // A lot of things can go wrong with that approach.
 
-	      // Possible problem:  Up to 8 digipeaters are allowed in radio format.
-	      // There is a potential of finding a larger number here.
+	      // (1)  Up to 8 digipeaters are allowed in radio format.
+	      //      There is a potential of finding a larger number here.
+	      //
+	      // (2)  The via path can have names that are not valid in the radio format.
+	      //      e.g.  qAC, T2HAKATA, N5JXS-F1.
+	      //      Non-strict parsing would force uppercase, truncate names too long,
+	      //      and drop unacceptable SSIDs.
+	      //
+	      // (3) The source address could be invalid for the RF address format.
+	      //     e.g.  WHO-IS>APJIW4,TCPIP*,qAC,AE5PL-JF::ZL1JSH-9 :Charles Beadfield/New Zealand{583
+	      //     That is essential information that we absolutely need to preserve.
+	      //
+	      // I think the only correct solution is to apply a third party header
+	      // wrapper so the original contents are preserved.  This will be a little
+	      // more work for the application developer.  Search for ":}" and use only
+	      // the part after that.  At this point, I don't see any value in encoding
+	      // information in the source/destination so I will just use "X>X:}" as a prefix
 
-	      packet_t pp3 = ax25_from_text((char*)message, 0);	// 0 means not strict
+	      char stemp[AX25_MAX_INFO_LEN];
+	      strlcpy (stemp, "X>X:}", sizeof(stemp));
+	      strlcat (stemp, (char*)message, sizeof(stemp));
+
+	      packet_t pp3 = ax25_from_text(stemp, 0);	// 0 means not strict
 	      if (pp3 != NULL) {
-
-	        // Should we remove the VIA path?
-
-	        // For example, we might get something like this from the server.
-	        // Lower case 'q' and non-numeric SSID are not valid for AX.25 over the air.
-	        // K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000
-
-	        // Should we try to retain all information and pass that along, to the best of our ability,
-	        // to the client app, or should we remove the via path so it looks like this?
-	        // K1USN-1>APWW10:T#479,100,048,002,500,000,10000000
-
-	        // For now, keep it intact and see if it causes problems.  Easy to remove like this:
-	        // while (ax25_get_num_repeaters(pp3) > 0) {
-	        //   ax25_remove_addr (pp3, AX25_REPEATER_1);
-	        // }
 
 	        alevel_t alevel;
 	        memset (&alevel, 0, sizeof(alevel));
@@ -1831,8 +1843,19 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  * If we recently transmitted a 'message' from some station,
  * send the position of the message sender when it comes along later.
  *
+ * Some refer to this as a courtesy posit report but I don't
+ * think that is an official term.
+ *
  * If we have a position report, look up the sender and see if we should
  * bypass the normal filtering.
+ *
+ * Reference:  https://www.aprs-is.net/IGating.aspx
+ *
+ *	"Passing all message packets also includes passing the sending station's position
+ *	along with the message. When APRS-IS was small, we did this using historical position
+ *	packets. This has become problematic as it introduces historical data on to RF. 
+ *	The IGate should note the station(s) it has gated messages to RF for and pass
+ *	the next position packet seen for that station(s) to RF."
  */
 
 // TODO: Not quite this simple.  Should have a function to check for position.

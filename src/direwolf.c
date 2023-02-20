@@ -1053,7 +1053,7 @@ int main (int argc, char *argv[])
 						audio_config.achan[x_opt_chan].mark_freq,
 						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(x_opt_chan, 0);
+					tone_gen_put_bit(x_opt_chan, 1);
 				}
 				break;
 			case 's':  // "Space" tone: -x s
@@ -1061,7 +1061,7 @@ int main (int argc, char *argv[])
 						audio_config.achan[x_opt_chan].space_freq,
 						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(x_opt_chan, 1);
+					tone_gen_put_bit(x_opt_chan, 0);
 				}
 				break;
 			case 'p':  // Silence - set PTT only: -x p

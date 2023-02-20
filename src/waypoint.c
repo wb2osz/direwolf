@@ -298,7 +298,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
 	dw_printf ("waypoint_send_sentence (\"%s\", \"%c%c\")\n", name_in, symtab, symbol);
 #endif
 
-// Don't waste time if no destintations specified.
+// Don't waste time if no destinations specified.
 
 	if (s_waypoint_serial_port_fd == MYFDERROR &&
 	    s_waypoint_udp_sock_fd == -1) {

@@ -437,7 +437,7 @@ packet_t il2p_decode_header_type_1 (unsigned char *hdr, int num_sym_changed)
 // However, I have seen cases, where the error rate is very high, where the RS decoder
 // thinks it found a valid code block by changing one symbol but it was the wrong one.
 // The result is trash.  This shows up as address fields like 'R&G4"A' and 'TEW\ !'.
-// I added a sanity check here to catch characters other than uppper case letters and digits.
+// I added a sanity check here to catch characters other than upper case letters and digits.
 // The frame should be rejected in this case.  The question is whether to discard it
 // silently or print a message so the user can see that something strange is happening?
 // My current thinking is that it should be silently ignored if the header has been
