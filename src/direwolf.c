@@ -383,7 +383,7 @@ int main (int argc, char *argv[])
 #ifndef __WIN32__
 	if (getuid() == 0 || geteuid() == 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    for (n=0; n<15; n++) {
+	    for (int n=0; n<15; n++) {
 	      dw_printf ("\n");
 	      dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
 	      dw_printf ("Running this as root is an unnecessary security risk.\n");
