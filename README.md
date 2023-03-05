@@ -9,11 +9,11 @@ Why waste $200 and settle for mediocre receive performance from a 1980's technol
 
 ![](tnc-test-cd-results.png)
 
-Dire Wolf now includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless. This was originally developed for satellites and is now seeing widespread use on HF.
+Dire Wolf includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless. This was originally developed for satellites and is now seeing widespread use on HF.
 
 ![](fx25.png)
 
-Version 1.7 adds [IL2P](https://en.wikipedia.org/wiki/Improved_Layer_2_Protocol), a different method of FEC with less overhead.
+Version 1.7 adds [IL2P](https://en.wikipedia.org/wiki/Improved_Layer_2_Protocol), a different method of FEC with less overhead but it is not compatible with AX.25.
 
 
 
@@ -114,12 +114,16 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 ## Documentation ##
 
+
 [Stable Version](https://github.com/wb2osz/direwolf/tree/master/doc)
 
-[Latest Development Version](https://github.com/wb2osz/direwolf/tree/dev/doc)
+[Latest Development Version ("dev" branch)](https://github.com/wb2osz/direwolf/tree/dev/doc)
 
-[Power Point presentation](https://github.com/wb2osz/direwolf-presentation)  -- Why not give a talk at a local club meeting?
+[Additional Topics](https://github.com/wb2osz/direwolf-doc)
 
+[Power Point presentations](https://github.com/wb2osz/direwolf-presentation)  -- Why not give a talk at a local club meeting?
+
+Youtube has many interesting and helpful videos.  Searching for [direwolf tnc](https://www.youtube.com/results?search_query=direwolf+tnc) or [direwolf aprs](https://www.youtube.com/results?search_query=direwolf+aprs)  will produce the most relevant results. 
 
 ## Installation ##
 
