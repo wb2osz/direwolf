@@ -504,8 +504,10 @@ void decode_aprs_print (decode_aprs_t *A) {
 	//dw_printf ("DEBUG decode_aprs_print stemp3=%s mfr=%s\n", stemp, A->g_mfr);
 
 	if (strlen(A->g_mfr) > 0) {
-	  if (strcmp(A->g_dest, "APRS") == 0) {
-	    strlcat (stemp, "\nUse of \"APRS\" in the destination field is obsolete.", sizeof(stemp));
+	  if (strcmp(A->g_dest, "APRS") == 0  ||  strcmp(A->g_dest, "BEACON") == 0) {
+	    strlcat (stemp, "\nUse of \"", sizeof(stemp));
+	    strlcat (stemp, A->g_dest, sizeof(stemp));
+	    strlcat (stemp, "\" in the destination field is obsolete.", sizeof(stemp));
 	    strlcat (stemp, "  You can help to improve the quality of APRS signals.", sizeof(stemp));
 	    strlcat (stemp, "\nTell the sender (", sizeof(stemp));
 	    strlcat (stemp, A->g_src, sizeof(stemp));
