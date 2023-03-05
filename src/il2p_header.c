@@ -462,8 +462,11 @@ packet_t il2p_decode_header_type_1 (unsigned char *hdr, int num_sym_changed)
 	for (int i = 0; i < strlen(addrs[AX25_DESTINATION]); i++) {
 	    if (! isupper(addrs[AX25_DESTINATION][i]) && ! isdigit(addrs[AX25_DESTINATION][i])) {
 	        if (num_sym_changed == 0) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("IL2P: Invalid character '%c' in destination address '%s'\n", addrs[AX25_DESTINATION][i], addrs[AX25_DESTINATION]);
+		    // This can pop up sporadically when receiving random noise.
+		    // Would be better to show only when debug is enabled but variable not available here.
+		    // TODO: For now we will just suppress it.
+	            //text_color_set(DW_COLOR_ERROR);
+	            //dw_printf ("IL2P: Invalid character '%c' in destination address '%s'\n", addrs[AX25_DESTINATION][i], addrs[AX25_DESTINATION]);
 	        }
 	        return (NULL);
 	    }
@@ -477,8 +480,11 @@ packet_t il2p_decode_header_type_1 (unsigned char *hdr, int num_sym_changed)
 	for (int i = 0; i < strlen(addrs[AX25_SOURCE]); i++) {
 	    if (! isupper(addrs[AX25_SOURCE][i]) && ! isdigit(addrs[AX25_SOURCE][i])) {
 	        if (num_sym_changed == 0) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("IL2P: Invalid character '%c' in source address '%s'\n", addrs[AX25_SOURCE][i], addrs[AX25_SOURCE]);
+		    // This can pop up sporadically when receiving random noise.
+		    // Would be better to show only when debug is enabled but variable not available here.
+		    // TODO: For now we will just suppress it.
+	            //text_color_set(DW_COLOR_ERROR);
+	            //dw_printf ("IL2P: Invalid character '%c' in source address '%s'\n", addrs[AX25_SOURCE][i], addrs[AX25_SOURCE]);
 	        }
 	        return (NULL);
 	    }
