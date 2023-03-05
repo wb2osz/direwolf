@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -283,6 +283,8 @@ int main (int argc, char *argv[])
 				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
 
+// FIXME: consider case of no space between t and number.
+
 	for (j=1; j<argc-1; j++) {
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
@@ -299,7 +301,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "F", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -374,16 +376,19 @@ int main (int argc, char *argv[])
 
 // I've seen many references to people running this as root.
 // There is no reason to do that.
-// There is for some privileges to access the audio system, GPIO (if needed for PTT),
-// etc. but ordinary users have those abilities.
+// Ordinary users can access audio, gpio, etc. if they are in the correct groups.
 // Giving an applications permission to do things it does not need to do
 // is a huge security risk.
 
 #ifndef __WIN32__
 	if (getuid() == 0 || geteuid() == 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
-	    dw_printf ("Running this as root is an unnecessary security risk.\n");
+	    for (n=0; n<15; n++) {
+	      dw_printf ("\n");
+	      dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
+	      dw_printf ("Running this as root is an unnecessary security risk.\n");
+	      SLEEP_SEC(1);
+	    }
 	}
 #endif
 
