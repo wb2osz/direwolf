@@ -164,7 +164,34 @@ void digipeater (int from_chan, packet_t pp)
 /*
  * First pass:  Look at packets being digipeated to same channel.
  *
- * We want these to get out quickly.
+ * We want these to get out quickly, bypassing the usual random wait time.
+ *
+ * Some may disagree but I followed what WB4APR had to say about it.   
+ *
+ *	http://www.aprs.org/balloons.html
+ *
+ *		APRS NETWORK FRATRICIDE: Generally, all APRS digipeaters are supposed to transmit
+ *		immediately and all at the same time. They should NOT wait long enough for each
+ *		one to QRM the channel with the same copy of each packet. NO, APRS digipeaters
+ *		are all supposed to STEP ON EACH OTHER with every packet. This makes sure that
+ *		everyone in range of a digi will hear one and only one copy of each packet.
+ *		and that the packet will digipeat OUTWARD and not backward. The goal is that a
+ *		digipeated packet is cleared out of the local area in ONE packet time and not
+ *		N packet times for every N digipeaters that heard the packet. This means no
+ *		PERSIST times, no DWAIT times and no UIDWAIT times. Notice, this is contrary 
+ *		to other packet systems that might want to guarantee delivery (but at the
+ *		expense of throughput). APRS wants to clear the channel quickly to maximize throughput.
+ *
+ *	http://www.aprs.org/kpc3/kpc3+WIDEn.txt
+ *
+ *		THIRD:  Eliminate the settings that are detrimental to the network.
+ *
+ *		* UIDWAIT should be OFF. (the default).  With it on, your digi is not doing the
+ *		fundamental APRS fratricide that is the primary mechanism for minimizing channel
+ *		loading.  All digis that hear the same packet are supposed to DIGI it at the SAME
+ *		time so that all those copies only take up one additional time slot. (but outward
+ *		located digs will hear it without collision (and continue outward propagation)
+ *
  */
 
 	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
@@ -180,7 +207,7 @@ void digipeater (int from_chan, packet_t pp)
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
-	        tq_append (to_chan, TQ_PRIO_0_HI, result);
+	        tq_append (to_chan, TQ_PRIO_0_HI, result);		//  High priority queue.
 	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
@@ -207,7 +234,7 @@ void digipeater (int from_chan, packet_t pp)
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
-	        tq_append (to_chan, TQ_PRIO_1_LO, result);
+	        tq_append (to_chan, TQ_PRIO_1_LO, result);		// Low priority queue.
 	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
