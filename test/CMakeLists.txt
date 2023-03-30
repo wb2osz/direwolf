@@ -577,6 +577,17 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/tt_text.c
     ${CUSTOM_SRC_DIR}/symbols.c
     ${CUSTOM_SRC_DIR}/textcolor.c
+    ${CUSTOM_SRC_DIR}/ax25_pad2.c
+    ${CUSTOM_SRC_DIR}/fx25_init.c
+    ${CUSTOM_SRC_DIR}/fx25_encode.c
+    ${CUSTOM_SRC_DIR}/fx25_extract.c
+    ${CUSTOM_SRC_DIR}/fx25_rec.c
+    ${CUSTOM_SRC_DIR}/il2p_header.c
+    ${CUSTOM_SRC_DIR}/il2p_init.c
+    ${CUSTOM_SRC_DIR}/il2p_codec.c
+    ${CUSTOM_SRC_DIR}/il2p_payload.c
+    ${CUSTOM_SRC_DIR}/il2p_rec.c
+    ${CUSTOM_SRC_DIR}/il2p_scramble.c
     )
 
   if(WIN32 OR CYGWIN)
