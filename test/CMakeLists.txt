@@ -523,6 +523,7 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/latlong.c
     ${CUSTOM_SRC_DIR}/tt_text.c
     ${CUSTOM_SRC_DIR}/symbols.c
+    ${CUSTOM_SRC_DIR}/dlq.c
     )
 
   if(WIN32 OR CYGWIN)
