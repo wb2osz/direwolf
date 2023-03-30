@@ -646,6 +646,27 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/audio_stats.c
     ${CUSTOM_SRC_DIR}/dtime_now.c
     ${CUSTOM_SRC_DIR}/dlq.c
+    ${CUSTOM_SRC_DIR}/ax25_pad2.c
+    ${CUSTOM_SRC_DIR}/decode_aprs.c
+    ${CUSTOM_SRC_DIR}/fx25_encode.c
+    ${CUSTOM_SRC_DIR}/fx25_extract.c
+    ${CUSTOM_SRC_DIR}/fx25_init.c
+    ${CUSTOM_SRC_DIR}/fx25_rec.c
+    ${CUSTOM_SRC_DIR}/fx25_send.c
+    ${CUSTOM_SRC_DIR}/gen_tone.c
+    ${CUSTOM_SRC_DIR}/igate.c
+    ${CUSTOM_SRC_DIR}/il2p_codec.c
+    ${CUSTOM_SRC_DIR}/il2p_header.c
+    ${CUSTOM_SRC_DIR}/il2p_init.c
+    ${CUSTOM_SRC_DIR}/il2p_payload.c
+    ${CUSTOM_SRC_DIR}/il2p_rec.c
+    ${CUSTOM_SRC_DIR}/il2p_scramble.c
+    ${CUSTOM_SRC_DIR}/il2p_send.c
+    ${CUSTOM_SRC_DIR}/mheard.c
+    ${CUSTOM_SRC_DIR}/pfilter.c
+    ${CUSTOM_SRC_DIR}/symbols.c
+    ${CUSTOM_SRC_DIR}/telemetry.c
+    ${CUSTOM_SRC_DIR}/tt_text.c
     )
 
   if(LINUX)
