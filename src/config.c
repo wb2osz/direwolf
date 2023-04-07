@@ -4600,6 +4600,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Unexpected \"%s\" after the port number.\n", line, t);
+	      dw_printf ("Perhaps you were trying to use feature available only with KISSPORT.\n");
+	      continue;
+	    }
             if ((n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) || n == 0) {
 	      p_misc_config->agwpe_port = n;
 	    }
@@ -4609,13 +4616,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               dw_printf ("Line %d: Invalid port number for AGW TCPIP Socket Interface. Using %d.\n", 
 			line, p_misc_config->agwpe_port);
    	    }
-	    t = split(NULL,0);
-	    if (t != NULL) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Unexpected \"%s\" is ignored.\n", line, t);
-	      dw_printf ("Perhaps you were trying to use feature available only with KISSPORT.\n");
-	      continue;
-	    }
 	  }
 
 /*
