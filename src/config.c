@@ -2780,6 +2780,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    if (*t == 'i' || *t == 'I') {
 	      from_chan = MAX_CHANS;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: FILTER IG ... on line %d.\n", line);
+	      dw_printf ("Warning! Don't mess with IS>RF filtering unless you are an expert and have an unusual situation.\n");
+	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
+	      dw_printf ("Warning! If you insist, be sure to add \" | i/180 \" so you don't break messaging.\n");
 	    }
 	    else {
 	      from_chan = isdigit(*t) ? atoi(t) : -999;
@@ -2813,6 +2819,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    if (*t == 'i' || *t == 'I') {
 	      to_chan = MAX_CHANS;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: FILTER ... IG ... on line %d.\n", line);
+	      dw_printf ("Warning! Don't mess with RF>IS filtering unless you are an expert and have an unusual situation.\n");
+	      dw_printf ("Warning! Expected behavior is for everything to go from RF to IS.\n");
+	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
 	    }
 	    else {
 	      to_chan = isdigit(*t) ? atoi(t) : -999;
@@ -4578,7 +4590,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  * In version 1.2 we allow 0 to disable listening.
  */
-// FIXME:  complain if extra parameter e.g. port as in KISSPORT
 
 	  else if (strcasecmp(t, "AGWPORT") == 0) {
 	    int n;
@@ -4598,6 +4609,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               dw_printf ("Line %d: Invalid port number for AGW TCPIP Socket Interface. Using %d.\n", 
 			line, p_misc_config->agwpe_port);
    	    }
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Unexpected \"%s\" is ignored.\n", line, t);
+	      dw_printf ("Perhaps you were trying to use feature available only with KISSPORT.\n");
+	      continue;
+	    }
 	  }
 
 /*
