@@ -83,7 +83,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 8
       - name: dependency
@@ -149,7 +149,7 @@ jobs:
             make package
           fi
       - name: archive binary
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: direwolf_${{ matrix.config.os }}_${{ matrix.config.arch }}_${{ github.sha }}
           path: |
