@@ -55,6 +55,7 @@ static unsigned char preload[] = {
 
 int main ()
 {
+	text_color_init(1, 0);
 	text_color_set(DW_COLOR_ERROR);
 	dw_printf("fxsend - FX.25 unit test.\n");
 	dw_printf("This generates 11 files named fx01.dat, fx02.dat, ..., fx0b.dat\n");

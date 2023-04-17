@@ -1069,6 +1069,7 @@ int main ( )
 	strlcpy (comment, "", sizeof(comment));
 
 
+	text_color_init(1, 0);
 	text_color_set(DW_COLOR_INFO);
 	dw_printf ("Unit test for telemetry decoding functions...\n");	
 

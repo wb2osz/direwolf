@@ -1782,6 +1782,7 @@ static void test_tt2text (char *buttons, char *expect_mp, char *expect_2k, char 
 int main (int argc, char *argv[])
 {
 
+	text_color_init (1, 0);
 	text_color_set (DW_COLOR_INFO);
 	dw_printf ("Test conversions between normal text and DTMF representation.\n");
 	dw_printf ("Some error messages are normal.  Just look for number of errors at end.\n");

@@ -853,6 +853,7 @@ int main (int argc, char *argv[])
 	char result[100];
 	int errors = 0;
 
+	text_color_init (1, 0);
 
 /***********  Position  ***********/
 

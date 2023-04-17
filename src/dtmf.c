@@ -532,6 +532,7 @@ int main ()
 	my_audio_config.chan_medium[c] = MEDIUM_RADIO;
 	my_audio_config.achan[c].dtmf_decode = DTMF_DECODE_ON;
 
+	text_color_init (1, 0);
 	dtmf_init(&my_audio_config, 50);	
 
 	text_color_set(DW_COLOR_INFO);

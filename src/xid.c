@@ -653,6 +653,7 @@ int main (int argc, char *argv[]) {
 	unsigned char info[40];	// Currently max of 27 but things can change.
 	char desc[150];		// I've seen 109.
 
+	text_color_init (1, 0);
 
 /* parse example. */
 

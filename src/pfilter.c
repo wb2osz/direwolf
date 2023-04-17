@@ -1527,6 +1527,7 @@ static void pftest (int test_num, char *filter, char *packet, int expected);
 int main ()
 {
 
+	text_color_init (1, 0);
 	dw_printf ("Quick test for packet filtering.\n");
 	dw_printf ("Some error messages are normal.  Look at the final success/fail message.\n");
 

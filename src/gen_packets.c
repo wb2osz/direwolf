@@ -265,6 +265,8 @@ int main(int argc, char **argv)
 
 	strlcpy (output_file, "", sizeof(output_file));
 
+	text_color_init (1, 0);
+
 /*
  * Parse the command line options.
  */

@@ -2078,6 +2078,7 @@ static void check_result (void)
 
 int main (int argc, char *argv[])
 {
+	text_color_init (1, 0);
 	aprs_tt_init (NULL, 0);
 
 	error_count = 0;

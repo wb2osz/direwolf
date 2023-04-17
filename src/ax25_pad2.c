@@ -792,6 +792,8 @@ int main ()
 	strcpy (addrs[1], "WB2OSZ-15");
 	num_addr = 2;
 
+	text_color_init (1, 0);
+
 /* U frame */
 
 	for (ftype = frame_type_U_SABME; ftype <= frame_type_U_TEST; ftype++) {
