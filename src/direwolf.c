@@ -1329,7 +1329,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  else {
 	    text_color_set(DW_COLOR_DECODED);
             if (is_fx25) {  // really means 'FEC enabled'
-              if (X_fx25_xmit_enable > 0) {
+              if (audio_config.achan[0].layer2_xmit == LAYER2_FX25) {
                 dw_printf("[FX.25] ");
               } else {
                 dw_printf("[IL2P] ");
