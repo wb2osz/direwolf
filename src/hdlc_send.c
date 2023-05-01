@@ -295,4 +295,82 @@ static void send_bit_nrzi (int chan, int b)
 	number_of_bits_sent[chan]++;
 }
 
+
+//  The rest of this is for EAS SAME.
+//  This is sort of a logical place because it serializes a frame, but not in HDLC.
+//  We have a parallel where SAME deserialization is in hdlc_rec.
+//  Maybe both should be pulled out and moved to a same.c.
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        eas_send
+ *
+ * Purpose:    	Serialize EAS SAME for transmission.
+ *
+ * Inputs:	chan	- Radio channel number.
+ *		str	- Character string to send.
+ *		repeat	- Number of times to repeat with 1 sec quiet between.
+ *		txdelay	- Delay (ms) from PTT to first preamble bit.
+ *		txtail	- Delay (ms) from last data bit to PTT off.	
+ *		
+ *
+ * Returns:	Total number of milliseconds to activate PTT.
+ *		This includes delays before the first character
+ *		and after the last to avoid chopping off part of it.
+ *
+ * Description:	xmit_thread calls this instead of the usual hdlc_send
+ *		when we have a special packet that means send EAS SAME
+ *		code.
+ *
+ *--------------------------------------------------------------------*/
+
+static inline void eas_put_byte (int chan, unsigned char b)
+{
+	for (int n=0; n<8; n++) {
+	  tone_gen_put_bit (chan, (b & 1));
+	  b >>= 1;
+	}
+}
+
+int eas_send (int chan, unsigned char *str, int repeat, int txdelay, int txtail)
+{
+	int bytes_sent = 0;
+	const int gap = 1000;
+	int gaps_sent = 0;
+
+	gen_tone_put_quiet_ms (chan, txdelay);
+
+	for (int r=0; r<repeat; r++ ) {
+	  for (int j=0; j<16; j++) {
+	    eas_put_byte (chan, 0xAB);
+	    bytes_sent++;
+	  }
+
+	  for (unsigned char *p = str; *p != '\0'; p++) {
+	    eas_put_byte (chan, *p);
+	    bytes_sent++;
+	  }
+
+	  if (r < repeat-1) {
+	    gen_tone_put_quiet_ms (chan, gap);
+	    gaps_sent++;
+	  }
+	}
+
+	gen_tone_put_quiet_ms (chan, txtail);
+
+	audio_flush(ACHAN2ADEV(chan));
+
+	int elapsed = txdelay + (int) (bytes_sent * 8 * 1.92) + (gaps_sent * gap) + txtail;
+
+// dw_printf ("DEBUG:  EAS total time = %d ms\n", elapsed);
+
+	return (elapsed);
+
+}  /* end eas_send */
+
+
+
+
 /* end hdlc_send.c */

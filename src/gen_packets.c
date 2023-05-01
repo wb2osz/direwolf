@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2019, 2021, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -118,13 +118,48 @@ static void send_packet (char *str)
     	packet_t pp;
     	unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
     	int flen;
-	int c;
+	int c = 0;	// channel number.
 
 	if (g_morse_wpm > 0) {
 
-	  // TODO: Why not use the destination field instead of command line option?
+	  // Why not use the destination field instead of command line option?
+	  // For one thing, this is not in TNC-2 monitor format.
 
-	  morse_send (0, str, g_morse_wpm, 100, 100);
+	  morse_send (c, str, g_morse_wpm, 100, 100);
+	}
+	else if (modem.achan[0].modem_type == MODEM_EAS) {
+
+// Generate EAS SAME signal FOR RESEARCH AND TESTING ONLY!!!
+// There could be legal consequences for sending unauhorized SAME
+// over the radio so don't do it!
+
+	  // I'm expecting to see TNC 2 monitor format.
+	  // The source and destination are ignored.
+	  // The optional destination SSID is the number of times to repeat.
+	  // The user defined data type indicator can optionally be used
+	  // for compatibility with how it is received and presented to client apps.
+	  // Examples:
+	  //	X>X-3:{DEZCZC-WXR-RWT-033019-033017-033015-033013-033011-025011-025017-033007-033005-033003-033001-025009-025027-033009+0015-1691525-KGYX/NWS-
+	  //	X>X:NNNN
+
+	  pp = ax25_from_text (str, 1);
+	  if (pp == NULL) {
+            text_color_set(DW_COLOR_ERROR);
+            dw_printf ("\"%s\" is not valid TNC2 monitoring format.\n", str);
+	    return;
+	  }
+	  unsigned char *pinfo;
+	  int info_len = ax25_get_info (pp, &pinfo);
+	  if (info_len >= 3 && strncmp((char*)pinfo, "{DE", 3) == 0) {
+	    pinfo += 3;
+	    info_len -= 3;
+	  }
+
+	  int repeat = ax25_get_ssid (pp, AX25_DESTINATION);
+	  if (repeat == 0) repeat = 1;
+
+	  eas_send (c, pinfo, repeat, 500, 500);
+	  ax25_delete (pp);
 	}
 	else {
 	  pp = ax25_from_text (str, 1);
@@ -135,6 +170,9 @@ static void send_packet (char *str)
 	  }
 	  flen = ax25_pack (pp, fbuf);
 	  (void)flen;
+
+	  // If stereo, put same thing in each channel.
+
 	  for (c=0; c<modem.adev[0].num_channels; c++)
 	  {
 
@@ -282,22 +320,30 @@ int main(int argc, char **argv)
 
 						// FIXME: options should not be order dependent.
 
-              modem.achan[0].baud = atoi(optarg);
+              if (strcasecmp(optarg, "EAS") == 0) {
+	        modem.achan[0].baud = 0xEA5EA5;	// See special case below.
+	      }
+	      else {
+	        modem.achan[0].baud = atoi(optarg);
+	      }
+
               text_color_set(DW_COLOR_INFO); 
               dw_printf ("Data rate set to %d bits / second.\n", modem.achan[0].baud);
-              if (modem.achan[0].baud != 100 && (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD)) {
-                text_color_set(DW_COLOR_ERROR);
-                dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
-                exit (EXIT_FAILURE);
-              }
 
 	      /* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
 	      /* that need to be kept in sync.  Maybe it could be a common function someday. */
 
-	      if (modem.achan[0].baud == 100) {
+	      if (modem.achan[0].baud == 100) {			// What was this for?
                   modem.achan[0].modem_type = MODEM_AFSK;
                   modem.achan[0].mark_freq = 1615;
                   modem.achan[0].space_freq = 1785;
+	      }
+	      else if (modem.achan[0].baud == 0xEA5EA5) {
+		  modem.achan[0].baud = 521;			// Fine tuned later. 520.83333
+								// Proper fix is to make this float.
+                  modem.achan[0].modem_type = MODEM_EAS;
+                  modem.achan[0].mark_freq = 2083.3333;		// Ideally these should be floating point.
+                  modem.achan[0].space_freq = 1562.5000 ;
 	      }
 	      else if (modem.achan[0].baud < 600) {
                   modem.achan[0].modem_type = MODEM_AFSK;
@@ -334,6 +380,11 @@ int main(int argc, char **argv)
                   text_color_set(DW_COLOR_INFO); 
                   dw_printf ("Using scrambled baseband signal rather than AFSK.\n");
 	      }
+              if (modem.achan[0].baud != 100 && (modem.achan[0].baud < MIN_BAUD || modem.achan[0].baud > MAX_BAUD)) {
+                text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+                exit (EXIT_FAILURE);
+              }
               break;
 
             case 'g':				/* -g for g3ruh scrambling */
@@ -740,14 +791,23 @@ int main(int argc, char **argv)
 	}
 	else {
 
+	  // This should send a total of 6.
+	  // Note that sticking in the user defined type {DE is optional.
+
+	  if (modem.achan[0].modem_type == MODEM_EAS) {
+	    send_packet ("X>X-3:{DEZCZC-WXR-RWT-033019-033017-033015-033013-033011-025011-025017-033007-033005-033003-033001-025009-025027-033009+0015-1691525-KGYX/NWS-");
+	    send_packet ("X>X-2:{DENNNN");
+	    send_packet ("X>X:NNNN");
+	  }
+	  else {
 /*
  * Builtin default 4 packets.
  */
-
-	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  1 of 4");
-	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  2 of 4");
-	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  3 of 4");
-	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  4 of 4");
+	    send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  1 of 4");
+	    send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  2 of 4");
+	    send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  3 of 4");
+	    send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  4 of 4");
+	  }
 	}
 
 	audio_file_close();
@@ -765,7 +825,7 @@ static void usage (char **argv)
 	dw_printf ("Options:\n");
 	dw_printf ("  -a <number>   Signal amplitude in range of 0 - 200%%.  Default 50.\n");
 	dw_printf ("  -b <number>   Bits / second for data.  Default is %d.\n", DEFAULT_BAUD);
-	dw_printf ("  -B <number>   Bits / second for data.  Proper modem selected for 300, 1200, 2400, 4800, 9600.\n");
+	dw_printf ("  -B <number>   Bits / second for data.  Proper modem selected for 300, 1200, 2400, 4800, 9600, EAS.\n");
 	dw_printf ("  -g            Scrambled baseband rather than AFSK.\n");
 	dw_printf ("  -j            2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("  -J            2400 bps QPSK compatible with MFJ-2400.\n");
@@ -788,6 +848,7 @@ static void usage (char **argv)
 	dw_printf ("the default built-in message. The format should correspond to\n");
 	dw_printf ("the standard packet monitoring representation such as,\n\n");
 	dw_printf ("    WB2OSZ-1>APDW12,WIDE2-2:!4237.14NS07120.83W#\n");
+	dw_printf ("User defined content can't be used with -n option.\n");
 	dw_printf ("\n");
 	dw_printf ("Example:  gen_packets -o x.wav \n");
 	dw_printf ("\n");
