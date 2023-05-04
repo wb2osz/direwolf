@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016, 2017, 2018  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017, 2018, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -1580,13 +1580,49 @@ void dl_unregister_callsign (dlq_item_t *E)
  *		- Incoming connected data, from application still in the queue.
  *		- I frames which have been transmitted but not yet acknowledged.
  *
+ * Confusion:	https://github.com/wb2osz/direwolf/issues/427
+ *
+ *		There are different, inconsistent versions of the protocol spec.
+ *
+ *		One of them simply has:
+ *
+ *			CallFrom is our call
+ *			CallTo is the call of the other station
+ *
+ *		A more detailed version has the same thing in the table of fields:
+ *
+ *			CallFrom	10 bytes	Our CallSign
+ *			CallTo		10 bytes	Other CallSign
+ *
+ *		(My first implementation went with that.)
+ *		
+ *		HOWEVER, shortly after that, is contradictory information:
+ *
+ *			Careful must be exercised to fill correctly both the CallFrom
+ *			and CallTo fields to match the ones of an existing connection,
+ *			otherwise AGWPE won’t return any information at all from this query.
+ *
+ *			The order of the CallFrom and CallTo is not trivial, it should
+ *			reflect the order used to start the connection, so
+ *
+ *			  *  If we started the connection CallFrom=US and CallTo=THEM
+ *			  *  If the other end started the connection CallFrom=THEM and CallTo=US
+ *
+ *		This seems to make everything unnecessarily more complicated.
+ *		We should only care about the stream going from the local station to the
+ *		remote station.  Why would it matter who reqested the link?  The state
+ *		machine doesn't even contain this information so the TNC doesn't know.
+ *		The client app interface needs to behave differently for the two cases.
+ *
+ *		The new code, below, May 2023, should handle both of those cases.
+ *
  *------------------------------------------------------------------------------*/
 
 void dl_outstanding_frames_request (dlq_item_t *E)
 {
 	ax25_dlsm_t *S;
-	int ok_to_create = 0;	// must exist already.
-
+	const int ok_to_create = 0;	// must exist already.
+	int reversed_addrs = 0;
 
 	if (s_debug_client_app) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -1594,12 +1630,28 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 	}
 
 	S = get_link_handle (E->addrs, E->num_addr, E->chan, E->client, ok_to_create);
+	if (S != NULL) {
+	  int reversed_addrs = 1;
+	}
+	else {
+	  // Try swapping the addresses.
+	  // this is communicating with the client app, not over the air,
+	  // so we don't need to worry about digipeaters.
 
-	if (S == NULL) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Can't get outstanding frames for %s -> %s, chan %d\n", E->addrs[OWNCALL], E->addrs[PEERCALL], E->chan);
-	  server_outstanding_frames_reply (E->chan, E->client, E->addrs[OWNCALL], E->addrs[PEERCALL], 0);
-	  return;
+	  char swapped[AX25_MAX_REPEATERS][AX25_MAX_ADDR_LEN];
+	  memset (swapped, 0, sizeof(swapped));
+	  strlcpy (swapped[PEERCALL], E->addrs[OWNCALL], sizeof(swapped[PEERCALL]));
+	  strlcpy (swapped[OWNCALL], E->addrs[PEERCALL], sizeof(swapped[OWNCALL]));
+	  S = get_link_handle (swapped, E->num_addr, E->chan, E->client, ok_to_create);
+	  if (S != NULL) {
+	    int reversed_addrs = 1;
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Can't get outstanding frames for %s -> %s, chan %d\n", E->addrs[OWNCALL], E->addrs[PEERCALL], E->chan);
+	    server_outstanding_frames_reply (E->chan, E->client, E->addrs[OWNCALL], E->addrs[PEERCALL], 0);
+	    return;
+	  }
 	}
 
 // Add up these
@@ -1628,7 +1680,13 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 	  }
 	}
 
-	server_outstanding_frames_reply (S->chan, S->client, S->addrs[OWNCALL], S->addrs[PEERCALL], count1 + count2);
+	if (reversed_addrs) {
+	  // Other end initiated the link.
+	  server_outstanding_frames_reply (S->chan, S->client, S->addrs[PEERCALL], S->addrs[OWNCALL], count1 + count2);
+	}
+	else {
+	  server_outstanding_frames_reply (S->chan, S->client, S->addrs[OWNCALL], S->addrs[PEERCALL], count1 + count2);
+	}
 
 } // end dl_outstanding_frames_request
 
