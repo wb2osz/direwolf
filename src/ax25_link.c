@@ -1075,12 +1075,31 @@ void dl_disconnect_request (dlq_item_t *E)
 	  case 	state_1_awaiting_connection:
 	  case 	state_5_awaiting_v22_connection:
 
-// TODO: "requeue."  Not sure what to do here.
-// If we put it back in the queue we will get it back again probably still in same state.
-// Need a way to defer it until the next state change.
+// Erratum: The protocol spec says "requeue."  If we put disconnect req back in the
+// queue we will probably get it back again here while still in same state.
+// I don't think we would want to delay it until the next state transition.
 
+// Suppose someone tried to connect to another station, which is not responding, and decided to cancel
+// before all of the SABMe retries were used up.  I think we would want to transmit a DISC, send a disc
+// notice to the user, and go directly into disconnected state, rather than into awaiting release.
+
+// New code v1.7 dev, May 6 2023
+
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("Stream %d: In progress connection attempt to %s terminated by user.\n", S->stream_id, S->addrs[PEERCALL]);
+	    discard_i_queue (S);
+	    SET_RC(0);
+	    int p1 = 1;
+	    int nopid0 = 0;
+	    packet_t pp15 = ax25_u_frame (S->addrs, S->num_addr, cr_cmd, frame_type_U_DISC, p1, nopid0, NULL, 0);
+	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp15);
+
+	    STOP_T1;	// started in establish_data_link.
+	    STOP_T3;	// probably don't need.
+	    enter_new_state (S, state_0_disconnected, __func__, __LINE__);
+	    server_link_terminated (S->chan, S->client, S->addrs[PEERCALL], S->addrs[OWNCALL], 0);
 	    break;
-	    
+
 	  case 	state_2_awaiting_release:
 	    {
 	      // We have previously started the disconnect sequence and are waiting
@@ -1631,7 +1650,7 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 
 	S = get_link_handle (E->addrs, E->num_addr, E->chan, E->client, ok_to_create);
 	if (S != NULL) {
-	  int reversed_addrs = 1;
+	  reversed_addrs = 0;
 	}
 	else {
 	  // Try swapping the addresses.
@@ -1644,7 +1663,7 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 	  strlcpy (swapped[OWNCALL], E->addrs[PEERCALL], sizeof(swapped[OWNCALL]));
 	  S = get_link_handle (swapped, E->num_addr, E->chan, E->client, ok_to_create);
 	  if (S != NULL) {
-	    int reversed_addrs = 1;
+	    reversed_addrs = 1;
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);
