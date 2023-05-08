@@ -852,7 +852,6 @@ int demod_init (struct audio_s *pa)
 
 #define FSK_READ_ERR (256*256)
 
-
 __attribute__((hot))
 int demod_get_sample (int a)		
 {
@@ -861,7 +860,6 @@ int demod_get_sample (int a)
 
 
 	assert (save_audio_config_p->adev[a].bits_per_sample == 8 || save_audio_config_p->adev[a].bits_per_sample == 16);
-
 
 	if (save_audio_config_p->adev[a].bits_per_sample == 8) {
 
@@ -929,6 +927,21 @@ int demod_get_sample (int a)
  *
  *--------------------------------------------------------------------*/
 
+static int mute_input[MAX_CHANS];
+
+// New in 1.7.
+// A few people have a really bad audio cross talk situation where they receive their own transmissions.
+// It usually doesn't cause a problem but it is confusing to look at.
+// "half duplex" setting applied only to the transmit logic.  i.e. wait for clear channel before sending.
+// Receiving was still active.
+// I think the simplest solution is to mute/unmute the audio input at this point if not full duplex.
+// This is called from ptt_set for half duplex.
+
+void demod_mute_input (int chan, int mute_during_xmit)
+{
+	assert (chan >= 0 && chan < MAX_CHANS);
+	mute_input[chan] = mute_during_xmit;
+}
 
 __attribute__((hot))
 void demod_process_sample (int chan, int subchan, int sam)
@@ -941,6 +954,10 @@ void demod_process_sample (int chan, int subchan, int sam)
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
+
+	if (mute_input[chan]) {
+	  sam = 0;
+	};
 
 	D = &demodulator_state[chan][subchan];
 

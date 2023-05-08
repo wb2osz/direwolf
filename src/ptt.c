@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -176,6 +176,7 @@ typedef int HANDLE;
 #include "audio.h"
 #include "ptt.h"
 #include "dlq.h"
+#include "demod.h"	// to mute recv audio during xmit if half duplex.
 
 
 #if __WIN32__
@@ -1141,6 +1142,8 @@ void ptt_init (struct audio_s *audio_config_p)
  *
  *--------------------------------------------------------------------*/
 
+// JWL - save status and new get_ptt function.
+
 
 void ptt_set (int ot, int chan, int ptt_signal)
 {
@@ -1163,6 +1166,19 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  dw_printf ("Internal error, ptt_set ( %s, %d, %d ), did not expect invalid channel.\n", otnames[ot], chan, ptt);
 	  return;
 	}
+
+// New in 1.7.
+// A few people have a really bad audio cross talk situation where they receive their own transmissions.
+// It usually doesn't cause a problem but it is confusing to look at.
+// "half duplex" setting applied only to the transmit logic.  i.e. wait for clear channel before sending.
+// Receiving was still active.
+// I think the simplest solution is to mute/unmute the audio input at this point if not full duplex.
+
+#ifndef TEST
+	if ( ! save_audio_config_p->achan[chan].fulldup) {
+	  demod_mute_input (chan, ptt_signal);
+	}
+#endif
 
 /*
  * The data link state machine has an interest in activity on the radio channel.
