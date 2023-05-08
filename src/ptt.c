@@ -1175,7 +1175,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 // I think the simplest solution is to mute/unmute the audio input at this point if not full duplex.
 
 #ifndef TEST
-	if ( ! save_audio_config_p->achan[chan].fulldup) {
+	if ( ot == OCTYPE_PTT && ! save_audio_config_p->achan[chan].fulldup) {
 	  demod_mute_input (chan, ptt_signal);
 	}
 #endif

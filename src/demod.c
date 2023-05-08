@@ -927,7 +927,7 @@ int demod_get_sample (int a)
  *
  *--------------------------------------------------------------------*/
 
-static int mute_input[MAX_CHANS];
+static volatile int mute_input[MAX_CHANS];
 
 // New in 1.7.
 // A few people have a really bad audio cross talk situation where they receive their own transmissions.
