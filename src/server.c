@@ -1937,8 +1937,10 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    case 'D': 				/* Send Connected Data */
 
 	      {
-	        char callsigns[2][AX25_MAX_ADDR_LEN];
-	        const int num_calls = 2;
+	        char callsigns[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
+	        memset (callsigns, 0, sizeof(callsigns));
+	        const int num_calls = 2;	// only first 2 used.  Digipeater path
+						// must be remembered from connect request.
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
 	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
@@ -1951,8 +1953,9 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    case 'd': 				/* Disconnect, Terminate an AX.25 Connection */
 
 	      {
-	        char callsigns[2][AX25_MAX_ADDR_LEN];
-	        const int num_calls = 2;
+	        char callsigns[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
+	        memset (callsigns, 0, sizeof(callsigns));
+	        const int num_calls = 2;	// only first 2 used.
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
 	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
@@ -2102,15 +2105,14 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	      {
 
-	        char callsigns[2][AX25_MAX_ADDR_LEN];
-	        const int num_calls = 2;
+	        char callsigns[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
+	        memset (callsigns, 0, sizeof(callsigns));
+	        const int num_calls = 2;	// only first 2 used.
 
 	        strlcpy (callsigns[AX25_SOURCE], cmd.hdr.call_from, sizeof(callsigns[AX25_SOURCE]));
 	        strlcpy (callsigns[AX25_DESTINATION], cmd.hdr.call_to, sizeof(callsigns[AX25_SOURCE]));
 
-	        // Issue 169.  Proper implementation for 'Y'.
 	        dlq_outstanding_frames_request (callsigns, num_calls, cmd.hdr.portx, client);
-
 	      }
 	      break;
 

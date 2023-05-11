@@ -116,9 +116,9 @@ void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 
 void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid, char *xdata_ptr, int xdata_len);
 
-void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
+void dlq_register_callsign (char *addr, int chan, int client);
 
-void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
+void dlq_unregister_callsign (char *addr, int chan, int client);
 
 void dlq_channel_busy (int chan, int activity, int status);
 

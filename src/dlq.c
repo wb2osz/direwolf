@@ -728,8 +728,7 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
  *
  * Purpose:     Register callsigns that we will recognize for incoming connection requests.
  *
- * Inputs:	addrs		- Source (owncall), destination (peercall),
- *				  and possibly digipeaters.
+ * Inputs:	addr		- Callsign to [un]register.
  *
  *		chan		- Channel, 0 is first.
  *
@@ -749,7 +748,7 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
  *--------------------------------------------------------------------*/
 
 
-void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
+void dlq_register_callsign (char *addr, int chan, int client)
 {
 	struct dlq_item_s *pnew;
 
@@ -773,7 +772,7 @@ void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
 
 	pnew->type = DLQ_REGISTER_CALLSIGN;
 	pnew->chan = chan;
-	strlcpy (pnew->addrs[0], addr, AX25_MAX_ADDR_LEN);
+	strlcpy (pnew->addrs[0], addr, sizeof(pnew->addrs[0]));
 	pnew->num_addr = 1;
 	pnew->client = client;
 
@@ -784,7 +783,7 @@ void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
 } /* end dlq_register_callsign */
 
 
-void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
+void dlq_unregister_callsign (char *addr, int chan, int client)
 {
 	struct dlq_item_s *pnew;
 
@@ -808,7 +807,7 @@ void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client
 
 	pnew->type = DLQ_UNREGISTER_CALLSIGN;
 	pnew->chan = chan;
-	strlcpy (pnew->addrs[0], addr, AX25_MAX_ADDR_LEN);
+	strlcpy (pnew->addrs[0], addr, sizeof(pnew->addrs[0]));
 	pnew->num_addr = 1;
 	pnew->client = client;
 

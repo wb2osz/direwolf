@@ -250,7 +250,7 @@ typedef struct ax25_dlsm_s {
 						// notifications about state changes.
 
 
-	char addrs[AX25_MAX_REPEATERS][AX25_MAX_ADDR_LEN];
+	char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
 						// Up to 10 addresses, same order as in frame.
 
 	int num_addr;				// Number of addresses.  Should be in range 2 .. 10.
@@ -1657,7 +1657,7 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 	  // this is communicating with the client app, not over the air,
 	  // so we don't need to worry about digipeaters.
 
-	  char swapped[AX25_MAX_REPEATERS][AX25_MAX_ADDR_LEN];
+	  char swapped[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
 	  memset (swapped, 0, sizeof(swapped));
 	  strlcpy (swapped[PEERCALL], E->addrs[OWNCALL], sizeof(swapped[PEERCALL]));
 	  strlcpy (swapped[OWNCALL], E->addrs[PEERCALL], sizeof(swapped[OWNCALL]));
