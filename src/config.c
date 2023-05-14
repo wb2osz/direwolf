@@ -709,6 +709,14 @@ static char *split (char *string, int rest_of_line)
  *
  *--------------------------------------------------------------------*/
 
+static void rtfm()
+{
+	text_color_set(DW_COLOR_ERROR);
+	dw_printf ("See online documentation:\n");
+	dw_printf ("    stable release:    https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("    development version:    https://github.com/wb2osz/direwolf/tree/dev/doc\n");
+	dw_printf ("    additional topics:    https://github.com/wb2osz/direwolf-doc\n");
+}
 
 void config_init (char *fname, struct audio_s *p_audio_config, 
 			struct digi_config_s *p_digi_config,
@@ -970,7 +978,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Could not open config file %s\n", filepath);
 	  dw_printf ("Try using -c command line option for alternate location.\n");
-	  return;
+	  rtfm();
+	  exit(EXIT_FAILURE);
 	}
 	
 	dw_printf ("\nReading config file %s\n", filepath);
@@ -1027,7 +1036,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing name of audio device for ADEVICE command on line %d.\n", line);
-	      continue;
+	      rtfm();
+	      exit(EXIT_FAILURE);
 	    }
 
 	    p_audio_config->adev[adevice].defined = 1;
@@ -1986,7 +1996,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with CM108 is only available when USB Audio GPIO support is enabled.\n", line, otname);
 	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
 	      dw_printf ("See Interface Guide for details.\n");
-
+	      rtfm();
 	      exit (EXIT_FAILURE);
 #endif
 	    }

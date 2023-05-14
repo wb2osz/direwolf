@@ -138,7 +138,7 @@ static BOOL cleanup_win (int);
 static void cleanup_linux (int);
 #endif
 
-static void usage (char **argv);
+static void usage ();
 
 #if defined(__SSE__) && !defined(__APPLE__)
 
@@ -598,7 +598,7 @@ int main (int argc, char *argv[])
           case '?':
 
             /* For '?' unknown option message was already printed. */
-            usage (argv);
+            usage ();
             break;
 
 	  case 'd':				/* Set debug option. */
@@ -742,7 +742,7 @@ int main (int argc, char *argv[])
             /* Should not be here. */
 	    text_color_set(DW_COLOR_DEBUG);
             dw_printf("?? getopt returned character code 0%o ??\n", c);
-            usage (argv);
+            usage ();
           }
 	}  /* end while(1) for options */
 
@@ -987,6 +987,7 @@ int main (int argc, char *argv[])
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Pointless to continue without audio device.\n");
 	  SLEEP_SEC(5);
+	  usage ();
 	  exit (1);
 	}
 
@@ -1722,16 +1723,16 @@ static void usage (char **argv)
 	dw_printf ("\n");
   
 #if __WIN32__
-	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
+	dw_printf ("Documentation can be found in the 'doc' folder\n");
 #else
 	// TODO: Could vary by platform and build options.
-	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
+	dw_printf ("Documentation can be found in /usr/local/share/doc/direwolf\n");
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("additional topics: https://github.com/wb2osz/direwolf-doc\n");
 	text_color_set(DW_COLOR_INFO);
 	exit (EXIT_FAILURE);
 }
-
 
 
 /* end direwolf.c */
