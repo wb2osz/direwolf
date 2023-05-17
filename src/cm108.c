@@ -34,6 +34,7 @@
  *	We have a few commercial products:
  *
  *		DINAH		https://hamprojects.info/dinah/
+ *		PAUL		https://hamprojects.info/paul/
  *		DMK URI		http://www.dmkeng.com/URI_Order_Page.htm
  *		RB-USB RIM	http://www.repeater-builder.com/products/usb-rim-lite.html
  *		RA-35		http://www.masterscommunications.com/products/radio-adapter/ra35.html
@@ -92,6 +93,12 @@
  *	In version 1.7, we add a half-backed solution for Windows.  It's fine for situations
  *	with a single USB Audio Adapter, but does not automatically handle the multiple device case.
  *	Manual configuration needs to be used in this case.
+ *
+ *	Here is something new and interesting.  The All in One cable (AIOC).
+ *	https://github.com/skuep/AIOC/tree/master
+ *
+ *	A microcontroller is used to emulate a CM108-compatible soundcard
+ *	and a serial port.  It fits right on the side of a Bao Feng or similar.
  *
  *---------------------------------------------------------------*/
 
@@ -178,6 +185,11 @@ static int cm108_write (char *name, int iomask, int iodata);
 #define SSS_PID2 0x1607
 #define SSS_PID3 0x160b
 
+// https://github.com/skuep/AIOC/blob/master/stm32/aioc-fw/Src/usb_descriptors.h
+
+#define AIOC_VID 0x1209
+#define AIOC_PID 0x7388
+
 
 //	Device		VID	PID		Number of GPIO
 //	------		---	---		--------------
@@ -217,7 +229,9 @@ static int cm108_write (char *name, int iomask, int iodata);
 							|| p == CMEDIA_PID_CM119A \
 							|| p == CMEDIA_PID_CM119B )) \
 				 || \
-				  (v == SSS_VID && (p == SSS_PID1 || p == SSS_PID2 || p == SSS_PID3))  )
+				  (v == SSS_VID && (p == SSS_PID1 || p == SSS_PID2 || p == SSS_PID3)) \
+				 || \
+				  (v == AIOC_VID && p == AIOC_PID)  )
 
 // Look out for null source pointer, and avoid buffer overflow on destination.
 
@@ -243,6 +257,12 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
 
 #endif
 
+// Maximum length of name for PTT HID.
+// For Linux, this was originally 17 to handle names like /dev/hidraw3.
+// Windows has more complicated names.  The longest I saw was 95 but longer have been reported.
+
+#define MAXX_HIDRAW_NAME_LEN 128
+
 /*
  * Result of taking inventory of USB soundcards and USB HIDs.
  */
@@ -258,7 +278,8 @@ struct thing_s {
 				// Oversized to silence a compiler warning.
 	char plughw2[72];	// With name rather than number.
 	char devpath[128];	// Kernel dev path.  Does not include /sys mount point.
-	char devnode_hidraw[128]; // e.g. /dev/hidraw3  -  for Linux - was length 17
+	char devnode_hidraw[MAXX_HIDRAW_NAME_LEN];
+				// e.g. /dev/hidraw3  -  for Linux - was length 17
 				// The Windows path for a HID looks like this, lengths up to 95 seen.
 				// \\?\hid#vid_0d8c&pid_000c&mi_03#8&164d11c9&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
 	char devnode_usb[25];	// e.g. /dev/bus/usb/001/012
@@ -852,7 +873,7 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
  *
  * Errors:	A descriptive error message will be printed for any problem.
  *
- * Future:	For our initial implementation we are making the simplifying
+ * Shortcut:	For our initial implementation we are making the simplifying
  *		restriction of using only one GPIO pin per device and limit
  *		configuration to PTT only.
  *		Longer term, we might want to have DCD, and maybe other
@@ -882,7 +903,6 @@ int cm108_set_gpio_pin (char *name, int num, int state)
 
 	iomask = 1 << (num - 1);	// 0=input, 1=output
 	iodata = state << (num - 1);	// 0=low, 1=high
-
 	return (cm108_write (name, iomask, iodata));
 
 }  /* end cm108_set_gpio_pin */
