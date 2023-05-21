@@ -1816,6 +1816,11 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      
 	      break;
 
+	    case 'P':				/* Application Login  */
+
+	      // Silently ignore it.
+	      break;
+
 	    case 'X':				/* Register CallSign  */
 
 	      {
