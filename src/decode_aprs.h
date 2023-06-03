@@ -70,6 +70,8 @@ typedef struct decode_aprs_s {
 				message_subtype_message,
 				message_subtype_ack,
 				message_subtype_rej,
+				message_subtype_bulletin,
+				message_subtype_nws,
 				message_subtype_telem_parm,
 				message_subtype_telem_unit,
 				message_subtype_telem_eqns,

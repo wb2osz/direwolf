@@ -1628,10 +1628,15 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		It's a lot more complicated with different types of addressees
  *		and replies with acknowledgement or rejection.
  *
- *		There is even a special case for telemetry metadata.
+ *		Is it an elegant generalization to lump all of these special cases
+ *		together or was it a big mistake that will cause confusion and incorrect
+ *		implementations?  The decision to put telemetry metadata here is baffling.
  *
  *
- * Cases:	:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
+ * Cases:	:BLNxxxxxx: ...			Bulletin.
+ *		:NWSxxxxxx: ...			National Weather Service Bulletin.
+ *
+ *		:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
  *		:xxxxxxxxx:UNIT.		Telemetry metadata, unit/label
  *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficients
  *		:xxxxxxxxx:BITS.		Telemetry metadata, Bit Sense/Project Name
@@ -1736,6 +1741,46 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	strlcpy (A->g_addressee, addressee, sizeof(A->g_addressee));
 
+/*
+ * Addressee starting with BLN or NWS is a bulletin.
+ */
+	if (strlen(addressee) >= 3 && strncmp(addressee,"BLN",3) == 0) {
+
+	  // Interpret 3 cases of identifiers.
+	  // BLN9	"general bulletin" has a single digit.
+	  // BLNX	"announcement" has a single uppercase letter.
+	  // BLN9xxxxx	"group bulletin" has single digit group id and group name up to 5 characters.
+
+	  if (strlen(addressee) == 4 && isdigit(addressee[3])) {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "General Bulletin with identifier \"%s\"", addressee+3);
+	  }
+	  else if (strlen(addressee) == 4 && isupper(addressee[3])) {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Announcement with identifier \"%s\"", addressee+3);
+	  }
+	  if (strlen(addressee) >=5 && isdigit(addressee[3])) {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Group Bulletin with identifier \"%c\", group name \"%s\"", addressee[3], addressee+4);
+	  }
+	  else {
+	    // Not one of the official formats.
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Bulletin with identifier \"%s\"", addressee+3);
+	  }
+	  A->g_message_subtype = message_subtype_bulletin;
+	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	}
+
+	else if (strlen(addressee) >= 3 && strncmp(addressee,"NWS",3) == 0) {
+	  // NWS-xxxxx
+
+	  if (strlen(addressee) >=4 && addressee[3] == '-') {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "NWS bulletin with identifier \"%s\"", addressee+4);
+	  }
+	  else {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "NWS bulletin with identifier \"%s\", missing - after NWS", addressee+3);
+	  }
+	  A->g_message_subtype = message_subtype_nws;
+	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	}
+
 
 /*
  * Special message formats contain telemetry metadata.
@@ -1748,7 +1793,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
  * Why not use other characters after the "T" for metadata?
  */
 
-	if (strncmp(p->message,"PARM.",5) == 0) {
+	else if (strncmp(p->message,"PARM.",5) == 0) {
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Parameter Name Message for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_parm;
 	  telemetry_name_message (addressee, p->message+5);
@@ -1847,7 +1892,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{toolong
 
 	else {
-	  // Look for message number.
+	  // Normal messaage case.  Look for message number.
 	  char *pno = strchr(p->message, '{');
 	  if (pno != NULL) {
 	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
