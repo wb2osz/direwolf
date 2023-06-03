@@ -153,7 +153,7 @@ static void next_token (pfstate_t *pf);
 static void print_error (pfstate_t *pf, char *msg);
 
 static int filt_bodgu (pfstate_t *pf, char *pattern);
-static int filt_t (pfstate_t *pf);
+static int filt_t (pfstate_t *pf, char * typeChar);
 static int filt_r (pfstate_t *pf, char *sdist);
 static int filt_s (pfstate_t *pf);
 static int filt_i (pfstate_t *pf);
@@ -200,6 +200,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate_t pfstate;
 	char *p;
 	int result;
+
 
 	assert (from_chan >= 0 && from_chan <= MAX_CHANS);
 	assert (to_chan >= 0 && to_chan <= MAX_CHANS);
@@ -547,13 +548,11 @@ static int parse_filter_spec (pfstate_t *pf)
 
 	else if (pf->token_str[0] == 'b' && ispunct(pf->token_str[1])) {
 	  /* Budlist - source address */
-	  char addr[AX25_MAX_ADDR_LEN];
-	  ax25_get_addr_with_ssid (pf->pp, AX25_SOURCE, addr);
-	  result = filt_bodgu (pf, addr);
+	  result = filt_bodgu (pf, pf->decoded.g_src);
 
 	  if (s_debug >= 2) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("   %s returns %s for %s\n", pf->token_str, bool2text(result), addr);
+	    dw_printf ("   %s returns %s for %s\n", pf->token_str, bool2text(result), pf->decoded.g_src);
 	  }
 	}
 
@@ -671,15 +670,12 @@ static int parse_filter_spec (pfstate_t *pf)
 /* t - type: position, weather, etc. */
 
 	else if (pf->token_str[0] == 't' && ispunct(pf->token_str[1])) {
-	  
-	  result = filt_t (pf);
+	  char typeChar = 0;
+	  result = filt_t (pf, &typeChar);
 
 	  if (s_debug >= 2) {
-	    char *infop = NULL;
-	    (void) ax25_get_info (pf->pp, (unsigned char **)(&infop));
-
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("   %s returns %s for %c data type indicator\n", pf->token_str, bool2text(result), *infop);
+	    dw_printf ("   %s returns %s for %c data type indicator\n", pf->token_str, bool2text(result), typeChar);
 	  }
 	}
 
@@ -857,17 +853,34 @@ int is_telem_metadata (char *infop)
 }
 
 
-static int filt_t (pfstate_t *pf) 
+static int filt_t (pfstate_t *pf, char * typeChar) 
 {
 	char src[AX25_MAX_ADDR_LEN];
 	char *infop = NULL;
 	char *f;
+	int isThirdParty = 0;
 
 	memset (src, 0, sizeof(src));
 	ax25_get_addr_with_ssid (pf->pp, AX25_SOURCE, src);
 	(void) ax25_get_info (pf->pp, (unsigned char **)(&infop));
 
+	if (*infop == '}') {
+		// We have a 3d party packet, dig inside it to get the actual type.
+		packet_t pp_payload = ax25_from_text ((char*)infop+1, 0);
+		if (pp_payload == NULL) {
+			print_error (pf, "Invalid third party payload\n");
+			return (0);
+		}
+		memset (src, 0, sizeof(src));
+		ax25_get_addr_with_ssid (pp_payload, AX25_SOURCE, src);
+		(void) ax25_get_info (pp_payload, (unsigned char **)(&infop));
+		ax25_delete(pp_payload);
+		isThirdParty = 1;
+	}
+
 	assert (infop != NULL);
+
+	*typeChar = *infop;
 
 	for (f = pf->token_str + 2; *f != '\0'; f++) {
 	  switch (*f) {
@@ -920,7 +933,8 @@ static int filt_t (pfstate_t *pf)
 	      break;
 
 	    case 'h':				/* third party Header - my extension */
-	      if (*infop == '}') return (1);
+		  *typeChar = '}';
+	      return (isThirdParty);
 	      break;
 
 	    case 'w':				/* Weather */
