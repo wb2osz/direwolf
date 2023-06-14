@@ -30,6 +30,14 @@
     > Add:     "FX25TX 1" (or 16 or 32 or 64)
 
 
+
+### Bugs Fixed: ###
+
+- The t/m packet filter incorrectly included bulletins.  It now allows only "messages" to specific stations.  Use of t/m is discouraged.  i/180 is the preferred filter for messages to users recently heard locally.
+
+- Packet filtering now skips over any third party header before classifying packet types.
+
+
 ## Version 1.6  --  October 2020 ##
 
 ### New Build Procedure: ###

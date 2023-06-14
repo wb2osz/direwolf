@@ -24,7 +24,8 @@ typedef struct decode_aprs_s {
 
 	int g_quiet;			/* Suppress error messages when decoding. */
 
-        char g_src[AX25_MAX_ADDR_LEN];
+        char g_src[AX25_MAX_ADDR_LEN];	// In the case of a packet encapsulated by a 3rd party
+					// header, this is the encapsulated source.
 
         char g_dest[AX25_MAX_ADDR_LEN];
 
@@ -65,6 +66,24 @@ typedef struct decode_aprs_s {
 	char g_addressee[12];		/* Addressee for a "message."  Max. 9 characters. */
 					/* Also for Directed Station Query which is a */
 					/* special case of message. */
+
+	// This is so pfilter.c:filt_t does not need to duplicate the same work.
+
+	int g_has_thirdparty_header;
+	enum packet_type_e {
+			packet_type_none=0,
+			packet_type_position,
+			packet_type_weather,
+			packet_type_object,
+			packet_type_item,
+			packet_type_message,
+			packet_type_query,
+			packet_type_capabilities,
+			packet_type_status,
+			packet_type_telemetry,
+			packet_type_userdefined,
+			packet_type_nws
+		} g_packet_type;
 
 	enum message_subtype_e { message_subtype_invalid = 0,
 				message_subtype_message,
