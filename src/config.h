@@ -221,6 +221,7 @@ struct misc_config_s {
 	  char dir[3];		/* 1 or 2 of N,E,W,S, or empty for omni. */
 
 	  float freq;		/* MHz. */
+	  char  tone_type;	/* Tone(T), Tone Squelch(C) or DCS(D) */
 	  float tone;		/* Hz. */
 	  float offset;		/* MHz. */
 	

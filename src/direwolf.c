@@ -1495,7 +1495,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	        // Unknown not handled properly.
 		// Should encode_object take floating point here?
 		(int)(A.g_course+0.5), (int)(DW_MPH_TO_KNOTS(A.g_speed_mph)+0.5),
-		0, 0, 0, A.g_comment,	// freq, tone, offset
+		0, 'T', 0, 0, A.g_comment,	// freq, tone_type, tone, offset
 		ais_obj_info, sizeof(ais_obj_info));
 
 	      snprintf (ais_obj_packet, sizeof(ais_obj_packet), "%s>%s%1d%1d:%s", A.g_src, APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, ais_obj_info);
