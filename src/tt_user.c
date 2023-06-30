@@ -846,6 +846,7 @@ static void xmit_object_report (int i, int first_time)
 		tt_user[i].overlay, tt_user[i].symbol, 
 		0,0,0,NULL, G_UNKNOWN, G_UNKNOWN,	/* PHGD, Course/Speed */
 		strlen(tt_user[i].freq) > 0 ? atof(tt_user[i].freq) : G_UNKNOWN,
+		'T',
 		strlen(tt_user[i].ctcss) > 0 ? atof(tt_user[i].ctcss) : G_UNKNOWN,
 		G_UNKNOWN,	/* CTCSS */
 		info_comment, object_info, sizeof(object_info));

@@ -6020,6 +6020,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->symtab = '/';
 	b->symbol = '-';	/* house */
 	b->freq = G_UNKNOWN;
+	b->tone_type = 'T';
 	b->tone = G_UNKNOWN;
 	b->offset = G_UNKNOWN;
 	b->source = NULL;
@@ -6270,7 +6271,33 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    b->freq = atof(value);
 	  }
 	  else if (strcasecmp(keyword, "TONE") == 0) {
-	    b->tone = atof(value);
+	    int n = 0;
+	    char type = '\0';
+	    float tone = 0;
+
+	    b->tone_type = 'T';
+	    b->tone = 0;
+
+	    /* Legacy format: plain numeric tone value, including 0 for tone-off. */
+	    if (sscanf(value, " %f %n", &tone, &n) == 1 && value[n] == '\0') {
+	      b->tone = tone;
+	    }
+	    /* Extended format: type prefix plus value (T/C/D), e.g. C100 or D023. */
+	    else if (sscanf(value, " %c%f %n", &type, &tone, &n) == 2 && value[n] == '\0') {
+	      type = toupper((unsigned char)type);
+	      if (type == 'T' || type == 'C' || type == 'D') {
+	        b->tone_type = type;
+	        b->tone = tone;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Bad tone type, %c.  Use T, C, or D.\n", line, type);
+	      }
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file, line %d: Bad tone format, %s.\n", line, value);
+	    }
 	  }
 	  else if (strcasecmp(keyword, "OFFSET") == 0 || strcasecmp(keyword, "OFF") == 0) {
 	    b->offset = atof(value);
