@@ -847,7 +847,7 @@ static void xmit_object_report (int i, int first_time)
 		0,0,0,NULL, G_UNKNOWN, G_UNKNOWN,	/* PHGD, Course/Speed */
 		strlen(tt_user[i].freq) > 0 ? atof(tt_user[i].freq) : G_UNKNOWN,
 		strlen(tt_user[i].ctcss) > 0 ? atof(tt_user[i].ctcss) : G_UNKNOWN,
-		G_UNKNOWN,	/* CTCSS */
+		'T', G_UNKNOWN,	/* CTCSS */
 		info_comment, object_info, sizeof(object_info));
 
 	strlcat (stemp, object_info, sizeof(stemp));
