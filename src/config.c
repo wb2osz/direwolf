@@ -2380,7 +2380,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->achan[channel].il2p_invert_polarity = 0;
 
 	    while ((t = split(NULL,0)) != NULL) {
-	      for (char *c = t; *t != '\0'; c++) {
+	      for (char *c = t; *c != '\0'; c++) {
 	        switch (*c) {
 	          case '+':
 	            p_audio_config->achan[channel].il2p_invert_polarity = 0;
