@@ -13,7 +13,11 @@
 
 - New variable speed option for gen_packets. For example,  "-v 5,0.1" would generate packets from 5% too slow to 5% too fast with increments of 0.1.  Some implementations might have imprecise timing.  Use this to test how well TNCs tolerate sloppy timing.
 
-- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).  Use "-I 1" on command line to enable transmit for first channel.  Compatible with Nino TNC for 1200 and 9600 bps.
+- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).    Compatible with Nino TNC for 1200 and 9600 bps.  Use "-I 1" on command line to enable transmit for first channel.  For more general case, add to config file (simplified version, see User Guide for more details):
+
+    > After:   "CHANNEL 1"   (or other channel)
+    >
+    > Add:     "IL2PTX 1"
 
 - Limited support for CM108/CM119 GPIO PTT on Windows.
 
