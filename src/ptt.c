@@ -991,6 +991,8 @@ void ptt_init (struct audio_s *audio_config_p)
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_HAMLIB) {
 	        if (ot == OCTYPE_PTT) {
+		  int err = -1;
+		  int tries = 0;
 
 	          /* For "AUTO" model, try to guess what is out there. */
 
@@ -1055,13 +1057,24 @@ void ptt_init (struct audio_s *audio_config_p)
 	            rig[ch][ot]->state.rigport.parm.serial.parity = RIG_PARITY_NONE;
 	            rig[ch][ot]->state.rigport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
 	          }
-	          int err = rig_open(rig[ch][ot]);
+		  tries = 0;
+		  do {
+		    // Try up to 5 times, Hamlib can take a moment to finish init
+	            err = rig_open(rig[ch][ot]);
+		    if (++tries > 5) {
+			break;
+		    } else if (err != RIG_OK) {
+			text_color_set(DW_COLOR_INFO);
+			dw_printf ("Retrying Hamlib Rig open...\n");
+			sleep (5);
+		    }
+		  } while (err != RIG_OK);
 	          if (err != RIG_OK) {
 	            text_color_set(DW_COLOR_ERROR);
 	            dw_printf ("Hamlib Rig open error %d: %s\n", err, rigerror(err));
 	            rig_cleanup (rig[ch][ot]);
 	            rig[ch][ot] = NULL;
-	            continue;
+	            exit (1);
 	          }
 
        		  /* Successful.  Later code should check for rig[ch][ot] not NULL. */
