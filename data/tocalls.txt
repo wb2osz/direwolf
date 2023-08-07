@@ -4,6 +4,7 @@ APRS TO-CALL VERSION NUMBERS                              14 Dec 2021
                                                                WB4APR
 </title>
 <version_notes>
+07 Jun 23 Added APK005 for Kenwood TH-D75
 14 Dec 21 Added APATAR ATA-R APRS Digipeater by TA7W/OH2UDS and TA6AEU
 26 Sep 21 Added APRRDZ EPS32 https://github.com/dl9rdz/rdz_ttgo_sonde
 18 Sep 21 Added APCSS  for AMSAT Cubesat Simulator https://cubesatsim.org
@@ -156,6 +157,7 @@ yourselves and keep me informed.
  APK  APK0xx  Kenwood TH-D7's
       APK003  Kenwood TH-D72
       APK004  Kenwood TH-D74
+      APK005  Kenwood TH-D75
       APK1xx  Kenwood D700's
       APK102  Kenwood D710
       APKRAM  KRAMstuff.com - Mark. G7LEU
@@ -278,6 +280,7 @@ yourselves and keep me informed.
       APZ247  for UPRS NR0Q
       APZ0xx  Xastir (old versions. See APX)
       APZMAJ  Martyn M1MAJ DeLorme inReach Tracker
+      APZMDM  github/codec2_talkie  - product code not registered
       APZMDR  for HaMDR trackers - hessu * hes.iki.fi]
       APZPAD  Smart Palm 
       APZTKP  TrackPoint, Nick N0LP (Balloon tracking)(depricated)
