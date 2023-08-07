@@ -17,6 +17,7 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+// TODO:  Better error messages for examples here: http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2023-July/date.html
 
 /*------------------------------------------------------------------
  *
@@ -339,7 +340,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	      else
 	      {
 	        aprs_raw_nmea (A, pinfo, info_len);
-	        A->g_packet_type = packet_type_position;	        
+	        A->g_packet_type = packet_type_position;
 	      }
 	      break;
 
@@ -382,7 +383,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	           break;
 
 		case message_subtype_bulletin:
-	     	default:
+	        default:
 		  break;
 
 		case message_subtype_telem_parm:
@@ -549,14 +550,16 @@ void decode_aprs_print (decode_aprs_t *A) {
 	//dw_printf ("DEBUG decode_aprs_print stemp3=%s mfr=%s\n", stemp, A->g_mfr);
 
 	if (strlen(A->g_mfr) > 0) {
-	  if (strcmp(A->g_dest, "APRS") == 0  ||  strcmp(A->g_dest, "BEACON") == 0) {
+	  if (strcmp(A->g_dest, "APRS") == 0  ||
+		strcmp(A->g_dest, "BEACON") == 0 ||
+		strcmp(A->g_dest, "ID") == 0) {
 	    strlcat (stemp, "\nUse of \"", sizeof(stemp));
 	    strlcat (stemp, A->g_dest, sizeof(stemp));
 	    strlcat (stemp, "\" in the destination field is obsolete.", sizeof(stemp));
 	    strlcat (stemp, "  You can help to improve the quality of APRS signals.", sizeof(stemp));
 	    strlcat (stemp, "\nTell the sender (", sizeof(stemp));
 	    strlcat (stemp, A->g_src, sizeof(stemp));
-	    strlcat (stemp, ") to use the proper product code from", sizeof(stemp));
+	    strlcat (stemp, ") to use the proper product identifier from", sizeof(stemp));
 	    strlcat (stemp, " http://www.aprs.org/aprs11/tocalls.txt", sizeof(stemp));
 	  }
 	  else {
@@ -582,7 +585,7 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  /* http://eng.usna.navy.mil/~bruninga/aprs/aprs11.html */
 	  /* "The Antenna Gain in the PHG format on page 28 is in dBi." */
 
-	  snprintf (phg, sizeof(phg), ", %d W height=%d %ddBi %s", A->g_power, A->g_height, A->g_gain, A->g_directivity);
+	  snprintf (phg, sizeof(phg), ", %d W height(HAAT)=%dft=%.0fm %ddBi %s", A->g_power, A->g_height, DW_FEET_TO_METERS(A->g_height), A->g_gain, A->g_directivity);
 	  strlcat (stemp, phg, sizeof(stemp));
 	}
 
@@ -1147,7 +1150,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  * Description:	
  *
- *		AX.25 Destination Address Field - 
+ *		AX.25 Destination Address Field -
  *
  *		The 6-byte Destination Address field contains
  *		the following encoded information:
@@ -1213,7 +1216,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *		It is three base-91 characters followed by "}".
  *		Examples:    "4T}	"4T}	]"4T}
  *
- *		We can also have frequency specification  --  http://www.aprs.org/info/freqspec.tx	
+ *		We can also have frequency specification  --  http://www.aprs.org/info/freqspec.txt
  *
  * Warning:	Some Kenwood radios add CR at the end, in apparent violation of the spec.
  *		Watch out so it doesn't get included when looking for equipment type suffix.
@@ -1247,7 +1250,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  *		`      cP#      l!F   k/     '       "7H}    |!%&-']|         !w`&!   |3
  *		mic-e  long.    cs   sym    prefix   alt     base91telemetry  DAO     suffix
- *		                                                                      TinyTrack3   
+ *		                                                                      TinyTrack3
  *---------------
  *
  *		 W1STJ-3>T2UR4X,WA1PLE-4,WIDE1*,WIDE2-1:`c@&l#.-/`"5,}146.685MHz T100 -060 146.520 Simplex or Voice Alert_%<0x0d>
@@ -1912,7 +1915,6 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
 	}
 
-#warning = double check.
 
 	// Weather bulletins have addressee starting with NWS, SKY, CWA, or BOM.
 	// The protocol spec and http://www.aprs.org/APRS-docs/WX.TXT state that
@@ -1994,10 +1996,12 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: \"%s\" must be lower case \"ack\"\n", p->message);
 	  }
-	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
-	  if (strlen(A->g_message_number) == 0) {
+	  else {
+	    strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	    if (strlen(A->g_message_number) == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: Message number is missing after \"ack\".\n");
+	    }
 	  }
 
 	  // Xastir puts a carriage return on the end.
@@ -2018,10 +2022,12 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: \"%s\" must be lower case \"rej\"\n", p->message);
 	  }
-	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
-	  if (strlen(A->g_message_number) == 0) {
+	  else {
+	    strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	    if (strlen(A->g_message_number) == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: Message number is missing after \"rej\".\n");
+	    }
 	  }
 
 	  // Xastir puts a carriage return on the end.

@@ -111,8 +111,9 @@ typedef struct decode_aprs_s {
         int g_power;			/* Transmitter power in watts. */
 
         int g_height;			/* Antenna height above average terrain, feet. */
+					// TODO:  rename to g_height_ft
 
-        int g_gain;			/* Antenna gain in dB. */
+        int g_gain;			/* Antenna gain in dBi. */
 
         char g_directivity[12];		/* Direction of max signal strength */
 
@@ -120,7 +121,7 @@ typedef struct decode_aprs_s {
 
         float g_altitude_ft;		/* Feet above median sea level.  */
 					/* I used feet here because the APRS specification */
-					/* has units of feet for alititude.  Meters would be */
+					/* has units of feet for altitude.  Meters would be */
 					/* more natural to the other 96% of the world. */
 
         char g_mfr[80];			/* Manufacturer or application. */
