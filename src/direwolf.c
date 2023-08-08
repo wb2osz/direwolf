@@ -300,8 +300,8 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
+	dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -387,7 +387,7 @@ int main (int argc, char *argv[])
 	      dw_printf ("\n");
 	      dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
 	      dw_printf ("Running this as root is an unnecessary security risk.\n");
-	      SLEEP_SEC(1);
+	      //SLEEP_SEC(1);
 	    }
 	}
 #endif

@@ -1749,7 +1749,6 @@ static void * satgate_delay_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
-#warning -  clean up
 
 // It is unforunate that the : data type indicator (DTI) was overloaded with
 // so many different meanings.  Simply looking at the DTI is not adequate for
@@ -1824,9 +1823,6 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	if (gt != NULL) {
 	    *gt = '\0';
 	}
-
-// FIXME NO!
-	///////ax25_get_addr_with_ssid (pp3, AX25_SOURCE, src);
 
 /*
  * Drop if path contains:
@@ -2471,24 +2467,6 @@ void ig_to_tx_remember (packet_t pp, int chan, int bydigi)
         }
 }
 
-
-#warning remove
-
-static int is_message_overload (char *infop)
-{
-	if (*infop != ':') return (0);
-	if (strlen(infop) < 16) return (0);
-	if (strncmp(infop+10, ":PARM.", 6) == 0) return (1);
-	if (strncmp(infop+10, ":UNIT.", 6) == 0) return (1);
-	if (strncmp(infop+10, ":EQNS.", 6) == 0) return (1);
-	if (strncmp(infop+10, ":BITS.", 6) == 0) return (1);
-	if (strncmp(infop+1, "BLN", 3) == 0) return (1);
-	if (strncmp(infop+1, "NWS", 3) == 0) return (1);
-	if (strncmp(infop+1, "SKY", 3) == 0) return (1);
-	if (strncmp(infop+1, "CWA", 3) == 0) return (1);
-	if (strncmp(infop+1, "BOM", 3) == 0) return (1);
-	return (0);
-}
 
 
 static int ig_to_tx_allow (packet_t pp, int chan)

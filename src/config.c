@@ -5775,8 +5775,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "POWER") == 0) {
 	    b->power = atoi(value);
 	  }
-	  else if (strcasecmp(keyword, "HEIGHT") == 0) {
+	  else if (strcasecmp(keyword, "HEIGHT") == 0) {	// This is in feet.
 	    b->height = atoi(value);
+	    // TODO: ability to add units suffix, e.g.  10m
 	  }
 	  else if (strcasecmp(keyword, "GAIN") == 0) {
 	    b->gain = atoi(value);

@@ -1303,6 +1303,11 @@ static int filt_s (pfstate_t *pf)
  *		what they are for other digipeaters.
  *		I think the best solution is to simply ignore the hop count.
  *
+ * Release 1.7:	I got overly ambitious and now realize this is just giving people too much
+ *		"rope to hang themselves," drop messages unexpectedly, and accidentally break messaging.
+ *		Change documentation to mention only the time limit.
+ *		The other functionality will be undocumented and maybe disappear over time.
+ *
  *------------------------------------------------------------------------------*/
 
 static int filt_i (pfstate_t *pf)

@@ -207,7 +207,7 @@ static void * recv_adev_thread (void *arg)
 	int eof;
 	
 	/* This audio device can have one (mono) or two (stereo) channels. */
-	/* Find number of the first channel. */
+	/* Find number of the first channel and number of channels. */
 
 	int first_chan =  ADEVFIRSTCHAN(a); 
 	int num_chan = save_pa->adev[a].num_channels;
@@ -234,6 +234,8 @@ static void * recv_adev_thread (void *arg)
  	    if (audio_sample >= 256 * 256) 
 	      eof = 1;
 
+	    // Future?  provide more flexible mapping.
+	    // i.e. for each valid channel where audio_source[] is first_chan+c.
 	    multi_modem_process_sample(first_chan + c, audio_sample);
 
 
@@ -262,14 +264,14 @@ static void * recv_adev_thread (void *arg)
 	        aprs_tt_button (first_chan + c, tt);
 	      }
 	    }
-	  }
+	  }  // for c is just 0 or 0 then 1
 
 		/* When a complete frame is accumulated, */
 		/* dlq_rec_frame, is called. */
 
 		/* recv_process, below, drains the queue. */
 
-	}
+	}  // while !eof on audio stream
 
 // What should we do now?
 // Seimply terminate the application?  
