@@ -51,8 +51,8 @@
 #define MAGIC2 0x56788765
 
 
-static int new_count = 0;
-static int delete_count = 0;
+volatile static int new_count = 0;
+volatile static int delete_count = 0;
 
 
 /***********************************************************************************
@@ -427,6 +427,50 @@ alevel_t rrbb_get_audio_level (rrbb_t b)
 
 /***********************************************************************************
  *
+ * Name:	rrbb_set_speed_error
+ *
+ * Purpose:	Set speed error of the received frame.
+ *
+ * Inputs:	b		Handle for bit array.
+ *		speed_error	In percentage.
+ *
+ ***********************************************************************************/
+
+void rrbb_set_speed_error (rrbb_t b, float speed_error)
+{
+	assert (b != NULL);
+	assert (b->magic1 == MAGIC1);
+	assert (b->magic2 == MAGIC2);
+
+	b->speed_error = speed_error;
+}
+
+
+/***********************************************************************************
+ *
+ * Name:	rrbb_get_speed_error
+ *
+ * Purpose:	Get speed error of the received frame.
+ *
+ * Inputs:	b	Handle for bit array.
+ *
+ * Returns:	speed error in percentage.
+ *
+ ***********************************************************************************/
+
+float rrbb_get_speed_error (rrbb_t b)
+{
+	assert (b != NULL);
+	assert (b->magic1 == MAGIC1);
+	assert (b->magic2 == MAGIC2);
+
+	return (b->speed_error);
+}
+
+
+
+/***********************************************************************************
+ *
  * Name:	rrbb_get_is_scrambled	
  *
  * Purpose:	Find out if using scrambled data.
@@ -486,6 +530,7 @@ int rrbb_get_prev_descram (rrbb_t b)
 
 	return (b->prev_descram);
 }
+
 
 
 /* end rrbb.c */
