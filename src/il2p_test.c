@@ -943,7 +943,7 @@ void tone_gen_put_bit (int chan, int data)
 
 // This is called when a complete frame has been deserialized.
 
-void multi_modem_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, int is_fx25)
+void multi_modem_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, fec_type_t fec_type)
 {
 	if (rec_count < 0) return;	// Skip check before serdes test.
 

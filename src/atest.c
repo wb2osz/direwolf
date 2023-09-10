@@ -757,7 +757,7 @@ int audio_get (int a)
  * This is called when we have a good frame.
  */
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -826,28 +826,30 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	  strlcat (heard, ")", sizeof(heard));
 	}
 
-	if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
-	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
-	}
-	else if (is_fx25) {
-	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
-	}
-	else {
-	  assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
-	  dw_printf ("%s audio level = %s   [%s]   %s\n", heard, alevel_text, retry_text[(int)retries], spectrum);
+	switch (fec_type) {
+
+	  case fec_type_fx25:
+	    dw_printf ("%s audio level = %s   FX.25  %s\n", heard, alevel_text, spectrum);
+	    break;
+
+	  case fec_type_il2p:
+	    dw_printf ("%s audio level = %s   IL2P  %s\n", heard, alevel_text, spectrum);
+	    break;
+
+	  case fec_type_none:
+	  default:
+	    if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
+	      // No fix_bits or passall specified.
+	      dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
+	    }
+	    else {
+	      assert (retries >= RETRY_NONE && retries <= RETRY_MAX);   // validate array index.
+	      dw_printf ("%s audio level = %s   [%s]   %s\n", heard, alevel_text, retry_text[(int)retries], spectrum);
+	    }
+	    break;
 	}
 
 #endif
-
-//#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
-//	int j;
-//
-//	for (j=0; j<MAX_SUBCHANS; j++) {
-//	  if (spectrum[j] == '|') {
-//	    count[j]++;
-//	  }
-//	}
-//#endif
 
 
 // Display non-APRS packets in a different color.

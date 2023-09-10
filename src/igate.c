@@ -1564,9 +1564,9 @@ static void * igate_recv_thread (void *arg)
 					// See what happens with -2 and follow up on this.
 					// Do we need something else here?
 		int slice = 0;
-	        int is_fx25 = 0;
+	        fec_type_t fec_type = fec_type_none;
 	        char spectrum[] = "APRS-IS";
-	        dlq_rec_frame (ichan, subchan, slice, pp3, alevel, is_fx25, RETRY_NONE, spectrum);
+	        dlq_rec_frame (ichan, subchan, slice, pp3, alevel, fec_type, RETRY_NONE, spectrum);
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
