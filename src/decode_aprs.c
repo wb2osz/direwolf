@@ -1674,6 +1674,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '0')  { strlcpy (A->g_mfr, "Yaesu FT3D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '3')  { strlcpy (A->g_mfr, "Yaesu FT5D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '1')  { strlcpy (A->g_mfr, "Yaesu FTM-300D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '5')  { strlcpy (A->g_mfr, "Yaesu FTM-500D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
@@ -1799,7 +1800,8 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		:xxxxxxxxx: ... {mm}aa		Message with new style message number and ack.
  *
  *
- * Reference:	See new message id style:  http://www.aprs.org/aprs11/replyacks.txt
+ * Reference:	http://www.aprs.org/txt/messages101.txt
+ *		http://www.aprs.org/aprs11/replyacks.txt	<-- New (1999) adding ack to outgoing message.
  *
  *------------------------------------------------------------------*/
 
