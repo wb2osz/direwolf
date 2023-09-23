@@ -32,9 +32,14 @@ if(LINUX)
       )
   endif()
 
-  add_library(misc STATIC
-    ${misc_SOURCES}
-    )
+  if ( "${misc_SOURCES}" )
+    add_library(misc STATIC
+      ${misc_SOURCES}
+      )
+  else()
+    # Nothing to build
+    set(MISC_LIBRARIES "" CACHE INTERNAL "")
+  endif()
 
 elseif(WIN32 OR CYGWIN) # windows
 
