@@ -32,9 +32,15 @@ if(LINUX)
       )
   endif()
 
-  add_library(misc STATIC
-    ${misc_SOURCES}
-    )
+  # add_library doesn't like to get an empty source file list.
+
+  if($misc_SOURCES)
+    add_library(misc STATIC
+      ${misc_SOURCES}
+      )
+  else()
+    set(MISC_LIBRARIES "" CACHE INTERNAL "")
+  endif()
 
 elseif(WIN32 OR CYGWIN) # windows
 
