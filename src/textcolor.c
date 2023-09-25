@@ -171,14 +171,19 @@ static const char clear_eos[]	= "\e[0J";
  */
 
 static int g_enable_color = 1;
+static FILE *g_dw_printf_dest = 0;
 
-
-void text_color_init (int enable_color)
+void text_color_init (int enable_color, int redirect_output)
 {
-
+	if (redirect_output != 0) {
+	  g_dw_printf_dest = stderr;
+	} else {
+	  g_dw_printf_dest = stdout;
+	}
 
 #if __WIN32__
 
+	g_enable_color = enable_color;
 
 	if (g_enable_color != 0) {
 
@@ -189,7 +194,12 @@ void text_color_init (int enable_color)
 	  COORD coord;
 	  DWORD nwritten;
 
-	  h = GetStdHandle(STD_OUTPUT_HANDLE);
+	  if (redirect_output != 0) {
+	    h = GetStdHandle(STD_ERROR_HANDLE);
+	  } else {
+	    h = GetStdHandle(STD_OUTPUT_HANDLE);
+	  }
+
 	  if (h != NULL && h != INVALID_HANDLE_VALUE) {
 
 	    GetConsoleScreenBufferInfo (h, &csbi);
@@ -208,18 +218,18 @@ void text_color_init (int enable_color)
 	if (enable_color < 0 || enable_color > MAX_T) {
 	  int t;
 	  for (t = 0; t <= MAX_T; t++) {
-	    text_color_init (t);
-	    printf ("-t %d", t);
-	    if (t) printf ("   [white background]   ");
-	    printf ("\n");
-	    printf ("%sBlack ", t_black[t]);
-	    printf ("%sRed ", t_red[t]);
-	    printf ("%sGreen ", t_green[t]);
-	    printf ("%sDark-Green ", t_dark_green[t]);
-	    printf ("%sYellow ", t_yellow[t]);
-	    printf ("%sBlue ", t_blue[t]);
-	    printf ("%sMagenta ", t_magenta[t]);
-	    printf ("%sCyan   \n", t_cyan[t]);
+	    text_color_init (t, redirect_output);
+	    fprintf (g_dw_printf_dest,"-t %d", t);
+	    if (t) fprintf (g_dw_printf_dest, "   [white background]   ");
+	    fprintf (g_dw_printf_dest,"\n");
+	    fprintf (g_dw_printf_dest,"%sBlack ", t_black[t]);
+	    fprintf (g_dw_printf_dest,"%sRed ", t_red[t]);
+	    fprintf (g_dw_printf_dest,"%sGreen ", t_green[t]);
+	    fprintf (g_dw_printf_dest,"%sDark-Green ", t_dark_green[t]);
+	    fprintf (g_dw_printf_dest,"%sYellow ", t_yellow[t]);
+	    fprintf (g_dw_printf_dest,"%sBlue ", t_blue[t]);
+	    fprintf (g_dw_printf_dest, "%sMagenta ", t_magenta[t]);
+	    fprintf (g_dw_printf_dest, "%sCyan   \n", t_cyan[t]);
 	   }
 	   exit (EXIT_SUCCESS);
 	}
@@ -232,9 +242,9 @@ void text_color_init (int enable_color)
 	  if (t < 0) t = 0;
 	  if (t > MAX_T) t = MAX_T;
 
-	  printf ("%s", t_background_white[t]);
-	  printf ("%s", clear_eos);
-	  printf ("%s", t_black[t]);
+	  fprintf (g_dw_printf_dest, "%s", t_background_white[t]);
+	  fprintf (g_dw_printf_dest, "%s", clear_eos);
+	  fprintf (g_dw_printf_dest, "%s", t_black[t]);
 	}
 #endif
 }
@@ -285,7 +295,11 @@ void text_color_set ( enum dw_color_e c )
 	    break;
 	}
 
-	h = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (dw_printf_redirected()) {
+	  h = GetStdHandle(STD_ERROR_HANDLE);
+	} else {
+	  h = GetStdHandle(STD_OUTPUT_HANDLE);
+	}
 
 	if (h != NULL && h != INVALID_HANDLE_VALUE) {
 	  SetConsoleTextAttribute (h, attr);
@@ -310,30 +324,30 @@ void text_color_set ( enum dw_color_e c )
 
 	  default:
 	  case DW_COLOR_INFO:
-	    printf ("%s", t_black[t]);
+	    fprintf (g_dw_printf_dest, "%s", t_black[t]);
 	    break;
 
 	  case DW_COLOR_ERROR:
-	    printf ("%s", t_red[t]);
+	    fprintf (g_dw_printf_dest, "%s", t_red[t]);
 	    break;
 
 	  case DW_COLOR_REC:
 	    // Bright green is very difficult to read against a while background.
 	    // Let's use dark green instead.   release 1.6.
 	    //printf ("%s", t_green[t]);
-	    printf ("%s", t_dark_green[t]);
+	    fprintf (g_dw_printf_dest, "%s", t_dark_green[t]);
 	    break;
 
 	  case DW_COLOR_DECODED:
-	    printf ("%s", t_blue[t]);
+	    fprintf (g_dw_printf_dest, "%s", t_blue[t]);
 	    break;
 
 	  case DW_COLOR_XMIT:
-	    printf ("%s", t_magenta[t]);
+	    fprintf (g_dw_printf_dest, "%s", t_magenta[t]);
 	    break;
 
 	  case DW_COLOR_DEBUG:
-	    printf ("%s", t_dark_green[t]);
+	    fprintf (g_dw_printf_dest, "%s", t_dark_green[t]);
 	    break;
 	}
 }
@@ -377,17 +391,21 @@ int dw_printf (const char *fmt, ...)
 
 // TODO: other possible destinations...
 
-	fputs (buffer, stdout);
+	fputs (buffer, g_dw_printf_dest);
+	fflush (g_dw_printf_dest);
 	return (len);
 }
 
-
+int dw_printf_redirected ()
+{
+	return g_dw_printf_dest != stdout;
+}
 
 #if TESTC
 main () 
 {
 	printf ("Initial condition\n");
-	text_color_init (1);
+	text_color_init (1, 0);
 	printf ("After text_color_init\n");
 	text_color_set(DW_COLOR_INFO); 		printf ("Info\n");
 	text_color_set(DW_COLOR_ERROR); 	printf ("Error\n");

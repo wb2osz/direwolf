@@ -242,6 +242,8 @@ int main (int argc, char *argv[])
 	char x_opt_mode = ' ';		/* "-x N" option for transmitting calibration tones. */
 	int x_opt_chan = 0;		/* Split into 2 parts.  Mode e.g.  m, a, and optional channel. */
 
+	int O_opt = 0;			/* Redirect text io to stderr for use with stdout audio */
+
 	strlcpy(l_opt_logdir, "", sizeof(l_opt_logdir));
 	strlcpy(L_opt_logfile, "", sizeof(L_opt_logfile));
 	strlcpy(P_opt, "", sizeof(P_opt));
@@ -270,23 +272,28 @@ int main (int argc, char *argv[])
 #endif
 
 /*
- * Pre-scan the command line options for the text color option.
- * We need to set this before any text output.
+ * Pre-scan the command line options for the text color and stdout redirect options.
+ * We need to set these before any text output.
  * Default will be no colors if stdout is not a terminal (i.e. piped into
  * something else such as "tee") but command line can override this.
  */
+	for (j=1; j<argc; j++) {
+	  if (strcmp(argv[j], "-O") == 0) {
+	    O_opt = 1;
+	  }
+	}
 
 #if __WIN32__
-	t_opt = _isatty(_fileno(stdout)) > 0;
+	t_opt = _isatty(_fileno(O_opt ? stderr : stdout)) > 0;
 #else
-	t_opt = isatty(fileno(stdout));
+	t_opt = isatty(fileno(O_opt ? stderr : stdout));
 #endif
 				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
 
 // FIXME: consider case of no space between t and number.
 
-	for (j=1; j<argc-1; j++) {
+	for (j=1; j<argc; j++) {
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
 	    //dw_printf ("DEBUG: text color option = %d.\n", t_opt);
@@ -299,7 +306,7 @@ int main (int argc, char *argv[])
 	// Might want to print OS version here.   For Windows, see:
 	// https://msdn.microsoft.com/en-us/library/ms724451(v=VS.85).aspx
 
-	text_color_init(t_opt);
+	text_color_init(t_opt, O_opt);
 	text_color_set(DW_COLOR_INFO);
 	dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 7\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
 	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
@@ -421,7 +428,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:O",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -737,6 +744,10 @@ int main (int argc, char *argv[])
 
 	    A_opt_ais_to_obj = 1;
 	    break;
+
+	  case 'O':				/* Was handled earlier. -O Redirects output to stderr. */
+	    break;
+
 
           default:
 

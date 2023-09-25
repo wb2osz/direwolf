@@ -899,6 +899,8 @@ int main (int argc, char *argv[])
 	double dlat, dlon;
 	double d, b;
 
+	text_color_init (1, 0);
+
 /* Latitude to APRS format. */
 
 	latitude_to_str (45.25, 0, result);

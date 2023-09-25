@@ -765,6 +765,7 @@ int main (int argc, char *argv[])
 	strlcpy(mycall, "WB2OSZ-9", sizeof(mycall));
 
 	dedupe_init (4);
+	text_color_init (1, 0);
 
 /* 
  * Compile the patterns. 

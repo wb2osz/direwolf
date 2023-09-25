@@ -217,7 +217,7 @@ int main (int argc, char *argv[])
 	}
 #endif
 
-	text_color_init(1);
+	text_color_init(1, 0);
 	text_color_set(DW_COLOR_INFO);
 
 /* 

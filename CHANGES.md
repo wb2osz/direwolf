@@ -33,6 +33,10 @@
     >
     > Add:     "FX25TX 1" (or 16 or 32 or 64)
 
+- stdout is now supported for audio output via piping to other utilities.  To support this, all non-audio output must be redirected to stderr using the new -O option on the command line.
+
+- udp audio output is also now supported.  Use udp:destination:port style output device in the configuration file.
+
 
 
 ### Bugs Fixed: ###

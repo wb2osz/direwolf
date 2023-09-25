@@ -73,6 +73,7 @@ static int fx25_test_count = 0;
 
 int main ()
 {
+	text_color_init(1, 0);
 	fx25_init(3);
 
 	for (int i = CTAG_MIN; i <= CTAG_MAX; i++) {
