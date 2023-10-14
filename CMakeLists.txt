@@ -275,7 +275,7 @@ include(CheckSymbolExists)
 #
 # This was all working fine until these were added to the gnu c library 2.38.
 # References:
-*  - https://www.gnu.org/software/libc/sources.html
+#  - https://www.gnu.org/software/libc/sources.html
 #  - https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=NEWS;hb=HEAD
 #
 # This test is not detecting them for glibc 2.38 resulting in a conflict.
