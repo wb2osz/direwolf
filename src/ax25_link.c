@@ -194,14 +194,16 @@
 // Debug switches for different types of information.
 // Should have command line options instead of changing source and recompiling.
 
-static int s_debug_protocol_errors = 1;	// Less serious Protocol errors.
+static int s_debug_protocol_errors = 0;	// Less serious Protocol errors.
 					// Useful for debugging but unnecessarily alarming other times.
+					// Was it intentially left on for release 1.6?
 
 static int s_debug_client_app = 0;	// Interaction with client application.
 					// dl_connect_request, dl_data_request, dl_data_indication, etc.
 
 static int s_debug_radio = 0;		// Received frames and channel busy status.
 					// lm_data_indication, lm_channel_busy
+
 static int s_debug_variables = 0;	// Variables, state changes.
 
 static int s_debug_retry = 0;		// Related to lost I frames, REJ, SREJ, timeout, resending.
@@ -593,6 +595,8 @@ static int AX25MODULO(int n, int m, const char *file, const char *func, int line
 #define STOP_TM201	stop_tm201(S, __func__, __LINE__)
 #define PAUSE_TM201	pause_tm201(S, __func__, __LINE__)
 #define RESUME_TM201	resume_tm201(S, __func__, __LINE__)
+
+// TODO: add SELECT_T1_VALUE	for debugging.
 
 
 static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len);
@@ -6225,7 +6229,7 @@ static void select_t1_value (ax25_dlsm_t *S)
 
 	    // This goes up exponentially if implemented as documented!
 	    // For example, if we were trying to connect to a station which is not there, we
-	    // would retry after 3, the 8, 16, 32, ...  and not time out for over an hour.
+	    // would retry after 3, then 8, 16, 32, ...  and not time out for over an hour.
 	    // That's ridiculous.   Let's try increasing it by a quarter second each time.
 	    // We now give up after about a minute.
 
@@ -6242,12 +6246,30 @@ static void select_t1_value (ax25_dlsm_t *S)
 	}
 
 
+// See  https://groups.io/g/direwolf/topic/100782658#8542
+// Perhaps the demands of file transfer lead to this problem.
+
+// "Temporary" hack.
+// Automatic fine tuning of t1v generally works well, but on very rare occasions, it gets wildly out of control.
+// Until I have more time to properly diagnose this, add some guardrails so it does not go flying off a cliff.
+
+// The initial value of t1v is frack + frack * 2 (number of digipeateers in path)
+// If anything, it should automatically be adjusted down.
+// Let's say, something smells fishy if it exceeds twice that initial value.
+
+// TODO: Add some instrumentation to record where this was called from and all the values in the printf below.
+
+#if 1
+	if (S->t1v < 0.25 || S->t1v > 2 * (g_misc_config_p->frack * (2 * (S->num_addr - 2) + 1)) ) {
+	    INIT_T1V_SRT;
+	}
+#else
 	if (S->t1v < 0.99 || S->t1v > 30) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("INTERNAL ERROR?  Stream %d: select_t1_value, rc = %d, t1 remaining = %.3f, old srt = %.3f, new srt = %.3f, Extreme new t1v = %.3f\n",
 		S->stream_id, S->rc, S->t1_remaining_when_last_stopped, old_srt, S->srt, S->t1v);
 	}
-
+#endif
 } /* end select_t1_value */
 
 
