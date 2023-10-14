@@ -265,9 +265,33 @@ endif(WIN32 OR CYGWIN)
 # requirements
 
 include(CheckSymbolExists)
+
 # Some platforms provide their own strlcpy & strlcat. (BSD, MacOSX)
-# Others don't so we provide our own. (Most, but not all Linux)
-# Define the preprocessor macro so libgps does not supply its own version.
+# Others don't so we provide our own. (Windows, most, but not all Linux)
+# Here we detect whether these are provided by the OS and set a symbol
+# so that:
+#  (1) libgps does not supply its own version.
+#  (2) we know whether we need to supply our own copy.
+#
+# This was all working fine until these were added to the gnu c library 2.38.
+# References:
+*  - https://www.gnu.org/software/libc/sources.html
+#  - https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=NEWS;hb=HEAD
+#
+# This test is not detecting them for glibc 2.38 resulting in a conflict.
+# Why?  Are they declared in a different file or in some strange way?
+#
+# This is how they are declared in include/string.h:
+#
+#	extern __typeof (strlcpy) __strlcpy;
+#	libc_hidden_proto (__strlcpy)
+#	extern __typeof (strlcat) __strlcat;
+#	libc_hidden_proto (__strlcat)
+#
+# Apparently cmake does not recognize this style.
+# Keep this here for BSD type systems where it behaves as expected.
+# We will need to add a hack in direwolf.h to define these if glibc version >= 2.38.
+
 check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
 if(HAVE_STRLCPY)
     add_compile_options(-DHAVE_STRLCPY)
