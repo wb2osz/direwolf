@@ -49,7 +49,8 @@
  *		Preemptive Digipeating  (new in version 0.8)
  *
  *			http://www.aprs.org/aprs12/preemptive-digipeating.txt
- *		
+ *			I ignored the part about the RR bits.
+ *
  *------------------------------------------------------------------*/
 
 #define DIGIPEATER_C
@@ -440,6 +441,10 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 /* 
  * If preemptive digipeating is enabled, try matching my call 
  * and aliases against all remaining unused digipeaters.
+ *
+ * Bob says: "GENERIC XXXXn-N DIGIPEATING should not do preemptive digipeating."
+ *
+ * But consider this case:  https://github.com/wb2osz/direwolf/issues/488
  */
 
 	if (preempt != PREEMPT_OFF) {
@@ -465,13 +470,22 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 	      switch (preempt) {
 	        case PREEMPT_DROP:	/* remove all prior */
+					// TODO: deprecate this option.  Result is misleading.
+
+		  text_color_set (DW_COLOR_ERROR);
+		  dw_printf ("The digipeat DROP option will be removed in a future release.  Use PREEMPT for preemptive digipeating.\n");
+
 	          while (r2 > AX25_REPEATER_1) {
 	            ax25_remove_addr (result, r2-1);
  		    r2--;
 	          }
 	          break;
 
-	        case PREEMPT_MARK:
+	        case PREEMPT_MARK:	// TODO: deprecate this option.  Result is misleading.
+
+		  text_color_set (DW_COLOR_ERROR);
+		  dw_printf ("The digipeat MARK option will be removed in a future release.  Use PREEMPT for preemptive digipeating.\n");
+
 	          r2--;
 	          while (r2 >= AX25_REPEATER_1 && ax25_get_h(result,r2) == 0) {
 	            ax25_set_h (result, r2);
@@ -479,7 +493,12 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	          }
 	          break;
 
-		case PREEMPT_TRACE:	/* remove prior unused */
+		case PREEMPT_TRACE:	/* My enhancement - remove prior unused digis. */
+					/* this provides an accurate path of where packet traveled. */
+
+					// Uh oh.  It looks like sample config files went out
+					// with this option.  Should it be renamed as
+					// PREEMPT which is more descriptive?
 	        default:
 	          while (r2 > AX25_REPEATER_1 && ax25_get_h(result,r2-1) == 0) {
 	            ax25_remove_addr (result, r2-1);

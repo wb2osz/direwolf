@@ -2523,7 +2523,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Preemptive digipeating DROP option is discouraged.\n", line);
 	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
-	        dw_printf ("TRACE is the best choice for this feature.\n");
+	        dw_printf ("PREEMPT is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_DROP;
 	        t = split(NULL,0);
 	      }
@@ -2531,11 +2531,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Preemptive digipeating MARK option is discouraged.\n", line);
 	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
-	        dw_printf ("TRACE is the best choice for this feature.\n");
+	        dw_printf ("PREEMPT is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_MARK;
 	        t = split(NULL,0);
 	      }
-	      else if (strcasecmp(t, "TRACE") == 0) {
+	      else if ((strcasecmp(t, "TRACE") == 0) || (strncasecmp(t, "PREEMPT", 7) == 0)){
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
 	        t = split(NULL,0);
 	      }
