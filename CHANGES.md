@@ -5,9 +5,24 @@
 ## Version 1.7  --  October 2023 ##
 
 
+### New Documentation: ###
+
+Additional documentation location to slow down growth of main repository.  [https://github.com/wb2osz/direwolf-doc](https://github.com/wb2osz/direwolf-doc) .   These are more oriented toward achieving a goal and understanding, as opposed to the User Guide which describes the functionality.
+
+- ***APRS Digipeaters***
+
+- ***Internal Packet Routing***
+
+- ***Radio Interface Guide***
+
+- ***Successful IGate Operation***
+
+- ***Understanding APRS Packets***
+
+
 ### New Features: ###
 
-- Additional documentation location to slow down growth of main repository.  [https://github.com/wb2osz/direwolf-doc](https://github.com/wb2osz/direwolf-doc)
+
 
 - New ICHANNEL configuration option to map a KISS client application channel to APRS-IS. Packets from APRS-IS will be presented to client applications as the specified channel. Packets sent, by client applications, to that channel will go to APRS-IS rather than a radio channel.  Details in ***Internal-Packet-Routing.pdf***.
 
@@ -41,6 +56,13 @@
 
 - Packet filtering now skips over any third party header before classifying packet types.
 
+- Fixed build for Alpine Linux.
+
+### Notes: ###
+
+The Windows binary distribution now uses gcc (MinGW) version 11.3.0.
+The Windows version is built for both 32 and 64 bit operating systems.
+Use the 64 bit version if possible; it runs considerably faster.
 
 ## Version 1.6  --  October 2020 ##
 
