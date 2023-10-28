@@ -2,7 +2,7 @@
 # Revision History #
 
 
-## Version 1.7  --  Under Development ('dev' branch) ##
+## Version 1.7  --  October 2023 ##
 
 
 ### New Features: ###
