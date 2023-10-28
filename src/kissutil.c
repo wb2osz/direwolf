@@ -67,7 +67,6 @@
 #include "serial_port.h"
 #include "kiss_frame.h"
 #include "dwsock.h"
-#include "dtime_now.h"
 #include "audio.h"		// for DEFAULT_TXDELAY, etc.
 #include "dtime_now.h"
 
@@ -308,10 +307,15 @@ int main (int argc, char *argv[])
 	}
 #endif
 
+// Give the threads a little while to open the TNC connection before trying to use it.
+// This was a problem when the transmit queue already existed when starting up.
+
+	SLEEP_MS (500);
+
 /*
  * Process keyboard or other input source.
  */
-	char stuff[1000];
+	char stuff[AX25_MAX_PACKET_LEN];
 
 	if (strlen(transmit_from) > 0) {
 /*
@@ -544,8 +548,8 @@ static void process_input (char *stuff)
 
 static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 {
-	unsigned char temp[1000];
-	unsigned char kissed[2000];
+	unsigned char temp[AX25_MAX_PACKET_LEN];	// We don't limit to 256 info bytes.
+	unsigned char kissed[AX25_MAX_PACKET_LEN*2];
 	int klen;
 
 	if (chan < 0 || chan > 15) {
@@ -587,6 +591,7 @@ static void send_to_kiss_tnc (int chan, int cmd, char *data, int dlen)
 	  if (rc != klen) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("ERROR writing KISS frame to serial port.\n");
+	    //dw_printf ("DEBUG wanted %d, got %d\n", klen, rc);
 	  }
 	}
 
@@ -663,7 +668,7 @@ static THREAD_F tnc_listen_net (void *arg)
 	    // on the assumption it was being used in only one direction.
 	    // Not worried enough about it to do anything at this time.
 
-	    kiss_rec_byte (&kstate, data[j], verbose, client, NULL);
+	    kiss_rec_byte (&kstate, data[j], verbose, NULL, client, NULL);
 	  }
 	}
 
@@ -726,7 +731,7 @@ static THREAD_F tnc_listen_serial (void *arg)
 	  // Feed in one byte at a time.
 	  // kiss_process_msg is called when a complete frame has been accumulated.
 
-	  kiss_rec_byte (&kstate, ch, verbose, client, NULL);
+	  kiss_rec_byte (&kstate, ch, verbose, NULL, client, NULL);
 	}
 
 } /* end tnc_listen_serial */
@@ -754,7 +759,8 @@ static THREAD_F tnc_listen_serial (void *arg)
  *
  *-----------------------------------------------------------------*/
 
-void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, int client, void (*sendfun)(int,int,unsigned char*,int,int))
+void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct kissport_status_s *kps, int client,
+			void (*sendfun)(int chan, int kiss_cmd, unsigned char *fbuf, int flen, struct kissport_status_s *onlykps, int onlyclient))
 {
 	int chan;
 	int cmd;
@@ -915,7 +921,7 @@ static void usage(void)
  	dw_printf ("		a serial port.  e.g.  /dev/ttyAMA0 or COM3.\n");
  	dw_printf ("	-s	Serial port speed, default 9600.\n");
 	dw_printf ("	-v	Verbose.  Show the KISS frame contents.\n");
-	dw_printf ("	-f	Transmit files directory.  Processs and delete files here.\n");
+	dw_printf ("	-f	Transmit files directory.  Process and delete files here.\n");
 	dw_printf ("	-o	Receive output queue directory.  Store received frames here.\n");
 	dw_printf ("	-T	Precede received frames with 'strftime' format time stamp.\n");
 	usage2();
@@ -929,7 +935,7 @@ static void usage2 (void)
 	dw_printf ("Input, starting with upper case letter or digit, is assumed\n");
 	dw_printf ("to be an AX.25 frame in the usual TNC2 monitoring format.\n");
 	dw_printf ("\n");
-	dw_printf ("Input, starting with a lower case letter is a commmand.\n");
+	dw_printf ("Input, starting with a lower case letter is a command.\n");
 	dw_printf ("Whitespace, as shown in examples, is optional.\n");
 	dw_printf ("\n");
 	dw_printf ("	letter	meaning			example\n");

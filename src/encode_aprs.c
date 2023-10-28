@@ -81,8 +81,14 @@ typedef struct position_s {
 
 static int set_norm_position (char symtab, char symbol, double dlat, double dlong, int ambiguity, position_t *presult)
 {
+	// An over zealous compiler might complain about l*itude_to_str writing
+	// N characters plus nul to an N character field so we stick it into a
+	// larger temp then copy the desired number of bytes.  (Issue 296)
 
-	latitude_to_str (dlat, ambiguity, presult->lat);
+	char stemp[16];
+
+	latitude_to_str (dlat, ambiguity, stemp);
+	memcpy (presult->lat, stemp, sizeof(presult->lat));
 
 	if (symtab != '/' && symtab != '\\' && ! isdigit(symtab) && ! isupper(symtab)) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -90,7 +96,8 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
 	}
 	presult->sym_table_id = symtab;
 
-	longitude_to_str (dlong, ambiguity, presult->lon);
+	longitude_to_str (dlong, ambiguity, stemp);
+	memcpy (presult->lon, stemp, sizeof(presult->lon));
 
 	if (symbol < '!' || symbol > '~') {
 	  text_color_set(DW_COLOR_ERROR);
@@ -118,7 +125,7 @@ static int set_norm_position (char symtab, char symbol, double dlat, double dlon
  *		height	- Feet.
  *		gain	- dBi.
  *
- * 		course	- Degress, 0 - 360 (360 equiv. to 0).  
+ * 		course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.
  *
@@ -336,7 +343,7 @@ static int phg_data_extension (int power, int height, int gain, char *dir, char 
  *
  * Purpose:     Fill in parts of the course & speed data extension.
  *
- * Inputs: 	course	- Degress, 0 - 360 (360 equiv. to 0).
+ * Inputs: 	course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *
  *		speed	- knots.
@@ -487,7 +494,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *		gain	- dB.  Not clear if it is dBi or dBd.
  *		dir	- Directivity: N, NE, etc., omni.
  *
- *		course	- Degress, 0 - 360 (360 equiv. to 0).
+ *		course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.		// TODO:  should distinguish unknown(not revevant) vs. known zero.
  *
@@ -497,7 +504,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *
  *		comment	- Additional comment text.
  *
- *		result_size - Ammount of space for result, provideed by 
+ *		result_size - Amount of space for result, provided by
  *				caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.  Should be at least ??? bytes.
@@ -512,7 +519,7 @@ static int frequency_spec (float freq, float tone, float offset, char *presult)
  *			Power/height/gain/directivity or
  *			Course/speed.
  *
- *		Afer that, 
+ *		After that,
  *
  *----------------------------------------------------------------*/
 
@@ -544,6 +551,15 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 	int result_len = 0;
 
 	if (compressed) {
+
+// Thought:
+// https://groups.io/g/direwolf/topic/92718535#6886
+// When speed is zero, we could put the altitude in the compressed
+// position rather than having /A=999999.
+// However, the resolution would be decreased and that could be important
+// when hiking in hilly terrain.  It would also be confusing to
+// flip back and forth between two different representations.
+
 	  aprs_compressed_pos_t *p = (aprs_compressed_pos_t *)presult;
 
 	  p->dti = messaging ? '=' : '!';
@@ -629,7 +645,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *		gain	- dB.  Not clear if it is dBi or dBd.
  *		dir	- Direction: N, NE, etc., omni.
  *
- *		course	- Degress, 0 - 360 (360 equiv. to 0).
+ *		course	- Degrees, 0 - 360 (360 equiv. to 0).
  *			  Use G_UNKNOWN for none or unknown.
  *		speed	- knots.
  *
@@ -639,7 +655,7 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
  *
  *		comment	- Additional comment text.
  *
- *		result_size - Ammount of space for result, provideed by 
+ *		result_size - Amount of space for result, provided by
  *				caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.  Should be at least ??? bytes.
@@ -769,7 +785,7 @@ int encode_object (char *name, int compressed, time_t thyme, double lat, double 
  * Inputs:      addressee	- Addressed to, up to 9 characters.
  *		text		- Text part of the message.
  *		id		- Identifier, 0 to 5 characters.
- *		result_size 	- Ammount of space for result, provided by
+ *		result_size 	- Amount of space for result, provided by
  *				  caller, to avoid buffer overflow.
  *
  * Outputs:	presult	- Stored here.
@@ -853,7 +869,7 @@ int main (int argc, char *argv[])
 	dw_printf ("%s\n", result);
 	if (strcmp(result, "!4234.61ND07126.47W&PHG7368") != 0) { dw_printf ("ERROR!  line %d\n", __LINE__); errors++; }
 
-/* with freq & tone.  minus offset, no offset, explict simplex. */
+/* with freq & tone.  minus offset, no offset, explicit simplex. */
 
 	encode_position (0, 0, 42+34.61/60, -(71+26.47/60), 0, G_UNKNOWN, 'D', '&',
 		0, 0, 0, NULL, G_UNKNOWN, 0, 146.955, 74.4, -0.6, NULL, result, sizeof(result));

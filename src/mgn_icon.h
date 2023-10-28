@@ -208,9 +208,9 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_park,		//  ;  27  	 Park/Picnic area
 	MGN_default,		//  <  28  	 ADVISORY (one WX flag)
 	MGN_default,		//  =  29  	 APRStt Touchtone (DTMF users)
-	MGN_default,		//  >  30  	 OVERLAYED CAR
+	MGN_default,		//  >  30  	 OVERLAID CAR
 	MGN_tourist_info,	//  ?  31  	 INFO Kiosk  (Blue box with ?)
-	MGN_default,		//  @  32  	 HURICANE/Trop-Storm
+	MGN_default,		//  @  32  	 HURRICANE/Trop-Storm
 	MGN_box,		//  A  33  	 overlayBOX DTMF & RFID & XO
 	MGN_default,		//  B  34  	 Blwng Snow (& future codes)
 	MGN_boating,		//  C  35  	 Coast Guard
@@ -220,7 +220,7 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_default,		//  G  39  	 Snow Shwr (& future ovrlys)
 	MGN_default,		//  H  40  	 Haze (& Overlay Hazards)
 	MGN_default,		//  I  41  	 Rain Shower
-	MGN_default,		//  J  42  	 Lightening (& future ovrlys)
+	MGN_default,		//  J  42  	 Lightning (& future ovrlys)
 	MGN_default,		//  K  43  	 Kenwood HT (W)
 	MGN_lighthouse,		//  L  44  	 Lighthouse
 	MGN_default,		//  M  45  	 MARS (A=Army,N=Navy,F=AF)
@@ -263,12 +263,12 @@ static const char mgn_alternate_symtab[SYMTAB_SIZE][3] =  {
 	MGN_default,		//  r  82  	 Restrooms
 	MGN_default,		//  s  83  	 OVERLAY SHIP/boat (top view)
 	MGN_default,		//  t  84  	 Tornado
-	MGN_default,		//  u  85  	 OVERLAYED TRUCK
-	MGN_default,		//  v  86  	 OVERLAYED Van
+	MGN_default,		//  u  85  	 OVERLAID TRUCK
+	MGN_default,		//  v  86  	 OVERLAID Van
 	MGN_default,		//  w  87  	 Flooding
 	MGN_wreck,		//  x  88  	 Wreck or Obstruction ->X<-
 	MGN_default,		//  y  89  	 Skywarn
-	MGN_default,		//  z  90  	 OVERLAYED Shelter
+	MGN_default,		//  z  90  	 OVERLAID Shelter
 	MGN_default,		//  {  91  	 Fog (& future ovrly codes)
 	MGN_default,		//  |  92  	 TNC Stream Switch
 	MGN_default,		//  }  93  	 

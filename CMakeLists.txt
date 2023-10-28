@@ -4,12 +4,13 @@ project(direwolf)
 
 # configure version
 set(direwolf_VERSION_MAJOR "1")
-set(direwolf_VERSION_MINOR "6")
+set(direwolf_VERSION_MINOR "7")
 set(direwolf_VERSION_PATCH "0")
-set(direwolf_VERSION_SUFFIX "")
+set(direwolf_VERSION_SUFFIX "Development")
 
 # options
-option(FORCE_SSE "Compile with SSE instruction only" OFF)
+# See Issue 297.
+option(FORCE_SSE "Compile with SSE instruction only" ON)
 option(FORCE_SSSE3 "Compile with SSSE3 instruction only" OFF)
 option(FORCE_SSE41 "Compile with SSE4.1 instruction only" OFF)
 option(OPTIONAL_TEST "Compile optional test (might be broken)" OFF)
@@ -71,6 +72,7 @@ set(CUSTOM_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(CUSTOM_EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
 set(CUSTOM_MISC_DIR "${CUSTOM_EXTERNAL_DIR}/misc")
 set(CUSTOM_REGEX_DIR "${CUSTOM_EXTERNAL_DIR}/regex")
+set(CUSTOM_HIDAPI_DIR "${CUSTOM_EXTERNAL_DIR}/hidapi")
 set(CUSTOM_GEOTRANZ_DIR "${CUSTOM_EXTERNAL_DIR}/geotranz")
 set(CUSTOM_DATA_DIR "${CMAKE_SOURCE_DIR}/data")
 set(CUSTOM_SCRIPTS_DIR "${CMAKE_SOURCE_DIR}/scripts")
@@ -131,7 +133,7 @@ endif()
 # auto include current directory
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-# set OS dependant variables
+# set OS dependent variables
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   set(LINUX TRUE)
 
@@ -142,6 +144,10 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
   set(FREEBSD TRUE)
   configure_file("${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}.desktop.in"
     "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop" @ONLY)
+
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "OpenBSD")
+  set(OPENBSD TRUE)
+  set(HAVE_SNDIO TRUE)
 
 elseif(APPLE)
   if("${CMAKE_OSX_DEPLOYMENT_TARGET}" STREQUAL "")
@@ -156,16 +162,21 @@ elseif(APPLE)
   set(CMAKE_MACOSX_RPATH ON)
   message(STATUS "RPATH support: ${CMAKE_MACOSX_RPATH}")
 
+  # just blindly enable dns-sd
+  set(USE_MACOS_DNSSD ON)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_MACOS_DNSSD")
+
 elseif (WIN32)
-  if(NOT VS2015 AND NOT VS2017)
-    message(FATAL_ERROR "You must use Microsoft Visual Studio 2015 or 2017 as compiler")
+  if(C_MSVC)
+    if (NOT VS2015 AND NOT VS2017 AND NOT VS2019)
+      message(FATAL_ERROR "You must use Microsoft Visual Studio 2015, 2017 or 2019 as compiler")
+    else()
+      # compile with full multicore
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+      set(CUSTOM_SHELL_BIN "")
+    endif()
   endif()
-
-  # compile with full multicore
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-
-  set(CUSTOM_SHELL_BIN "")
 endif()
 
 if (C_CLANG OR C_GCC)
@@ -195,10 +206,16 @@ if (C_CLANG OR C_GCC)
   # I also took out -Wextra because it spews out so much noise a serious problem was not noticed.
   # It might go back in someday when I have more patience to clean up all the warnings.
   #
+
+  # TODO:
+  # Try error checking -fsanitize=bounds-strict -fsanitize=leak
+  # Requires libubsan and liblsan, respectively.
+
   ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   if(FREEBSD)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   else()
+    #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE -fsanitize=bounds-strict ${EXTRA_FLAGS}")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
   endif()
   #
@@ -246,6 +263,44 @@ else()
 endif(WIN32 OR CYGWIN)
 
 # requirements
+
+include(CheckSymbolExists)
+
+# Some platforms provide their own strlcpy & strlcat. (BSD, MacOSX)
+# Others don't so we provide our own. (Windows, most, but not all Linux)
+# Here we detect whether these are provided by the OS and set a symbol
+# so that:
+#  (1) libgps does not supply its own version.
+#  (2) we know whether we need to supply our own copy.
+#
+# This was all working fine until these were added to the gnu c library 2.38.
+# References:
+#  - https://www.gnu.org/software/libc/sources.html
+#  - https://sourceware.org/git/?p=glibc.git;a=blob_plain;f=NEWS;hb=HEAD
+#
+# This test is not detecting them for glibc 2.38 resulting in a conflict.
+# Why?  Are they declared in a different file or in some strange way?
+#
+# This is how they are declared in include/string.h:
+#
+#	extern __typeof (strlcpy) __strlcpy;
+#	libc_hidden_proto (__strlcpy)
+#	extern __typeof (strlcat) __strlcat;
+#	libc_hidden_proto (__strlcat)
+#
+# Apparently cmake does not recognize this style.
+# Keep this here for BSD type systems where it behaves as expected.
+# We will need to add a hack in direwolf.h to define these if glibc version >= 2.38.
+
+check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
+if(HAVE_STRLCPY)
+    add_compile_options(-DHAVE_STRLCPY)
+endif()
+check_symbol_exists(strlcat string.h HAVE_STRLCAT)
+if(HAVE_STRLCAT)
+    add_compile_options(-DHAVE_STRLCAT)
+endif()
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
@@ -276,6 +331,17 @@ if(LINUX)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CM108")
   endif()
 
+  find_package(Avahi)
+  if(AVAHI_CLIENT_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_AVAHI_CLIENT")
+  endif()
+
+elseif (HAVE_SNDIO)
+  find_package(sndio REQUIRED)
+  if(SNDIO_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_SNDIO")
+  endif()
+
 elseif (NOT WIN32 AND NOT CYGWIN)
   find_package(Portaudio REQUIRED)
   if(PORTAUDIO_FOUND)
@@ -287,8 +353,12 @@ else()
   set(ALSA_LIBRARIES "")
   set(UDEV_INCLUDE_DIRS "")
   set(UDEV_LIBRARIES "")
+  # Version 1.7 supports CM108/CM119 GPIO PTT for Windows.
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CM108")
   set(PORTAUDIO_INCLUDE_DIRS "")
   set(PORTAUDIO_LIBRARIES "")
+  set(SNDIO_INCLUDE_DIRS "")
+  set(SNDIO_LIBRARIES "")
 endif()
 
 # manage and fetch new data
@@ -297,6 +367,7 @@ add_subdirectory(data)
 # external libraries
 add_subdirectory(${CUSTOM_GEOTRANZ_DIR})
 add_subdirectory(${CUSTOM_REGEX_DIR})
+add_subdirectory(${CUSTOM_HIDAPI_DIR})
 add_subdirectory(${CUSTOM_MISC_DIR})
 
 # direwolf source code and utilities

@@ -237,12 +237,14 @@ MYFDTYPE serial_port_open (char *devicename, int baud)
 	  case 9600:	cfsetispeed (&ts, B9600);	cfsetospeed (&ts, B9600); 	break;
 	  case 19200:	cfsetispeed (&ts, B19200);	cfsetospeed (&ts, B19200); 	break;
 	  case 38400:	cfsetispeed (&ts, B38400);	cfsetospeed (&ts, B38400); 	break;
-#ifndef __APPLE__
+// This does not seem to be a problem anymore.
+// Leaving traces behind, as clue, in case failure is encountered in some older version.
+//#ifndef __APPLE__
 	  // Not defined for Mac OSX.
 	  // https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2072
 	  case 57600:	cfsetispeed (&ts, B57600);	cfsetospeed (&ts, B57600); 	break;
 	  case 115200:	cfsetispeed (&ts, B115200);	cfsetospeed (&ts, B115200); 	break;
-#endif
+//#endif
 	  default:	text_color_set(DW_COLOR_ERROR);
 	  		dw_printf ("serial_port_open: Unsupported speed %d.  Using 4800.\n", baud);
 			cfsetispeed (&ts, B4800);	cfsetospeed (&ts, B4800);
@@ -302,17 +304,12 @@ int serial_port_write (MYFDTYPE fd, char *str, int len)
 	  {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error writing to serial port.  Error %d.\n\n", err);
+	    return (-1);
 	  }
 	}
-	else if ((int)nwritten != len) 
-	{
-	  // Do we want this message here?
-	  // Or rely on caller to check and provide something more meaningful for the usage?
-	  //text_color_set(DW_COLOR_ERROR);
-	  //dw_printf ("Error writing to serial port.  Only %d of %d written.\n\n", (int)nwritten, len);
-	}
 
-	return (nwritten);
+	// nwritten is 0 for asynchronous write, at this point, so just return the requested len.
+	return (len);
 
 #else
 	int written;

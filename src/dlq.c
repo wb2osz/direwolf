@@ -130,12 +130,18 @@ void dlq_init (void)
 #else
 	int err;
 	err = pthread_mutex_init (&wake_up_mutex, NULL);
+	if (err != 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("dlq_init: pthread_mutex_init err=%d", err);
+	  perror ("");
+	  exit (EXIT_FAILURE);
+	}
 	err = pthread_mutex_init (&dlq_mutex, NULL);
 	if (err != 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("dlq_init: pthread_mutex_init err=%d", err);
 	  perror ("");
-	  exit (1);
+	  exit (EXIT_FAILURE);
 	}
 #endif
 
@@ -209,10 +215,10 @@ void dlq_init (void)
  *				 display of audio level line.
  *				 Use -2 to indicate DTMF message.)
  *
- *		is_fx25 - Was it from FX.25?  Need to know because
+ *		fec_type - Was it from FX.25 or IL2P?  Need to know because
  *			  meaning of retries is different.
  *
- *		retries	- Level of bit correction used.
+ *		retries	- Level of correction used.
  *
  *		spectrum - Display of how well multiple decoders did.
  *
@@ -222,7 +228,7 @@ void dlq_init (void)
  *
  *--------------------------------------------------------------------*/
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {
 
 	struct dlq_item_s *pnew;
@@ -233,7 +239,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	dw_printf ("dlq_rec_frame (chan=%d, pp=%p, ...)\n", chan, pp);
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);	// TOTAL to include virtual channels.
 
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -253,6 +259,11 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	if (s_new_count > s_delete_count + 50) {
@@ -267,7 +278,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	pnew->subchan = subchan;
 	pnew->pp = pp;
 	pnew->alevel = alevel;
-	pnew->is_fx25 = is_fx25;
+	pnew->fec_type = fec_type;
 	pnew->retries = retries;
 	if (spectrum == NULL) 
 	  strlcpy(pnew->spectrum, "", sizeof(pnew->spectrum));
@@ -492,6 +503,11 @@ void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_CONNECT_REQUEST;
@@ -545,6 +561,11 @@ void dlq_disconnect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int 
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_DISCONNECT_REQUEST;
@@ -603,6 +624,11 @@ void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_OUTSTANDING_FRAMES_REQUEST;
@@ -670,6 +696,11 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_XMIT_DATA_REQUEST;
@@ -697,8 +728,7 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
  *
  * Purpose:     Register callsigns that we will recognize for incoming connection requests.
  *
- * Inputs:	addrs		- Source (owncall), destination (peercall),
- *				  and possibly digipeaters.
+ * Inputs:	addr		- Callsign to [un]register.
  *
  *		chan		- Channel, 0 is first.
  *
@@ -718,7 +748,7 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
  *--------------------------------------------------------------------*/
 
 
-void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
+void dlq_register_callsign (char *addr, int chan, int client)
 {
 	struct dlq_item_s *pnew;
 
@@ -733,11 +763,16 @@ void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_REGISTER_CALLSIGN;
 	pnew->chan = chan;
-	strlcpy (pnew->addrs[0], addr, AX25_MAX_ADDR_LEN);
+	strlcpy (pnew->addrs[0], addr, sizeof(pnew->addrs[0]));
 	pnew->num_addr = 1;
 	pnew->client = client;
 
@@ -748,7 +783,7 @@ void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
 } /* end dlq_register_callsign */
 
 
-void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client)
+void dlq_unregister_callsign (char *addr, int chan, int client)
 {
 	struct dlq_item_s *pnew;
 
@@ -763,11 +798,16 @@ void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_UNREGISTER_CALLSIGN;
 	pnew->chan = chan;
-	strlcpy (pnew->addrs[0], addr, AX25_MAX_ADDR_LEN);
+	strlcpy (pnew->addrs[0], addr, sizeof(pnew->addrs[0]));
 	pnew->num_addr = 1;
 	pnew->client = client;
 
@@ -817,6 +857,11 @@ void dlq_channel_busy (int chan, int activity, int status)
 /* Allocate a new queue item. */
 
 	  pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	  if (pnew == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("FATAL ERROR: Out of memory.\n");
+	    exit (EXIT_FAILURE);
+	  }
 	  s_new_count++;
 
 	  pnew->type = DLQ_CHANNEL_BUSY;
@@ -840,7 +885,7 @@ void dlq_channel_busy (int chan, int activity, int status)
  * Name:        dlq_seize_confirm
  *
  * Purpose:     Inform data link state machine that the transmitter is on.
- *		This is in reponse to lm_seize_request.
+ *		This is in response to lm_seize_request.
  *
  * Inputs:	chan		- Radio channel number.
  *
@@ -865,6 +910,11 @@ void dlq_seize_confirm (int chan)
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	pnew->type = DLQ_SEIZE_CONFIRM;
@@ -910,6 +960,11 @@ void dlq_client_cleanup (int client)
 /* Allocate a new queue item. */
 
 	pnew = (struct dlq_item_s *) calloc (sizeof(struct dlq_item_s), 1);
+	if (pnew == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	s_new_count++;
 
 	// All we care about is the client number.
@@ -1192,6 +1247,11 @@ cdata_t *cdata_new (int pid, char *data, int len)
 	size = ( len + 127 ) & ~0x7f;
 
 	cdata = malloc ( sizeof(cdata_t) + size );
+	if (cdata == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 
 	cdata->magic = TXDATA_MAGIC;
 	cdata->next = NULL;

@@ -87,7 +87,15 @@ Divide audio sample by n for first channel.
 
 .TP
 .BI "-X " "n"
-1 to enable FX.25 transmit.
+1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.
+
+.TP
+.BI "-I " "n"
+Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.
+
+.TP
+.BI "-i " "n"
+Enable IL2P transmit, inverted polarity.  n=1 is recommended.  0 uses weaker FEC.
 
 .TP
 .BI "-d " "x"
@@ -122,6 +130,8 @@ m = Monitor heard station list.
 f = Packet filtering.
 .P
 x = FX.25 increase verbose level.
+.P
+d = APRStt (DTMF to APRS object conversion).
 .RE
 .RE
 .PD
@@ -135,6 +145,8 @@ Quiet (suppress output). Specify one or more of the following in place of x.
 h = Heard line with the audio level.
 .P
 d = Decoding of APRS packets.
+.P
+x = Silence FX.25 information.
 .RE
 .RE
 .PD
@@ -149,11 +161,26 @@ Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.  Use 9 to test com
 Enable pseudo terminal for KISS protocol.
 
 .TP
-.B "-x " 
+.BI "-x "
 Send Xmit level calibration tones.
+.PD 0
+.RS
+.RS
+a = Alternating mark/space tones.
+.P
+m = steady Mark tone (e.g. 1200 Hz)
+.P
+s = steady Space tone (e.g. 2200 Hz)
+.P
+p = selence (set Ptt only).
+.P
+Optionally add a number to specify radio channel.
+.RE
+.RE
+.PD
 
 .TP
-.B "-U " 
+.B "-u "
 Print UTF-8 test string and exit.
 
 .TP

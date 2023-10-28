@@ -24,11 +24,12 @@ typedef struct decode_aprs_s {
 
 	int g_quiet;			/* Suppress error messages when decoding. */
 
-        char g_src[AX25_MAX_ADDR_LEN];
+        char g_src[AX25_MAX_ADDR_LEN];	// In the case of a packet encapsulated by a 3rd party
+					// header, this is the encapsulated source.
 
-        char g_msg_type[60];		/* APRS data type.  Telemetry descriptions get pretty long. */
-					/* Putting msg in the name was a poor choice because  */
-					/* "message" has a specific meaning.  Rename it someday. */
+        char g_dest[AX25_MAX_ADDR_LEN];
+
+        char g_data_type_desc[100];	/* APRS data type description.  Telemetry descriptions get pretty long. */
 
         char g_symbol_table;		/* The Symbol Table Identifier character selects one */
 					/* of the two Symbol Tables, or it may be used as */
@@ -66,10 +67,30 @@ typedef struct decode_aprs_s {
 					/* Also for Directed Station Query which is a */
 					/* special case of message. */
 
+	// This is so pfilter.c:filt_t does not need to duplicate the same work.
+
+	int g_has_thirdparty_header;
+	enum packet_type_e {
+			packet_type_none=0,
+			packet_type_position,
+			packet_type_weather,
+			packet_type_object,
+			packet_type_item,
+			packet_type_message,
+			packet_type_query,
+			packet_type_capabilities,
+			packet_type_status,
+			packet_type_telemetry,
+			packet_type_userdefined,
+			packet_type_nws
+		} g_packet_type;
+
 	enum message_subtype_e { message_subtype_invalid = 0,
 				message_subtype_message,
 				message_subtype_ack,
 				message_subtype_rej,
+				message_subtype_bulletin,
+				message_subtype_nws,
 				message_subtype_telem_parm,
 				message_subtype_telem_unit,
 				message_subtype_telem_eqns,
@@ -77,23 +98,31 @@ typedef struct decode_aprs_s {
 				message_subtype_directed_query
 		} g_message_subtype;	/* Various cases of the overloaded "message." */
 
-	char g_message_number[8];	/* Message number.  Should be 1 - 5 characters if used. */
+	char g_message_number[12];	/* Message number.  Should be 1 - 5 alphanumeric characters if used. */
+					/* Addendum 1.1 has new format {mm} or {mm}aa with only two */
+					/* characters for message number and an ack riding piggyback. */
 
         float g_speed_mph;		/* Speed in MPH.  */
+					/* The APRS transmission uses knots so watch out for */
+					/* conversions when sending and receiving APRS packets. */
 
         float g_course;			/* 0 = North, 90 = East, etc. */
 	
         int g_power;			/* Transmitter power in watts. */
 
         int g_height;			/* Antenna height above average terrain, feet. */
+					// TODO:  rename to g_height_ft
 
-        int g_gain;			/* Antenna gain in dB. */
+        int g_gain;			/* Antenna gain in dBi. */
 
         char g_directivity[12];		/* Direction of max signal strength */
 
         float g_range;			/* Precomputed radio range in miles. */
 
         float g_altitude_ft;		/* Feet above median sea level.  */
+					/* I used feet here because the APRS specification */
+					/* has units of feet for altitude.  Meters would be */
+					/* more natural to the other 96% of the world. */
 
         char g_mfr[80];			/* Manufacturer or application. */
 
@@ -135,7 +164,7 @@ typedef struct decode_aprs_s {
 
 
 
-extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet);
+extern void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_src);
 
 extern void decode_aprs_print (decode_aprs_t *A);
 

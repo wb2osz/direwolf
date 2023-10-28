@@ -321,7 +321,7 @@ static void * tnc_listen_thread (void *arg)
 	    s_tnc_sock = dwsock_connect (s_tnc_host, s_tnc_port, "TNC", 0, 0, tncaddr);
 
 	    if (s_tnc_sock != -1) {
-	      dw_printf ("Succesfully reattached to network TNC.\n");
+	      dw_printf ("Successfully reattached to network TNC.\n");
 
 	      // Might need to run TNC initialization again.
 	      // For example, a server would register its callsigns.
@@ -365,7 +365,7 @@ static void * tnc_listen_thread (void *arg)
 	    }
 
 /*
- * Call to/from fields are 10 bytes but contents must not exceeed 9 characters.
+ * Call to/from fields are 10 bytes but contents must not exceed 9 characters.
  * It's not guaranteed that unused bytes will contain 0 so we
  * don't issue error message in this case. 
  */
@@ -600,7 +600,7 @@ int agwlib_G_ask_port_information (void)
  * Returns:	Number of bytes sent for success, -1 for error.
  *
  * Description:	This only starts the sequence and does not wait.
- *		Success or failue will be indicated sometime later by ?
+ *		Success or failure will be indicated sometime later by ?
  *
  *--------------------------------------------------------------------*/
 
@@ -635,7 +635,7 @@ int agwlib_C_connect (int chan, char *call_from, char *call_to)
  * Returns:	Number of bytes sent for success, -1 for error.
  *
  * Description:	This only starts the sequence and does not wait.
- *		Success or failue will be indicated sometime later by ?
+ *		Success or failure will be indicated sometime later by ?
  *
  *--------------------------------------------------------------------*/
 
@@ -722,13 +722,13 @@ int agwlib_D_send_connected_data (int chan, int pid, char *call_from, char *call
  *		hand we don't want to get TOO far ahead when transferring a large file.
  *
  *		Before disconnecting from another station, it would be good to know
- *		that it actually recevied the last message we sent.  For this reason,
+ *		that it actually received the last message we sent.  For this reason,
  *		I think it would be good for this to include frames that were 
- *		transmitted but not yet acknowleged.  (Even if it was transmitted once,
+ *		transmitted but not yet acknowledged.  (Even if it was transmitted once,
  *		it could still be transmitted again, if lost, so you could say it is
  *		still waiting for transmission.)
  *
- *		See server.c for a more precise definition of exacly how this is defined.
+ *		See server.c for a more precise definition of exactly how this is defined.
  *
  *--------------------------------------------------------------------*/
 

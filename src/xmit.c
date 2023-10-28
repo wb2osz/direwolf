@@ -88,7 +88,7 @@
  */
 
 
-static int xmit_slottime[MAX_CHANS];	/* Slot time in 10 mS units for persistance algorithm. */
+static int xmit_slottime[MAX_CHANS];	/* Slot time in 10 mS units for persistence algorithm. */
 
 static int xmit_persist[MAX_CHANS];	/* Sets probability for transmitting after each */
 					/* slot time delay.  Transmit if a random number */
@@ -278,7 +278,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 
 	for (j=0; j<MAX_CHANS; j++) {
 
-	  if (p_modem->achan[j].medium == MEDIUM_RADIO) {
+	  if (p_modem->chan_medium[j] == MEDIUM_RADIO) {
 #if __WIN32__
 	    xmit_th[j] = (HANDLE)_beginthreadex (NULL, 0, xmit_thread, (void*)(ptrdiff_t)j, 0, NULL);
 	    if (xmit_th[j] == NULL) {
@@ -597,6 +597,11 @@ static void * xmit_thread (void *arg)
 
 	          case FLAVOR_APRS_DIGI:
 	            xmit_ax25_frames (chan, prio, pp, 1);	/* 1 means don't bundle */
+					// I don't know if this in some official specification
+					// somewhere, but it is generally agreed that APRS digipeaters
+					// should send only one frame at a time rather than
+					// bundling multiple frames into a single transmission.
+					// Discussion here:  http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2021-September/049034.html
 	            break;
 
 	          case FLAVOR_APRS_NEW:
@@ -761,7 +766,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 					// machine, that the transmission opportunity has arrived."
 
 	pre_flags = MS_TO_BITS(xmit_txdelay[chan] * 10, chan) / 8;
-	num_bits =  hdlc_send_flags (chan, pre_flags, 0);
+	num_bits =  layer2_preamble_postamble (chan, pre_flags, 0, save_audio_config_p);
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("xmit_thread: t=%.3f, txdelay=%d [*10], pre_flags=%d, num_bits=%d\n", dtime_now()-time_ptt, xmit_txdelay[chan], pre_flags, num_bits);
@@ -862,7 +867,7 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
  */
 
 	post_flags = MS_TO_BITS(xmit_txtail[chan] * 10, chan) / 8;
-	nb = hdlc_send_flags (chan, post_flags, 1);
+	nb = layer2_preamble_postamble (chan, post_flags, 1, save_audio_config_p);
 	num_bits += nb;
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
@@ -957,8 +962,6 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 
 static int send_one_frame (int c, int p, packet_t pp)
 {
-	unsigned char fbuf[AX25_MAX_PACKET_LEN+2];
-	int flen;
 	char stemp[1024];	/* max size needed? */
 	int info_len;
 	unsigned char *pinfo;
@@ -1002,10 +1005,10 @@ static int send_one_frame (int c, int p, packet_t pp)
 	ax25_format_addrs (pp, stemp);
 	info_len = ax25_get_info (pp, &pinfo);
 	text_color_set(DW_COLOR_XMIT);
-#if 0
+#if 0						// FIXME - enable this?
 	dw_printf ("[%d%c%s%s] ", c,
 			p==TQ_PRIO_0_HI ? 'H' : 'L',
-			save_audio_config_p->fx25_xmit_enable ? "F" : "",
+			save_audio_config_p->achan[c].fx25_strength ? "F" : "",
 			ts);
 #else
 	dw_printf ("[%d%c%s] ", c, p==TQ_PRIO_0_HI ? 'H' : 'L', ts);
@@ -1059,9 +1062,6 @@ static int send_one_frame (int c, int p, packet_t pp)
 /*
  * Transmit the frame.
  */
-	flen = ax25_pack (pp, fbuf);
-	assert (flen >= 1 && flen <= (int)(sizeof(fbuf)));
-
 	int send_invalid_fcs2 = 0;
 
 	if (save_audio_config_p->xmit_error_rate != 0) {
@@ -1074,7 +1074,7 @@ static int send_one_frame (int c, int p, packet_t pp)
 	  }
 	}
 
-	nb = hdlc_send_frame (c, fbuf, flen, send_invalid_fcs2, save_audio_config_p->fx25_xmit_enable);
+	nb = layer2_send_frame (c, pp, send_invalid_fcs2, save_audio_config_p);
 
 // Optionally send confirmation to AGW client app if monitoring enabled.
 
@@ -1384,7 +1384,7 @@ static void xmit_dtmf (int c, packet_t pp, int speed)
  *		New in version 1.5: full duplex.
  *		Just start transmitting rather than waiting for clear channel.
  *		This would only be appropriate when transmit and receive are
- *		using different radio freqencies.  e.g.  VHF up, UHF down satellite.
+ *		using different radio frequencies.  e.g.  VHF up, UHF down satellite.
  *
  * Transmit delay algorithm:
  *

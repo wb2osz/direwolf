@@ -102,7 +102,9 @@
  *
  *			RR note:	It seems that some implementations put a hint
  *					in the "RR" reserved bits.
- *					http://www.tapr.org/pipermail/ax25-layer2/2005-October/000297.html
+ *					http://www.tapr.org/pipermail/ax25-layer2/2005-October/000297.html (now broken)
+ *					https://elixir.bootlin.com/linux/latest/source/net/ax25/ax25_addr.c#L237
+ *
  *					The RR bits can also be used for "DAMA" which is
  *					some sort of channel access coordination scheme.
  *					http://internet.freepage.de/cgi-bin/feets/freepage_ext/41030x030A/rewrite/hennig/afu/afudoc/afudama.html
@@ -406,7 +408,7 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	}
 
 	// Erratum: The AX.25 spec is not clear about whether SREJ should be command, response, or both.
-	// The underlying X.25 spec clearly says it is reponse only.  Let's go with that.
+	// The underlying X.25 spec clearly says it is response only.  Let's go with that.
 
 	if (ftype == frame_type_S_SREJ && cr != cr_res) {
 	  text_color_set(DW_COLOR_ERROR);

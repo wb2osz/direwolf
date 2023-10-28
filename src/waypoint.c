@@ -187,10 +187,10 @@ void waypoint_init (struct misc_config_s *mc)
 
 	s_waypoint_formats = mc->waypoint_formats;
 	if (s_waypoint_formats == 0) {
-	  s_waypoint_formats = WPT_FORMAT_NMEA_GENERIC | WPT_FORMAT_KENWOOD;
+	  s_waypoint_formats = WPL_FORMAT_NMEA_GENERIC | WPL_FORMAT_KENWOOD;
 	}
-	if (s_waypoint_formats & WPT_FORMAT_GARMIN) {
-	  s_waypoint_formats |= WPT_FORMAT_NMEA_GENERIC;		/* See explanation below. */
+	if (s_waypoint_formats & WPL_FORMAT_GARMIN) {
+	  s_waypoint_formats |= WPL_FORMAT_NMEA_GENERIC;		/* See explanation below. */
 	}
 
 #if DEBUG
@@ -298,7 +298,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
 	dw_printf ("waypoint_send_sentence (\"%s\", \"%c%c\")\n", name_in, symtab, symbol);
 #endif
 
-// Don't waste time if no destintations specified.
+// Don't waste time if no destinations specified.
 
 	if (s_waypoint_serial_port_fd == MYFDERROR &&
 	    s_waypoint_udp_sock_fd == -1) {
@@ -376,7 +376,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
  *		*99		is checksum
  */
 
-	if (s_waypoint_formats & WPT_FORMAT_NMEA_GENERIC) {
+	if (s_waypoint_formats & WPL_FORMAT_NMEA_GENERIC) {
 
 	  snprintf (sentence, sizeof(sentence), "$GPWPL,%s,%s,%s,%s,%s", slat, slat_ns, slong, slong_ew, wname);
 	  append_checksum (sentence);
@@ -406,7 +406,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
  *		*99		is checksum
  */
 
-	if (s_waypoint_formats & WPT_FORMAT_GARMIN) {
+	if (s_waypoint_formats & WPL_FORMAT_GARMIN) {
 
 	  int i = symbol - ' ';
 	  int grm_sym;		/* Garmin symbol code. */
@@ -455,7 +455,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
  * to delete that specific waypoint.
  */
 
-	if (s_waypoint_formats & WPT_FORMAT_MAGELLAN) {
+	if (s_waypoint_formats & WPL_FORMAT_MAGELLAN) {
 
 	  int i = symbol - ' ';
 	  char sicon[3];		/* Magellan icon string.  Currently 1 or 2 characters. */
@@ -567,7 +567,7 @@ void waypoint_send_sentence (char *name_in, double dlat, double dlong, char symt
 
 
  
-	if (s_waypoint_formats & WPT_FORMAT_KENWOOD) {
+	if (s_waypoint_formats & WPL_FORMAT_KENWOOD) {
 
 	  time_t now;
 	  struct tm tm;
@@ -654,7 +654,7 @@ void waypoint_send_ais (char *sentence)
 	  return;
 	}
 
-	if (s_waypoint_formats & WPT_FORMAT_AIS) {
+	if (s_waypoint_formats & WPL_FORMAT_AIS) {
 	  send_sentence (sentence);
 	}
 }

@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016, 2017, 2018  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017, 2018, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -25,6 +25,10 @@
  * Purpose:	Data Link State Machine.
  *		Establish connections and transfer data in the proper
  *		order with retries.
+ *
+ *		Using the term "data link" is rather unfortunate because it causes
+ *		confusion to someone familiar with the OSI networking model.
+ *		This corresponds to the layer 4 transport, not layer 2 data link.
  *
  * Description:	
  *
@@ -190,14 +194,16 @@
 // Debug switches for different types of information.
 // Should have command line options instead of changing source and recompiling.
 
-static int s_debug_protocol_errors = 1;	// Less serious Protocol errors.
+static int s_debug_protocol_errors = 0;	// Less serious Protocol errors.
 					// Useful for debugging but unnecessarily alarming other times.
+					// Was it intentially left on for release 1.6?
 
 static int s_debug_client_app = 0;	// Interaction with client application.
 					// dl_connect_request, dl_data_request, dl_data_indication, etc.
 
 static int s_debug_radio = 0;		// Received frames and channel busy status.
 					// lm_data_indication, lm_channel_busy
+
 static int s_debug_variables = 0;	// Variables, state changes.
 
 static int s_debug_retry = 0;		// Related to lost I frames, REJ, SREJ, timeout, resending.
@@ -246,7 +252,7 @@ typedef struct ax25_dlsm_s {
 						// notifications about state changes.
 
 
-	char addrs[AX25_MAX_REPEATERS][AX25_MAX_ADDR_LEN];
+	char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
 						// Up to 10 addresses, same order as in frame.
 
 	int num_addr;				// Number of addresses.  Should be in range 2 .. 10.
@@ -255,7 +261,7 @@ typedef struct ax25_dlsm_s {
 						// addrs[OWNCALL] is owncall for this end of link.
 						// Note that we are acting on behalf of
 						// a client application so the APRS mycall
-						// might not be relevent.
+						// might not be relevant.
 
 #define PEERCALL AX25_DESTINATION
 						// addrs[PEERCALL] is call for other end.
@@ -319,8 +325,8 @@ typedef struct ax25_dlsm_s {
 
 	int reject_exception;			// A REJ frame has been sent to the remote station. (boolean)
 
-						// This is used only when receving an I frame, in states 3 & 4, SREJ not enabled.
-						// When an I frame has an unepected N(S),
+						// This is used only when receiving an I frame, in states 3 & 4, SREJ not enabled.
+						// When an I frame has an unexpected N(S),
 						//   - if not already set, set it and send REJ.
 						// When an I frame with expected N(S) is received, clear it.
 						// This would prevent us from sending additional REJ while
@@ -343,7 +349,7 @@ typedef struct ax25_dlsm_s {
 						// Sometimes the flow chart has SAT instead of SRT.
 						// I think that is a typographical error.
 
-	float t1v;				// How long to wait for an acknowlegement before resending.
+	float t1v;				// How long to wait for an acknowledgement before resending.
 						// Value used when starting timer T1, in seconds.
 						// "FRACK" parameter in some implementations.
 						// Typically it might be 3 seconds after frame has been
@@ -590,6 +596,8 @@ static int AX25MODULO(int n, int m, const char *file, const char *func, int line
 #define PAUSE_TM201	pause_tm201(S, __func__, __LINE__)
 #define RESUME_TM201	resume_tm201(S, __func__, __LINE__)
 
+// TODO: add SELECT_T1_VALUE	for debugging.
+
 
 static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len);
 
@@ -824,6 +832,11 @@ static ax25_dlsm_t *get_link_handle (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 // Create new data link state machine.
 
 	p = calloc (sizeof(ax25_dlsm_t), 1);
+	if (p == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	p->magic1 = MAGIC1;
 	p->start_time = dtime_now();
 	p->stream_id = next_stream_id++;
@@ -1066,12 +1079,31 @@ void dl_disconnect_request (dlq_item_t *E)
 	  case 	state_1_awaiting_connection:
 	  case 	state_5_awaiting_v22_connection:
 
-// TODO: "requeue."  Not sure what to do here.
-// If we put it back in the queue we will get it back again probably still in same state.
-// Need a way to defer it until the next state change.
+// Erratum: The protocol spec says "requeue."  If we put disconnect req back in the
+// queue we will probably get it back again here while still in same state.
+// I don't think we would want to delay it until the next state transition.
 
+// Suppose someone tried to connect to another station, which is not responding, and decided to cancel
+// before all of the SABMe retries were used up.  I think we would want to transmit a DISC, send a disc
+// notice to the user, and go directly into disconnected state, rather than into awaiting release.
+
+// New code v1.7 dev, May 6 2023
+
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("Stream %d: In progress connection attempt to %s terminated by user.\n", S->stream_id, S->addrs[PEERCALL]);
+	    discard_i_queue (S);
+	    SET_RC(0);
+	    int p1 = 1;
+	    int nopid0 = 0;
+	    packet_t pp15 = ax25_u_frame (S->addrs, S->num_addr, cr_cmd, frame_type_U_DISC, p1, nopid0, NULL, 0);
+	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp15);
+
+	    STOP_T1;	// started in establish_data_link.
+	    STOP_T3;	// probably don't need.
+	    enter_new_state (S, state_0_disconnected, __func__, __LINE__);
+	    server_link_terminated (S->chan, S->client, S->addrs[PEERCALL], S->addrs[OWNCALL], 0);
 	    break;
-	    
+
 	  case 	state_2_awaiting_release:
 	    {
 	      // We have previously started the disconnect sequence and are waiting
@@ -1157,7 +1189,7 @@ void dl_disconnect_request (dlq_item_t *E)
  *
  * Erratum:	Not sure how to interpret that.  See example below for how it was implemented.
  *
- * Version 1.6:	Bug 252.  Segmentation was occuring for a V2.0 link.  From the spec:
+ * Version 1.6:	Bug 252.  Segmentation was occurring for a V2.0 link.  From the spec:
  *			"The receipt of an XID response from the other station establishes that both
  *			stations are using AX.25 version 2.2 or higher and enables the use of the
  *			segmenter/reassembler and selective reject."
@@ -1493,6 +1525,11 @@ void dl_register_callsign (dlq_item_t *E)
 	}
 
 	r = calloc(sizeof(reg_callsign_t),1);
+	if (r == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("FATAL ERROR: Out of memory.\n");
+	  exit (EXIT_FAILURE);
+	}
 	strlcpy (r->callsign, E->addrs[0], sizeof(r->callsign));
 	r->chan = E->chan;
 	r->client = E->client;
@@ -1564,15 +1601,51 @@ void dl_unregister_callsign (dlq_item_t *E)
  *
  * Description:	This is the sum of:
  *		- Incoming connected data, from application still in the queue.
- *		- I frames which have been transmitted but not yet acknowleged.
+ *		- I frames which have been transmitted but not yet acknowledged.
+ *
+ * Confusion:	https://github.com/wb2osz/direwolf/issues/427
+ *
+ *		There are different, inconsistent versions of the protocol spec.
+ *
+ *		One of them simply has:
+ *
+ *			CallFrom is our call
+ *			CallTo is the call of the other station
+ *
+ *		A more detailed version has the same thing in the table of fields:
+ *
+ *			CallFrom	10 bytes	Our CallSign
+ *			CallTo		10 bytes	Other CallSign
+ *
+ *		(My first implementation went with that.)
+ *		
+ *		HOWEVER, shortly after that, is contradictory information:
+ *
+ *			Careful must be exercised to fill correctly both the CallFrom
+ *			and CallTo fields to match the ones of an existing connection,
+ *			otherwise AGWPE won’t return any information at all from this query.
+ *
+ *			The order of the CallFrom and CallTo is not trivial, it should
+ *			reflect the order used to start the connection, so
+ *
+ *			  *  If we started the connection CallFrom=US and CallTo=THEM
+ *			  *  If the other end started the connection CallFrom=THEM and CallTo=US
+ *
+ *		This seems to make everything unnecessarily more complicated.
+ *		We should only care about the stream going from the local station to the
+ *		remote station.  Why would it matter who reqested the link?  The state
+ *		machine doesn't even contain this information so the TNC doesn't know.
+ *		The client app interface needs to behave differently for the two cases.
+ *
+ *		The new code, below, May 2023, should handle both of those cases.
  *
  *------------------------------------------------------------------------------*/
 
 void dl_outstanding_frames_request (dlq_item_t *E)
 {
 	ax25_dlsm_t *S;
-	int ok_to_create = 0;	// must exist already.
-
+	const int ok_to_create = 0;	// must exist already.
+	int reversed_addrs = 0;
 
 	if (s_debug_client_app) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -1580,12 +1653,28 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 	}
 
 	S = get_link_handle (E->addrs, E->num_addr, E->chan, E->client, ok_to_create);
+	if (S != NULL) {
+	  reversed_addrs = 0;
+	}
+	else {
+	  // Try swapping the addresses.
+	  // this is communicating with the client app, not over the air,
+	  // so we don't need to worry about digipeaters.
 
-	if (S == NULL) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Can't get outstanding frames for %s -> %s, chan %d\n", E->addrs[OWNCALL], E->addrs[PEERCALL], E->chan);
-	  server_outstanding_frames_reply (E->chan, E->client, E->addrs[OWNCALL], E->addrs[PEERCALL], 0);
-	  return;
+	  char swapped[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN];
+	  memset (swapped, 0, sizeof(swapped));
+	  strlcpy (swapped[PEERCALL], E->addrs[OWNCALL], sizeof(swapped[PEERCALL]));
+	  strlcpy (swapped[OWNCALL], E->addrs[PEERCALL], sizeof(swapped[OWNCALL]));
+	  S = get_link_handle (swapped, E->num_addr, E->chan, E->client, ok_to_create);
+	  if (S != NULL) {
+	    reversed_addrs = 1;
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Can't get outstanding frames for %s -> %s, chan %d\n", E->addrs[OWNCALL], E->addrs[PEERCALL], E->chan);
+	    server_outstanding_frames_reply (E->chan, E->client, E->addrs[OWNCALL], E->addrs[PEERCALL], 0);
+	    return;
+	  }
 	}
 
 // Add up these
@@ -1614,7 +1703,13 @@ void dl_outstanding_frames_request (dlq_item_t *E)
 	  }
 	}
 
-	server_outstanding_frames_reply (S->chan, S->client, S->addrs[OWNCALL], S->addrs[PEERCALL], count1 + count2);
+	if (reversed_addrs) {
+	  // Other end initiated the link.
+	  server_outstanding_frames_reply (S->chan, S->client, S->addrs[PEERCALL], S->addrs[OWNCALL], count1 + count2);
+	}
+	else {
+	  server_outstanding_frames_reply (S->chan, S->client, S->addrs[OWNCALL], S->addrs[PEERCALL], count1 + count2);
+	}
 
 } // end dl_outstanding_frames_request
 
@@ -1633,7 +1728,7 @@ void dl_outstanding_frames_request (dlq_item_t *E)
  * Description:	By client application we mean something that attached with the 
  *		AGW network protocol.
  *
- *		Clean out anything related to the specfied client application.
+ *		Clean out anything related to the specified client application.
  *		This would include state machines and registered callsigns.
  *	
  *------------------------------------------------------------------------------*/
@@ -2201,7 +2296,7 @@ void lm_data_indication (dlq_item_t *E)
 	    break;
 
 // Erratum: The AX.25 spec is not clear about whether SREJ should be command, response, or both.
-// The underlying X.25 spec clearly says it is reponse only.  Let's go with that.
+// The underlying X.25 spec clearly says it is response only.  Let's go with that.
 
 	  case frame_type_S_SREJ:
 	  case frame_type_U_DM:
@@ -2224,7 +2319,7 @@ void lm_data_indication (dlq_item_t *E)
 	  case frame_type_U_UI:
 	    // Don't test at this point in case an APRS frame gets thru.
 	    // APRS doesn't specify what to put in the Source and Dest C bits.
-	    // In practice we see all 4 possble combinations.
+	    // In practice we see all 4 possible combinations.
 	    // I have an opinion about what would be "correct" (discussed elsewhere)
 	    // but in practice no one seems to care.
 	    break;
@@ -2701,7 +2796,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 
 	  if (S->rxdata_by_ns[ns] != NULL) {
 	    // There is a possibility that we might have another received frame stashed
-	    // away from 8 or 128 (modulo) frames back.  Remove it so it doesn't accidently
+	    // away from 8 or 128 (modulo) frames back.  Remove it so it doesn't accidentally
 	    // show up at some future inopportune time.
 
 	    cdata_delete (S->rxdata_by_ns[ns]);
@@ -2786,7 +2881,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 // we discard 3,4,5,6, and tell the other end to resend everything starting with 2.
 
 // At one time, I had some doubts about when to use command or response for REJ.
-// I now believe that reponse, as implied by setting F in the flow chart, is correct.
+// I now believe that response, as implied by setting F in the flow chart, is correct.
 
 	  int f = p;
 	  int nr = S->vr;		// Next expected sequence number.
@@ -2796,7 +2891,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 	  S->reject_exception = 1;
 
 	  if (s_debug_retry) {
-	      text_color_set(DW_COLOR_ERROR);	// make it more noticable.
+	      text_color_set(DW_COLOR_ERROR);	// make it more noticeable.
 	      dw_printf ("sending REJ, at %s %d, SREJ not enabled case, V(R)=%d", __func__, __LINE__, S->vr);
 	  }
 
@@ -2860,7 +2955,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 // In version 1.4:
 // We end up sending more SREJ than necessary and and get back redundant information.  Example:
 // When we see 113 missing, we ask for a resend.
-// When we see 115 & 116 missing, a cummulative SREJ asks for everything.
+// When we see 115 & 116 missing, a cumulative SREJ asks for everything.
 // The other end dutifully sends 113 twice.
 //
 // [0.4] DW1>DW0:(SREJ res, n(r)=113, f=0)
@@ -2890,7 +2985,7 @@ static void i_frame_continued (ax25_dlsm_t *S, int p, int ns, int pid, char *inf
 //	      int allow_f1 = 0;		// F=1 from X.25 2.4.6.4 b) 3)
 	      int allow_f1 = 1;		// F=1 from X.25 2.4.6.4 b) 3)
 
-// send only for this gap, not cummulative from V(R).
+// send only for this gap, not cumulative from V(R).
 
 	      int last = AX25MODULO(ns - 1, S->modulo, __FILE__, __func__, __LINE__);
 	      int first = last;
@@ -2993,7 +3088,7 @@ dw_printf ("%s:%d, %d srej exceptions, V(R)=%d, N(S)=%d\n", __func__, __LINE__, 
 	      if (first == AX25MODULO(S->vr - 1, S->modulo, __FILE__, __func__, __LINE__)) {
 	        //  Oops!  Went too far.  This I frame was already processed.
 		text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("INTERNAL ERROR calulating what to put in SREJ, %s line %d\n", __func__, __LINE__);
+	        dw_printf ("INTERNAL ERROR calculating what to put in SREJ, %s line %d\n", __func__, __LINE__);
 	        dw_printf ("V(R)=%d, N(S)=%d, SREJ exception=%d, first=%d, ask_resend_count=%d\n", S->vr, ns, selective_reject_exception(S), first, ask_resend_count);
 		int k;
 	        for (k=0; k<128; k++) {
@@ -3146,7 +3241,7 @@ static void send_srej_frames (ax25_dlsm_t *S, int *resend, int count, int allow_
 	if (s_debug_retry) {
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("%s line %d\n", __func__, __LINE__);
-	  //dw_printf ("state=%d, count=%d, k=%d, V(R)=%d, SREJ exeception=%d\n", S->state, count, S->k_maxframe, S->vr, selective_reject_exception(S));
+	  //dw_printf ("state=%d, count=%d, k=%d, V(R)=%d, SREJ exception=%d\n", S->state, count, S->k_maxframe, S->vr, selective_reject_exception(S));
 	  dw_printf ("state=%d, count=%d, k=%d, V(R)=%d\n", S->state, count, S->k_maxframe, S->vr);
 
 	  dw_printf ("resend[]=");
@@ -3447,7 +3542,7 @@ static void rr_rnr_frame (ax25_dlsm_t *S, int ready, cmdres_t cr, int pf, int nr
 // we received RR frames with N(R) values indicating that the other side received everything
 // that we sent.  Eventually rc could reach the limit and we would get an error.
 // If we are in state 4, and other guy ack'ed last I frame we sent, transition to state 3.
-// The same thing was done for receving I frames after check_i_frame_ackd.
+// The same thing was done for receiving I frames after check_i_frame_ackd.
 
 // Thought: Could we simply call check_i_frame_ackd, for consistency, rather than only setting V(A)?
 
@@ -3759,7 +3854,7 @@ static void rej_frame (ax25_dlsm_t *S, cmdres_t cr, int pf, int nr)
  *
  *		The SREJ command/response initiates more-efficient error recovery by requesting the retransmission of a
  *		single I frame following the detection of a sequence error. This is an advancement over the earlier versions in
- *		which the requested I frame was retransmitted togther with all additional I frames subsequently transmitted and
+ *		which the requested I frame was retransmitted together with all additional I frames subsequently transmitted and
  *		successfully received.
  *
  *		When a TNC sends one or more SREJ commands, each with the P bit set to "0" or "1", or one or more SREJ
@@ -4409,7 +4504,7 @@ static void disc_frame (ax25_dlsm_t *S, int p)
  *		earliest opportunity. If the TNC is not capable of accepting a SABME command, it responds with a DM frame.
  *
  *		A TNC that uses a version of AX.25 prior to v2.2 responds with a FRMR.
- *		( I think the KPC-3+ has a bug - it replys with DM - WB2OSZ )
+ *		( I think the KPC-3+ has a bug - it replies with DM - WB2OSZ )
  *
  *		4.3.3.5. Disconnected Mode (DM) Response
  *
@@ -4636,7 +4731,7 @@ static void ua_frame (ax25_dlsm_t *S, int f)
 	    if (f == 1) {
 	      if (S->layer_3_initiated) {
 	        text_color_set(DW_COLOR_INFO);
-	        // TODO: add via if apppropriate.
+	        // TODO: add via if appropriate.
 	        dw_printf ("Stream %d: Connected to %s.  (%s)\n", S->stream_id, S->addrs[PEERCALL], S->state == state_5_awaiting_v22_connection ? "v2.2" : "v2.0");
 	        // There is a subtle difference here between connect confirm and indication.
 	        // connect *confirm* means "has been made"
@@ -5615,7 +5710,7 @@ static void clear_exception_conditions (ax25_dlsm_t *S)
  *
  *					Other guy gets RR/RNR command P=1.
  *					Same action for either state 3 or 4.
- *					Whether he has outstanding un-ack'ed sent I frames is irrelevent.
+ *					Whether he has outstanding un-ack'ed sent I frames is irrelevant.
  *					He calls "enquiry response" which sends RR/RNR response F=1.
  *					(Read about detour 1 below and in enquiry_response.)
  *
@@ -6035,7 +6130,7 @@ static void check_need_for_response (ax25_dlsm_t *S, ax25_frame_type_t frame_typ
  *
  * Outputs:	S->srt			New smoothed roundtrip time.
  *
- *		S->t1v			How long to wait for an acknowlegement before resending.
+ *		S->t1v			How long to wait for an acknowledgement before resending.
  *					Value used when starting timer T1, in seconds.
  *					Here it is dynamically adjusted.
  *
@@ -6134,7 +6229,7 @@ static void select_t1_value (ax25_dlsm_t *S)
 
 	    // This goes up exponentially if implemented as documented!
 	    // For example, if we were trying to connect to a station which is not there, we
-	    // would retry after 3, the 8, 16, 32, ...  and not time out for over an hour.
+	    // would retry after 3, then 8, 16, 32, ...  and not time out for over an hour.
 	    // That's ridiculous.   Let's try increasing it by a quarter second each time.
 	    // We now give up after about a minute.
 
@@ -6151,12 +6246,30 @@ static void select_t1_value (ax25_dlsm_t *S)
 	}
 
 
+// See  https://groups.io/g/direwolf/topic/100782658#8542
+// Perhaps the demands of file transfer lead to this problem.
+
+// "Temporary" hack.
+// Automatic fine tuning of t1v generally works well, but on very rare occasions, it gets wildly out of control.
+// Until I have more time to properly diagnose this, add some guardrails so it does not go flying off a cliff.
+
+// The initial value of t1v is frack + frack * 2 (number of digipeateers in path)
+// If anything, it should automatically be adjusted down.
+// Let's say, something smells fishy if it exceeds twice that initial value.
+
+// TODO: Add some instrumentation to record where this was called from and all the values in the printf below.
+
+#if 1
+	if (S->t1v < 0.25 || S->t1v > 2 * (g_misc_config_p->frack * (2 * (S->num_addr - 2) + 1)) ) {
+	    INIT_T1V_SRT;
+	}
+#else
 	if (S->t1v < 0.99 || S->t1v > 30) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("INTERNAL ERROR?  Stream %d: select_t1_value, rc = %d, t1 remaining = %.3f, old srt = %.3f, new srt = %.3f, Extreme new t1v = %.3f\n",
 		S->stream_id, S->rc, S->t1_remaining_when_last_stopped, old_srt, S->srt, S->t1v);
 	}
-
+#endif
 } /* end select_t1_value */
 
 

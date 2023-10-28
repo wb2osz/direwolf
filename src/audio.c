@@ -75,17 +75,16 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <errno.h>
 
 
 #if USE_ALSA
 #include <alsa/asoundlib.h>
-#else
-#include <errno.h>
-#ifdef __OpenBSD__
-#include <soundcard.h>
+#elif USE_SNDIO
+#include <sndio.h>
+#include <poll.h>
 #else
 #include <sys/soundcard.h>
-#endif
 #endif
 
 
@@ -111,6 +110,9 @@ static struct adev_s {
 
 	int bytes_per_frame;		/* number of bytes for a sample from all channels. */
 					/* e.g. 4 for stereo 16 bit. */
+#elif USE_SNDIO
+	struct sio_hdl *sndio_in_handle;
+	struct sio_hdl *sndio_out_handle;
 
 #else
 	int oss_audio_device_fd;	/* Single device, both directions. */
@@ -141,6 +143,9 @@ static struct adev_s {
 #if USE_ALSA
 static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *name, char *dir);
 //static void alsa_select_device (char *pick_dev, int direction, char *result);
+#elif USE_SNDIO
+static int set_sndio_params (int a, struct sio_hdl *handle, struct audio_s *pa, char *devname, char *inout);
+static int poll_sndio (struct sio_hdl *hdl, int events);
 #else
 static int set_oss_params (int a, int fd, struct audio_s *pa);
 #endif
@@ -201,7 +206,7 @@ static int calcbufsize(int rate, int chans, int bits)
  *				more restrictive in its capabilities.
  *				It might say, the best I can do is mono, 8 bit, 8000/sec.
  *
- *				The sofware modem must use this ACTUAL information
+ *				The software modem must use this ACTUAL information
  *				that the device is supplying, that could be different
  *				than what the user specified.
  *              
@@ -212,7 +217,9 @@ static int calcbufsize(int rate, int chans, int bits)
 
 int audio_open (struct audio_s *pa)
 {
+#if !USE_SNDIO
 	int err;
+#endif
 	int chan;
 	int a;
 	char audio_in_name[30];
@@ -224,7 +231,11 @@ int audio_open (struct audio_s *pa)
 	memset (adev, 0, sizeof(adev));
 
 	for (a=0; a<MAX_ADEVS; a++) {
-#ifndef USE_ALSA
+#if USE_ALSA
+	  adev[a].audio_in_handle = adev[a].audio_out_handle = NULL;
+#elif USE_SNDIO
+	  adev[a].sndio_in_handle = adev[a].sndio_out_handle = NULL;
+#else
 	  adev[a].oss_audio_device_fd = -1;
 #endif
 	  adev[a].udp_sock = -1;
@@ -343,11 +354,33 @@ int audio_open (struct audio_s *pa)
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Could not open audio device %s for input\n%s\n", 
 	  		audio_in_name, snd_strerror(err));
+		  if (err == -EBUSY) {
+	            dw_printf ("This means that some other application is using that device.\n");
+	            dw_printf ("The solution is to identify that other application and stop it.\n");
+	          }
 	          return (-1);
 	        }
 
 	        adev[a].inbuf_size_in_bytes = set_alsa_params (a, adev[a].audio_in_handle, pa, audio_in_name, "input");
 	    
+#elif USE_SNDIO
+		adev[a].sndio_in_handle = sio_open (audio_in_name, SIO_REC, 0);
+		if (adev[a].sndio_in_handle == NULL) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Could not open audio device %s for input\n",
+			audio_in_name);
+		  return (-1);
+		}
+
+		adev[a].inbuf_size_in_bytes = set_sndio_params (a, adev[a].sndio_in_handle, pa, audio_in_name, "input");
+
+		if (!sio_start (adev[a].sndio_in_handle)) {
+		  text_color_set(DW_COLOR_ERROR);
+		  dw_printf ("Could not start audio device %s for input\n",
+			audio_in_name);
+		  return (-1);
+		}
+
 #else // OSS
 	        adev[a].oss_audio_device_fd = open (pa->adev[a].adevice_in, O_RDWR);
 
@@ -430,6 +463,10 @@ int audio_open (struct audio_s *pa)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Could not open audio device %s for output\n%s\n", 
 			audio_out_name, snd_strerror(err));
+	      if (err == -EBUSY) {
+	        dw_printf ("This means that some other application is using that device.\n");
+	        dw_printf ("The solution is to identify that other application and stop it.\n");
+	      }
 	      return (-1);
 	    }
 
@@ -439,6 +476,27 @@ int audio_open (struct audio_s *pa)
 	      return (-1);
 	    }
 
+#elif USE_SNDIO
+	    adev[a].sndio_out_handle = sio_open (audio_out_name, SIO_PLAY, 0);
+	    if (adev[a].sndio_out_handle == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Could not open audio device %s for output\n",
+			audio_out_name);
+	      return (-1);
+	    }
+
+	    adev[a].outbuf_size_in_bytes = set_sndio_params (a, adev[a].sndio_out_handle, pa, audio_out_name, "output");
+
+	    if (adev[a].inbuf_size_in_bytes <= 0 || adev[a].outbuf_size_in_bytes <= 0) {
+	      return (-1);
+	    }
+
+	    if (!sio_start (adev[a].sndio_out_handle)) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Could not start audio device %s for output\n",
+			audio_out_name);
+	      return (-1);
+	    }
 #endif
 
 /*
@@ -675,6 +733,112 @@ static int set_alsa_params (int a, snd_pcm_t *handle, struct audio_s *pa, char *
 } /* end alsa_set_params */
 
 
+#elif USE_SNDIO
+
+/*
+ * Set parameters for sound card. (sndio)
+ *
+ * See  /usr/include/sndio.h  for details.
+ */
+
+static int set_sndio_params (int a, struct sio_hdl *handle, struct audio_s *pa, char *devname, char *inout)
+{
+
+	struct sio_par q, r;
+
+	/* Signed 16 bit little endian or unsigned 8 bit. */
+	sio_initpar (&q);
+	q.bits = pa->adev[a].bits_per_sample;
+	q.bps = (q.bits + 7) / 8;
+	q.sig = (q.bits == 8) ? 0 : 1;
+	q.le = 1; /* always little endian */
+	q.msb = 0; /* LSB aligned */
+	q.rchan = q.pchan = pa->adev[a].num_channels;
+	q.rate = pa->adev[a].samples_per_sec;
+	q.xrun = SIO_IGNORE;
+	q.appbufsz = calcbufsize(pa->adev[a].samples_per_sec, pa->adev[a].num_channels, pa->adev[a].bits_per_sample);
+
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("suggest buffer size %d bytes for %s %s.\n",
+		q.appbufsz, devname, inout);
+#endif
+
+	/* challenge new setting */
+	if (!sio_setpar (handle, &q)) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Could not set hardware parameter for %s %s.\n",
+		devname, inout);
+	  return (-1);
+	}
+
+	/* get response */
+	if (!sio_getpar (handle, &r)) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Could not obtain current hardware setting for %s %s.\n",
+		devname, inout);
+	  return (-1);
+	}
+
+#if DEBUG
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("audio buffer size %d bytes for %s %s.\n",
+		r.appbufsz, devname, inout);
+#endif
+	if (q.rate != r.rate) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("Asked for %d samples/sec but got %d for %s %s.",
+		     pa->adev[a].samples_per_sec, r.rate, devname, inout);
+	  pa->adev[a].samples_per_sec = r.rate;
+	}
+
+	/* not supported */
+	if (q.bits != r.bits || q.bps != r.bps || q.sig != r.sig ||
+	    (q.bits > 8 && q.le != r.le) ||
+	    (*inout == 'o' && q.pchan != r.pchan) ||
+	    (*inout == 'i' && q.rchan != r.rchan)) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Unsupported format for %s %s.\n", devname, inout);
+	  return (-1);
+	}
+
+	return r.appbufsz;
+
+} /* end set_sndio_params */
+
+static int poll_sndio (struct sio_hdl *hdl, int events)
+{
+	struct pollfd *pfds;
+	int nfds, revents;
+
+	nfds = sio_nfds (hdl);
+	pfds = alloca (nfds * sizeof(struct pollfd));
+
+	do {
+	  nfds = sio_pollfd (hdl, pfds, events);
+	  if (nfds < 1) {
+	    /* no need to wait */
+	    return (0);
+	  }
+	  if (poll (pfds, nfds, -1) < 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("poll %d\n", errno);
+	    return (-1);
+	  }
+	  revents = sio_revents (hdl, pfds);
+	} while (!(revents & (events | POLLHUP)));
+
+	/* unrecoverable error occurred */
+	if (revents & POLLHUP) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("waited for %s, POLLHUP received\n", (events & POLLIN) ? "POLLIN" : "POLLOUT");
+	  return (-1);
+	}
+
+	return (0);
+}
+
 #else
 
 
@@ -769,7 +933,7 @@ static int set_oss_params (int a, int fd, struct audio_s *pa)
  * This was long ago under different conditions.
  * Should study this again some day.
  *
- * Your milage may vary.
+ * Your mileage may vary.
  */
 	err = ioctl (fd, SNDCTL_DSP_GETBLKSIZE, &ossbuf_size_in_bytes);
    	if (err == -1) {
@@ -842,7 +1006,9 @@ __attribute__((hot))
 int audio_get (int a)
 {
 	int n;
+#if USE_ALSA
 	int retries = 0;
+#endif
 
 #if STATISTICS
 	/* Gather numbers for read from audio device. */
@@ -936,6 +1102,8 @@ int audio_get (int a)
 	          dw_printf ("This is most likely caused by the CPU being too slow to keep up with the audio stream.\n");
 	          dw_printf ("Use the \"top\" command, in another command window, to look at CPU usage.\n");
 	          dw_printf ("This might be a temporary condition so we will attempt to recover a few times before giving up.\n");
+	          dw_printf ("If using a very slow CPU, try reducing the CPU load by using -P- command\n");
+	          dw_printf ("line option for 9600 bps or -D3 for slower AFSK .\n");
 	        }
 
 	        audio_stats (a, 
@@ -970,7 +1138,28 @@ int audio_get (int a)
 	    }
 
 
-#else	/* end ALSA, begin OSS */
+#elif USE_SNDIO
+
+	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
+
+	      assert (adev[a].sndio_in_handle != NULL);
+	      if (poll_sndio (adev[a].sndio_in_handle, POLLIN) < 0) {
+		adev[a].inbuf_len = 0;
+		adev[a].inbuf_next = 0;
+		return (-1);
+	      }
+
+	      n = sio_read (adev[a].sndio_in_handle, adev[a].inbuf_ptr, adev[a].inbuf_size_in_bytes);
+	      adev[a].inbuf_len = n;
+	      adev[a].inbuf_next = 0;
+
+	      audio_stats (a,
+			save_audio_config_p->adev[a].num_channels,
+			n / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8),
+			save_audio_config_p->statistics_interval);
+	    }
+
+#else	/* begin OSS */
 
 	    /* Fixed in 1.2.  This was formerly outside of the switch */
 	    /* so the OSS version did not process stdin or UDP. */
@@ -1250,6 +1439,37 @@ int audio_flush (int a)
 	adev[a].outbuf_len = 0;
 	return (-1);
 
+#elif USE_SNDIO
+
+	int k;
+	unsigned char *ptr;
+	int len;
+
+	ptr = adev[a].outbuf_ptr;
+	len = adev[a].outbuf_len;
+
+	while (len > 0) {
+	  assert (adev[a].sndio_out_handle != NULL);
+	  if (poll_sndio (adev[a].sndio_out_handle, POLLOUT) < 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    perror("Can't write to audio device");
+	    adev[a].outbuf_len = 0;
+	    return (-1);
+	  }
+
+	  k = sio_write (adev[a].sndio_out_handle, ptr, len);
+#if DEBUGx
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("audio_flush(): write %d returns %d\n", len, k);
+	  fflush (stdout);
+#endif
+	  ptr += k;
+	  len -= k;
+	}
+
+	adev[a].outbuf_len = 0;
+	return (0);
+
 #else		/* OSS */
 
 	int k;
@@ -1320,7 +1540,7 @@ int audio_flush (int a)
  *		(3) Call this function, which might or might not wait long enough.
  *		(4) Add (1) and (2) resulting in when PTT should be turned off.
  *		(5) Take difference between current time and desired PPT off time
- *			and wait for additoinal time if required.
+ *			and wait for additional time if required.
  *
  *----------------------------------------------------------------*/
 
@@ -1350,6 +1570,10 @@ void audio_wait (int a)
 	 * all pending frames have been played.  
 	 * Either way, the caller will now compensate for it.
  	 */
+
+#elif USE_SNDIO
+
+	poll_sndio (adev[a].sndio_out_handle, POLLOUT);
 
 #else
 
@@ -1396,7 +1620,22 @@ int audio_close (void)
 
 	    snd_pcm_close (adev[a].audio_in_handle);
 	    snd_pcm_close (adev[a].audio_out_handle);
-	
+
+	    adev[a].audio_in_handle = adev[a].audio_out_handle = NULL;
+
+#elif USE_SNDIO
+
+	  if (adev[a].sndio_in_handle != NULL && adev[a].sndio_out_handle != NULL) {
+
+	    audio_wait (a);
+
+	    sio_stop (adev[a].sndio_in_handle);
+	    sio_stop (adev[a].sndio_out_handle);
+	    sio_close (adev[a].sndio_in_handle);
+	    sio_close (adev[a].sndio_out_handle);
+
+	    adev[a].sndio_in_handle = adev[a].sndio_out_handle = NULL;
+
 #else
 
 	  if  (adev[a].oss_audio_device_fd > 0) {

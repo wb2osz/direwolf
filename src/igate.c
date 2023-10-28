@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2016, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -100,11 +100,13 @@
 #include "version.h"
 #include "digipeater.h"
 #include "tq.h"
+#include "dlq.h"
 #include "igate.h"
 #include "latlong.h"
 #include "pfilter.h"
 #include "dtime_now.h"
 #include "mheard.h"
+
 
 
 #if __WIN32__
@@ -200,6 +202,8 @@ static char * ia_to_text (int  Family, void * pAddr, char * pStringBuf, size_t S
 
 
 #if ITEST
+
+// TODO:  Add to automated tests.
 
 /* For unit testing. */
 
@@ -324,7 +328,7 @@ static int stats_uplink_packets;	/* Number of packets passed along to the IGate 
 					/* server after filtering. */
 
 static int stats_uplink_bytes;		/* Total number of bytes sent to IGate server */
-					/* including login, packets, and hearbeats. */
+					/* including login, packets, and heartbeats. */
 
 static int stats_downlink_bytes;	/* Total number of bytes from IGate server including */
 					/* packets, heartbeats, other messages. */
@@ -851,6 +855,9 @@ static void * connnect_thread (void *arg)
  * Purpose:     Send a packet to the IGate server
  *
  * Inputs:	chan	- Radio channel it was received on.
+ *			  This is required for the RF>IS filtering.
+ *		          Beaconing (sendto=ig, chan=-1) and a client app sending
+ *			  to ICHANNEL should bypass the filtering.
  *
  *		recv_pp	- Pointer to packet object.
  *			  *** CALLER IS RESPONSIBLE FOR DELETING IT! **
@@ -898,7 +905,12 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
  * In that case, the payload will have TCPIP in the path and it will be dropped.
  */
 
-	if (save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
+// Apply RF>IS filtering only if it same from a radio channel.
+// Beacon will be channel -1.
+// Client app to ICHANNEL is outside of radio channel range.
+
+	if (chan >= 0 && chan < MAX_CHANS && 		// in radio channel range
+		save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
 
 	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp, 1) != 1) {
 
@@ -1217,7 +1229,7 @@ static void send_packet_to_server (packet_t pp, int chan)
  * Name:        send_msg_to_server
  *
  * Purpose:     Send something to the IGate server.
- *		This one function should be used for login, hearbeats,
+ *		This one function should be used for login, heartbeats,
  *		and packets.
  *
  * Inputs:	imsg	- Message.  We will add CR/LF here.
@@ -1469,7 +1481,7 @@ static void * igate_recv_thread (void *arg)
  *
  * Future: might have ability to configure multiple transmit
  * channels, each with own client side filtering and via path.
- * Loop here over all configured channels.
+ * If so, loop here over all configured channels.
  */
 	    text_color_set(DW_COLOR_REC);
 	    dw_printf ("\n[ig>tx] ");		// formerly just [ig]
@@ -1504,6 +1516,64 @@ static void * igate_recv_thread (void *arg)
 	    if (to_chan >= 0) {
 	      maybe_xmit_packet_from_igate ((char*)message, to_chan);
 	    }
+
+
+/*
+ * New in 1.7:  If ICHANNEL was specified, send packet to client app as specified channel.
+ */
+	    if (save_audio_config_p->igate_vchannel >= 0) {
+
+	      int ichan = save_audio_config_p->igate_vchannel;
+
+	      // My original poorly thoughtout idea was to parse it into a packet object,
+	      // using the non-strict option, and send to the client app.
+	      //
+	      // A lot of things can go wrong with that approach.
+
+	      // (1)  Up to 8 digipeaters are allowed in radio format.
+	      //      There is a potential of finding a larger number here.
+	      //
+	      // (2)  The via path can have names that are not valid in the radio format.
+	      //      e.g.  qAC, T2HAKATA, N5JXS-F1.
+	      //      Non-strict parsing would force uppercase, truncate names too long,
+	      //      and drop unacceptable SSIDs.
+	      //
+	      // (3) The source address could be invalid for the RF address format.
+	      //     e.g.  WHO-IS>APJIW4,TCPIP*,qAC,AE5PL-JF::ZL1JSH-9 :Charles Beadfield/New Zealand{583
+	      //     That is essential information that we absolutely need to preserve.
+	      //
+	      // I think the only correct solution is to apply a third party header
+	      // wrapper so the original contents are preserved.  This will be a little
+	      // more work for the application developer.  Search for ":}" and use only
+	      // the part after that.  At this point, I don't see any value in encoding
+	      // information in the source/destination so I will just use "X>X:}" as a prefix
+
+	      char stemp[AX25_MAX_INFO_LEN];
+	      strlcpy (stemp, "X>X:}", sizeof(stemp));
+	      strlcat (stemp, (char*)message, sizeof(stemp));
+
+	      packet_t pp3 = ax25_from_text(stemp, 0);	// 0 means not strict
+	      if (pp3 != NULL) {
+
+	        alevel_t alevel;
+	        memset (&alevel, 0, sizeof(alevel));
+	        alevel.mark = -2;	// FIXME: Do we want some other special case?
+	        alevel.space = -2;
+
+	        int subchan = -2;	// FIXME: -1 is special case for APRStt.
+					// See what happens with -2 and follow up on this.
+					// Do we need something else here?
+		int slice = 0;
+	        fec_type_t fec_type = fec_type_none;
+	        char spectrum[] = "APRS-IS";
+	        dlq_rec_frame (ichan, subchan, slice, pp3, alevel, fec_type, RETRY_NONE, spectrum);
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("ICHANNEL %d: Could not parse message from APRS-IS server.\n", ichan);
+	        dw_printf ("%s\n", message);
+	      }
+	    }  // end ICHANNEL option
 	  }
 
 	}  /* while (1) */
@@ -1538,9 +1608,14 @@ static void * igate_recv_thread (void *arg)
  *		Duplicate removal will drop the original if there is no
  *		corresponding digipeated version.
  *
+ *
+ *		This was an idea that came up in one of the discussion forums.
+ *		I rushed in without thinking about it very much.
+ *
  * 		In retrospect, I don't think this was such a good idea.
  *		It would be of value only if there is no other IGate nearby
  *		that would report on the original transmission.
+ *		I wonder if anyone would notice if this silently disappeared.
  *
  *--------------------------------------------------------------------*/
 
@@ -1652,7 +1727,14 @@ static void * satgate_delay_thread (void *arg)
  *				K1RI-2>APWW10,WIDE1-1,WIDE2-1,qAS,K1RI:/221700h/9AmA<Ct3_ sT010/002g005t045r000p023P020h97b10148
  *				KC1BOS-2>T3PQ3S,WIDE1-1,WIDE2-1,qAR,W1TG-1:`c)@qh\>/"50}TinyTrak4 Mobile
  *
- *				  Notice how the final address in the header might not
+ *				  This is interesting because the source is not a valid AX.25 address.
+ *				  Non-RF stations can have 2 alphanumeric characters for SSID.
+ *				  In this example, the WHO-IS server is responding to a message.
+ *
+ *				WHO-IS>APJIW4,TCPIP*,qAC,AE5PL-JF::ZL1JSH-9 :Charles Beadfield/New Zealand{583
+ *
+ *
+ *				  Notice how the final digipeater address, in the header, might not
  *				  be a valid AX.25 address.  We see a 9 character address
  *				  (with no ssid) and an ssid of two letters.
  *				  We don't care because we end up discarding them before
@@ -1667,29 +1749,61 @@ static void * satgate_delay_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
+
+// It is unforunate that the : data type indicator (DTI) was overloaded with
+// so many different meanings.  Simply looking at the DTI is not adequate for
+// determining whether a packet is a message.
+// We need to exclude the other special cases of telemetry metadata,
+// bulletins, and weather bulletins.
+
+static int is_message_message (char *infop)
+{
+	if (*infop != ':') return (0);
+	if (strlen(infop) < 11) return (0);	// too short for : addressee :
+	if (strlen(infop) >= 16) {
+	  if (strncmp(infop+10, ":PARM.", 6) == 0) return (0);
+	  if (strncmp(infop+10, ":UNIT.", 6) == 0) return (0);
+	  if (strncmp(infop+10, ":EQNS.", 6) == 0) return (0);
+	  if (strncmp(infop+10, ":BITS.", 6) == 0) return (0);
+	}
+	if (strlen(infop) >= 4) {
+	  if (strncmp(infop+1, "BLN", 3) == 0) return (0);
+	  if (strncmp(infop+1, "NWS", 3) == 0) return (0);
+	  if (strncmp(infop+1, "SKY", 3) == 0) return (0);
+	  if (strncmp(infop+1, "CWA", 3) == 0) return (0);
+	  if (strncmp(infop+1, "BOM", 3) == 0) return (0);
+	}
+	return (1);		// message, including ack, rej
+}
+
+
 static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 {
-	packet_t pp3;
-	char payload[AX25_MAX_PACKET_LEN];	/* what is max len? */
-	char src[AX25_MAX_ADDR_LEN];		/* Source address. */
-
-	char *pinfo = NULL;
-	int info_len;
 	int n;
 
 	assert (to_chan >= 0 && to_chan < MAX_CHANS);
 
-
 /*
- * Try to parse it into a packet object.
- * This will contain "q constructs" and we might see an address
- * with two alphnumeric characters in the SSID so we must use
- * the non-strict parsing.
+ * Try to parse it into a packet object; we need this for the packet filtering.
  *
- * Bug:  Up to 8 digipeaters are allowed in radio format.
- * There is a potential of finding a larger number here.
+ * We use the non-strict option because there the via path can have:
+ *	- station names longer than 6.
+ *	- alphanumeric SSID.
+ *	- lower case for "q constructs.
+ * We don't care about any of those because the via path will be discarded anyhow.
+ *
+ * The other issue, that I did not think of originally, is that the "source"
+ * address might not conform to AX.25 restrictions when it originally came
+ * from a non-RF source.  For example an APRS "message" might be sent to the
+ * "WHO-IS" server, and the reply message would have that for the source address.
+ *
+ * Originally, I used the source address from the packet object but that was
+ * missing the alphanumeric SSID.  This needs to be done differently.
+ *
+ * Potential Bug:  Up to 8 digipeaters are allowed in radio format.
+ * Is there a possibility of finding a larger number here?
  */
-	pp3 = ax25_from_text(message, 0);
+	packet_t pp3 = ax25_from_text(message, 0);
 	if (pp3 == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Tx IGate: Could not parse message from server.\n");
@@ -1697,7 +1811,18 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	  return;
 	}
 
-	ax25_get_addr_with_ssid (pp3, AX25_SOURCE, src);
+// Issue 408: The source address might not be valid AX.25 because it
+// came from a non-RF station.  e.g.  some server responding to a message.
+// We need to take source address from original rather than extracting it
+// from the packet object.
+
+	char src[AX25_MAX_ADDR_LEN];		/* Source address. */
+	memset (src, 0, sizeof(src));
+	memcpy (src, message, sizeof(src)-1);
+	char *gt = strchr(src, '>');
+	if (gt != NULL) {
+	    *gt = '\0';
+	}
 
 /*
  * Drop if path contains:
@@ -1709,8 +1834,8 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 
 	  ax25_get_addr_with_ssid (pp3, n + AX25_REPEATER_1, via);
 
-	  if (strcmp(via, "qAX") == 0 ||
-	      strcmp(via, "TCPXX") == 0 ||
+	  if (strcmp(via, "qAX") == 0 ||		// qAX deprecated. http://www.aprs-is.net/q.aspx
+	      strcmp(via, "TCPXX") == 0 ||		// TCPXX deprecated.
 	      strcmp(via, "RFONLY") == 0 ||
 	      strcmp(via, "NOGATE") == 0) {
 
@@ -1739,14 +1864,26 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  * If we recently transmitted a 'message' from some station,
  * send the position of the message sender when it comes along later.
  *
+ * Some refer to this as a "courtesy posit report" but I don't
+ * think that is an official term.
+ *
  * If we have a position report, look up the sender and see if we should
  * bypass the normal filtering.
+ *
+ * Reference:  https://www.aprs-is.net/IGating.aspx
+ *
+ *	"Passing all message packets also includes passing the sending station's position
+ *	along with the message. When APRS-IS was small, we did this using historical position
+ *	packets. This has become problematic as it introduces historical data on to RF. 
+ *	The IGate should note the station(s) it has gated messages to RF for and pass
+ *	the next position packet seen for that station(s) to RF."
  */
 
 // TODO: Not quite this simple.  Should have a function to check for position.
 // $ raw gps could be a position.  @ could be weather data depending on symbol.
 
-	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
+	char *pinfo = NULL;
+	int info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
 
 	int msp_special_case = 0;
 
@@ -1776,12 +1913,6 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	      // Previously there was a debug message here about the packet being dropped by filtering.
 	      // This is now handled better by the "-df" command line option for filtering details.
 
-	      //  TODO: clean up - remove these lines.
-	      //if (s_debug >= 1) {
-	      //  text_color_set(DW_COLOR_INFO);
-	      //  dw_printf ("Packet from IGate to channel %d was rejected by filter: %s\n", to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan]);
-	      //}
-
 	      ax25_delete (pp3);
 	      return;
 	    }
@@ -1790,13 +1921,15 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 
 
 /*
- * Remove the VIA path.
+ * We want to discard the via path, as received from the APRS-IS, then
+ * replace it with TCPIP and our own call, marked as used.
+ *
  *
  * For example, we might get something like this from the server.
- *	K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
+ *	K1USN-1>APWW10,TCPIP*,qAC,N5JXS-F1:T#479,100,048,002,500,000,10000000
  *
- * We want to reduce it to this before wrapping it as third party traffic.
- *	K1USN-1>APWW10:T#479,100,048,002,500,000,10000000<0x0d><0x0a>
+ * We want to transform it to this before wrapping it as third party traffic.
+ *	K1USN-1>APWW10,TCPIP,mycall*:T#479,100,048,002,500,000,10000000
  */
 
 /*
@@ -1824,36 +1957,23 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  *
  * What is the ",I" construct?
  * Do we care here?
- * Is is something new and improved that we should be using in the other direction?
+ * Is it something new and improved that we should be using in the other direction?
  */
 
-	while (ax25_get_num_repeaters(pp3) > 0) {
-	  ax25_remove_addr (pp3, AX25_REPEATER_1);
-	}
+	char payload[AX25_MAX_PACKET_LEN];
+
+	char dest[AX25_MAX_ADDR_LEN];		/* Destination field. */
+	ax25_get_addr_with_ssid (pp3, AX25_DESTINATION, dest);
+	snprintf (payload, sizeof(payload), "%s>%s,TCPIP,%s*:%s",
+				src, dest, save_audio_config_p->achan[to_chan].mycall, pinfo);
 
 
-/* 
- * Replace the VIA path with TCPIP and my call.
- * Mark my call as having been used.
- */
-	ax25_set_addr (pp3, AX25_REPEATER_1, "TCPIP");
-	ax25_set_h (pp3, AX25_REPEATER_1);
-	ax25_set_addr (pp3, AX25_REPEATER_2, save_audio_config_p->achan[to_chan].mycall);
-	ax25_set_h (pp3, AX25_REPEATER_2);
-
-/*
- * Convert to text representation.
- */
-	memset (payload, 0, sizeof(payload));
-
-	ax25_format_addrs (pp3, payload);
-	info_len = ax25_get_info (pp3, (unsigned char **)(&pinfo));
-	(void)(info_len);
-	strlcat (payload, pinfo, sizeof(payload));
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("Tx IGate: payload=%s\n", payload);
+	dw_printf ("Tx IGate: DEBUG payload=%s\n", payload);
 #endif
+
+
 	
 /*
  * Encapsulate for sending over radio if no reason to drop it.
@@ -1870,19 +1990,13 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  */
 	if (ig_to_tx_allow (pp3, to_chan)) {
 	  char radio [2400];
-	  packet_t pradio;
-
 	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
 				save_audio_config_p->achan[to_chan].mycall,
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
 				save_igate_config_p->tx_via,
 				payload);
 
-	  pradio = ax25_from_text (radio, 1);
-
-	  /* Oops.  Didn't have a check for NULL here. */
-	  /* Could this be the cause of rare and elusive crashes in 1.2? */
-
+	  packet_t pradio = ax25_from_text (radio, 1);
 	  if (pradio != NULL) {
 
 #if ITEST
@@ -1895,10 +2009,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 #endif
 	    stats_rf_xmit_packets++;		// Any type of packet.
 
-	    // TEMP TEST: metadata temporarily allowed during testing.
-
-	    if (*pinfo == ':' && ! is_telem_metadata(pinfo)) {
-	    // temp test // if (*pinfo == ':') {
+	    if (is_message_message(pinfo)) {
 
 // We transmitted a "message."  Telemetry metadata is excluded.
 // Remember to pass along address of the sender later.
@@ -2211,7 +2322,7 @@ static int rx_to_ig_allow (packet_t pp)
  *
  * Future:
  *		Should the digipeater function avoid transmitting something if it
- *		was recently transmitted by the IGate funtion?
+ *		was recently transmitted by the IGate function?
  *		This code is pretty much the same as dedupe.c. Maybe it could all
  *		be combined into one.  Need to ponder this some more.
  * 
@@ -2356,6 +2467,8 @@ void ig_to_tx_remember (packet_t pp, int chan, int bydigi)
         }
 }
 
+
+
 static int ig_to_tx_allow (packet_t pp, int chan)
 {
 	unsigned short crc = ax25_dedupe_crc(pp);
@@ -2388,7 +2501,7 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 
 	    /* We have a duplicate within some time period. */
 
-	    if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+	    if (is_message_message((char*)pinfo)) {
 
 	      /* I think I want to avoid the duplicate suppression for "messages." */
 	      /* Suppose we transmit a message from station X and it doesn't get an ack back. */
@@ -2437,7 +2550,7 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 	/* the normal limit for them. */
 
 	increase_limit = 1;
-	if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+	if (is_message_message((char*)pinfo)) {
 	  increase_limit = 3;
 	}
 

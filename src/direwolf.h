@@ -37,11 +37,8 @@
 
 #endif
 
-
 /*
- * Previously, we could handle only a single audio device.
- * This meant we could have only two radio channels.
- * In version 1.2, we relax this restriction and allow more audio devices.
+ * Maximum number of audio devices.
  * Three is probably adequate for standard version.
  * Larger reasonable numbers should also be fine.
  *
@@ -65,7 +62,15 @@
  * and make sure they handle undefined channels correctly.
  */
 
-#define MAX_CHANS ((MAX_ADEVS) * 2)
+#define MAX_RADIO_CHANS ((MAX_ADEVS) * 2)
+
+#define MAX_CHANS MAX_RADIO_CHANS	// TODO: Replace all former  with latter to avoid confusion with following.
+
+#define MAX_TOTAL_CHANS 16		// v1.7 allows additional virtual channels which are connected
+					// to something other than radio modems.
+					// Total maximum channels is based on the 4 bit KISS field.
+					// Someone with very unusual requirements could increase this and
+					// use only the AGW network protocol.
 
 /*
  * Maximum number of rigs.
@@ -97,7 +102,7 @@
  * Each one of these can have multiple slicers, at
  * different levels, to compensate for different
  * amplitudes of the AFSK tones.
- * Intially used same number as subchannels but
+ * Initially used same number as subchannels but
  * we could probably trim this down a little
  * without impacting performance.
  */
@@ -176,6 +181,7 @@
 #define DW_METERS_TO_FEET(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 3.2808399)
 #define DW_FEET_TO_METERS(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.3048)
 #define DW_KM_TO_MILES(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.621371192)
+#define DW_MILES_TO_KM(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 1.609344)
 
 #define DW_KNOTS_TO_MPH(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 1.15077945)
 #define DW_KNOTS_TO_METERS_PER_SEC(x) ((x) == G_UNKNOWN ? G_UNKNOWN : (x) * 0.51444444444)
@@ -272,49 +278,78 @@ typedef pthread_mutex_t dw_mutex_t;
 /* Platform differences for string functions. */
 
 
+// Windows is missing a few which are available on Unix/Linux platforms.
+// We provide our own copies when building on Windows.
 
 #if __WIN32__
 char *strsep(char **stringp, const char *delim);
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
-// Don't recall why for everyone.
+// Don't recall why I added this for everyone rather than only for Windows.
+// Potential problem if some C library declares it a little differently.
 char *strcasestr(const char *S, const char *FIND);
 
 
-#if defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
+// cmake tries to determine whether strlcpy and strlcat are provided by the C runtime library.
+//
+//	../CMakeLists.txt:check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
+//
+// It sets HAVE_STRLCPY and HAVE_STRLCAT if the corresponding functions are declared.
+// Unfortunately this does not work right for glibc 2.38 which declares the functions
+// like this:
+//
+//	extern __typeof (strlcpy) __strlcpy;
+//	libc_hidden_proto (__strlcpy)
+//	extern __typeof (strlcat) __strlcat;
+//	libc_hidden_proto (__strlcat)
+//
+// Rather than the normal way found in earlier versions:
+//
+//	extern char *strcpy (char *__restrict __dest, const char *__restrict __src)
+//
+// Perhaps a later version of cmake will recognize this form but the version I'm
+// using does not.
+// So, our work around is to assume these functions are available for glibc >= 2.38.
+//
+// In theory, cmake should be able to find the version of the C runtime library, 
+// but I could not get it to work.  So we have the test here.  We will still build
+// own library with the strl... functions but this does not cause a problem
+// because they have special debug names which will not cause a conflict.
 
-// strlcpy and strlcat should be in string.h and the C library.
-
-#else   // Use our own copy
-
-
-// These prevent /usr/include/gps.h from providing its own definition.
-#define HAVE_STRLCAT 1
+#ifdef __GLIBC__
+#if (__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 38))
+// These functions first added in 2.38.
+//#warning "DEBUG - glibc >= 2.38"
 #define HAVE_STRLCPY 1
-
-
-#define DEBUG_STRL 1
-
-#if DEBUG_STRL
-
-#define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz,__FILE__,__func__,__LINE__)
-#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz,__FILE__,__func__,__LINE__)
-
-size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
-size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
-
+#define HAVE_STRLCAT 1
 #else
+//#warning "DEBUG - glibc < 2.38"
+#endif
+#endif
 
+#define DEBUG_STRL 1	// Extra Debug version when using our own strlcpy, strlcat.
+			// Should be ignored if not supplying our own.
+
+#ifndef HAVE_STRLCPY	// Need to supply our own.
+#if DEBUG_STRL
+#define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz,__FILE__,__func__,__LINE__)
+size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
+#else
 #define strlcpy(dst,src,siz) strlcpy_debug(dst,src,siz)
-#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz)
-
 size_t strlcpy_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
-size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
-
 #endif  /* DEBUG_STRL */
+#endif
 
-#endif	/* BSD or Apple */
+#ifndef HAVE_STRLCAT	// Need to supply our own.
+#if DEBUG_STRL
+#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz,__FILE__,__func__,__LINE__)
+size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz, const char *file, const char *func, int line);
+#else
+#define strlcat(dst,src,siz) strlcat_debug(dst,src,siz)
+size_t strlcat_debug(char *__restrict__ dst, const char *__restrict__ src, size_t siz);
+#endif  /* DEBUG_STRL */
+#endif
 
 
 #endif   /* ifndef DIREWOLF_H */

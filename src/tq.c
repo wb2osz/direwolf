@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2014, 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2014, 2015, 2016, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -50,7 +50,8 @@
 #include "audio.h"
 #include "tq.h"
 #include "dedupe.h"
-
+#include "igate.h"
+#include "dtime_now.h"
 
 
 
@@ -148,7 +149,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	for (c = 0; c < MAX_CHANS; c++) {
 
-	  if (audio_config_p->achan[c].medium == MEDIUM_RADIO) {
+	  if (audio_config_p->chan_medium[c] == MEDIUM_RADIO) {
 
 	    wake_up_event[c] = CreateEvent (NULL, 0, 0, NULL);
 
@@ -167,7 +168,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	  xmit_thread_is_waiting[c] = 0;
 
-	  if (audio_config_p->achan[c].medium == MEDIUM_RADIO) {
+	  if (audio_config_p->chan_medium[c] == MEDIUM_RADIO) {
 	    err = pthread_cond_init (&(wake_up_cond[c]), NULL);
 	    if (err != 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -194,6 +195,9 @@ void tq_init (struct audio_s *audio_config_p)
  * 		Connected mode is a little different.  Use lm_data_request instead.
  *
  * Inputs:	chan	- Channel, 0 is first.
+ *
+ *				New in 1.7:
+ *				Channel can be assigned to IGate rather than a radio.
  *
  *		prio	- Priority, use TQ_PRIO_0_HI for digipeated or
  *				TQ_PRIO_1_LO for normal.
@@ -247,7 +251,44 @@ void tq_append (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium == MEDIUM_NONE) {
+// New in 1.7 - A channel can be assigned to the IGate rather than a radio.
+
+#ifndef DIGITEST		// avoid dtest link error
+
+	if (save_audio_config_p->chan_medium[chan] == MEDIUM_IGATE) {
+
+	  char ts[100];		// optional time stamp.
+
+	  if (strlen(save_audio_config_p->timestamp_format) > 0) {
+	    char tstmp[100];
+	    timestamp_user_format (tstmp, sizeof(tstmp), save_audio_config_p->timestamp_format);
+	    strlcpy (ts, " ", sizeof(ts));	// space after channel.
+	    strlcat (ts, tstmp, sizeof(ts));
+	  }
+	  else {
+	    strlcpy (ts, "", sizeof(ts));
+	  }
+
+	  char stemp[256];	// Formated addresses.
+	  ax25_format_addrs (pp, stemp);
+	  unsigned char *pinfo;
+	  int info_len = ax25_get_info (pp, &pinfo);
+	  text_color_set(DW_COLOR_XMIT);
+	  dw_printf ("[%d>is%s] ", chan, ts);
+	  dw_printf ("%s", stemp);			/* stations followed by : */
+	  ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
+	  dw_printf ("\n");
+
+	  igate_send_rec_packet (chan, pp);
+	  ax25_delete(pp);
+	  return;
+	}
+#endif
+
+// Normal case - put in queue for radio transmission.
+// Error if trying to transmit to a radio channel which was not configured.
+
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
 	  dw_printf ("This is probably a client application error, not a problem with direwolf.\n");
@@ -281,8 +322,6 @@ void tq_append (int chan, int prio, packet_t pp)
  * The check would allow an unlimited number of other types.
  *
  * Limit was 20.  Changed to 100 in version 1.2 as a workaround.
- *
- * Implementing the 6PACK protocol is probably the proper solution.
  */
 
 	if (ax25_is_aprs(pp) && tq_count(chan,prio,"","",0) > 100) {
@@ -451,7 +490,7 @@ void lm_data_request (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
@@ -609,7 +648,7 @@ void lm_seize_request (int chan)
 #endif
 
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->achan[chan].medium != MEDIUM_RADIO) {
+	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);

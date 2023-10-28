@@ -78,7 +78,6 @@ endfunction()
 # The default will be set for maximum portability so packagers won't need to
 # to anything special.
 #
-set(FORCE_SSE 1)
 #
 # While ENABLE_GENERIC also had the desired result (for x86_64), I don't think
 # it is the right approach.  It prevents the detection of the architecture,
@@ -354,7 +353,12 @@ elseif(ARCHITECTURE_ARM)
     if(C_MSVC)
         try_run(RUN_NEON COMPILE_NEON "${CMAKE_BINARY_DIR}/tmp" "${TEST_DIR}/test_arm_neon.cxx" COMPILE_DEFINITIONS /O0)
     else()
-        try_run(RUN_NEON COMPILE_NEON "${CMAKE_BINARY_DIR}/tmp" "${TEST_DIR}/test_arm_neon.cxx" COMPILE_DEFINITIONS -mfpu=neon -O0)
+        if(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL ${CMAKE_SYSTEM_PROCESSOR})
+          try_run(RUN_NEON COMPILE_NEON "${CMAKE_BINARY_DIR}/tmp" "${TEST_DIR}/test_arm_neon.cxx" COMPILE_DEFINITIONS -mfpu=neon -O0)
+        else()  
+          try_compile(COMPILE_NEON "${CMAKE_BINARY_DIR}/tmp" "${TEST_DIR}/test_arm_neon.cxx" COMPILE_DEFINITIONS -mfpu=neon -O0)
+          set(RUN_NEON  0)
+        endif()
     endif()
     if(COMPILE_NEON AND RUN_NEON EQUAL 0)
        set(HAS_NEON ON CACHE BOOL "Architecture has NEON SIMD enabled")

@@ -320,7 +320,7 @@ static void poll_timing_test (void)
  *
  *		data		- Should look something like this for incoming:
  *					*** CONNECTED to Station xxx\r
- *				  and ths for my request being accepted:
+ *				  and this for my request being accepted:
  *					*** CONNECTED With Station xxx\r
  *
  *		session_id	- Session id to be used in data transfer and
@@ -491,15 +491,19 @@ void agw_cb_D_connected_data (int chan, char *call_from, char *call_to, int data
 // who - list people currently logged in.
 
 	  int n;
-	  char greeting[80];
+	  char greeting[128];
 
 	  snprintf (greeting, sizeof(greeting), "Session Channel User   Since\r");
 	  agwlib_D_send_connected_data (chan, 0xF0, mycall, call_from, strlen(greeting), greeting);
 
 	  for (n = 0; n < MAX_SESSIONS; n++) {
 	    if (session[n].client_addr[0]) {
+// I think compiler is confused.  It says up to 520 characters can be written.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
 	      snprintf (greeting, sizeof(greeting), "  %2d       %d    %-9s [time later]\r", 
 			n, session[n].channel, session[n].client_addr);
+#pragma GCC diagnostic pop
 	      agwlib_D_send_connected_data (chan, 0xF0, mycall, call_from, strlen(greeting), greeting);
 	    }
 	  }

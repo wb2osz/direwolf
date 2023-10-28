@@ -349,7 +349,7 @@ void text_color_set ( enum dw_color_e c )
  *		output to stdout or other desired destination.
  *
  * Inputs:	fmt	- C language format.
- *		...	- Addtional arguments, just like printf.
+ *		...	- Additional arguments, just like printf.
  *
  *
  * Returns:	Number of characters in result.

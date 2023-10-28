@@ -162,9 +162,10 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 	  int chan = g_misc_config_p->beacon[j].sendto_chan;
 
 	  if (chan < 0) chan = 0;	/* For IGate, use channel 0 call. */
+	  if (chan >= MAX_CHANS) chan = 0;	// For ICHANNEL, use channel 0 call.
 
-	  if (g_modem_config_p->achan[chan].medium == MEDIUM_RADIO ||
-	      g_modem_config_p->achan[chan].medium == MEDIUM_NETTNC) {
+	  if (g_modem_config_p->chan_medium[chan] == MEDIUM_RADIO ||
+	      g_modem_config_p->chan_medium[chan] == MEDIUM_NETTNC) {
 
 	    if (strlen(g_modem_config_p->achan[chan].mycall) > 0 &&
 			 strcasecmp(g_modem_config_p->achan[chan].mycall, "N0CALL") != 0 &&
@@ -614,6 +615,22 @@ static void * beacon_thread (void *arg)
 	        /* i.e. Don't take relative to now in case there was some delay. */
 
 	        bp->next += bp->every;
+
+	        // https://github.com/wb2osz/direwolf/pull/301
+	        // https://github.com/wb2osz/direwolf/pull/301
+	        // This happens with a portable system with no Internet connection.
+	        // On reboot, the time is in the past.
+	        // After time gets set from GPS, all beacons from that interval are sent.
+	        // FIXME:  This will surely break time slotted scheduling.
+		// TODO: The correct fix will be using monotonic, rather than clock, time.
+
+	        /* craigerl: if next beacon is scheduled in the past, then set next beacon relative to now (happens when NTP pushes clock AHEAD) */
+	        /* fixme: if NTP sets clock BACK an hour, this thread will sleep for that hour */
+	        if ( bp->next < now ) {
+	            bp->next = now + bp->every;
+	            text_color_set(DW_COLOR_INFO);
+	            dw_printf("\nSystem clock appears to have jumped forward.  Beacon schedule updated.\n\n");
+	        }
 	      }
 
 	    }  /* if time to send it */
@@ -790,11 +807,17 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 	      assert (bp->sendto_chan >= 0);
 
-	      strlcpy (mycall, g_modem_config_p->achan[bp->sendto_chan].mycall, sizeof(mycall));
+	      if (g_modem_config_p->chan_medium[bp->sendto_chan] == MEDIUM_IGATE) {	// ICHANNEL uses chan 0 mycall.
+									// TODO: Maybe it should be allowed to have own.
+	        strlcpy (mycall, g_modem_config_p->achan[0].mycall, sizeof(mycall));
+	      }
+	      else {
+	        strlcpy (mycall, g_modem_config_p->achan[bp->sendto_chan].mycall, sizeof(mycall));
+	      }
 	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("MYCALL not set for beacon in config file line %d.\n", bp->lineno);
+	        dw_printf ("MYCALL not set for beacon to chan %d in config file line %d.\n", bp->sendto_chan, bp->lineno);
 		return;
 	      }
 
@@ -804,7 +827,12 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
  * 	src > dest [ , via ]
  */
 
-	      strlcpy (beacon_text, mycall, sizeof(beacon_text));
+	      if (bp->source != NULL) {
+	        strlcpy (beacon_text, bp->source, sizeof(beacon_text));
+	      }
+	      else {
+	        strlcpy (beacon_text, mycall, sizeof(beacon_text));
+	      }
 	      strlcat (beacon_text, ">", sizeof(beacon_text));
 
 	      if (bp->dest != NULL) {
@@ -1026,7 +1054,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 	  	    text_color_set(DW_COLOR_XMIT);
 	  	    dw_printf ("[ig] %s\n", beacon_text);
 
-		    igate_send_rec_packet (0, pp);
+		    igate_send_rec_packet (-1, pp);	// Channel -1 to avoid RF>IS filtering.
 		    ax25_delete (pp);
 	            break;
 

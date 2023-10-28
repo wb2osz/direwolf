@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -193,9 +193,9 @@ static const struct {
 	/*  ;  27  */	{ "NS", "Park/Picnic area" },
 	/*  <  28  */	{ "NT", "ADVISORY (one WX flag)" },
 	/*  =  29  */	{ "NU", "APRStt Touchtone (DTMF users)" },
-	/*  >  30  */	{ "NV", "OVERLAYED CAR" },
+	/*  >  30  */	{ "NV", "OVERLAID CAR" },
 	/*  ?  31  */	{ "NW", "INFO Kiosk  (Blue box with ?)" },
-	/*  @  32  */	{ "NX", "HURICANE/Trop-Storm" },
+	/*  @  32  */	{ "NX", "HURRICANE/Trop-Storm" },
 	/*  A  33  */	{ "AA", "overlayBOX DTMF & RFID & XO" },
 	/*  B  34  */	{ "AB", "Blwng Snow (& future codes)" },
 	/*  C  35  */	{ "AC", "Coast Guard" },
@@ -205,7 +205,7 @@ static const struct {
 	/*  G  39  */	{ "AG", "Snow Shwr (& future ovrlys)" },
 	/*  H  40  */	{ "AH", "Haze (& Overlay Hazards)" },
 	/*  I  41  */	{ "AI", "Rain Shower" },
-	/*  J  42  */	{ "AJ", "Lightening (& future ovrlys)" },
+	/*  J  42  */	{ "AJ", "Lightning (& future ovrlys)" },
 	/*  K  43  */	{ "AK", "Kenwood HT (W)" },
 	/*  L  44  */	{ "AL", "Lighthouse" },
 	/*  M  45  */	{ "AM", "MARS (A=Army,N=Navy,F=AF)" },
@@ -248,12 +248,12 @@ static const struct {
 	/*  r  82  */	{ "SR", "Restrooms" },
 	/*  s  83  */	{ "SS", "OVERLAY SHIP/boat (top view)" },
 	/*  t  84  */	{ "ST", "Tornado" },
-	/*  u  85  */	{ "SU", "OVERLAYED TRUCK" },
-	/*  v  86  */	{ "SV", "OVERLAYED Van" },
+	/*  u  85  */	{ "SU", "OVERLAID TRUCK" },
+	/*  v  86  */	{ "SV", "OVERLAID Van" },
 	/*  w  87  */	{ "SW", "Flooding" },
 	/*  x  88  */	{ "SX", "Wreck or Obstruction ->X<-" },
 	/*  y  89  */	{ "SY", "Skywarn" },
-	/*  z  90  */	{ "SZ", "OVERLAYED Shelter" },
+	/*  z  90  */	{ "SZ", "OVERLAID Shelter" },
 	/*  {  91  */	{ "Q1", "Fog (& future ovrly codes)" },
 	/*  |  92  */	{ "Q2", "TNC Stream Switch" },
 	/*  }  93  */	{ "Q3", "" },
@@ -298,7 +298,7 @@ static const char *search_locations[] = {
  * Description:	The primary and alternate symbol tables are constant
  *		so they are hardcoded.
  *		However the "new" sysmbols, which give new meanings to
- *		overlayed symbols, are always evolving.
+ *		OVERLAID symbols, are always evolving.
  *		For maximum flexibility, we will read the
  *		data file at run time rather than compiling it in.
  *
@@ -319,7 +319,7 @@ static const char *search_locations[] = {
 typedef struct new_sym_s {
 	char overlay;
 	char symbol;
-	char description[NEW_SYM_DESC_LEN+1];
+	char *description;
 } new_sym_t;
 
 static new_sym_t *new_sym_ptr = NULL;	/* Dynamically allocated array. */
@@ -352,10 +352,22 @@ void symbols_init (void)
 	char stuff[200];
 	int j;
 
+// Feb. 2022 - Noticed that some lines have - rather than =.
+
+// LD = LIght Rail or Subway (new Aug 2014)
+// SD = Seaport Depot (new Aug 2014)
+// DIGIPEATERS
+// /# - Generic digipeater
+// 1# - WIDE1-1 digipeater
+
+
 #define GOOD_LINE(x) (strlen(x) > 6 && \
 			(x[COL1_OVERLAY] == '/' || x[COL1_OVERLAY] == '\\' || isupper(x[COL1_OVERLAY]) || isdigit(x[COL1_OVERLAY])) \
 			&& x[COL2_SYMBOL] >= '!' && x[COL2_SYMBOL] <= '~' \
-			&& x[COL3_SP] == ' ' && x[COL4_EQUAL] == '=' && x[COL5_SP] == ' ' && x[COL6_DESC] != ' ')
+			&& x[COL3_SP] == ' ' \
+			&& (x[COL4_EQUAL] == '=' || x[COL4_EQUAL] == '-') \
+			&& x[COL5_SP] == ' ' \
+			&& x[COL6_DESC] != ' ')
 
 	if (new_sym_ptr != NULL) {
 	  return;			/* was called already. */
@@ -374,7 +386,7 @@ void symbols_init (void)
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Warning: Could not open 'symbols-new.txt'.\n");
-	  dw_printf ("The \"new\" overlayed character information will not be available.\n");
+	  dw_printf ("The \"new\" OVERLAID character information will not be available.\n");
 
 	  new_sym_size = 1;	
 	  new_sym_ptr = calloc(new_sym_size, sizeof(new_sym_t));  /* Don't try again. */
@@ -406,7 +418,7 @@ void symbols_init (void)
 	    }
 	    new_sym_ptr[new_sym_len].overlay = stuff[COL1_OVERLAY];
 	    new_sym_ptr[new_sym_len].symbol = stuff[COL2_SYMBOL];
-	    strncpy(new_sym_ptr[new_sym_len].description, stuff+COL6_DESC, NEW_SYM_DESC_LEN);
+	    new_sym_ptr[new_sym_len].description = strdup(stuff+COL6_DESC);
 	    new_sym_len++;
 	  }
 	}
@@ -556,6 +568,7 @@ static const char ssid_to_sym[16] = {
 	  'v' 	/* 15 - Van */
 	};
 
+
 void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, char *symbol)
 {
 	char *p;
@@ -659,18 +672,34 @@ void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, ch
 
 /*
  * When all else fails, use source SSID.
+ * This is totally non-obvious and confusing, but it is in the APRS protocol spec.
+ * Chapter 20, "Symbol in the Source Address SSID"
  */
 
-	p = strchr (src, '-');
-	if (p != NULL) 
-	{
-	  int ssid;
+// January 2022 - Every time this shows up, it confuses people terribly.
+// e.g. An APRS "message" shows up with Bus or Motorcycle in the description.
 
-	  ssid = atoi(p+1);
-	  if (ssid >= 1 && ssid <= 15) {
-	    *symtab = '/';		/* All in Primary table. */
-	    *symbol = ssid_to_sym[ssid];
-	    return;
+// The position and object formats all contain a proper symbol and table.
+// There doesn't seem to be much reason to have a symbol for something without
+// a position because it would not show up on a map.
+// This just seems to be a remnant of something used long ago and no longer needed.
+// The protocol spec mentions a "MIM tracker" but I can't find any references to it.
+
+// If this was completely removed, no one would probably ever notice.
+// The only possible useful case I can think of would be someone sending a
+// NMEA string directly from a GPS receiver and wanting to keep the destination field
+// for the system type.
+
+	if (dti == '$') {
+
+	  p = strchr (src, '-');
+	  if (p != NULL) {
+	    int ssid = atoi(p+1);
+	    if (ssid >= 1 && ssid <= 15) {
+	      *symtab = '/';		/* All in Primary table. */
+	      *symbol = ssid_to_sym[ssid];
+	      return;
+	    }
 	  }
 	}
 

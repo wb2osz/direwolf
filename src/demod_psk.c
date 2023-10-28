@@ -60,7 +60,7 @@
  *		"bis" and "ter" are from Latin for second and third.
  *		I used the "ter" version which has phase shifts of 0, 90, 180, and 270 degrees.
  *
- *		There are ealier references to an alternative B which uses other phase shifts offset
+ *		There are earlier references to an alternative B which uses other phase shifts offset
  *		by another 45 degrees.
  *
  *		After getting QPSK working, it was not much more effort to add V.27 with 8 phases.
@@ -501,7 +501,7 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
  */
 
 	float fc = correct_baud * D->u.psk.lpf_baud / (float)samples_per_sec;
-	gen_lowpass (fc, D->u.psk.lp_filter, D->u.psk.lp_filter_taps, D->u.psk.lp_window, 0);
+	gen_lowpass (fc, D->u.psk.lp_filter, D->u.psk.lp_filter_taps, D->u.psk.lp_window);
 
 /*
  * No point in having multiple numbers for signal level.
@@ -781,7 +781,7 @@ static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct 
  * If we adjust it too quickly, the clock will have too much jitter.
  * If we adjust it too slowly, it will take too long to lock on to a new signal.
  *
- * Be a little more agressive about adjusting the PLL
+ * Be a little more aggressive about adjusting the PLL
  * phase when searching for a signal.
  * Don't change it as much when locked on to a signal.
  */

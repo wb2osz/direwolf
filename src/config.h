@@ -30,11 +30,31 @@ enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 
 
 #define MAX_BEACONS 30
+#define MAX_KISS_TCP_PORTS (MAX_CHANS+1)
 
 struct misc_config_s {
 
-	int agwpe_port;		/* Port number for the "AGW TCPIP Socket Interface" */
-	int kiss_port;		/* Port number for the "TCP KISS" protocol. */
+	int agwpe_port;		/* TCP Port number for the "AGW TCPIP Socket Interface" */
+
+	// Previously we allowed only a single TCP port for KISS.
+	// An increasing number of people want to run multiple radios.
+	// Unfortunately, most applications don't know how to deal with multi-radio TNCs.
+	// They ignore the channel on receive and always transmit to channel 0.
+	// Running multiple instances of direwolf is a work-around but this leads to
+	// more complex configuration and we lose the cross-channel digipeating capability.
+	// In release 1.7 we add a new feature to assign a single radio channel to a TCP port.
+	// e.g.
+	//	KISSPORT 8001		# default, all channels.  Radio channel = KISS channel.
+	//
+	//	KISSPORT 7000 0		# Only radio channel 0 for receive.
+	//				# Transmit to radio channel 0, ignoring KISS channel.
+	//
+	//	KISSPORT 7001 1		# Only radio channel 1 for receive.  KISS channel set to 0.
+	//				# Transmit to radio channel 1, ignoring KISS channel.
+
+	int kiss_port[MAX_KISS_TCP_PORTS];	/* TCP Port number for the "TCP KISS" protocol. */
+	int kiss_chan[MAX_KISS_TCP_PORTS];	/* Radio Channel number for this port or -1 for all.  */
+
 	int kiss_copy;		/* Data from network KISS client is copied to all others. */
 	int enable_kiss_pt;	/* Enable pseudo terminal for KISS. */
 				/* Want this to be off by default because it hangs */
@@ -56,7 +76,8 @@ struct misc_config_s {
 
 	char gpsnmea_port[20];	/* Serial port name for reading NMEA sentences from GPS. */
 				/* e.g. COM22, /dev/ttyACM0 */
-				/* Currently no option for setting non-standard speed. */
+
+	int gpsnmea_speed;	/* Speed for above, baud, default 4800. */
 
 	char gpsd_host[20];	/* Host for gpsd server. */
 				/* e.g. localhost, 192.168.1.2 */
@@ -77,16 +98,19 @@ struct misc_config_s {
 
 	int waypoint_formats;	/* Which sentence formats should be generated? */
 
-#define WPT_FORMAT_NMEA_GENERIC 0x01		/* N	$GPWPT */
-#define WPT_FORMAT_GARMIN       0x02		/* G	$PGRMW */
-#define WPT_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
-#define WPT_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
-#define WPT_FORMAT_AIS          0x10		/* A	!AIVDM */
+#define WPL_FORMAT_NMEA_GENERIC 0x01		/* N	$GPWPL */
+#define WPL_FORMAT_GARMIN       0x02		/* G	$PGRMW */
+#define WPL_FORMAT_MAGELLAN     0x04		/* M	$PMGNWPL */
+#define WPL_FORMAT_KENWOOD      0x08		/* K	$PKWDWPL */
+#define WPL_FORMAT_AIS          0x10		/* A	!AIVDM */
 
 
 	int log_daily_names;	/* True to generate new log file each day. */
 
 	char log_path[80];	/* Either directory or full file name depending on above. */
+
+	int dns_sd_enabled;	/* DNS Service Discovery announcement enabled. */
+	char dns_sd_name[64];	/* Name announced on dns-sd; defaults to "Dire Wolf on <hostname>" */
 
 	int sb_configured;	/* TRUE if SmartBeaconing is configured. */
 	int sb_fast_speed;	/* MPH */
@@ -160,6 +184,9 @@ struct misc_config_s {
 
 	  time_t next;		/* Unix time to transmit next one. */
 
+	  char *source;		/* NULL or explicit AX.25 source address to use */
+				/* instead of the mycall value for the channel. */
+
 	  char *dest;		/* NULL or explicit AX.25 destination to use */
 				/* instead of the software version such as APDW11. */
 
@@ -187,7 +214,7 @@ struct misc_config_s {
 	  char symbol;		/* Symbol code. */
 
 	  float power;		/* For PHG. */
-	  float height;
+	  float height;		/* HAAT in feet */
 	  float gain;		/* Original protocol spec was unclear. */
 				/* Addendum 1.1 clarifies it is dBi not dBd. */
 

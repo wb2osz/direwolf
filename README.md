@@ -1,4 +1,4 @@
-﻿
+
 # Dire Wolf #
 
 ### Decoded Information from Radio Emissions for Windows Or Linux Fans ###
@@ -9,11 +9,15 @@ Why waste $200 and settle for mediocre receive performance from a 1980's technol
 
 ![](tnc-test-cd-results.png)
 
-Dire Wolf now includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction/) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless.
+Dire Wolf includes [FX.25](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction) which adds Forward Error Correction (FEC) in a way that is completely compatible with existing systems.  If both ends are capable of FX.25, your information will continue to get through under conditions where regular AX.25 is completely useless. This was originally developed for satellites and is now seeing widespread use on HF.
 
 ![](fx25.png)
 
-Dire Wolf is a modern software replacement for the old 1980's style TNC built with special hardware.
+Version 1.7 adds [IL2P](https://en.wikipedia.org/wiki/Improved_Layer_2_Protocol), a different method of FEC with less overhead but it is not compatible with AX.25.
+
+
+
+### Dire Wolf is a modern software replacement for the old 1980's style TNC built with special hardware. ###
 
 Without any additional software, it can perform as:
 
@@ -76,7 +80,21 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 
 
-- **Standard 300, 1200 & 9600 bps modems and more.**
+- **Modems:**
+
+    300 bps AFSK for HF
+
+    1200 bps AFSK most common for VHF/UHF
+
+    2400 & 4800 bps PSK
+
+    9600 bps GMSK/G3RUH
+
+    AIS reception
+
+    EAS SAME reception
+
+
 
 - **DTMF ("Touch Tone") Decoding and Encoding.**
  
@@ -96,12 +114,16 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 ## Documentation ##
 
+
 [Stable Version](https://github.com/wb2osz/direwolf/tree/master/doc)
 
-[Latest Development Version](https://github.com/wb2osz/direwolf/tree/dev/doc)
+[Latest Development Version ("dev" branch)](https://github.com/wb2osz/direwolf/tree/dev/doc)
 
-[Power Point presentation](https://github.com/wb2osz/direwolf-presentation)  -- Why not give a talk at a local club meeting?
+[Additional Topics](https://github.com/wb2osz/direwolf-doc)
 
+[Power Point presentations](https://github.com/wb2osz/direwolf-presentation)  -- Why not give a talk at a local club meeting?
+
+Youtube has many interesting and helpful videos.  Searching for [direwolf tnc](https://www.youtube.com/results?search_query=direwolf+tnc) or [direwolf aprs](https://www.youtube.com/results?search_query=direwolf+aprs)  will produce the most relevant results. 
 
 ## Installation ##
 
@@ -131,15 +153,17 @@ On Debian / Ubuntu / Raspbian / Raspberry Pi OS:
     sudo apt-get install cmake
     sudo apt-get install libasound2-dev
     sudo apt-get install libudev-dev
+    sudo apt-get install libavahi-client-dev
 
 Or on Red Hat / Fedora / CentOS:
 
-	sudo yum install git
-	sudo yum install gcc
-	sudo yum install gcc-c++
-	sudo yum install make
+    sudo yum install git
+    sudo yum install gcc
+    sudo yum install gcc-c++
+    sudo yum install make
     sudo yum install alsa-lib-devel
     sudo yum install libudev-devel
+    sudo yum install avahi-devel
 
 CentOS 6 & 7 currently have cmake 2.8 but we need 3.1 or later.
 First you need to enable the EPEL repository.  Add a symlink if you don't already have the older version and want to type cmake rather than cmake3.
@@ -190,6 +214,9 @@ Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/dir
 
 If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.io/g/direwolf) discussion group.
 
+You can also install a pre-built version from Mac Ports.  Keeping this up to date depends on volunteers who perform the packaging. This version could lag behind development.
+
+	sudo port install direwolf
 
 
 ## Join the conversation  ##

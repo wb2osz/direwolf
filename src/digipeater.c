@@ -49,7 +49,8 @@
  *		Preemptive Digipeating  (new in version 0.8)
  *
  *			http://www.aprs.org/aprs12/preemptive-digipeating.txt
- *		
+ *			I ignored the part about the RR bits.
+ *
  *------------------------------------------------------------------*/
 
 #define DIGIPEATER_C
@@ -73,7 +74,7 @@
 
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *type_filter);
+				regex_t *uidigi, regex_t *uitrace, int to_chan, enum preempt_e preempt, char *atgp, char *type_filter);
 
 
 /*
@@ -154,8 +155,8 @@ void digipeater (int from_chan, packet_t pp)
 	// Network TNC is OK for UI frames where we don't care about timing.
 
 	if ( from_chan < 0 || from_chan >= MAX_CHANS ||
-	     (save_audio_config_p->achan[from_chan].medium != MEDIUM_RADIO &&
-	      save_audio_config_p->achan[from_chan].medium != MEDIUM_NETTNC)) {
+	     (save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO &&
+	      save_audio_config_p->chan_medium[from_chan] != MEDIUM_NETTNC)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("APRS digipeater: Did not expect to receive on invalid channel %d.\n", from_chan);
 	}
@@ -164,7 +165,34 @@ void digipeater (int from_chan, packet_t pp)
 /*
  * First pass:  Look at packets being digipeated to same channel.
  *
- * We want these to get out quickly.
+ * We want these to get out quickly, bypassing the usual random wait time.
+ *
+ * Some may disagree but I followed what WB4APR had to say about it.   
+ *
+ *	http://www.aprs.org/balloons.html
+ *
+ *		APRS NETWORK FRATRICIDE: Generally, all APRS digipeaters are supposed to transmit
+ *		immediately and all at the same time. They should NOT wait long enough for each
+ *		one to QRM the channel with the same copy of each packet. NO, APRS digipeaters
+ *		are all supposed to STEP ON EACH OTHER with every packet. This makes sure that
+ *		everyone in range of a digi will hear one and only one copy of each packet.
+ *		and that the packet will digipeat OUTWARD and not backward. The goal is that a
+ *		digipeated packet is cleared out of the local area in ONE packet time and not
+ *		N packet times for every N digipeaters that heard the packet. This means no
+ *		PERSIST times, no DWAIT times and no UIDWAIT times. Notice, this is contrary 
+ *		to other packet systems that might want to guarantee delivery (but at the
+ *		expense of throughput). APRS wants to clear the channel quickly to maximize throughput.
+ *
+ *	http://www.aprs.org/kpc3/kpc3+WIDEn.txt
+ *
+ *		THIRD:  Eliminate the settings that are detrimental to the network.
+ *
+ *		* UIDWAIT should be OFF. (the default).  With it on, your digi is not doing the
+ *		fundamental APRS fratricide that is the primary mechanism for minimizing channel
+ *		loading.  All digis that hear the same packet are supposed to DIGI it at the SAME
+ *		time so that all those copies only take up one additional time slot. (but outward
+ *		located digs will hear it without collision (and continue outward propagation)
+ *
  */
 
 	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
@@ -176,10 +204,11 @@ void digipeater (int from_chan, packet_t pp)
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
+				save_digi_config_p->atgp[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
-	        tq_append (to_chan, TQ_PRIO_0_HI, result);
+	        tq_append (to_chan, TQ_PRIO_0_HI, result);		//  High priority queue.
 	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
@@ -202,10 +231,11 @@ void digipeater (int from_chan, packet_t pp)
 					   save_audio_config_p->achan[to_chan].mycall, 
 			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
+				save_digi_config_p->atgp[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
-	        tq_append (to_chan, TQ_PRIO_1_LO, result);
+	        tq_append (to_chan, TQ_PRIO_1_LO, result);		// Low priority queue.
 	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
@@ -244,6 +274,9 @@ void digipeater (int from_chan, packet_t pp)
  *
  *		preempt		- Option for "preemptive" digipeating.
  *
+ *		atgp		- No tracing if this matches alias prefix.
+ *				  Hack added for special needs of ATGP.
+ *
  *		filter_str	- Filter expression string or NULL.
  *		
  * Returns:	Packet object for transmission or NULL.
@@ -260,32 +293,9 @@ void digipeater (int from_chan, packet_t pp)
  *
  *------------------------------------------------------------------------------*/
 
-#define OBSOLETE14 1
-
-
-#ifndef OBSOLETE14
-static char *dest_ssid_path[16] = { 	
-			"",		/* Use VIA path */
-			"WIDE1-1",
-			"WIDE2-2",
-			"WIDE3-3",
-			"WIDE4-4",
-			"WIDE5-5",
-			"WIDE6-6",
-			"WIDE7-7",
-			"WIDE1-1",	/* North */
-			"WIDE1-1",	/* South */
-			"WIDE1-1",	/* East */
-			"WIDE1-1",	/* West */
-			"WIDE2-2",	/* North */
-			"WIDE2-2",	/* South */
-			"WIDE2-2",	/* East */
-			"WIDE2-2"  };	/* West */
-#endif
-				  
 
 static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, char *mycall_xmit, 
-				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *filter_str)
+				regex_t *alias, regex_t *wide, int to_chan, enum preempt_e preempt, char *atgp, char *filter_str)
 {
 	char source[AX25_MAX_ADDR_LEN];
 	int ssid;
@@ -322,15 +332,6 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
  * Note that this modifies the input.  But only once!
  * Otherwise we don't want to modify the input because this could be called multiple times.
  */
-
-#ifndef OBSOLETE14		// Took it out in 1.4
-
-	if (ax25_get_num_repeaters(pp) == 0 && (ssid = ax25_get_ssid(pp, AX25_DESTINATION)) > 0) {
-	  ax25_set_addr(pp, AX25_REPEATER_1, dest_ssid_path[ssid]);
-	  ax25_set_ssid(pp, AX25_DESTINATION, 0);
-	  /* Continue with general case, below. */
-	}
-#endif
 
 
 /* 
@@ -440,6 +441,10 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 /* 
  * If preemptive digipeating is enabled, try matching my call 
  * and aliases against all remaining unused digipeaters.
+ *
+ * Bob says: "GENERIC XXXXn-N DIGIPEATING should not do preemptive digipeating."
+ *
+ * But consider this case:  https://github.com/wb2osz/direwolf/issues/488
  */
 
 	if (preempt != PREEMPT_OFF) {
@@ -465,13 +470,22 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 	      switch (preempt) {
 	        case PREEMPT_DROP:	/* remove all prior */
+					// TODO: deprecate this option.  Result is misleading.
+
+		  text_color_set (DW_COLOR_ERROR);
+		  dw_printf ("The digipeat DROP option will be removed in a future release.  Use PREEMPT for preemptive digipeating.\n");
+
 	          while (r2 > AX25_REPEATER_1) {
 	            ax25_remove_addr (result, r2-1);
  		    r2--;
 	          }
 	          break;
 
-	        case PREEMPT_MARK:
+	        case PREEMPT_MARK:	// TODO: deprecate this option.  Result is misleading.
+
+		  text_color_set (DW_COLOR_ERROR);
+		  dw_printf ("The digipeat MARK option will be removed in a future release.  Use PREEMPT for preemptive digipeating.\n");
+
 	          r2--;
 	          while (r2 >= AX25_REPEATER_1 && ax25_get_h(result,r2) == 0) {
 	            ax25_set_h (result, r2);
@@ -479,7 +493,12 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	          }
 	          break;
 
-		case PREEMPT_TRACE:	/* remove prior unused */
+		case PREEMPT_TRACE:	/* My enhancement - remove prior unused digis. */
+					/* this provides an accurate path of where packet traveled. */
+
+					// Uh oh.  It looks like sample config files went out
+					// with this option.  Should it be renamed as
+					// PREEMPT which is more descriptive?
 	        default:
 	          while (r2 > AX25_REPEATER_1 && ax25_get_h(result,r2-1) == 0) {
 	            ax25_remove_addr (result, r2-1);
@@ -509,6 +528,40 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 	err = regexec(wide,repeater,0,NULL,0);
 	if (err == 0) {
+
+// Special hack added for ATGP to behave like some combination of options in some old TNC
+// so the via path does not continue to grow and exceed the 8 available positions.
+// The strange thing about this is that the used up digipeater is left there but
+// removed by the next digipeater.
+
+	  if (strlen(atgp) > 0 && strncasecmp(repeater, atgp, strlen(atgp)) == 0) {
+
+	    if (ssid >= 1 && ssid <= 7) {
+	      packet_t result;
+
+	      result = ax25_dup (pp);
+	      assert (result != NULL);
+
+	      // First, remove any already used digipeaters.
+
+	      while (ax25_get_num_addr(result) >= 3 && ax25_get_h(result,AX25_REPEATER_1) == 1) {
+	        ax25_remove_addr (result, AX25_REPEATER_1);
+	        r--;
+	      }
+
+	      ssid = ssid - 1;
+	      ax25_set_ssid(result, r, ssid);	// could be zero.
+	      if (ssid == 0) {
+	        ax25_set_h (result, r);
+	      }
+
+	      // Insert own call at beginning and mark it used.
+
+	      ax25_insert_addr (result, AX25_REPEATER_1, mycall_xmit);
+	      ax25_set_h (result, AX25_REPEATER_1);
+	      return (result);
+	    }
+	  }
 
 /*
  * If ssid == 1, we simply replace the repeater with my call and
@@ -608,7 +661,7 @@ void digi_regen (int from_chan, packet_t pp)
  *
  * Name:	main
  * 
- * Purpose:	Standalone test case for this funtionality.
+ * Purpose:	Standalone test case for this functionality.
  *
  * Usage:	make -f Makefile.<platform> dtest
  *		./dtest 
@@ -617,7 +670,7 @@ void digi_regen (int from_chan, packet_t pp)
 
 #if DIGITEST
 
-static char mycall[] = "WB2OSZ-9";
+static char mycall[12];
 
 static regex_t alias_re;     
 
@@ -627,6 +680,7 @@ static int failed;
 
 static enum preempt_e preempt = PREEMPT_OFF;
 
+static 	char config_atgp[AX25_MAX_ADDR_LEN] = "HOP";
 
 
 static void test (char *in, char *out)
@@ -639,6 +693,7 @@ static void test (char *in, char *out)
 	unsigned char frame[AX25_MAX_PACKET_LEN];
 	int frame_len;
 	alevel_t alevel;
+
 
 	dw_printf ("\n");
 
@@ -689,9 +744,9 @@ static void test (char *in, char *out)
 	text_color_set(DW_COLOR_REC);
 	dw_printf ("Rec\t%s\n", rec);
 
-//TODO:											Add filtering to test.
-//											V
-	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, NULL);
+//TODO:										  	             Add filtering to test.
+//											             V
+	result = digipeat_match (0, pp, mycall, mycall, &alias_re, &wide_re, 0, preempt, config_atgp, NULL);
 	
 	if (result != NULL) {
 
@@ -726,6 +781,7 @@ int main (int argc, char *argv[])
 	int e;
 	failed = 0;
 	char message[256];
+	strlcpy(mycall, "WB2OSZ-9", sizeof(mycall));
 
 	dedupe_init (4);
 
@@ -740,7 +796,7 @@ int main (int argc, char *argv[])
 	  exit (1);
 	}
 
-	e = regcomp (&wide_re, "^WIDE[1-7]-[1-7]$|^TRACE[1-7]-[1-7]$|^MA[1-7]-[1-7]$", REG_EXTENDED|REG_NOSUB);
+	e = regcomp (&wide_re, "^WIDE[1-7]-[1-7]$|^TRACE[1-7]-[1-7]$|^MA[1-7]-[1-7]$|^HOP[1-7]-[1-7]$", REG_EXTENDED|REG_NOSUB);
 	if (e != 0) {
 	  regerror (e, &wide_re, message, sizeof(message));
 	  text_color_set(DW_COLOR_ERROR);
@@ -830,11 +886,8 @@ int main (int argc, char *argv[])
  */
 
 	test (	"W1ABC>TEST-3:",
-#ifndef OBSOLETE14
-		"W1ABC>TEST,WB2OSZ-9*,WIDE3-2:");
-#else
 		"");
-#endif
+
 	test (	"W1DEF>TEST-3,WIDE2-2:",
 		"W1DEF>TEST-3,WB2OSZ-9*,WIDE2-1:");
 
@@ -844,17 +897,17 @@ int main (int argc, char *argv[])
  * The 4th case might be controversial.
  */
 
-	test (	"W1XYZ>TEST,R1*,WIDE3-2:info1",
-		"W1XYZ>TEST,R1,WB2OSZ-9*,WIDE3-1:info1");
+	test (	"W1XYZ>TESTD,R1*,WIDE3-2:info1",
+		"W1XYZ>TESTD,R1,WB2OSZ-9*,WIDE3-1:info1");
 
-	test (	"W1XYZ>TEST,R2*,WIDE3-2:info1",
+	test (	"W1XYZ>TESTD,R2*,WIDE3-2:info1",
 		"");
 
-	test (	"W1XYZ>TEST,R3*,WIDE3-2:info1",
+	test (	"W1XYZ>TESTD,R3*,WIDE3-2:info1",
 		"");
 
-	test (	"W1XYZ>TEST,R1*,WB2OSZ-9:has explicit routing",
-		"W1XYZ>TEST,R1,WB2OSZ-9*:has explicit routing");
+	test (	"W1XYZ>TESTD,R1*,WB2OSZ-9:has explicit routing",
+		"W1XYZ>TESTD,R1,WB2OSZ-9*:has explicit routing");
 
 
 /*
@@ -931,6 +984,54 @@ int main (int argc, char *argv[])
 	test (	"WB2OSZ-15>TEST14,WIDE1-1,WIDE1-1:stuff",
 		"WB2OSZ-15>TEST14,WB2OSZ-9*,WIDE1-1:stuff");
 
+// New in 1.7 - ATGP Hack
+
+	preempt = PREEMPT_OFF;	// Shouldn't make a difference here.
+
+	test (	"W1ABC>TEST51,HOP7-7,HOP7-7:stuff1",
+		"W1ABC>TEST51,WB2OSZ-9*,HOP7-6,HOP7-7:stuff1");
+
+	test (	"W1ABC>TEST52,ABCD*,HOP7-1,HOP7-7:stuff2",
+		"W1ABC>TEST52,WB2OSZ-9,HOP7*,HOP7-7:stuff2");  // Used up address remains.
+
+	test (	"W1ABC>TEST53,HOP7*,HOP7-7:stuff3",
+		"W1ABC>TEST53,WB2OSZ-9*,HOP7-6:stuff3");	// But it gets removed here.
+
+	test (	"W1ABC>TEST54,HOP7*,HOP7-1:stuff4",
+		"W1ABC>TEST54,WB2OSZ-9,HOP7*:stuff4");		// Remains again here.
+
+	test (	"W1ABC>TEST55,HOP7,HOP7*:stuff5",
+		"");
+
+// Examples given for desired result.
+
+	strlcpy (mycall, "CLNGMN-1", sizeof(mycall));
+	test (	"W1ABC>TEST60,HOP7-7,HOP7-7:",
+		"W1ABC>TEST60,CLNGMN-1*,HOP7-6,HOP7-7:");
+	test (	"W1ABC>TEST61,ROAN-3*,HOP7-6,HOP7-7:",
+		"W1ABC>TEST61,CLNGMN-1*,HOP7-5,HOP7-7:");
+
+	strlcpy (mycall, "GDHILL-8", sizeof(mycall));
+	test (	"W1ABC>TEST62,MDMTNS-7*,HOP7-1,HOP7-7:",
+		"W1ABC>TEST62,GDHILL-8,HOP7*,HOP7-7:");
+	test (	"W1ABC>TEST63,CAMLBK-9*,HOP7-1,HOP7-7:",
+		"W1ABC>TEST63,GDHILL-8,HOP7*,HOP7-7:");
+
+	strlcpy (mycall, "MDMTNS-7", sizeof(mycall));
+	test (	"W1ABC>TEST64,GDHILL-8*,HOP7*,HOP7-7:",
+		"W1ABC>TEST64,MDMTNS-7*,HOP7-6:");
+
+	strlcpy (mycall, "CAMLBK-9", sizeof(mycall));
+	test (	"W1ABC>TEST65,GDHILL-8,HOP7*,HOP7-7:",
+		"W1ABC>TEST65,CAMLBK-9*,HOP7-6:");
+
+	strlcpy (mycall, "KATHDN-15", sizeof(mycall));
+	test (	"W1ABC>TEST66,MTWASH-14*,HOP7-1:",
+		"W1ABC>TEST66,KATHDN-15,HOP7*:");
+
+	strlcpy (mycall, "SPRNGR-1", sizeof(mycall));
+	test (	"W1ABC>TEST67,CLNGMN-1*,HOP7-1:",
+		"W1ABC>TEST67,SPRNGR-1,HOP7*:");
 
 
 	if (failed == 0) {

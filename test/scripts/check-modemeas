@@ -1,0 +1,4 @@
+@CUSTOM_SHELL_SHABANG@
+
+@GEN_PACKETS_BIN@ -B EAS -o testeas.wav
+@ATEST_BIN@ -B EAS -L 6 -G 6 testeas.wav

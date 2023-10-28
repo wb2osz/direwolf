@@ -2,6 +2,8 @@
 
 #ifndef FSK_DEMOD_STATE_H
 
+#include <stdint.h>          // int64_t
+
 #include "rpack.h"
 
 #include "audio.h"		// for enum modem_t
@@ -20,6 +22,32 @@ typedef enum bp_window_e { BP_WINDOW_TRUNCATED,
 				BP_WINDOW_BLACKMAN,
 				BP_WINDOW_FLATTOP } bp_window_t;
 
+// Experimental low pass filter to detect DC bias or low frequency changes.
+// IIR behaves like an analog R-C filter.
+// Intuitively, it seems like FIR would be better because it is based on a finite history.
+// However, it would require MANY taps and a LOT of computation for a low frequency.
+// We can use a little trick here to keep a running average.
+// This would be equivalent to convolving with an array of all 1 values.
+// That would eliminate the need to multiply.
+// We can also eliminate the need to add them all up each time by keeping a running total.
+// Add a sample to the total when putting it in our array of recent samples.
+// Subtract it from the total when it gets pushed off the end.
+// We can also eliminate the need to shift them all down by using a circular buffer.
+
+#define CIC_LEN_MAX 4000
+
+typedef struct cic_s {
+	int len;		// Number of elements used.
+				// Might want to dynamically allocate.
+	short in[CIC_LEN_MAX];	// Samples coming in.
+	int sum;		// Running sum.
+	int inext;		// Next position to fill.
+} cic_t;
+
+
+#define MAX_FILTER_SIZE 480		/* 401 is needed for profile A, 300 baud & 44100. Revisit someday. */
+					// Size comes out to 417 for 1200 bps with 48000 sample rate
+					// v1.7 - Was 404.  Bump up to 480.
 
 struct demodulator_state_s
 {
@@ -39,29 +67,11 @@ struct demodulator_state_s
 					// Data is sampled when it overflows.
 
 
-	int ms_filter_size;		/* Size of mark & space filters, in audio samples. */
-					/* Started off as a guess of one bit length */
-					/* but about 2 bit times turned out to be better. */
-					/* Currently using same size for any prefilter. */
-
-
-#define MAX_FILTER_SIZE 320		/* 304 is needed for profile C, 300 baud & 44100. */
-
-/*
- * Filter length for Mark & Space in bit times.
- * e.g.  1 means 1/1200 second for 1200 baud.
- */
-	float ms_filter_len_bits;
-	float lp_delay_fract;
-
 /* 
  * Window type for the various filters.
  */
 	
-	bp_window_t pre_window;
-	bp_window_t ms_window;
 	bp_window_t lp_window;
-
 
 /*
  * Alternate Low pass filters.
@@ -78,16 +88,13 @@ struct demodulator_state_s
 					/* In practice, it turned out a little larger */
 					/* for profiles B, C, D. */
 
-	float lp_filter_len_bits;  	/* Length in number of bit times. */
+	float lp_filter_width_sym;  	/* Length in number of symbol times. */
 
-	int lp_filter_size;		/* Size of Low Pass filter, in audio samples. */
-					/* Previously it was always the same as the M/S */
-					/* filters but in version 1.2 it's now independent. */
+#define lp_filter_len_bits lp_filter_width_sym	// FIXME: temp hack
 
-	int lp_filter_delay;		/* Number of samples that the low pass filter */
-					/* delays the signal. */
-	
-					/* New in 1.6. */
+	int lp_filter_taps;		/* Size of Low Pass filter, in audio samples. */
+
+#define lp_filter_size lp_filter_taps		// FIXME: temp hack
 
 
 /*
@@ -111,6 +118,7 @@ struct demodulator_state_s
 /* 
  * Phase Locked Loop (PLL) inertia.
  * Larger number means less influence by signal transitions.
+ * It is more resistant to change when locked on to a signal.
  */
 	float pll_locked_inertia;
 	float pll_searching_inertia;
@@ -129,23 +137,17 @@ struct demodulator_state_s
 				/* lower = min(1600,1800) - 0.5 * 300 = 1450 */
 				/* upper = max(1600,1800) + 0.5 * 300 = 1950 */
 
-	float pre_filter_len_bits;  /* Length in number of bit times. */
+	float pre_filter_len_sym;  	// Length in number of symbol times.
+#define pre_filter_len_bits pre_filter_len_sym 		// temp until all references changed.
 
-	int pre_filter_size;	/* Size of pre filter, in audio samples. */									
+	bp_window_t pre_window;		// Window type for filter shaping.
+
+	int pre_filter_taps;		// Calculated number of filter taps.
+#define pre_filter_size pre_filter_taps		// temp until all references changed.
 
 	float pre_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
-
-/*
- * Kernel for the mark and space detection filters.
- */
-					
-	float m_sin_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-	float m_cos_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-
-	float s_sin_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-	float s_cos_table[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-
+	float raw_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// audio in,  need better name.
 
 /*
  * The rest are continuously updated.
@@ -153,11 +155,6 @@ struct demodulator_state_s
 
 	unsigned int lo_phase;	/* Local oscillator for PSK. */
 
-
-/*
- * Most recent raw audio samples, before/after prefiltering.
- */
-	float raw_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
 
 /*
  * Use half of the AGC code to get a measure of input audio amplitude.
@@ -171,22 +168,12 @@ struct demodulator_state_s
 	float alevel_space_peak;
 
 /*
- * Input to the mark/space detector.
- * Could be prefiltered or raw audio.
- */
-	float ms_in_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-
-/*
  * Outputs from the mark and space amplitude detection, 
  * used as inputs to the FIR lowpass filters.
  * Kernel for the lowpass filters.
  */
 
-	float m_amp_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-	float s_amp_cb[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-
 	float lp_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));
-
 
 	float m_peak, s_peak;
 	float m_valley, s_valley;
@@ -232,6 +219,12 @@ struct demodulator_state_s
 		signed int prev_d_c_pll;		// Previous value of above, before
 							// incrementing, to detect overflows.
 
+		int pll_symbol_count;			// Number symbols during time nudge_total is accumulated.
+		int64_t pll_nudge_total;		// Sum of DPLL nudge amounts.
+							// Both of these are cleared at start of frame.
+							// At end of frame, we can see if incoming
+							// baud rate is a little off.
+
 		int prev_demod_data;			// Previous data bit detected.
 							// Used to look for transitions.
 		float prev_demod_out_f;
@@ -265,6 +258,122 @@ struct demodulator_state_s
  */
 
 	union {
+
+//////////////////////////////////////////////////////////////////////////////////
+//										//
+//			AFSK only - new method in 1.7				//
+//										//
+//////////////////////////////////////////////////////////////////////////////////
+
+
+	  struct afsk_only_s {
+
+	    unsigned int m_osc_phase;		// Phase for Mark local oscillator.
+	    unsigned int m_osc_delta;		// How much to change for each audio sample.
+
+	    unsigned int s_osc_phase;		// Phase for Space local oscillator.
+	    unsigned int s_osc_delta;		// How much to change for each audio sample.
+
+	    unsigned int c_osc_phase;		// Phase for Center frequency local oscillator.
+	    unsigned int c_osc_delta;		// How much to change for each audio sample.
+
+	    // Need two mixers for profile "A".
+
+	    float m_I_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+	    float m_Q_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	    float s_I_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+	    float s_Q_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	    // Only need one mixer for profile "B".  Reuse the same storage?
+
+//#define c_I_raw m_I_raw
+//#define c_Q_raw m_Q_raw
+	    float c_I_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+	    float c_Q_raw[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+	    int use_rrc;		// Use RRC rather than generic low pass.
+
+	    float rrc_width_sym;	/* Width of RRC filter in number of symbols.  */
+
+	    float rrc_rolloff;		/* Rolloff factor for RRC.  Between 0 and 1. */
+
+	    float prev_phase;		// To see phase shift between samples for FM demod.
+
+	    float normalize_rpsam;	// Normalize to -1 to +1 for expected tones.
+
+	  } afsk;
+
+//////////////////////////////////////////////////////////////////////////////////
+//										//
+//				Baseband only, AKA G3RUH			//
+//										//
+//////////////////////////////////////////////////////////////////////////////////
+
+// TODO: Continue experiments with root raised cosine filter.
+// Either switch to that or take out all the related stuff.
+
+	  struct bb_only_s {
+
+		float rrc_width_sym;		/* Width of RRC filter in number of symbols. */
+
+		float rrc_rolloff;		/* Rolloff factor for RRC.  Between 0 and 1. */
+
+		int rrc_filter_taps;		// Number of elements used in the next two.
+
+// FIXME: TODO: reevaluate max size needed.
+
+		float audio_in[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// Audio samples in.
+
+
+		float lp_filter[MAX_FILTER_SIZE] __attribute__((aligned(16)));	// Low pass filter.
+
+		// New in 1.7 - Polyphase filter to reduce CPU requirements.
+
+		float lp_polyphase_1[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float lp_polyphase_2[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float lp_polyphase_3[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+		float lp_polyphase_4[MAX_FILTER_SIZE] __attribute__((aligned(16)));
+
+		float lp_1_iir_param;		// very low pass filters to get DC offset.
+		float lp_1_out;
+
+		float lp_2_iir_param;
+		float lp_2_out;
+
+		float agc_1_fast_attack;	// Signal envelope detection.
+		float agc_1_slow_decay;
+		float agc_1_peak;
+		float agc_1_valley;
+
+		float agc_2_fast_attack;
+		float agc_2_slow_decay;
+		float agc_2_peak;
+		float agc_2_valley;
+
+		float agc_3_fast_attack;
+		float agc_3_slow_decay;
+		float agc_3_peak;
+		float agc_3_valley;
+
+		// CIC low pass filters to detect DC bias or low frequency changes.
+		// IIR behaves like an analog R-C filter.
+		// Intuitively, it seems like FIR would be better because it is based on a finite history.
+		// However, it would require MANY taps and a LOT of computation for a low frequency.
+		// We can use a little trick here to keep a running average.
+		// This would be equivalent to convolving with an array of all 1 values.
+		// That would eliminate the need to multiply.
+		// We can also eliminate the need to add them all up each time by keeping a running total.
+		// Add a sample to the total when putting it in our array of recent samples.
+		// Subtract it from the total when it gets pushed off the end.
+		// We can also eliminate the need to shift them all down by using a circular buffer.
+		// This only works with integers because float would have cumulated round off errors.
+
+		cic_t cic_center1;
+		cic_t cic_above;
+		cic_t cic_below;
+
+	  } bb;
 
 //////////////////////////////////////////////////////////////////////////////////
 //										//

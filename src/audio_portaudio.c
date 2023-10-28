@@ -156,7 +156,7 @@ static int calcbufsize(int rate, int chans, int bits)
  * the same device name for more then one connected device
  * (ie two SignaLinks). Appending a Portaudio device index to the
  * the device name ensure we can find the correct one. And if it's not
- * available return the first occurence that matches the device name.
+ * available return the first occurrence that matches the device name.
  *----------------------------------------------------------------*/
 static int searchPADevice(struct adev_s *dev, char *_devName, int reqDeviceNo, int io_flag)
 {
@@ -213,7 +213,21 @@ static int pa_devNN(char *deviceStr, char *_devName, size_t length, int *_devNo)
 	while(*cPtr) {
 		cVal = *cPtr++;
 		if(cVal == ':')  break;
-		if(((cVal >= ' ') && (cVal <= '~')) && (count < length)) {
+
+		// See Issue 417.
+		// Originally this copied only printable ASCII characters (space thru ~).
+		// That is a problem for some locales that use UTF-8 characters in the device name.
+		// original: if(((cVal >= ' ') && (cVal <= '~')) && (count < length)) {
+
+		// At first I was thinking we should keep the test for < ' ' but then I
+		// remembered that char type can be signed or unsigned depending on implementation.
+		// If characters are signed then a value above 0x7f would be considered negative.
+
+		// It seems to me that the test for buffer full is off by one.
+		// count could reach length, leaving no room for a nul terminator.
+		// Compare has been changed so count is limited to length minus 1.
+
+		if(count < length - 1) {
 			_devName[count++] = cVal;
 		}
 
@@ -513,7 +527,7 @@ static int paOutput16CB( const void *inputBuffer, void *outputBuffer,
  *				more restrictive in its capabilities.
  *				It might say, the best I can do is mono, 8 bit, 8000/sec.
  *
- *				The sofware modem must use this ACTUAL information
+ *				The software modem must use this ACTUAL information
  *				that the device is supplying, that could be different
  *				than what the user specified.
  *
@@ -1149,7 +1163,7 @@ int audio_put (int a, int c)
 	static double start = 0, end = 0, diff = 0;
 
 	if(adev[a].outbuf_len == 0)
-		start = dtime_now();
+		start = dtime_monotonic();
 #endif
 
 	if(c >= 0) {
@@ -1178,7 +1192,7 @@ int audio_put (int a, int c)
 #ifdef __TIMED__
 		count += frames;
 		if(c < 0) { // When the Ax25 frames are flushed.
-			end = dtime_now();
+			end = dtime_monotonic();
 			diff = end - start;
 			if(count)
 				dw_printf ("Transfer Time:%3.9f No of Frames:%d Per frame:%3.9f speed:%f\n",
@@ -1246,7 +1260,7 @@ int audio_flush (int a)
  *		(3) Call this function, which might or might not wait long enough.
  *		(4) Add (1) and (2) resulting in when PTT should be turned off.
  *		(5) Take difference between current time and desired PPT off time
- *			and wait for additoinal time if required.
+ *			and wait for additional time if required.
  *
  *----------------------------------------------------------------*/
 

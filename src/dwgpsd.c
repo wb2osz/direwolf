@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015, 2020  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2020, 2022  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 
 /*------------------------------------------------------------------
  *
- * Module:      dwgps.c
+ * Module:      dwgpsd.c
  *
  * Purpose:   	Interface to location data, i.e. GPS receiver.
  *		
@@ -57,12 +57,35 @@
 
 
 
-// An incompatibility was introduced with version 7
-// and again with 9 and again with 10.
+// An API incompatibility was introduced with API version 7.
+// and again with 9.
+// and again with 10.
+// We deal with it by using a bunch of conditional code such as:
+//	#if GPSD_API_MAJOR_VERSION >= 9
 
-#if GPSD_API_MAJOR_VERSION < 5 || GPSD_API_MAJOR_VERSION > 11
-#error libgps API version might be incompatible.
+
+// release	lib version	API	Raspberry Pi OS		Testing status
+// 3.22		28		11	bullseye		OK.
+// 3.23		29		12				OK.
+// 3.25		30		14				OK, Jan. 2023
+
+
+// Previously the compilation would fail if the API version was later
+// than the last one tested.  Now it is just a warning because it changes so
+// often but more recent versions have not broken backward compatibility.
+
+#define MAX_TESTED_VERSION 14
+
+#if (GPSD_API_MAJOR_VERSION < 5) || (GPSD_API_MAJOR_VERSION > MAX_TESTED_VERSION)
+#pragma message "Your version of gpsd might be incompatible with this application."
+#pragma message "The libgps application program interface (API) often"
+#pragma message "changes to be incompatible with earlier versions."
+// I could not figure out how to do value substitution here.
+#pragma message "You have libgpsd API version GPSD_API_MAJOR_VERSION."
+#pragma message "The last that has been tested is MAX_TESTED_VERSION."
+#pragma message "Even if this builds successfully, it might not run properly."
 #endif
+
 
 /*
  * Information for interface to gpsd daemon.
@@ -94,7 +117,7 @@ static void * read_gpsd_thread (void *arg);
  *
  * Name:        dwgpsd_init
  *
- * Purpose:    	Intialize the GPS interface.
+ * Purpose:    	Initialize the GPS interface.
  *
  * Inputs:	pconfig		Configuration settings.  This includes
  *				host name or address for network connection.
@@ -163,6 +186,22 @@ static void * read_gpsd_thread (void *arg);
  *	can't find it there.  Solution  is to define environment variable:
  *
  *	export LD_LIBRARY_PATH=/use/local/lib
+ *
+ * January 2023: Now using 64 bit Raspberry Pi OS, bullseye.
+ * See   https://gitlab.com/gpsd/gpsd/-/blob/master/build.adoc
+ * Try to install in proper library place so we don't have to mess with LD_LIBRARY_PATH.
+ *
+ *      (Remove any existing gpsd first so we are not mixing mismatched pieces.)
+ *
+ * 	sudo apt-get install libncurses5-dev
+ *	sudo apt-get install gtk+-3.0
+ *
+ * 	git clone https://gitlab.com/gpsd/gpsd.git  gpsd-gitlab
+ * 	cd gpsd-gitlab
+ * 	scons prefix=/usr libdir=lib/aarch64-linux-gnu
+ *	[ scons check ]
+ *	sudo scons udev-install
+ *	
  */
 
 
@@ -191,7 +230,7 @@ int dwgpsd_init (struct misc_config_s *pconfig, int debug)
 
 	if (strlen(pconfig->gpsd_host) == 0) {
 
-	  /* Nothing to do.  Leave initial fix value of errror. */
+	  /* Nothing to do.  Leave initial fix value of error. */
 	  return (0);
 	}	  
 
@@ -364,6 +403,10 @@ static void * read_gpsd_thread (void *arg)
 	    default:
 	    case MODE_NOT_SEEN:
 	    case MODE_NO_FIX:
+	      if (info.fix <= DWFIX_NOT_SEEN) {
+		text_color_set(DW_COLOR_INFO);
+	        dw_printf ("GPSD: No location fix.\n");
+	      }
 	      if (info.fix >= DWFIX_2D) {
 		text_color_set(DW_COLOR_INFO);
 	        dw_printf ("GPSD: Lost location fix.\n");
@@ -393,13 +436,15 @@ static void * read_gpsd_thread (void *arg)
 
 	  if (/*gpsdata.stupid_status >= STATUS_FIX &&*/ gpsdata.fix.mode >= MODE_2D) {
 
-	    info.dlat = isfinite(gpsdata.fix.latitude) ? gpsdata.fix.latitude : G_UNKNOWN;
-	    info.dlon = isfinite(gpsdata.fix.longitude) ? gpsdata.fix.longitude : G_UNKNOWN;
+#define GOOD(x) (isfinite(x) && ! isnan(x))
+
+	    info.dlat = GOOD(gpsdata.fix.latitude) ? gpsdata.fix.latitude : G_UNKNOWN;
+	    info.dlon = GOOD(gpsdata.fix.longitude) ? gpsdata.fix.longitude : G_UNKNOWN;
 	    // When stationary, track is NaN which is not finite.
-	    info.track = isfinite(gpsdata.fix.track) ? gpsdata.fix.track : G_UNKNOWN;
-	    info.speed_knots = isfinite(gpsdata.fix.speed) ? (MPS_TO_KNOTS * gpsdata.fix.speed) : G_UNKNOWN;
+	    info.track = GOOD(gpsdata.fix.track) ? gpsdata.fix.track : G_UNKNOWN;
+	    info.speed_knots = GOOD(gpsdata.fix.speed) ? (MPS_TO_KNOTS * gpsdata.fix.speed) : G_UNKNOWN;
 	    if (gpsdata.fix.mode >= MODE_3D) {
-	      info.altitude = isfinite(gpsdata.fix.stupid_altitude) ? gpsdata.fix.stupid_altitude : G_UNKNOWN;
+	      info.altitude = GOOD(gpsdata.fix.stupid_altitude) ? gpsdata.fix.stupid_altitude : G_UNKNOWN;
 	    }
 	    // Otherwise keep last known altitude when we downgrade from 3D to 2D fix.
 	    // Caller knows altitude is outdated if info.fix == DWFIX_2D.

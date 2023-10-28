@@ -46,6 +46,8 @@ Data rate in bits/sec for first channel.  Standard values are 300, 1200, 2400, 4
 4800 bps uses 8PSK based on V.27 standard.
 .P
 9600 bps and up uses K9NG/G3RUH standard.
+.P
+EAS for Emergency Alert System (EAS) Specific Area Message Encoding (SAME).
 .RE
 .RE
 .PD
@@ -61,6 +63,18 @@ Force G3RUH modem regardless of data rate.
 .TP
 .BI "-J " 
 2400 bps QPSK compatible with MFJ-2400.
+
+.TP
+.BI "-X " "n"
+1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.
+
+.TP
+.BI "-I " "n"
+Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.
+
+.TP
+.BI "-i " "n"
+Enable IL2P transmit, inverted polarity.  n=1 is recommended.  0 uses weaker FEC.
 
 
 .TP
@@ -88,8 +102,12 @@ Send output to .wav file.
 8 bit audio rather than 16.
 
 .TP
-.B  "-2"
+.BI  "-2"
 2 channels of audio rather than 1.
+
+.TP
+.BI "-v"  "max[,incr]"
+Variable speed with specified maximum error and optional increment.
 
 
 .SH EXAMPLES

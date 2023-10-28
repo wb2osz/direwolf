@@ -371,6 +371,7 @@ int fx25_pick_mode (int fx_mode, int dlen)
 // The PRUG FX.25 TNC has additional modes that will handle larger frames
 // by using multiple RS blocks.  This is a future possibility but needs
 // to be coordinated with other FX.25 developers so we maintain compatibility.
+// See https://web.tapr.org/meetings/DCC_2020/JE1WAZ/DCC-2020-PRUG-FINAL.pptx
 
 	static const int prefer[6] = { 0x04, 0x03, 0x06, 0x09, 0x05, 0x01 };
 	for (int k = 0; k < 6; k++) {
@@ -410,19 +411,25 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
     return NULL; /* Can't have more roots than symbol values! */
 
   rs = (struct rs *)calloc(1,sizeof(struct rs));
+  if (rs == NULL) {
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
+  }
   rs->mm = symsize;
   rs->nn = (1<<symsize)-1;
 
-  rs->alpha_to = (DTYPE *)malloc(sizeof(DTYPE)*(rs->nn+1));
+  rs->alpha_to = (DTYPE *)calloc((rs->nn+1),sizeof(DTYPE));
   if(rs->alpha_to == NULL){
-    free(rs);
-    return NULL;
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
   }
-  rs->index_of = (DTYPE *)malloc(sizeof(DTYPE)*(rs->nn+1));
+  rs->index_of = (DTYPE *)calloc((rs->nn+1),sizeof(DTYPE));
   if(rs->index_of == NULL){
-    free(rs->alpha_to);
-    free(rs);
-    return NULL;
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
   }
 
   /* Generate Galois field lookup tables */
@@ -446,14 +453,13 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
   }
 
   /* Form RS code generator polynomial from its roots */
-  rs->genpoly = (DTYPE *)malloc(sizeof(DTYPE)*(nroots+1));
+  rs->genpoly = (DTYPE *)calloc((nroots+1),sizeof(DTYPE));
   if(rs->genpoly == NULL){
-    free(rs->alpha_to);
-    free(rs->index_of);
-    free(rs);
-    return NULL;
+    text_color_set(DW_COLOR_ERROR);
+    dw_printf ("FATAL ERROR: Out of memory.\n");
+    exit (EXIT_FAILURE);
   }
-  rs->fcr = fcr;
+ rs->fcr = fcr;
   rs->prim = prim;
   rs->nroots = nroots;
 
@@ -482,7 +488,7 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
   }
   
 // diagnostic prints
-/*
+#if 0
   printf("Alpha To:\n\r");
   for (i=0; i < sizeof(DTYPE)*(rs->nn+1); i++) 
     printf("0x%2x,", rs->alpha_to[i]);
@@ -497,7 +503,7 @@ struct rs *INIT_RS(unsigned int symsize,unsigned int gfpoly,unsigned fcr,unsigne
   for (i = 0; i <= nroots; i++) 
     printf("0x%2x,", rs->genpoly[i]);
   printf("\n\r");
-*/
+#endif
   return rs;
 }
 

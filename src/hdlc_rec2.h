@@ -6,6 +6,7 @@
 #include "ax25_pad.h"	/* for packet_t, alevel_t */
 #include "rrbb.h"
 #include "audio.h"		/* for struct audio_s */
+#include "dlq.h"		// for fec_type_t definition.
 
 
 
@@ -62,6 +63,6 @@ int hdlc_rec2_try_to_fix_later (rrbb_t block, int chan, int subchan, int slice, 
 
 /* Provided by the top level application to process a complete frame. */
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t level, int is_fx25, retry_t retries, char *spectrum);
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t level, fec_type_t fec_type, retry_t retries, char *spectrum);
 
 #endif

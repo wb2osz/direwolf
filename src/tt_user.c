@@ -230,7 +230,7 @@ void tt_user_init (struct audio_s *p_audio_config, struct tt_config_s *p_tt_conf
  * Inputs:      callsign	- full or a old style 3 DIGIT suffix abbreviation
  *		overlay
  *
- * Returns:     Handle for refering to table position or -1 if not found.
+ * Returns:     Handle for referring to table position or -1 if not found.
  *		This happens to be an index into an array but
  *		the implementation could change so the caller should
  *		not make any assumptions.
@@ -290,7 +290,7 @@ int tt_user_search (char *callsign, char overlay)
  *
  * Outputs:	callsign - corresponding full callsign or empty string.
  *
- * Returns:     Handle for refering to table position (>= 0) or -1 if not found.
+ * Returns:     Handle for referring to table position (>= 0) or -1 if not found.
  *		This happens to be an index into an array but
  *		the implementation could change so the caller should
  *		not make any assumptions.
@@ -351,7 +351,7 @@ static void clear_user(int i)
  *
  * Inputs:      none
  *
- * Returns:     Handle for refering to table position.
+ * Returns:     Handle for referring to table position.
  *
  * Description:	If table is already full, this should delete the 
  *		least recently heard user to make room.		
@@ -453,7 +453,7 @@ static void digit_suffix (char *callsign, char *suffix)
  *
  * Name:        tt_user_heard
  *
- * Purpose:     Record information from an APRStt trasmission.
+ * Purpose:     Record information from an APRStt transmission.
  *
  * Inputs:      callsign	- full or an abbreviation
  *		ssid
@@ -881,8 +881,8 @@ static void xmit_object_report (int i, int first_time)
  *	Any attached application(s).
  * 	IGate.
  *
- * When transmitting over the radio, it gets sent multipe times, to help
- * probablity of being heard, with increasing delays between.
+ * When transmitting over the radio, it gets sent multiple times, to help
+ * probability of being heard, with increasing delays between.
  *
  * The other methods are reliable so we only want to send it once.
  */
@@ -897,9 +897,9 @@ static void xmit_object_report (int i, int first_time)
 	  flen = ax25_pack(pp, fbuf);
 
 	  server_send_rec_packet (save_tt_config_p->obj_recv_chan, pp, fbuf, flen);
-	  kissnet_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);
-	  kissserial_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);
-	  kisspt_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, -1);
+	  kissnet_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);
+	  kissserial_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);
+	  kisspt_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);
 	}
 
 	if (first_time && save_tt_config_p->obj_send_to_ig)  {

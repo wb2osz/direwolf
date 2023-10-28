@@ -49,7 +49,7 @@
  *
  *
  *	APRS uses only UI frames.
- *	Each starts with 2-10 addressses (14-70 octets):
+ *	Each starts with 2-10 addresses (14-70 octets):
  *
  *	* Destination Address  (note: opposite order in printed format)
  *
@@ -350,8 +350,9 @@ void ax25_delete (packet_t this_p)
  *		strict	- True to enforce rules for packets sent over the air.
  *			  False to be more lenient for packets from IGate server.
  *
- *			  Messages from an IGate server can have longer 
- *		 	  addresses after qAC.  Up to 9 observed so far. 
+ *			  Packets from an IGate server can have longer
+ *		 	  addresses after qAC.  Up to 9 observed so far.
+ *			  The SSID can be 2 alphanumeric characters, not just 1 to 15.
  *
  *			  We can just truncate the name because we will only
  *			  end up discarding it.    TODO:  check on this.
@@ -372,7 +373,7 @@ packet_t ax25_from_text (char *monitor, int strict)
 /*
  * Tearing it apart is destructive so make our own copy first.
  */
-	char stuff[512];
+	char stuff[AX25_MAX_PACKET_LEN+1];
 	char *pinfo;
 
 	int ssid_temp, heard_temp;
@@ -510,6 +511,13 @@ packet_t ax25_from_text (char *monitor, int strict)
 	  int k = this_p->num_addr;
 
 	  // printf ("DEBUG: get digi loop, num addr = %d, address = '%s'\n", k, pa);// FIXME
+
+	  // Hack for q construct, from APRS-IS, so it does not cause panic later.
+
+	  if ( ! strict && pa[0] == 'q' && pa[1] == 'A') {
+	    pa[0] = 'Q';
+	    pa[2] = toupper(pa[2]);
+	  }
 
 	  if ( ! ax25_parse_addr (k, pa, strict, atemp, &ssid_temp, &heard_temp)) {
 	    text_color_set(DW_COLOR_ERROR);
@@ -733,6 +741,7 @@ packet_t ax25_dup (packet_t copy_from)
  *				  alphanumeric characters for the SSID.
  *				  We also get messages like this from a server.
  *					KB1POR>APU25N,TCPIP*,qAC,T2NUENGLD:...
+ *					K1BOS-B>APOSB,TCPIP,WR2X-2*:...
  *
  *				  2 (extra true) will complain if * is found at end.
  *
@@ -940,7 +949,7 @@ int ax25_check_addresses (packet_t pp)
  *
  * Name:	ax25_unwrap_third_party
  * 
- * Purpose:	Unwrap a third party messge from the header.
+ * Purpose:	Unwrap a third party message from the header.
  *
  * Inputs:	copy_from	- Existing packet object.
  *
@@ -1717,6 +1726,19 @@ int ax25_get_info (packet_t this_p, unsigned char **paddr)
 } /* end ax25_get_info */
 
 
+void ax25_set_info (packet_t this_p, unsigned char *new_info_ptr, int new_info_len)
+{
+	unsigned char *old_info_ptr;
+	int old_info_len = ax25_get_info (this_p, &old_info_ptr);
+	this_p->frame_len -= old_info_len;
+
+	if (new_info_len < 0) new_info_len = 0;
+	if (new_info_len > AX25_MAX_INFO_LEN) new_info_len = AX25_MAX_INFO_LEN;
+	memcpy (old_info_ptr, new_info_ptr, new_info_len);
+	this_p->frame_len += new_info_len;
+}
+
+
 /*------------------------------------------------------------------------------
  *
  * Name:	ax25_cut_at_crlf
@@ -1844,7 +1866,7 @@ packet_t ax25_get_nextp (packet_t this_p)
  *
  * Inputs:	this_p		- Current packet object.
  *
- *		release_time	- Time as returned by dtime_now().
+ *		release_time	- Time as returned by dtime_monotonic().
  *
  *------------------------------------------------------------------------------*/
 
@@ -1891,6 +1913,25 @@ void ax25_set_modulo (packet_t this_p, int modulo)
 	this_p->modulo = modulo;
 }
 
+
+/*------------------------------------------------------------------------------
+ *
+ * Name:	ax25_get_modulo
+ *
+ * Purpose:	Get modulo value for I and S frame sequence numbers.
+ *
+ * Returns:	8 or 128 if known.
+ *		0 if unknown.
+ *
+ *------------------------------------------------------------------------------*/
+
+int ax25_get_modulo (packet_t this_p)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	return (this_p->modulo);
+}
 
 
 
@@ -1944,6 +1985,7 @@ void ax25_format_addrs (packet_t this_p, char *result)
 	}
 
 	ax25_get_addr_with_ssid (this_p, AX25_SOURCE, stemp);
+	// FIXME:  For ALL strcat: Pass in sizeof result and use strlcat.
 	strcat (result, stemp);
 	strcat (result, ">");
 
@@ -2598,6 +2640,15 @@ int ax25_get_frame_len (packet_t this_p)
 } /* end ax25_get_frame_len */
 
 
+unsigned char *ax25_get_frame_data_ptr (packet_t this_p)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	return (this_p->frame_data);
+
+} /* end ax25_get_frame_data_ptr */
+
 
 /*------------------------------------------------------------------------------
  *
@@ -2710,6 +2761,7 @@ unsigned short ax25_m_m_crc (packet_t pp)
 	unsigned char fbuf[AX25_MAX_PACKET_LEN];
 	int flen;
 
+	// TODO: I think this can be more efficient by getting the packet content pointer instead of copying.
 	flen = ax25_pack (pp, fbuf); 
 
 	crc = 0xffff;
@@ -2762,7 +2814,8 @@ unsigned short ax25_m_m_crc (packet_t pp)
  *			
  *------------------------------------------------------------------*/
 
-#define MAXSAFE 500
+//#define MAXSAFE 500
+#define MAXSAFE AX25_MAX_INFO_LEN
 
 void ax25_safe_print (char *pstr, int len, int ascii_only)
 {
@@ -2870,7 +2923,9 @@ int ax25_alevel_to_text (alevel_t alevel, char text[AX25_ALEVEL_TO_TEXT_SIZE])
 
 	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d(%+d/%+d)", alevel.rec, alevel.mark, alevel.space);
 	}
-	else if (alevel.mark == -1 &&  alevel.space == -1) {		/* PSK - single number. */
+	else if ((alevel.mark == -1 &&  alevel.space == -1) ||		/* PSK */
+		(alevel.mark == -99 &&  alevel.space == -99)) {		/* v. 1.7 "B" FM demodulator. */
+									// ?? Where does -99 come from?
 
 	  snprintf (text, AX25_ALEVEL_TO_TEXT_SIZE, "%d", alevel.rec);
 	}

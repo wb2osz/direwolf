@@ -224,7 +224,7 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_
 
 	now = time(NULL);			// Get current time.
 	(void)gmtime_r (&now, &tm);	
-
+// FIXME:  https://github.com/wb2osz/direwolf/issues/473
 
 	if (g_daily_names) {
 
@@ -345,7 +345,7 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_
 	  char sstatus[40];
 	  char stelemetry[200];
 	  char scomment[256];
-	  char alevel_text[32];
+	  char alevel_text[40];
 
 
 

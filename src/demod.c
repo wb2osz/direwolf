@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 // 
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -60,10 +60,6 @@
 static struct audio_s          *save_audio_config_p;
 
 
-// TODO: temp experiment.
-
-
-static int zerostuff = 1;	// temp experiment.
 
 // Current state of all the decoders.
 
@@ -106,7 +102,7 @@ int demod_init (struct audio_s *pa)
 
 	for (chan = 0; chan < MAX_CHANS; chan++) {
 
-	 if (save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	 if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 
 	  char *p;
 	  char just_letters[16];
@@ -198,46 +194,57 @@ int demod_init (struct audio_s *pa)
 	      assert (num_letters == (int)(strlen(just_letters)));
 
 /*
- * Pick a good default demodulator if none specified. 
+ * Pick a good default demodulator if none specified.
+ * Previously, we had "D" optimized for 300 bps.
+ * Gone in 1.7 so it is always "A+".
  */
 	      if (num_letters == 0) {
+	        strlcpy (just_letters, "A", sizeof(just_letters));
+	        num_letters = strlen(just_letters);
 
-	        if (save_audio_config_p->achan[chan].baud < 600) {
-
-	          /* This has been optimized for 300 baud. */
-
-	          strlcpy (just_letters, "D", sizeof(just_letters));
-
-	        }
-	        else {
-#if __arm__
-	          /* We probably don't have a lot of CPU power available. */
-	          /* Previously we would use F if possible otherwise fall back to A. */
-
-	          /* In version 1.2, new default is E+ /3. */
-	          strlcpy (just_letters, "E", sizeof(just_letters));			// version 1.2 now E.
-	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
+	        if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
 								// If not explicitly turned off.
-	          if (save_audio_config_p->achan[chan].decimate == 0) {
-	            if (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
-	              save_audio_config_p->achan[chan].decimate = 3;
-	            }
-	          }
-#else
-	          strlcpy (just_letters, "E", sizeof(just_letters));			// version 1.2 changed C to E.
-	          if (have_plus != -1) have_plus = 1;		// Add as default for version 1.2
-								// If not explicitly turned off.
-#endif
-	        }
-	        num_letters = 1;
 	      }
 
+/*
+ * Special case for ARM.
+ * The higher end ARM chips have loads of power but many people
+ * are using a single core Pi Zero or similar.
+ * (I'm still using a model 1 for my digipeater/IGate!)
+ * Decreasing CPU requirement has a negligible impact on decoding performance.
+ *
+ * 	atest -PA- 01_Track_1.wav		--> 1002 packets decoded.
+ * 	atest -PA- -D3 01_Track_1.wav		--> 997 packets decoded.
+ *
+ * Someone concerned about 1/2 of one percent difference can add "-D 1"
+ */
+#if __arm__
+	      if (save_audio_config_p->achan[chan].decimate == 0) {
+	        if (save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
+	          save_audio_config_p->achan[chan].decimate = 3;
+	        }
+	      }
+#endif
 
-	      assert (num_letters == (int)(strlen(just_letters)));
+/*
+ * Number of filter taps is proportional to number of audio samples in a "symbol" duration.
+ * These can get extremely large for low speeds, e.g. 300 baud.
+ * In this case, increase the decimation ration.  Crude approximation. Could be improved.
+ */
+	      if (save_audio_config_p->achan[chan].decimate == 0 &&
+		  save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000 &&
+	          save_audio_config_p->achan[chan].baud < 600) {
+
+		// Avoid enormous number of filter taps.
+
+	        save_audio_config_p->achan[chan].decimate = 3;
+	      }
+
 
 /*
  * Put it back together again.
  */
+	      assert (num_letters == (int)(strlen(just_letters)));
 
 		/* At this point, have_plus can have 3 values: */
 		/* 	1 = turned on, either explicitly or by applied default */
@@ -286,7 +293,7 @@ int demod_init (struct audio_s *pa)
 
 	      if (save_audio_config_p->achan[chan].decimate == 0) {
 	        save_audio_config_p->achan[chan].decimate = 1;
-		if (strchr (just_letters, 'D') != NULL && save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
+		if (strchr (just_letters, 'B') != NULL && save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec > 40000) {
 		  save_audio_config_p->achan[chan].decimate = 3;
 		}
 	      }
@@ -492,7 +499,7 @@ int demod_init (struct audio_s *pa)
 	      // In versions 1.4 and 1.5, V.26 "Alternative A" was used.
 	      // years later, I discover that the MFJ-2400 used "Alternative B."
 	      // It looks like the other two manufacturers use the same but we
-              // can't be sure until we find one for compatbility testing.
+              // can't be sure until we find one for compatibility testing.
 
 	      // In version 1.6 we add a choice for the user.
 	      // If neither one was explicitly specified, print a message and take
@@ -503,8 +510,8 @@ int demod_init (struct audio_s *pa)
 
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Two incompatible versions of 2400 bps QPSK are now available.\n");
-	        dw_printf ("For compatbility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
-	        dw_printf ("For compatbility MFJ-2400 use 'V26B' modem option in config file.\n");
+	        dw_printf ("For compatibility with direwolf <= 1.5, use 'V26A' modem option in config file.\n");
+	        dw_printf ("For compatibility MFJ-2400 use 'V26B' modem option in config file.\n");
 	        dw_printf ("Command line options -j and -J can be used for channel 0.\n");
 	        dw_printf ("For more information, read the Dire Wolf User Guide and\n");
 	        dw_printf ("2400-4800-PSK-for-APRS-Packet-Radio.pdf.\n");
@@ -665,12 +672,6 @@ int demod_init (struct audio_s *pa)
 	        strlcpy (save_audio_config_p->achan[chan].profiles, "+", sizeof(save_audio_config_p->achan[chan].profiles));
 	      }
 
-
-#ifdef TUNE_ZEROSTUFF
-	      zerostuff = TUNE_ZEROSTUFF;
-#endif
-
-
 /*
  * We need a minimum number of audio samples per bit time for good performance.
  * Easier to check here because demod_9600_init might have an adjusted sample rate.
@@ -685,26 +686,32 @@ int demod_init (struct audio_s *pa)
 
 	      if (save_audio_config_p->achan[chan].upsample == 0) {
 
-	        if (ratio < 5) {
+	        if (ratio < 4) {
 
-	          // example: 44100 / 9600 is 4.59
-	          // Big improvement with x2.
-	          // x4 seems to work the best.
-	          // The other parameters are not as touchy.
-	          // Might reduce on ARM if it takes too much CPU power.
+	           // This is extreme.
+		   // No one should be using a sample rate this low but
+		   // amazingly a recording with 22050 rate can be decoded.
+	           // 3 and 4 are the same.  Need more tests.
 
 	          save_audio_config_p->achan[chan].upsample = 4;
+	        }
+	        else if (ratio < 5) {
+
+	          // example: 44100 / 9600 is 4.59
+	          // 3 is slightly better than 2 or 4.
+
+	          save_audio_config_p->achan[chan].upsample = 3;
 	        }
 	        else if (ratio < 10) {
 
-	          // 48000 / 9600 is 5.00
-	          // Need more reasearch.  Treat like above for now.
+	          // example: 48000 / 9600 = 5
+	          // 3 is slightly better than 2 or 4.
 
-	          save_audio_config_p->achan[chan].upsample = 4;
+	          save_audio_config_p->achan[chan].upsample = 3;
 	        }
 	        else if (ratio < 15) {
 
-	          // ...
+	          // ... guessing
 
 	          save_audio_config_p->achan[chan].upsample = 2;
 	        }
@@ -775,7 +782,8 @@ int demod_init (struct audio_s *pa)
 	      }
 
 	      demod_9600_init (save_audio_config_p->achan[chan].modem_type,
-			save_audio_config_p->achan[chan].upsample * save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+			save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+			save_audio_config_p->achan[chan].upsample,
 			save_audio_config_p->achan[chan].baud, D);
 
 	      if (strchr(save_audio_config_p->achan[chan].profiles, '+') != NULL) {
@@ -796,10 +804,23 @@ int demod_init (struct audio_s *pa)
 
 	  }  /* switch on modulation type. */
     
-	 }  /* if channel number is valid */
+	 }  /* if channel medium is radio */
+
+// FIXME dw_printf ("-------- end of loop for chn %d \n", chan);
 
 	}  /* for chan ... */
 
+	// Now the virtual channels.  FIXME:  could be single loop.
+
+	for (chan = MAX_CHANS; chan < MAX_TOTAL_CHANS; chan++) {
+
+// FIXME dw_printf ("-------- virtual channel loop %d \n", chan);
+
+	  if (chan == save_audio_config_p->igate_vchannel) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("Channel %d: IGate virtual channel.\n", chan);
+	  }
+	}
 
         return (0);
 
@@ -811,7 +832,7 @@ int demod_init (struct audio_s *pa)
  *
  * Name:        demod_get_sample
  *
- * Purpose:     Get one audio sample fromt the specified sound input source.
+ * Purpose:     Get one audio sample from the specified sound input source.
  *
  * Inputs:	a	- Index for audio device.  0 = first.
  *
@@ -821,7 +842,7 @@ int demod_init (struct audio_s *pa)
  * Global In:	save_audio_config_p->adev[ACHAN2ADEV(chan)].bits_per_sample - So we know whether to 
  *			read 1 or 2 bytes from audio stream.
  *
- * Description:	Grab 1 or two btyes depending on data source.
+ * Description:	Grab 1 or two bytes depending on data source.
  *
  *		When processing stereo, the caller will call this
  *		at twice the normal rate to obtain alternating left 
@@ -831,16 +852,14 @@ int demod_init (struct audio_s *pa)
 
 #define FSK_READ_ERR (256*256)
 
-
 __attribute__((hot))
 int demod_get_sample (int a)		
 {
 	int x1, x2;
-	signed short sam;	/* short to force sign extention. */
+	signed short sam;	/* short to force sign extension. */
 
 
 	assert (save_audio_config_p->adev[a].bits_per_sample == 8 || save_audio_config_p->adev[a].bits_per_sample == 16);
-
 
 	if (save_audio_config_p->adev[a].bits_per_sample == 8) {
 
@@ -908,18 +927,37 @@ int demod_get_sample (int a)
  *
  *--------------------------------------------------------------------*/
 
+static volatile int mute_input[MAX_CHANS];
+
+// New in 1.7.
+// A few people have a really bad audio cross talk situation where they receive their own transmissions.
+// It usually doesn't cause a problem but it is confusing to look at.
+// "half duplex" setting applied only to the transmit logic.  i.e. wait for clear channel before sending.
+// Receiving was still active.
+// I think the simplest solution is to mute/unmute the audio input at this point if not full duplex.
+// This is called from ptt_set for half duplex.
+
+void demod_mute_input (int chan, int mute_during_xmit)
+{
+	assert (chan >= 0 && chan < MAX_CHANS);
+	mute_input[chan] = mute_during_xmit;
+}
 
 __attribute__((hot))
 void demod_process_sample (int chan, int subchan, int sam)
 {
 	float fsam;
-	int k;
+	//int k;
 
 
 	struct demodulator_state_s *D;
 
 	assert (chan >= 0 && chan < MAX_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
+
+	if (mute_input[chan]) {
+	  sam = 0;
+	};
 
 	D = &demodulator_state[chan][subchan];
 
@@ -1005,47 +1043,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 	  case MODEM_AIS:
 	  default:
 	
-	    if (zerostuff) {
-	      /* Literature says this is better if followed */
-	      /* by appropriate low pass filter. */
-	      /* So far, both are same in tests with different */
-	      /* optimal low pass filter parameters. */
-
-	      for (k=1; k<save_audio_config_p->achan[chan].upsample; k++) {
-	        demod_9600_process_sample (chan, 0, D);
-	      }
-	      demod_9600_process_sample (chan, sam * save_audio_config_p->achan[chan].upsample, D);
-	    }
-	    else {
-
-	      /* Linear interpolation. */
-	      static int prev_sam;
-
-	      switch (save_audio_config_p->achan[chan].upsample) {
-	        case 1:
-	          demod_9600_process_sample (chan, sam, D);
-	          break;
-	        case 2:
-	          demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
-	          demod_9600_process_sample (chan, sam, D);
-	          break;
-                case 3:
-                  demod_9600_process_sample (chan, (2 * prev_sam + sam) / 3, D);
-                  demod_9600_process_sample (chan, (prev_sam + 2 * sam) / 3, D);
-                  demod_9600_process_sample (chan, sam, D);
-                  break;
-                case 4:
-                  demod_9600_process_sample (chan, (3 * prev_sam + sam) / 4, D);
-                  demod_9600_process_sample (chan, (prev_sam + sam) / 2, D);
-                  demod_9600_process_sample (chan, (prev_sam + 3 * sam) / 4, D);
-                  demod_9600_process_sample (chan, sam, D);
-                  break;
-                default:
-                  assert (0);
-                  break;
-	      }
-	      prev_sam = sam;
-	    }
+	    demod_9600_process_sample (chan, sam, save_audio_config_p->achan[chan].upsample, D);
 	    break;
 
 	}  /* switch modem_type */

@@ -83,7 +83,7 @@
 
 //#define DEBUG 1
 
-#define DIGIPEATER_C
+#define DIGIPEATER_C		// Why?
 
 #include "direwolf.h"
 
@@ -116,7 +116,8 @@ static struct audio_s          *save_audio_config_p;
 static struct {
 	packet_t packet_p;
 	alevel_t alevel;
-	int is_fx25;		// 1 for FX.25, 0 for regular AX.25.
+	float speed_error;
+	fec_type_t fec_type;	// Type of FEC: none(0), fx25, il2p
 	retry_t retries;	// For the old "fix bits" strategy, this is the
 				// number of bits that were modified to get a good CRC.
 				// It would be 0 to something around 4.
@@ -172,7 +173,7 @@ void multi_modem_init (struct audio_s *pa)
 	hdlc_rec_init (save_audio_config_p);
 
 	for (chan=0; chan<MAX_CHANS; chan++) {
-	  if (save_audio_config_p->achan[chan].medium == MEDIUM_RADIO) {
+	  if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	    if (save_audio_config_p->achan[chan].baud <= 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("Internal error, chan=%d, %s, %d\n", chan, __FILE__, __LINE__);
@@ -306,14 +307,14 @@ void multi_modem_process_sample (int chan, int audio_sample)
  *				 display of audio level line.
  *				 Use -2 to indicate DTMF message.)
  *		retries	- Level of correction used.
- *		is_fx25	- 1 for FX.25, 0 for normal AX.25.
+ *		fec_type	- none(0), fx25, il2p
  *
  * Description:	Add to list of candidates.  Best one will be picked later.
  *
  *--------------------------------------------------------------------*/
 
 
-void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries, int is_fx25)
+void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned char *fbuf, int flen, alevel_t alevel, retry_t retries, fec_type_t fec_type)
 {
 	packet_t pp;
 
@@ -345,12 +346,19 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	else {
 	  pp = ax25_from_frame (fbuf, flen, alevel);
 	}
+
+	multi_modem_process_rec_packet (chan, subchan, slice, pp, alevel, retries, fec_type);
+}
+
+// TODO: Eliminate function above and move code elsewhere?
+
+void multi_modem_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, retry_t retries, fec_type_t fec_type)
+{
 	if (pp == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Unexpected internal problem, %s %d\n", __FILE__, __LINE__);
 	  return;	/* oops!  why would it fail? */
 	}
-
 
 /*
  * If only one demodulator/slicer, and no FX.25 in progress,
@@ -379,7 +387,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	    ax25_delete (pp);
 	  }
 	  else {
-	    dlq_rec_frame (chan, subchan, slice, pp, alevel, is_fx25, retries, "");
+	    dlq_rec_frame (chan, subchan, slice, pp, alevel, fec_type, retries, "");
 	  }
 	  return;
 	}
@@ -399,7 +407,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 
 	candidate[chan][subchan][slice].packet_p = pp;
 	candidate[chan][subchan][slice].alevel = alevel;
-	candidate[chan][subchan][slice].is_fx25 = is_fx25;
+	candidate[chan][subchan][slice].fec_type = fec_type;
 	candidate[chan][subchan][slice].retries = retries;
 	candidate[chan][subchan][slice].age = 0;
 	candidate[chan][subchan][slice].crc = ax25_m_m_crc(pp);
@@ -436,6 +444,9 @@ static void pick_best_candidate (int chan)
 	int best_n, best_score;
 	char spectrum[MAX_SUBCHANS*MAX_SLICERS+1];
 	int n, j, k;
+	if (save_audio_config_p->achan[chan].num_slicers < 1) {
+	  save_audio_config_p->achan[chan].num_slicers = 1;
+	}
 	int num_bars = save_audio_config_p->achan[chan].num_slicers * save_audio_config_p->achan[chan].num_subchan;
 
 	memset (spectrum, 0, sizeof(spectrum));
@@ -449,7 +460,7 @@ static void pick_best_candidate (int chan)
 	  if (candidate[chan][j][k].packet_p == NULL) {
 	    spectrum[n] = '_';
 	  }
-	  else if (candidate[chan][j][k].is_fx25) {
+	  else if (candidate[chan][j][k].fec_type != fec_type_none) {		// FX.25 or IL2P
 	    // FIXME: using retries both as an enum and later int too.
 	    if ((int)(candidate[chan][j][k].retries) <= 9) {
 	      spectrum[n] = '0' + candidate[chan][j][k].retries;
@@ -457,7 +468,7 @@ static void pick_best_candidate (int chan)
 	    else {
 	      spectrum[n] = '+';
 	    }
-	  }
+	  }									// AX.25 below
 	  else if (candidate[chan][j][k].retries == RETRY_NONE) {
 	    spectrum[n] = '|';
 	  }
@@ -468,14 +479,14 @@ static void pick_best_candidate (int chan)
 	    spectrum[n] = '.';
 	  }
 
-	  /* Begining score depends on effort to get a valid frame CRC. */
+	  /* Beginning score depends on effort to get a valid frame CRC. */
 
 	  if (candidate[chan][j][k].packet_p == NULL) {
 	    candidate[chan][j][k].score = 0;
 	  }
 	  else {
-	    if (candidate[chan][j][k].is_fx25) {
-	      candidate[chan][j][k].score = 9000 - 100 * candidate[chan][j][k].retries;
+	    if (candidate[chan][j][k].fec_type != fec_type_none) {
+	      candidate[chan][j][k].score = 9000 - 100 * candidate[chan][j][k].retries;		// has FEC
 	    }
 	    else {
 	      /* Originally, this produced 0 for the PASSALL case. */
@@ -487,6 +498,9 @@ static void pick_best_candidate (int chan)
 	    }
 	  }
 	}
+
+	// FIXME: IL2p & FX.25 don't have CRC calculated. Must fill it in first.
+
 
 	/* Bump it up slightly if others nearby have the same CRC. */
 
@@ -540,9 +554,9 @@ static void pick_best_candidate (int chan)
 		candidate[chan][j][k].packet_p);
 	  }
 	  else {
-	    dw_printf ("%d.%d.%d: ptr=%p, is_fx25=%d, retry=%d, age=%3d, crc=%04x, score=%d  %s\n", chan, j, k,
+	    dw_printf ("%d.%d.%d: ptr=%p, fec_type=%d, retry=%d, age=%3d, crc=%04x, score=%d  %s\n", chan, j, k,
 		candidate[chan][j][k].packet_p,
-		candidate[chan][j][k].is_fx25,
+		(int)(candidate[chan][j][k].fec_type),
 		(int)(candidate[chan][j][k].retries),
 		candidate[chan][j][k].age,
 		candidate[chan][j][k].crc,
@@ -601,7 +615,7 @@ static void pick_best_candidate (int chan)
 	  dlq_rec_frame (chan, j, k,
 		candidate[chan][j][k].packet_p,
 		candidate[chan][j][k].alevel,
-		candidate[chan][j][k].is_fx25,
+		candidate[chan][j][k].fec_type,
 		(int)(candidate[chan][j][k].retries),
 		spectrum);
 

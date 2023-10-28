@@ -382,7 +382,7 @@ int tt_text_to_two_key (const char *text, int quiet, char *buttons)
  * Outputs:	buttons	- Sequence of two buttons to press.
  *			  "00" for error because this is probably
  *			  being used to build up a fixed length
- *			  string where positions are signficant.
+ *			  string where positions are significant.
  *			  Must be at least 3 bytes.
  *
  * Returns:     Number of errors detected.
@@ -470,7 +470,7 @@ int tt_text_to_call10 (const char *text, int quiet, char *buttons)
 	char padded[8];
 	char stemp[11];
 
-
+	// FIXME: Add parameter for sizeof buttons and use strlcpy
 	strcpy (buttons, "");
 
 /* Quick validity check. */
@@ -540,6 +540,7 @@ int tt_text_to_call10 (const char *text, int quiet, char *buttons)
 /* Binary to decimal for the columns. */
 
 	snprintf (stemp, sizeof(stemp), "%04d", packed);
+	// FIXME: add parameter for sizeof buttons and use strlcat
 	strcat (buttons, stemp);
 
 	return (errors);          
@@ -1435,6 +1436,7 @@ int tt_satsq_to_text (const char *buttons, int quiet, char *text)
 	row = buttons[0] - '0';
 	col = buttons[1] - '0';
 
+	// FIXME: Add parameter for sizeof text and use strlcpy, strlcat.
 	strcpy (text, grid[row][col]);
 	strcat (text, buttons+2);
 
@@ -1603,11 +1605,11 @@ int main (int argc, char *argv[])
 	  exit (1);
 	}
 
-	strcpy (text, argv[1]);
+	strlcpy (text, argv[1], sizeof(text));
 
 	for (n = 2; n < argc; n++) {
-	  strcat (text, " ");
-	  strcat (text, argv[n]);
+	  strlcat (text, " ", sizeof(text));
+	  strlcat (text, argv[n], sizeof(text));
 	}
 
 	dw_printf ("Push buttons for multi-press method:\n");
@@ -1670,7 +1672,7 @@ int main (int argc, char *argv[])
 	  exit (1);
 	}
 
-	strcpy (buttons, argv[1]);
+	strlcpy (buttons, argv[1], sizeof(buttons));
 
 	for (n = 2; n < argc; n++) {
 	  strlcat (buttons, argv[n], sizeof(buttons));
