@@ -560,7 +560,7 @@ void decode_aprs_print (decode_aprs_t *A) {
 	    strlcat (stemp, "\nTell the sender (", sizeof(stemp));
 	    strlcat (stemp, A->g_src, sizeof(stemp));
 	    strlcat (stemp, ") to use the proper product identifier from", sizeof(stemp));
-	    strlcat (stemp, " http://www.aprs.org/aprs11/tocalls.txt", sizeof(stemp));
+	    strlcat (stemp, " https://github.com/aprsorg/aprs-deviceid ", sizeof(stemp));
 	  }
 	  else {
 	    strlcat (stemp, ", ", sizeof(stemp));
