@@ -208,7 +208,7 @@ int main (int argc, char *argv[])
 	char input_file[80];
 	char T_opt_timestamp[40];
 	
-	int t_opt = 1;		/* Text color option. */				
+	int t_opt = 0;		/* Text color option. */
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
 	int g_opt = 0;		/* G3RUH mode, ignoring default for speed. */				
 	int j_opt = 0;		/* 2400 bps PSK compatible with direwolf <= 1.5 */
@@ -269,18 +269,6 @@ int main (int argc, char *argv[])
 
 #endif
 
-/*
- * Pre-scan the command line options for the text color option.
- * We need to set this before any text output.
- * Default will be no colors if stdout is not a terminal (i.e. piped into
- * something else such as "tee") but command line can override this.
- */
-
-#if __WIN32__
-	t_opt = _isatty(_fileno(stdout)) > 0;
-#else
-	t_opt = isatty(fileno(stdout));
-#endif
 				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
 
