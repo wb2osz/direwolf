@@ -426,6 +426,92 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_
 
 } /* end log_write */
 
+/*------------------------------------------------------------------
+ *
+ * Function:    log_heard
+ *
+ * Purpose:     Save packet information from non-APRS packets to log file.
+ *              Basically the same info as written to stdout 
+ * 
+ *------------------------------------------------------------------*/
+
+
+void log_heard(char *heard, char *alevel_text, char *display_retries, char *spectrum)
+{
+  time_t now;
+  struct tm tm;
+
+  dw_printf ("Logging heard packet\n");
+
+  if (strlen(g_log_path) == 0) return;
+
+  now = time(NULL);                       // Get current time.
+  (void)gmtime_r (&now, &tm);
+
+
+  if (g_daily_names) {
+    char fname[20];
+    strftime (fname, sizeof(fname), "%Y-%m-%d.log", &tm);
+
+    // Close current file if name has changed
+    if (g_log_fp != NULL && strcmp(fname, g_open_fname) != 0) {
+      log_term ();
+    }
+    if (g_log_fp == NULL) {       // Open for append if not already open.
+      char full_path[120];
+
+      strlcpy (full_path, g_log_path, sizeof(full_path));
+#if __WIN32__
+      strlcat (full_path, "\\", sizeof(full_path));
+#else
+      strlcat (full_path, "/", sizeof(full_path));
+#endif
+      strlcat (full_path, fname, sizeof(full_path));
+
+      text_color_set(DW_COLOR_INFO);
+      dw_printf("Opening log file \"%s\".\n", fname);
+
+      g_log_fp = fopen (full_path, "a");
+
+      if (g_log_fp != NULL) {
+        strlcpy (g_open_fname, fname, sizeof(g_open_fname));
+      }
+      else {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf("Can't open log file \"%s\" for write.\n", full_path);
+        dw_printf ("%s\n", strerror(errno));
+        strlcpy (g_open_fname, "", sizeof(g_open_fname));
+        return;
+      }
+    }
+  } else {  // Added in version 1.5.  Single file.
+    if (g_log_fp == NULL) {       // Open for append if not already open.
+      text_color_set(DW_COLOR_INFO);
+      dw_printf("Opening log file \"%s\"\n", g_log_path);
+
+      g_log_fp = fopen (g_log_path, "a");
+
+      if (g_log_fp == NULL) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf("Can't open log file \"%s\" for write.\n", g_log_path);
+        dw_printf ("%s\n", strerror(errno));
+        strlcpy (g_log_path, "", sizeof(g_log_path));
+        return;
+      }
+    }
+  }
+
+  if (g_log_fp != NULL) {
+    char itime[24];
+    strftime (itime, sizeof(itime), "%Y-%m-%d %H:%M:%SZ", &tm);
+
+    fprintf (g_log_fp, "%s, %s, %s, %s, %s\n",
+             itime, heard, alevel_text, display_retries,spectrum);
+
+      fflush (g_log_fp);
+  }
+} /* end log_heard */
+
 
 
 /*------------------------------------------------------------------
