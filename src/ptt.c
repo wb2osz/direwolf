@@ -181,17 +181,51 @@ typedef int HANDLE;
 
 #if __WIN32__
 
-#define RTS_ON(fd) 	EscapeCommFunction(fd,SETRTS);
-#define RTS_OFF(fd) 	EscapeCommFunction(fd,CLRRTS);
-#define DTR_ON(fd)    	EscapeCommFunction(fd,SETDTR);
-#define DTR_OFF(fd)	EscapeCommFunction(fd,CLRDTR);
+void setRTS(HANDLE fd, unsigned char state)
+{
+	if (!EscapeCommFunction(fd, state ? SETRTS : CLRRTS)) {
+		return;
+	}
+
+	DCB dcb;
+	if (!GetCommState(fd, &dcb)) {
+		return;
+	}
+
+	dcb.fRtsControl = state ? RTS_CONTROL_ENABLE : RTS_CONTROL_DISABLE;
+
+	SetCommState(fd, &dcb);
+}
+
+void setDTR(HANDLE fd, unsigned char state)
+{
+	if (!EscapeCommFunction(fd, state ? SETDTR : CLRDTR)) {
+		return;
+	}
+
+	DCB dcb;
+	if (!GetCommState(fd, &dcb)) {
+		return;
+	}
+
+	dcb.fDtrControl = state ? DTR_CONTROL_ENABLE : DTR_CONTROL_DISABLE;
+
+	SetCommState(fd, &dcb);
+}
 
 #else
 
-#define RTS_ON(fd) 	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff |= TIOCM_RTS;  ioctl (fd, TIOCMSET, &stuff); }
-#define RTS_OFF(fd) 	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff &= ~TIOCM_RTS; ioctl (fd, TIOCMSET, &stuff); }
-#define DTR_ON(fd)    	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff |= TIOCM_DTR;  ioctl (fd, TIOCMSET, &stuff); }
-#define DTR_OFF(fd)	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff &= ~TIOCM_DTR;	ioctl (fd, TIOCMSET, &stuff); }
+void setRTS(HANDLE fd, unsigned char state)
+{
+	int bit = TIOCM_RTS;
+	ioctl(fd, state ? TIOCMBIS : TIOCMBIC, &bit);
+}
+
+void setDTR(HANDLE fd, unsigned char state)
+{
+	int bit = TIOCM_DTR;
+	ioctl(fd, state ? TIOCMBIS : TIOCMBIC, &bit);
+}
 
 #define LPT_IO_ADDR 0x378
 
@@ -1221,21 +1255,11 @@ void ptt_set (int ot, int chan, int ptt_signal)
 
 	  if (save_audio_config_p->achan[chan].octrl[ot].ptt_line == PTT_LINE_RTS) {
 
-	    if (ptt) {
-	      RTS_ON(ptt_fd[chan][ot]);
-	    }
-	    else {
-	      RTS_OFF(ptt_fd[chan][ot]);
-	    }
+	    setRTS(ptt_fd[chan][ot], ptt);
 	  }
 	  else if (save_audio_config_p->achan[chan].octrl[ot].ptt_line == PTT_LINE_DTR) {
 
-	    if (ptt) {
-	      DTR_ON(ptt_fd[chan][ot]);
-	    }
-	    else {
-	      DTR_OFF(ptt_fd[chan][ot]);
-	    }
+	    setDTR(ptt_fd[chan][ot], ptt);
 	  }
 
 /* 
@@ -1244,21 +1268,11 @@ void ptt_set (int ot, int chan, int ptt_signal)
 
 	  if (save_audio_config_p->achan[chan].octrl[ot].ptt_line2 == PTT_LINE_RTS) {
 
-	    if (ptt2) {
-	      RTS_ON(ptt_fd[chan][ot]);
-	    }
-	    else {
-	      RTS_OFF(ptt_fd[chan][ot]);
-	    }
+	    setRTS(ptt_fd[chan][ot], ptt2);
 	  }
 	  else if (save_audio_config_p->achan[chan].octrl[ot].ptt_line2 == PTT_LINE_DTR) {
 
-	    if (ptt2) {
-	      DTR_ON(ptt_fd[chan][ot]);
-	    }
-	    else {
-	      DTR_OFF(ptt_fd[chan][ot]);
-	    }
+		setDTR(ptt_fd[chan][ot], ptt2);
 	  }
 	  /* else neither one */
 
