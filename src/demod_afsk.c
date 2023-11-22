@@ -309,10 +309,6 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	      D->lp_window = BP_WINDOW_TRUNCATED;
 	    }
 
-	    D->agc_fast_attack = 0.820;		
-	    D->agc_slow_decay = 0.000214;
-	    D->agc_fast_attack = 0.45;		
-	    D->agc_slow_decay = 0.000195;
 	    D->agc_fast_attack = 0.70;		
 	    D->agc_slow_decay = 0.000090;
 
@@ -372,10 +368,16 @@ void demod_afsk_init (int samples_per_sec, int baud, int mark_freq,
 	    // For scaling phase shift into normallized -1 to +1 range for mark and space.
 	    D->u.afsk.normalize_rpsam = 1.0 / (0.5 * abs(mark_freq - space_freq) * 2 * M_PI / samples_per_sec);
 
+	    // New "B" demodulator does not use AGC but demod.c needs this to derive "quick" and
+	    // "sluggish" values for overall signal amplitude.  That probably should be independent
+	    // of these values.
+	    D->agc_fast_attack = 0.70;		
+	    D->agc_slow_decay = 0.000090;
+
 	    D->pll_locked_inertia = 0.74;
 	    D->pll_searching_inertia = 0.50;
 
-	    D->alevel_mark_peak = -1;		// FIXME:  disable display
+	    D->alevel_mark_peak = -1;		// Disable received signal (m/s) display.
 	    D->alevel_space_peak = -1;
 	    break;
 
@@ -868,6 +870,7 @@ static void nudge_pll (int chan, int subchan, int slice, float demod_out, struct
 {
 	D->slicer[slice].prev_d_c_pll = D->slicer[slice].data_clock_pll;
 
+
 	// Perform the add as unsigned to avoid signed overflow error.
 	D->slicer[slice].data_clock_pll = (signed)((unsigned)(D->slicer[slice].data_clock_pll) + (unsigned)(D->pll_step_per_sample));
 
@@ -901,7 +904,15 @@ static void nudge_pll (int chan, int subchan, int slice, float demod_out, struct
 
 #endif
 
+
+#if 1
 	  hdlc_rec_bit (chan, subchan, slice, demod_out > 0, 0, quality);
+#else  // TODO: new feature to measure data speed error.
+// Maybe hdlc_rec_bit could provide indication when frame starts.
+	  hdlc_rec_bit_new (chan, subchan, slice, demod_out > 0, 0, quality,
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
+	  D->slicer[slice].pll_symbol_count++;
+#endif
 	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
 	}
 
@@ -912,12 +923,14 @@ static void nudge_pll (int chan, int subchan, int slice, float demod_out, struct
 
 	  pll_dcd_signal_transition2 (D, slice, D->slicer[slice].data_clock_pll);
 
+// TODO:	  signed int before = (signed int)(D->slicer[slice].data_clock_pll);	// Treat as signed.
 	  if (D->slicer[slice].data_detect) {
 	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_locked_inertia);
 	  }
 	  else {
 	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_searching_inertia);
 	  }
+// TODO:	  D->slicer[slice].pll_nudge_total += (int64_t)((signed int)(D->slicer[slice].data_clock_pll)) - (int64_t)before;
 	}
 
 /*

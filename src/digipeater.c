@@ -49,7 +49,8 @@
  *		Preemptive Digipeating  (new in version 0.8)
  *
  *			http://www.aprs.org/aprs12/preemptive-digipeating.txt
- *		
+ *			I ignored the part about the RR bits.
+ *
  *------------------------------------------------------------------*/
 
 #define DIGIPEATER_C
@@ -164,7 +165,34 @@ void digipeater (int from_chan, packet_t pp)
 /*
  * First pass:  Look at packets being digipeated to same channel.
  *
- * We want these to get out quickly.
+ * We want these to get out quickly, bypassing the usual random wait time.
+ *
+ * Some may disagree but I followed what WB4APR had to say about it.   
+ *
+ *	http://www.aprs.org/balloons.html
+ *
+ *		APRS NETWORK FRATRICIDE: Generally, all APRS digipeaters are supposed to transmit
+ *		immediately and all at the same time. They should NOT wait long enough for each
+ *		one to QRM the channel with the same copy of each packet. NO, APRS digipeaters
+ *		are all supposed to STEP ON EACH OTHER with every packet. This makes sure that
+ *		everyone in range of a digi will hear one and only one copy of each packet.
+ *		and that the packet will digipeat OUTWARD and not backward. The goal is that a
+ *		digipeated packet is cleared out of the local area in ONE packet time and not
+ *		N packet times for every N digipeaters that heard the packet. This means no
+ *		PERSIST times, no DWAIT times and no UIDWAIT times. Notice, this is contrary 
+ *		to other packet systems that might want to guarantee delivery (but at the
+ *		expense of throughput). APRS wants to clear the channel quickly to maximize throughput.
+ *
+ *	http://www.aprs.org/kpc3/kpc3+WIDEn.txt
+ *
+ *		THIRD:  Eliminate the settings that are detrimental to the network.
+ *
+ *		* UIDWAIT should be OFF. (the default).  With it on, your digi is not doing the
+ *		fundamental APRS fratricide that is the primary mechanism for minimizing channel
+ *		loading.  All digis that hear the same packet are supposed to DIGI it at the SAME
+ *		time so that all those copies only take up one additional time slot. (but outward
+ *		located digs will hear it without collision (and continue outward propagation)
+ *
  */
 
 	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
@@ -180,7 +208,7 @@ void digipeater (int from_chan, packet_t pp)
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
-	        tq_append (to_chan, TQ_PRIO_0_HI, result);
+	        tq_append (to_chan, TQ_PRIO_0_HI, result);		//  High priority queue.
 	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
@@ -207,7 +235,7 @@ void digipeater (int from_chan, packet_t pp)
 				save_digi_config_p->filter_str[from_chan][to_chan]);
 	      if (result != NULL) {
 		dedupe_remember (pp, to_chan);
-	        tq_append (to_chan, TQ_PRIO_1_LO, result);
+	        tq_append (to_chan, TQ_PRIO_1_LO, result);		// Low priority queue.
 	        digi_count[from_chan][to_chan]++;
 	      }
 	    }
@@ -413,6 +441,10 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 /* 
  * If preemptive digipeating is enabled, try matching my call 
  * and aliases against all remaining unused digipeaters.
+ *
+ * Bob says: "GENERIC XXXXn-N DIGIPEATING should not do preemptive digipeating."
+ *
+ * But consider this case:  https://github.com/wb2osz/direwolf/issues/488
  */
 
 	if (preempt != PREEMPT_OFF) {
@@ -438,13 +470,22 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 
 	      switch (preempt) {
 	        case PREEMPT_DROP:	/* remove all prior */
+					// TODO: deprecate this option.  Result is misleading.
+
+		  text_color_set (DW_COLOR_ERROR);
+		  dw_printf ("The digipeat DROP option will be removed in a future release.  Use PREEMPT for preemptive digipeating.\n");
+
 	          while (r2 > AX25_REPEATER_1) {
 	            ax25_remove_addr (result, r2-1);
  		    r2--;
 	          }
 	          break;
 
-	        case PREEMPT_MARK:
+	        case PREEMPT_MARK:	// TODO: deprecate this option.  Result is misleading.
+
+		  text_color_set (DW_COLOR_ERROR);
+		  dw_printf ("The digipeat MARK option will be removed in a future release.  Use PREEMPT for preemptive digipeating.\n");
+
 	          r2--;
 	          while (r2 >= AX25_REPEATER_1 && ax25_get_h(result,r2) == 0) {
 	            ax25_set_h (result, r2);
@@ -452,7 +493,12 @@ static packet_t digipeat_match (int from_chan, packet_t pp, char *mycall_rec, ch
 	          }
 	          break;
 
-		case PREEMPT_TRACE:	/* remove prior unused */
+		case PREEMPT_TRACE:	/* My enhancement - remove prior unused digis. */
+					/* this provides an accurate path of where packet traveled. */
+
+					// Uh oh.  It looks like sample config files went out
+					// with this option.  Should it be renamed as
+					// PREEMPT which is more descriptive?
 	        default:
 	          while (r2 > AX25_REPEATER_1 && ax25_get_h(result,r2-1) == 0) {
 	            ax25_remove_addr (result, r2-1);

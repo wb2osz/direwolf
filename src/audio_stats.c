@@ -65,7 +65,6 @@
 
 #include "audio_stats.h"
 #include "textcolor.h"
-#include "dtime_now.h"
 #include "demod.h"		/* for alevel_t & demod_get_audio_level() */
 
 

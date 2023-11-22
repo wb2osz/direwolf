@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2019, 2021, 2022, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -23,11 +23,11 @@
  *
  * Name:        atest.c
  *
- * Purpose:     Test fixture for the AFSK demodulator.
+ * Purpose:     Test fixture for the Dire Wolf demodulators.
  *
  * Inputs:	Takes audio from a .WAV file instead of the audio device.
  *
- * Description:	This can be used to test the AFSK demodulator under
+ * Description:	This can be used to test the demodulators under
  *		controlled and reproducible conditions for tweaking.
  *	
  *		For example
@@ -68,6 +68,7 @@
 #include <string.h>
 #include <time.h>
 #include <getopt.h>
+#include <ctype.h>
 
 
 #define ATEST_C 1
@@ -107,7 +108,7 @@ struct wav_header {             /* .WAV file header. */
 					/* 8 bit samples are unsigned bytes */
 					/* in range of 0 .. 255. */
  
- 					/* 16 bit samples are signed short */
+ 					/* 16 bit samples are little endian signed short */
 					/* in range of -32768 .. +32767. */
 
 static struct {
@@ -275,12 +276,12 @@ int main (int argc, char *argv[])
 
             case 'B':				/* -B for data Bit rate */
 						/* Also implies modem type based on speed. */
-						/* Special case "AIS" rather than number. */
+						/* Special cases AIS, EAS rather than number. */
 	      if (strcasecmp(optarg, "AIS") == 0) {
-	        B_opt = 12345;	// See special case below.
+	        B_opt = 0xA15A15;	// See special case below.
 	      }
 	      else if (strcasecmp(optarg, "EAS") == 0) {
-	        B_opt = 23456;	// See special case below.
+	        B_opt = 0xEA5EA5;	// See special case below.
 	      }
 	      else {
 	        B_opt = atoi(optarg);
@@ -424,11 +425,6 @@ int main (int argc, char *argv[])
 
         my_audio_config.achan[0].baud = B_opt;
 
-        if (my_audio_config.achan[0].baud < MIN_BAUD || my_audio_config.achan[0].baud > MAX_BAUD) {
-	  text_color_set(DW_COLOR_ERROR);
-          dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
-          exit (EXIT_FAILURE);
-        }
 
 	/* We have similar logic in direwolf.c, config.c, gen_packets.c, and atest.c, */
 	/* that need to be kept in sync.  Maybe it could be a common function someday. */
@@ -437,7 +433,6 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
 	  my_audio_config.achan[0].mark_freq = 1615;
 	  my_audio_config.achan[0].space_freq = 1785;
-	  //strlcpy (my_audio_config.achan[0].profiles, "A", sizeof(my_audio_config.achan[0].profiles));
 	}
 	else if (my_audio_config.achan[0].baud < 600) {		// e.g. HF SSB packet
 	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
@@ -445,13 +440,11 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].space_freq = 1800;
 	  // Previously we had a "D" which was fine tuned for 300 bps.
 	  // In v1.7, it's not clear if we should use "B" or just stick with "A".
-	  //strlcpy (my_audio_config.achan[0].profiles, "B", sizeof(my_audio_config.achan[0].profiles));
 	}
 	else if (my_audio_config.achan[0].baud < 1800) {	// common 1200
 	  my_audio_config.achan[0].modem_type = MODEM_AFSK;
 	  my_audio_config.achan[0].mark_freq = DEFAULT_MARK_FREQ;
 	  my_audio_config.achan[0].space_freq = DEFAULT_SPACE_FREQ;
-	// Should default to E+ or something similar later.
 	}
 	else if (my_audio_config.achan[0].baud < 3600) {
 	  my_audio_config.achan[0].modem_type = MODEM_QPSK;
@@ -465,14 +458,14 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, "", sizeof(my_audio_config.achan[0].profiles));
 	}
-	else if (my_audio_config.achan[0].baud == 12345) {	// Hack for different use of 9600
+	else if (my_audio_config.achan[0].baud == 0xA15A15) {	// Hack for different use of 9600
 	  my_audio_config.achan[0].modem_type = MODEM_AIS;
 	  my_audio_config.achan[0].baud = 9600;
 	  my_audio_config.achan[0].mark_freq = 0;
 	  my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
 	}
-	else if (my_audio_config.achan[0].baud == 23456) {
+	else if (my_audio_config.achan[0].baud == 0xEA5EA5) {
 	  my_audio_config.achan[0].modem_type = MODEM_EAS;
 	  my_audio_config.achan[0].baud = 521;	// Actually 520.83 but we have an integer field here.
 						// Will make more precise in afsk demod init.
@@ -486,6 +479,12 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
 	}
+
+        if (my_audio_config.achan[0].baud < MIN_BAUD || my_audio_config.achan[0].baud > MAX_BAUD) {
+	  text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Use a more reasonable bit rate in range of %d - %d.\n", MIN_BAUD, MAX_BAUD);
+          exit (EXIT_FAILURE);
+        }
 
 /*
  * -g option means force g3RUH regardless of speed.
@@ -758,14 +757,14 @@ int audio_get (int a)
  * This is called when we have a good frame.
  */
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
 	unsigned char *pinfo;
 	int info_len;
 	int h;
-	char heard[AX25_MAX_ADDR_LEN];
+	char heard[2 * AX25_MAX_ADDR_LEN + 20];
 	char alevel_text[AX25_ALEVEL_TO_TEXT_SIZE];
 
 	packets_decoded_one++;
@@ -810,28 +809,47 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	}
 	ax25_alevel_to_text (alevel, alevel_text);
 
-	if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
-	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
+	/* As suggested by KJ4ERJ, if we are receiving from */
+	/* WIDEn-0, it is quite likely (but not guaranteed), that */
+	/* we are actually hearing the preceding station in the path. */
+
+	if (h >= AX25_REPEATER_2 &&
+	      strncmp(heard, "WIDE", 4) == 0 &&
+	      isdigit(heard[4]) &&
+	      heard[5] == '\0') {
+
+	  char probably_really[AX25_MAX_ADDR_LEN];
+	  ax25_get_addr_with_ssid(pp, h-1, probably_really);
+
+	  strlcat (heard, " (probably ", sizeof(heard));
+	  strlcat (heard, probably_really, sizeof(heard));
+	  strlcat (heard, ")", sizeof(heard));
 	}
-	else if (is_fx25) {
-	  dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
-	}
-	else {
-	  assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
-	  dw_printf ("%s audio level = %s   [%s]   %s\n", heard, alevel_text, retry_text[(int)retries], spectrum);
+
+	switch (fec_type) {
+
+	  case fec_type_fx25:
+	    dw_printf ("%s audio level = %s   FX.25  %s\n", heard, alevel_text, spectrum);
+	    break;
+
+	  case fec_type_il2p:
+	    dw_printf ("%s audio level = %s   IL2P  %s\n", heard, alevel_text, spectrum);
+	    break;
+
+	  case fec_type_none:
+	  default:
+	    if (my_audio_config.achan[chan].fix_bits == RETRY_NONE && my_audio_config.achan[chan].passall == 0) {
+	      // No fix_bits or passall specified.
+	      dw_printf ("%s audio level = %s     %s\n", heard, alevel_text, spectrum);
+	    }
+	    else {
+	      assert (retries >= RETRY_NONE && retries <= RETRY_MAX);   // validate array index.
+	      dw_printf ("%s audio level = %s   [%s]   %s\n", heard, alevel_text, retry_text[(int)retries], spectrum);
+	    }
+	    break;
 	}
 
 #endif
-
-//#if defined(EXPERIMENT_G) || defined(EXPERIMENT_H)
-//	int j;
-//
-//	for (j=0; j<MAX_SUBCHANS; j++) {
-//	  if (spectrum[j] == '|') {
-//	    count[j]++;
-//	  }
-//	}
-//#endif
 
 
 // Display non-APRS packets in a different color.
@@ -877,7 +895,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 
 
-#if 1		// temp experiment  	TODO: remove this.
+#if 0		// temp experiment
 
 #include "decode_aprs.h"
 #include "log.h"
@@ -886,7 +904,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 
 	  decode_aprs_t A;
 
-	  decode_aprs (&A, pp, 0, 0);
+	  decode_aprs (&A, pp, 0, NULL);
 
 	  // Temp experiment to see how different systems set the RR bits in the source and destination.
 	  // log_rr_bits (&A, pp);

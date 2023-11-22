@@ -709,6 +709,14 @@ static char *split (char *string, int rest_of_line)
  *
  *--------------------------------------------------------------------*/
 
+static void rtfm()
+{
+	text_color_set(DW_COLOR_ERROR);
+	dw_printf ("See online documentation:\n");
+	dw_printf ("    stable release:    https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("    development version:    https://github.com/wb2osz/direwolf/tree/dev/doc\n");
+	dw_printf ("    additional topics:    https://github.com/wb2osz/direwolf-doc\n");
+}
 
 void config_init (char *fname, struct audio_s *p_audio_config, 
 			struct digi_config_s *p_digi_config,
@@ -970,7 +978,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Could not open config file %s\n", filepath);
 	  dw_printf ("Try using -c command line option for alternate location.\n");
-	  return;
+	  rtfm();
+	  exit(EXIT_FAILURE);
 	}
 	
 	dw_printf ("\nReading config file %s\n", filepath);
@@ -1027,7 +1036,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing name of audio device for ADEVICE command on line %d.\n", line);
-	      continue;
+	      rtfm();
+	      exit(EXIT_FAILURE);
 	    }
 
 	    p_audio_config->adev[adevice].defined = 1;
@@ -2023,7 +2033,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with CM108 is only available when USB Audio GPIO support is enabled.\n", line, otname);
 	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
 	      dw_printf ("See Interface Guide for details.\n");
-
+	      rtfm();
 	      exit (EXIT_FAILURE);
 #endif
 	    }
@@ -2407,7 +2417,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->achan[channel].il2p_invert_polarity = 0;
 
 	    while ((t = split(NULL,0)) != NULL) {
-	      for (char *c = t; *t != '\0'; c++) {
+	      for (char *c = t; *c != '\0'; c++) {
 	        switch (*c) {
 	          case '+':
 	            p_audio_config->achan[channel].il2p_invert_polarity = 0;
@@ -2550,7 +2560,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Preemptive digipeating DROP option is discouraged.\n", line);
 	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
-	        dw_printf ("TRACE is the best choice for this feature.\n");
+	        dw_printf ("PREEMPT is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_DROP;
 	        t = split(NULL,0);
 	      }
@@ -2558,11 +2568,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Preemptive digipeating MARK option is discouraged.\n", line);
 	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
-	        dw_printf ("TRACE is the best choice for this feature.\n");
+	        dw_printf ("PREEMPT is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_MARK;
 	        t = split(NULL,0);
 	      }
-	      else if (strcasecmp(t, "TRACE") == 0) {
+	      else if ((strcasecmp(t, "TRACE") == 0) || (strncasecmp(t, "PREEMPT", 7) == 0)){
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
 	        t = split(NULL,0);
 	      }
@@ -2817,6 +2827,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    if (*t == 'i' || *t == 'I') {
 	      from_chan = MAX_CHANS;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: FILTER IG ... on line %d.\n", line);
+	      dw_printf ("Warning! Don't mess with IS>RF filtering unless you are an expert and have an unusual situation.\n");
+	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
+	      dw_printf ("Warning! If you insist, be sure to add \" | i/180 \" so you don't break messaging.\n");
 	    }
 	    else {
 	      from_chan = isdigit(*t) ? atoi(t) : -999;
@@ -2850,6 +2866,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    if (*t == 'i' || *t == 'I') {
 	      to_chan = MAX_CHANS;
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: FILTER ... IG ... on line %d.\n", line);
+	      dw_printf ("Warning! Don't mess with RF>IS filtering unless you are an expert and have an unusual situation.\n");
+	      dw_printf ("Warning! Expected behavior is for everything to go from RF to IS.\n");
+	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
 	    }
 	    else {
 	      to_chan = isdigit(*t) ? atoi(t) : -999;
@@ -2901,6 +2923,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * CFILTER  from-chan  to-chan  filter_specification_expression
+ *
+ * Why did I put this here?
+ * What would be a useful use case?  Perhaps block by source or destination?
  */
 
 	  else if (strcasecmp(t, "CFILTER") == 0) {
@@ -4612,7 +4637,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  * In version 1.2 we allow 0 to disable listening.
  */
-// FIXME:  complain if extra parameter e.g. port as in KISSPORT
 
 	  else if (strcasecmp(t, "AGWPORT") == 0) {
 	    int n;
@@ -4623,6 +4647,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Unexpected \"%s\" after the port number.\n", line, t);
+	      dw_printf ("Perhaps you were trying to use feature available only with KISSPORT.\n");
+	      continue;
+	    }
             if ((n >= MIN_IP_PORT_NUMBER && n <= MAX_IP_PORT_NUMBER) || n == 0) {
 	      p_misc_config->agwpe_port = n;
 	    }
@@ -5024,7 +5055,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    	    
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Old style 'BEACON' has been replaced with new commands.\n", line);
-	    dw_printf ("Use PBEACON, OBEACON, or CBEACON instead.\n");
+	    dw_printf ("Use PBEACON, OBEACON, TBEACON, or CBEACON instead.\n");
   
 	  }
 
@@ -5038,6 +5069,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  * New style with keywords for options.
  */
+
+// TODO: maybe add proportional pathing so multiple beacon timing does not need to be manually constructed?
+// http://www.aprs.org/newN/ProportionalPathing.txt
 
 	  else if (strcasecmp(t, "PBEACON") == 0 ||
 		   strcasecmp(t, "OBEACON") == 0 ||
@@ -5492,7 +5526,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  for (j=0; j<MAX_CHANS; j++) {
 	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO || p_audio_config->chan_medium[j] == MEDIUM_NETTNC) {
 	      if (p_digi_config->filter_str[MAX_CHANS][j] == NULL) {
-	        p_digi_config->filter_str[MAX_CHANS][j] = strdup("i/60");
+	        p_digi_config->filter_str[MAX_CHANS][j] = strdup("i/180");
 	      }
 	    }
 	  }
@@ -5625,7 +5659,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else if (value[0] == 'r' || value[0] == 'R') {
 	       int n = atoi(value+1);
-	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
+	       if (( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
+			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
 	         text_color_set(DW_COLOR_ERROR);
 	         dw_printf ("Config file, line %d: Simulated receive on channel %d is not valid.\n", line, n);
 	         continue;
@@ -5635,7 +5670,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else if (value[0] == 't' || value[0] == 'T' || value[0] == 'x' || value[0] == 'X') {
 	      int n = atoi(value+1);
-	      if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
+	      if (( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
+			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
 	        continue;
@@ -5646,7 +5682,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	    else {
 	       int n = atoi(value);
-	       if ( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE) {
+	       if (( n < 0 || n >= MAX_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
+			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
 	         text_color_set(DW_COLOR_ERROR);
 	         dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, n);
 	         continue;
@@ -5775,8 +5812,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "POWER") == 0) {
 	    b->power = atoi(value);
 	  }
-	  else if (strcasecmp(keyword, "HEIGHT") == 0) {
+	  else if (strcasecmp(keyword, "HEIGHT") == 0) {	// This is in feet.
 	    b->height = atoi(value);
+	    // TODO: ability to add units suffix, e.g.  10m
 	  }
 	  else if (strcasecmp(keyword, "GAIN") == 0) {
 	    b->gain = atoi(value);
@@ -5859,6 +5897,10 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 
 /*
  * Process symbol now that we have any later overlay.
+ *
+ * FIXME: Someone who used this was surprised to end up with Solar Powser  (S-).
+ *	overlay=S symbol="/-"
+ * We should complain if overlay used with symtab other than \.
  */
 	if (strlen(temp_symbol) > 0) {
 
@@ -5891,19 +5933,32 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 
 	if (b->sendto_type == SENDTO_XMIT) {
 
-	  if ( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_NONE) {
+	  if (( b->sendto_chan < 0 || b->sendto_chan >= MAX_CHANS || p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_NONE)
+		&& p_audio_config->chan_medium[b->sendto_chan] != MEDIUM_IGATE) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Config file, line %d: Send to channel %d is not valid.\n", line, b->sendto_chan);
 	    return (0);
 	  }
 
-	  if ( strcmp(p_audio_config->achan[b->sendto_chan].mycall, "") == 0 || 
-	       strcmp(p_audio_config->achan[b->sendto_chan].mycall, "NOCALL") == 0 || 
-	       strcmp(p_audio_config->achan[b->sendto_chan].mycall, "N0CALL") == 0 ) {
+	  if (p_audio_config->chan_medium[b->sendto_chan] == MEDIUM_IGATE) {  // Prevent subscript out of bounds.
+									     // Will be using call from chan 0 later.
+	    if ( strcmp(p_audio_config->achan[0].mycall, "") == 0 || 
+	         strcmp(p_audio_config->achan[0].mycall, "NOCALL") == 0 || 
+	         strcmp(p_audio_config->achan[0].mycall, "N0CALL") == 0 ) {
 
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", b->sendto_chan); 
-	    return (0);
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", 0); 
+	      return (0);
+	    }
+	  } else {
+	    if ( strcmp(p_audio_config->achan[b->sendto_chan].mycall, "") == 0 || 
+	         strcmp(p_audio_config->achan[b->sendto_chan].mycall, "NOCALL") == 0 || 
+	         strcmp(p_audio_config->achan[b->sendto_chan].mycall, "N0CALL") == 0 ) {
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: MYCALL must be set for channel %d before beaconing is allowed.\n", b->sendto_chan); 
+	      return (0);
+	    }
 	  }
 	}
 

@@ -84,7 +84,7 @@ static struct audio_s          *save_audio_config_p;
  */
 
 /*
- * Originally, we had an abitrary buf time of 40 mS.
+ * Originally, we had an arbitrary buf time of 40 mS.
  *
  * For mono, the buffer size was rounded up from 3528 to 4k so
  * it was really about 50 mS per buffer or about 20 per second.
@@ -1074,7 +1074,7 @@ int audio_flush (int a)
  *		(3) Call this function, which might or might not wait long enough.
  *		(4) Add (1) and (2) resulting in when PTT should be turned off.
  *		(5) Take difference between current time and desired PPT off time
- *			and wait for additoinal time if required.
+ *			and wait for additional time if required.
  *
  *----------------------------------------------------------------*/
 

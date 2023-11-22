@@ -336,6 +336,52 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
  */
 
 	hops = ax25_get_heard(pp) - AX25_SOURCE;
+/*
+ *		Consider the following scenario:
+ *
+ *		(1) We hear AA1PR-9 by a path of 4 digipeaters.
+ *		    Looking closer, it's probably only two because there are left over WIDE1-0 and WIDE2-0.
+ *
+ *			Digipeater WIDE2 (probably N3LLO-3) audio level = 72(19/15)   [NONE]   _|||||___
+ *			[0.3] AA1PR-9>APY300,K1EQX-7,WIDE1,N3LLO-3,WIDE2*,ARISS::ANSRVR   :cq hotg vt aprsthursday{01<0x0d>
+ *			                             -----         -----
+ *
+ *		(2) APRS-IS sends a response to us.
+ *
+ *			[ig>tx] ANSRVR>APWW11,KJ4ERJ-15*,TCPIP*,qAS,KJ4ERJ-15::AA1PR-9  :N:HOTG 161 Messages Sent{JL}
+ *
+ *		(3) Here is our analysis of whether it should be sent to RF.
+ *
+ *			Was message addressee AA1PR-9 heard in the past 180 minutes, with 2 or fewer digipeater hops?
+ *			No, AA1PR-9 was last heard over the radio with 4 digipeater hops 0 minutes ago.
+ *
+ *		The wrong hop count caused us to drop a packet that should have been transmitted.
+ *		We could put in a hack to not count the "WIDEn-0"  addresses.
+ *		That is not correct because other prefixes could be used and we don't know
+ *		what they are for other digipeaters.
+ *		I think the best solution is to simply ignore the hop count.
+ *		Maybe next release will have a major cleanup.
+ */
+
+	// HACK - Reduce hop count by number of used WIDEn-0 addresses.
+
+	if (hops > 1) {
+	  for (int k = 0; k < ax25_get_num_repeaters(pp); k++) {
+	    char digi[AX25_MAX_ADDR_LEN];
+	    ax25_get_addr_no_ssid (pp, AX25_REPEATER_1 + k, digi);
+	    int ssid = ax25_get_ssid (pp, AX25_REPEATER_1 + k);
+	    int used = ax25_get_h (pp, AX25_REPEATER_1 + k);
+
+	    //text_color_set(DW_COLOR_DEBUG);
+	    //dw_printf ("Examining %s-%d  used=%d.\n", digi, ssid, used);
+
+	    if (used && strlen(digi) == 5 && strncmp(digi, "WIDE", 4) == 0 && isdigit(digi[4]) && ssid == 0) {
+	      hops--;
+	      //text_color_set(DW_COLOR_DEBUG);
+	      //dw_printf ("Decrease hop count to %d for problematic %s.\n", hops, digi);
+	    }
+	  }
+	}
 	
 	mptr = mheard_ptr(source);
 	if (mptr == NULL) {
@@ -434,6 +480,7 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
  *				N1HKO-10>APJI40,TCPIP*,qAC,N1HKO-JS:<IGATE,MSG_CNT=0,LOC_CNT=0
  *				K1RI-2>APWW10,WIDE1-1,WIDE2-1,qAS,K1RI:/221700h/9AmA<Ct3_ sT010/002g005t045r000p023P020h97b10148
  *				KC1BOS-2>T3PQ3S,WIDE1-1,WIDE2-1,qAR,W1TG-1:`c)@qh\>/"50}TinyTrak4 Mobile
+ *				WHO-IS>APJIW4,TCPIP*,qAC,AE5PL-JF::WB2OSZ   :C/Billerica Amateur Radio Society/MA/United States{XF}WO
  *
  *				  Notice how the final address in the header might not
  *				  be a valid AX.25 address.  We see a 9 character address
@@ -443,6 +490,7 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
  *				  a clue about the journey taken but I don't think we care here.
  *
  *				  All we should care about here is the the source address.
+ *				  Note that the source address might not adhere to the AX.25 format.
  *
  * Description:
  *
@@ -450,21 +498,25 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 
 void mheard_save_is (char *ptext)
 {
-	packet_t pp;
 	time_t now = time(NULL);
 	char source[AX25_MAX_ADDR_LEN];
-	mheard_t *mptr;
+
+#if 1
+// It is possible that source won't adhere to the AX.25 restrictions.
+// So we simply extract the source address, as text, from the beginning rather than
+// using ax25_from_text() and ax25_get_addr_with_ssid().
+
+	memset (source, 0, sizeof(source));
+	memcpy (source, ptext, sizeof(source)-1);
+	char *g = strchr(source, '>');
+	if (g != NULL) *g = '\0';
+
+#else
 
 /*
- * Try to parse it into a packet object.
- * This will contain "q constructs" and we might see an address
- * with two alphnumeric characters in the SSID so we must use
- * the non-strict parsing.
- *
- * Bug:  Up to 8 digipeaters are allowed in radio format.
- * There is a potential of finding a larger number here.
+ * Keep this here in case I want to revive it to get location.
  */
-	pp = ax25_from_text(ptext, 0);
+	packet_t pp = ax25_from_text(ptext, 0);
 
 	if (pp == NULL) {
 	  if (mheard_debug) {
@@ -475,13 +527,17 @@ void mheard_save_is (char *ptext)
 	  return;
 	}
 
-	ax25_get_addr_with_ssid (pp, AX25_SOURCE, source);
+	//////ax25_get_addr_with_ssid (pp, AX25_SOURCE, source);
+#endif
 
-	mptr = mheard_ptr(source);
+	mheard_t *mptr = mheard_ptr(source);
 	if (mptr == NULL) {
 	  int i;
 /*
  * Not heard before.  Add it.
+ * Observation years later:
+ * Hmmmm.  I wonder why I did not store the location if available.
+ * An earlier example has an APRSdroid station reporting location without using [ham] RF.
  */
 
 	  if (mheard_debug) {
@@ -537,7 +593,9 @@ void mheard_save_is (char *ptext)
 	  mheard_dump ();
 	}
 
+#if 0
 	ax25_delete (pp);
+#endif
 
 } /* end mheard_save_is */
 
@@ -559,7 +617,7 @@ void mheard_save_is (char *ptext)
  *					8 for RF_CNT.
  *
  *		time_limit	- Include only stations heard within this many minutes.
- *				  Typically 30 or 60.
+ *				  Typically 180.
  *
  * Returns:	Number to be used in the statistics report.
  *
@@ -637,7 +695,7 @@ int mheard_count (int max_hops, int time_limit)
  *		callsign	- Callsign for station.
  *
  *		time_limit	- Include only stations heard within this many minutes.
- *				  Typically 30 or 60.
+ *				  Typically 180.
  *
  *		max_hops	- Include only stations heard with this number of
  *				  digipeater hops or less.  For reporting, we might use:
