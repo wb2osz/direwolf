@@ -186,7 +186,7 @@ static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in h
 static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
-static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
+static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of description of APRS packets. */
 
 static int A_opt_ais_to_obj = 0;	/* "-A" Convert received AIS to APRS "Object Report." */
 
@@ -302,26 +302,27 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 7\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
-	dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
-#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD
+#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD || USE_GPIOD
 	dw_printf ("Includes optional support for: ");
-#if defined(ENABLE_GPSD)
+ #if defined(ENABLE_GPSD)
 	dw_printf (" gpsd");
-#endif
-#if defined(USE_HAMLIB)
+ #endif
+ #if defined(USE_HAMLIB)
 	dw_printf (" hamlib");
-#endif
-#if defined(USE_CM108)
+ #endif
+ #if defined(USE_CM108)
 	dw_printf (" cm108-ptt");
-#endif
-#if defined(USE_GPIOD)
+ #endif
+ #if defined(USE_GPIOD)
 	dw_printf (" libgpiod");
-#if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
+ #endif
+ #if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
 	dw_printf (" dns-sd");
-#endif
+ #endif
 	dw_printf ("\n");
 #endif
 
@@ -1710,7 +1711,7 @@ static void usage (char **argv)
 	dw_printf ("       d             d = APRStt (DTMF to APRS object translation).\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
-	dw_printf ("       d             d = Decoding of APRS packets.\n");
+	dw_printf ("       d             d = Description of APRS packets.\n");
 	dw_printf ("       x             x = Silence FX.25 information.\n");
 	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.\n");
 	dw_printf ("                     Use 9 to test compatibility with your terminal.\n");
