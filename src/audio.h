@@ -74,16 +74,23 @@ struct audio_s {
 
 	    /* Properties of the sound device. */
 
-	    int defined;		/* Was device defined? */
-					/* First one defaults to yes. */
+	    int defined;		/* Was device defined?   0=no.  >0 for yes.  */
+					/* First channel defaults to 2 for yes with default config. */
+					/* 1 means it was defined by user. */
+
+	    int copy_from;		/* >=0  means copy contents from another audio device. */
+					/* In this case we don't have device names, below. */
+					/* Num channels, samples/sec, and bit/sample are copied from */
+					/* original device and can't be changed. */
+					/* -1 for normal case. */
 
 	    char adevice_in[80];	/* Name of the audio input device (or file?). */
-					/* TODO: Can be "-" to read from stdin. */
+					/* Can be udp:nnn for UDP or "-" to read from stdin. */
 
 	    char adevice_out[80];	/* Name of the audio output device (or file?). */
 
 	    int num_channels;		/* Should be 1 for mono or 2 for stereo. */
-	    int samples_per_sec;	/* Audio sampling rate.  Typically 11025, 22050, or 44100. */
+	    int samples_per_sec;	/* Audio sampling rate.  Typically 11025, 22050, 44100, or 48000. */
 	    int bits_per_sample;	/* 8 (unsigned char) or 16 (signed short). */
 
 	} adev[MAX_ADEVS];
