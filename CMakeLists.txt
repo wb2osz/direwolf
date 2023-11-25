@@ -342,6 +342,17 @@ elseif (HAVE_SNDIO)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_SNDIO")
   endif()
 
+elseif (APPLE)
+  find_package(Portaudio REQUIRED)
+  if(PORTAUDIO_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_PORTAUDIO")
+  endif()
+
+  find_package(hidapi REQUIRED)
+  if(HIDAPI_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_CM108")
+  endif()
+
 elseif (NOT WIN32 AND NOT CYGWIN)
   find_package(Portaudio REQUIRED)
   if(PORTAUDIO_FOUND)
@@ -367,7 +378,10 @@ add_subdirectory(data)
 # external libraries
 add_subdirectory(${CUSTOM_GEOTRANZ_DIR})
 add_subdirectory(${CUSTOM_REGEX_DIR})
-add_subdirectory(${CUSTOM_HIDAPI_DIR})
+if(NOT APPLE)
+  # Mac builds use the hidapi library, not custom local files
+  add_subdirectory(${CUSTOM_HIDAPI_DIR})
+endif()
 add_subdirectory(${CUSTOM_MISC_DIR})
 
 # direwolf source code and utilities
