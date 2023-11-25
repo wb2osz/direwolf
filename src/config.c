@@ -1843,6 +1843,43 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIO;
 #endif
 	    }
+	    else if (strcasecmp(t, "GPIOD") == 0) {
+#if __WIN32__
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: %s with GPIOD is only available on Linux.\n", line, otname);
+#else		
+#if defined(USE_GPIOD)
+	      t = split(NULL,0);
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: Missing GPIO chip for %s.\n", line, otname);
+	        continue;
+	      }
+	      strlcpy(p_audio_config->achan[channel].octrl[ot].out_gpio_name, t, 
+	              sizeof(p_audio_config->achan[channel].octrl[ot].out_gpio_name));
+
+	      t = split(NULL,0);
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Config file line %d: Missing GPIO number for %s.\n", line, otname);
+	        continue;
+	      }
+
+	      if (*t == '-') {
+	        p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t+1);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
+	      }
+	      else {
+	        p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
+	      }
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIOD;
+#else
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("GPIOD is not supported.\n");
+#endif /* USE_GPIOD*/
+#endif /* __WIN32__ */
+	    }
 	    else if (strcasecmp(t, "LPT") == 0) {
 
 /* Parallel printer case, x86 Linux only. */
