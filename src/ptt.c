@@ -480,7 +480,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	      // The solution might be to use the new gpiod approach.
 
 	      dw_printf ("It looks like gpio with sysfs is not supported on this operating system.\n");
-	      dw_printf ("Rather than the following form, in the configuration file,\n);
+	      dw_printf ("Rather than the following form, in the configuration file,\n");
 	      dw_printf ("    PTT GPIO  %s\n", stemp);
 	      dw_printf ("try using gpiod form instead.  e.g.\n");
 	      dw_printf ("    PTT GPIOD  gpiochip0  %s\n", stemp);
