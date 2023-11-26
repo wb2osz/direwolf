@@ -472,6 +472,20 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error writing \"%s\" to %s, errno=%d\n", stemp, gpio_export_path, e);
 	    dw_printf ("%s\n", strerror(e));
+
+	    if (e == 22) {
+	      // It appears that error 22 occurs when sysfs gpio is not available.
+	      // (See https://github.com/wb2osz/direwolf/issues/503)
+	      //
+	      // The solution might be to use the new gpiod approach.
+
+	      dw_printf ("It looks like gpio with sysfs is not supported on this operating system.\n");
+	      dw_printf ("Rather than the following form, in the configuration file,\n);
+	      dw_printf ("    PTT GPIO  %s\n", stemp);
+	      dw_printf ("try using gpiod form instead.  e.g.\n");
+	      dw_printf ("    PTT GPIOD  gpiochip0  %s\n", stemp);
+	      dw_printf ("You can get a list of gpio chip names and corresponding I/O lines with \"gpioinfo\" command.\n");
+	    }
 	    exit (1);
 	  }
 	}
@@ -914,7 +928,7 @@ void ptt_init (struct audio_s *audio_config_p)
 #if defined(USE_GPIOD)
     // GPIOD
 	for (ch = 0; ch < MAX_CHANS; ch++) {
-	  if (save_audio_config_p->achan[ch].medium == MEDIUM_RADIO) {
+	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    for (int ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
 	        const char *chip_name = audio_config_p->achan[ch].octrl[ot].out_gpio_name;

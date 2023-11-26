@@ -1852,7 +1852,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      t = split(NULL,0);
 	      if (t == NULL) {
 	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Config file line %d: Missing GPIO chip for %s.\n", line, otname);
+	        dw_printf ("Config file line %d: Missing GPIO chip name for %s.\n", line, otname);
+	        dw_printf ("Use the \"gpioinfo\" command to get a list of gpio chip names and corresponding I/O lines.\n");
 	        continue;
 	      }
 	      strlcpy(p_audio_config->achan[channel].octrl[ot].out_gpio_name, t, 
@@ -1876,7 +1877,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIOD;
 #else
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("GPIOD is not supported.\n");
+	      dw_printf ("Application was not built with optional support for GPIOD.\n");
+	      dw_printf ("Install packages gpiod and libgpiod-dev, remove 'build' subdirectory, then rebuild.\n");
 #endif /* USE_GPIOD*/
 #endif /* __WIN32__ */
 	    }
