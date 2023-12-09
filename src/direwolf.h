@@ -38,9 +38,7 @@
 #endif
 
 /*
- * Previously, we could handle only a single audio device.
- * This meant we could have only two radio channels.
- * In version 1.2, we relax this restriction and allow more audio devices.
+ * Maximum number of audio devices.
  * Three is probably adequate for standard version.
  * Larger reasonable numbers should also be fine.
  *
@@ -280,6 +278,8 @@ typedef pthread_mutex_t dw_mutex_t;
 /* Platform differences for string functions. */
 
 
+// Windows is missing a few which are available on Unix/Linux platforms.
+// We provide our own copies when building on Windows.
 
 #if __WIN32__
 char *strsep(char **stringp, const char *delim);
@@ -287,13 +287,49 @@ char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
 // Don't recall why I added this for everyone rather than only for Windows.
+// Potential problem if some C library declares it a little differently.
 char *strcasestr(const char *S, const char *FIND);
 
 
-// cmake determines whether strlcpy and strlcat are available
-// or if we need to supply our own.
+// cmake tries to determine whether strlcpy and strlcat are provided by the C runtime library.
+//
+//	../CMakeLists.txt:check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
+//
+// It sets HAVE_STRLCPY and HAVE_STRLCAT if the corresponding functions are declared.
+// Unfortunately this does not work right for glibc 2.38 which declares the functions
+// like this:
+//
+//	extern __typeof (strlcpy) __strlcpy;
+//	libc_hidden_proto (__strlcpy)
+//	extern __typeof (strlcat) __strlcat;
+//	libc_hidden_proto (__strlcat)
+//
+// Rather than the normal way found in earlier versions:
+//
+//	extern char *strcpy (char *__restrict __dest, const char *__restrict __src)
+//
+// Perhaps a later version of cmake will recognize this form but the version I'm
+// using does not.
+// So, our work around is to assume these functions are available for glibc >= 2.38.
+//
+// In theory, cmake should be able to find the version of the C runtime library, 
+// but I could not get it to work.  So we have the test here.  We will still build
+// own library with the strl... functions but this does not cause a problem
+// because they have special debug names which will not cause a conflict.
+
+#ifdef __GLIBC__
+#if (__GLIBC__ > 2) || ((__GLIBC__ == 2) && (__GLIBC_MINOR__ >= 38))
+// These functions first added in 2.38.
+//#warning "DEBUG - glibc >= 2.38"
+#define HAVE_STRLCPY 1
+#define HAVE_STRLCAT 1
+#else
+//#warning "DEBUG - glibc < 2.38"
+#endif
+#endif
 
 #define DEBUG_STRL 1	// Extra Debug version when using our own strlcpy, strlcat.
+			// Should be ignored if not supplying our own.
 
 #ifndef HAVE_STRLCPY	// Need to supply our own.
 #if DEBUG_STRL

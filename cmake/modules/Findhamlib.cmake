@@ -52,7 +52,7 @@ find_library(HAMLIB_LIBRARY
   )
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(HAMLIB
+find_package_handle_standard_args(hamlib
   DEFAULT_MSG
   HAMLIB_LIBRARY
   HAMLIB_INCLUDE_DIR

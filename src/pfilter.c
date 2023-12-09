@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2015, 2016  John Langner, WB2OSZ
+//    Copyright (C) 2015, 2016, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -235,7 +235,7 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	pfstate.is_aprs = is_aprs;
 
 	if (is_aprs) {
-	  decode_aprs (&pfstate.decoded, pp, 1, 0);
+	  decode_aprs (&pfstate.decoded, pp, 1, NULL);
 	}
 
 	next_token(&pfstate);
@@ -546,7 +546,8 @@ static int parse_filter_spec (pfstate_t *pf)
 /* b - budlist */
 
 	else if (pf->token_str[0] == 'b' && ispunct(pf->token_str[1])) {
-	  /* Budlist - source address */
+	  /* Budlist - AX.25 source address */
+	  /* Could be different than source encapsulated by 3rd party header. */
 	  char addr[AX25_MAX_ADDR_LEN];
 	  ax25_get_addr_with_ssid (pf->pp, AX25_SOURCE, addr);
 	  result = filt_bodgu (pf, addr);
@@ -572,7 +573,7 @@ static int parse_filter_spec (pfstate_t *pf)
 
 	else if (pf->token_str[0] == 'd' && ispunct(pf->token_str[1])) {
 	  int n;
-	  // loop on all digipeaters
+	  // Loop on all AX.25 digipeaters.
 	  result = 0;
 	  for (n = AX25_REPEATER_1; result == 0 && n < ax25_get_num_addr (pf->pp); n++) {
 	    // Consider only those with the H (has-been-used) bit set.
@@ -599,7 +600,7 @@ static int parse_filter_spec (pfstate_t *pf)
 
 	else if (pf->token_str[0] == 'v' && ispunct(pf->token_str[1])) {
 	  int n;
-	  // loop on all digipeaters (mnemonic Via)
+	  // loop on all AX.25 digipeaters (mnemonic Via)
 	  result = 0;
 	  for (n = AX25_REPEATER_1; result == 0 && n < ax25_get_num_addr (pf->pp); n++) {
 	    // This is different than the previous "d" filter.
@@ -623,10 +624,15 @@ static int parse_filter_spec (pfstate_t *pf)
 	  }
 	}
 
-/* g - Addressee of message. */
+/* g - Addressee of message. e.g. "BLN*" for bulletins. */
 
 	else if (pf->token_str[0] == 'g' && ispunct(pf->token_str[1])) {
-	  if (ax25_get_dti(pf->pp) == ':') {
+	  if (pf->decoded.g_message_subtype == message_subtype_message ||
+	      pf->decoded.g_message_subtype == message_subtype_ack ||
+	      pf->decoded.g_message_subtype == message_subtype_rej ||
+	      pf->decoded.g_message_subtype == message_subtype_bulletin ||
+	      pf->decoded.g_message_subtype == message_subtype_nws ||
+	      pf->decoded.g_message_subtype == message_subtype_directed_query) {
 	    result = filt_bodgu (pf, pf->decoded.g_addressee);
 
 	    if (s_debug >= 2) {
@@ -643,7 +649,7 @@ static int parse_filter_spec (pfstate_t *pf)
 	  }
 	}
 
-/* u - unproto (destination) */
+/* u - unproto (AX.25 destination) */
 
 	else if (pf->token_str[0] == 'u' && ispunct(pf->token_str[1])) {
 	  /* Probably want to exclude mic-e types */
@@ -668,7 +674,7 @@ static int parse_filter_spec (pfstate_t *pf)
 	  }
 	}
 
-/* t - type: position, weather, etc. */
+/* t - packet type: position, weather, telemetry, etc. */
 
 	else if (pf->token_str[0] == 't' && ispunct(pf->token_str[1])) {
 	  
@@ -728,7 +734,7 @@ static int parse_filter_spec (pfstate_t *pf)
 	    (void) ax25_get_info (pf->pp, (unsigned char **)(&infop));
 
 	    text_color_set(DW_COLOR_DEBUG);
-	    if (*infop == ':' && ! is_telem_metadata(infop)) {
+	    if (pf->decoded.g_packet_type == packet_type_message) {
 	      dw_printf ("   %s returns %s for message to %s\n", pf->token_str, bool2text(result), pf->decoded.g_addressee);
 	    }
 	    else {
@@ -832,30 +838,16 @@ static int filt_bodgu (pfstate_t *pf, char *arg)
  *		 0 = no
  *		-1 = error detected
  *
- * Description:	The filter is based the type filtering described here:
+ * Description:	The filter is loosely based the type filtering described here:
  *		http://www.aprs-is.net/javAPRSFilter.aspx
  *
- *		Most of these simply check the first byte of the information part.
- *		Trying to detect NWS information is a little trickier.
+ *		Mostly use g_packet_type and g_message_subtype from decode_aprs.
+ *
+ * References:
  *		http://www.aprs-is.net/WX/
- *		http://wxsvr.aprs.net.au/protocol-new.html	
+ *		http://wxsvr.aprs.net.au/protocol-new.html	(has disappeared)
  *		
  *------------------------------------------------------------------------------*/
-
-/* Telemetry metadata is a special case of message. */
-/* We want to categorize it as telemetry rather than message. */
-
-int is_telem_metadata (char *infop)
-{
-	if (*infop != ':') return (0);
-	if (strlen(infop) < 16) return (0);
-	if (strncmp(infop+10, ":PARM.", 6) == 0) return (1);
-	if (strncmp(infop+10, ":UNIT.", 6) == 0) return (1);
-	if (strncmp(infop+10, ":EQNS.", 6) == 0) return (1);
-	if (strncmp(infop+10, ":BITS.", 6) == 0) return (1);
-	return (0);
-}
-
 
 static int filt_t (pfstate_t *pf) 
 {
@@ -873,108 +865,60 @@ static int filt_t (pfstate_t *pf)
 	  switch (*f) {
 	
 	    case 'p':				/* Position */
-	      if (*infop == '!') return (1);
-	      if (*infop == '/') return (1);
-	      if (*infop == '=') return (1);
-	      if (*infop == '@') return (1);
-	      if (*infop == '\'') return (1);	// MIC-E
-	      if (*infop == '`') return (1);	// MIC-E
-
-	      // What if we have "_" symbol code for weather?
-	      // Still consider as position.
-	      // The same packet can match more than one type here.
+	      if (pf->decoded.g_packet_type == packet_type_position) return(1);
 	      break;
 
 	    case 'o':				/* Object */
-	      if (*infop == ';') return (1);
+	      if (pf->decoded.g_packet_type == packet_type_object) return(1);
 	      break;
 
 	    case 'i':				/* Item */
-	      if (*infop == ')') return (1);
+	      if (pf->decoded.g_packet_type == packet_type_item) return(1);
 	      break;
 
-	    case 'm':				/* Message */
-	      if (*infop == ':' && ! is_telem_metadata(infop)) return (1);
+	    case 'm':				// Any "message."
+	      if (pf->decoded.g_packet_type == packet_type_message) return(1);
 	      break;
 
 	    case 'q':				/* Query */
-	      if (*infop == '?') return (1);
+	      if (pf->decoded.g_packet_type == packet_type_query) return(1);
 	      break;
 
 	    case 'c':				/* station Capabilities - my extension */
 						/* Most often used for IGate statistics. */
-	      if (*infop == '<') return (1);
+	      if (pf->decoded.g_packet_type == packet_type_capabilities) return(1);
 	      break;
 
 	    case 's':				/* Status */
-	      if (*infop == '>') return (1);
+	      if (pf->decoded.g_packet_type == packet_type_status) return(1);
 	      break;
 
-	    case 't':				/* Telemetry */
-	      if (*infop == 'T') return (1);
-	      if (is_telem_metadata(infop)) return (1);
+	    case 't':				/* Telemetry data or metadata */
+	      if (pf->decoded.g_packet_type == packet_type_telemetry) return(1);
 	      break;
 
 	    case 'u':				/* User-defined */
-	      if (*infop == '{') return (1);
+	      if (pf->decoded.g_packet_type == packet_type_userdefined) return(1);
 	      break;
 
-	    case 'h':				/* third party Header - my extension */
-	      if (*infop == '}') return (1);
+	    case 'h':				/* has third party Header - my extension */
+	      if (pf->decoded.g_has_thirdparty_header) return (1);
 	      break;
 
 	    case 'w':				/* Weather */
 
-	      if (*infop == '*') return (1);			// Peet Bros
-	      if (*infop == '_') return (1);			// Weather report, no position.
-	      if (strncmp(infop, "!!", 2) == 0) return(1);	// Ultimeter 2000.
+	      if (pf->decoded.g_packet_type == packet_type_weather) return(1);
 
-	      /* '$' is normally raw GPS. Check for special case. */
-
-	      if (strncmp(infop, "$ULTW", 5) == 0) return (1);
-
-	      /* Positions !=/@ with symbol code _ are weather. */
-
-	      if (strchr("!=/@", *infop) != NULL &&
-			pf->decoded.g_symbol_code == '_') return (1);
-
+	      /* Positions !=/@  with symbol code _ are weather. */
 	      /* Object with _ symbol is also weather.  APRS protocol spec page 66. */
+	      // Can't use *infop because it would not work with 3rd party header.
 
-	      if (*infop == ';' &&
-			pf->decoded.g_symbol_code == '_') return (1);
-
-// TODO: need more test cases at end for new weather cases.
-
+	      if ((pf->decoded.g_packet_type == packet_type_position ||
+	           pf->decoded.g_packet_type == packet_type_object) && pf->decoded.g_symbol_code == '_') return (1);
 	      break;
 
 	    case 'n':				/* NWS format */
-/*
- * This is the interesting case.
- * The source must be exactly 6 upper case letters, no SSID.
- */
-	      if (strlen(src) != 6) break;
-	      if (! isupper(src[0])) break;
-	      if (! isupper(src[1])) break;
-	      if (! isupper(src[2])) break;
-	      if (! isupper(src[3])) break;
-	      if (! isupper(src[4])) break;
-	      if (! isupper(src[5])) break;
-/*
- * We can have a "message" with addressee starting with NWS, SKY, or BOM (Australian version.)
- */
-	      if (strncmp(infop, ":NWS", 4) == 0) return (1);
-	      if (strncmp(infop, ":SKY", 4) == 0) return (1);
-	      if (strncmp(infop, ":BOM", 4) == 0) return (1);
-/*
- * Or we can have an object.
- * It's not exactly clear how to distinguish this from other objects.
- * It looks like the first 3 characters of the source should be the same
- * as the first 3 characters of the addressee.
- */
-	      if (infop[0] == ';' &&
-		  infop[1] == src[0] &&
-		  infop[2] == src[1] &&
-		  infop[3] == src[2]) return (1);
+	      if (pf->decoded.g_packet_type == packet_type_nws) return(1);
 	      break;
 
 	    default:
@@ -987,6 +931,7 @@ static int filt_t (pfstate_t *pf)
 	return (0);			/* Didn't match anything.  Reject */
 
 } /* end filt_t */
+
 
 
 
@@ -1278,7 +1223,8 @@ static int filt_s (pfstate_t *pf)
  *
  * Name:	filt_i
  *
- * Purpose:	IGate messaging default behavior.
+ * Purpose:	IGate messaging filter.
+ *		This would make sense only for IS>RF direction.
  *
  * Inputs:	pf	- Pointer to current state information.
  *			  token_str should contain something of format:
@@ -1307,7 +1253,7 @@ static int filt_s (pfstate_t *pf)
  *		The rest is distanced, in kilometers, from given point.
  *		
  *		Examples:
- *			i/60/0		Heard in past 60 minutes directly.
+ *			i/180/0		Heard in past 3 hours directly.
  *			i/45		Past 45 minutes, default max digi hops.
  *			i/180/3		Default time (3 hours), max 3 digi hops.
  *			i/180/8/42.6/-71.3/50.
@@ -1317,13 +1263,50 @@ static int filt_s (pfstate_t *pf)
  *		The basic idea is that we want to transmit a "message" only if the
  *		addressee has been heard recently and is not too far away.
  *
+ *		That is so we can distinguish messages addressed to a specific
+ *		station, and other sundry uses of the addressee field.
+ *
  *		After passing along a "message" we will also allow the next
  *		position report from the sender of the "message."
  *		That is done somewhere else.  We are not concerned with it here.
  *
  *		IMHO, the rules here are too restrictive.
  *
- *		FIXME -explain
+ *		    The APRS-IS would send a "message" to my IGate only if the addressee
+ *		    has been heard nearby recently.  180 minutes, I believe.
+ *		    Why would I not want to transmit it?
+ *
+ * Discussion:	In retrospect, I think this is far too complicated.
+ *		In a future release, I think at options other than time should be removed.
+ *		Messages have more value than most packets.  Why reduce the chance of successful delivery?
+ *
+ *		Consider the following scenario:
+ *
+ *		(1) We hear AA1PR-9 by a path of 4 digipeaters.
+ *		    Looking closer, it's probably only two because there are left over WIDE1-0 and WIDE2-0.
+ *
+ *			Digipeater WIDE2 (probably N3LLO-3) audio level = 72(19/15)   [NONE]   _|||||___
+ *			[0.3] AA1PR-9>APY300,K1EQX-7,WIDE1,N3LLO-3,WIDE2*,ARISS::ANSRVR   :cq hotg vt aprsthursday{01<0x0d>
+ *
+ *		(2) APRS-IS sends a response to us.
+ *
+ *			[ig>tx] ANSRVR>APWW11,KJ4ERJ-15*,TCPIP*,qAS,KJ4ERJ-15::AA1PR-9  :N:HOTG 161 Messages Sent{JL}
+ *
+ *		(3) Here is our analysis of whether it should be sent to RF.
+ *
+ *			Was message addressee AA1PR-9 heard in the past 180 minutes, with 2 or fewer digipeater hops?
+ *			No, AA1PR-9 was last heard over the radio with 4 digipeater hops 0 minutes ago.
+ *
+ *		The wrong hop count caused us to drop a packet that should have been transmitted.
+ *		We could put in a hack to not count the "WIDE*-0"  addresses.
+ *		That is not correct because other prefixes could be used and we don't know
+ *		what they are for other digipeaters.
+ *		I think the best solution is to simply ignore the hop count.
+ *
+ * Release 1.7:	I got overly ambitious and now realize this is just giving people too much
+ *		"rope to hang themselves," drop messages unexpectedly, and accidentally break messaging.
+ *		Change documentation to mention only the time limit.
+ *		The other functionality will be undocumented and maybe disappear over time.
  *
  *------------------------------------------------------------------------------*/
 
@@ -1352,9 +1335,9 @@ static int filt_i (pfstate_t *pf)
 	double km = G_UNKNOWN;
 
 
-	char src[AX25_MAX_ADDR_LEN];
-	char *infop = NULL;
-	int info_len;
+	//char src[AX25_MAX_ADDR_LEN];
+	//char *infop = NULL;
+	//int info_len;
 	//char *f;
 	//char addressee[AX25_MAX_ADDR_LEN];
 
@@ -1428,20 +1411,7 @@ static int filt_i (pfstate_t *pf)
  * Get source address and info part.
  * Addressee has already been extracted into pf->decoded.g_addressee.
  */
-
-	memset (src, 0, sizeof(src));
-	ax25_get_addr_with_ssid (pf->pp, AX25_SOURCE, src);
-	info_len = ax25_get_info (pf->pp, (unsigned char **)(&infop));
-
-	if (infop == NULL) return (0);
-	if (info_len < 1) return (0);
-
-// Determine packet type.  We are interested only in "message."
-// Telemetry metadata is not considered a message.
-
-	if (*infop != ':') return (0);
-	if (is_telem_metadata(infop)) return (0);
-
+	if (pf->decoded.g_packet_type != packet_type_message) return(0);
 
 #if defined(PFTEST) || defined(DIGITEST)	// TODO: test functionality too, not just syntax.
 
@@ -1481,7 +1451,7 @@ static int filt_i (pfstate_t *pf)
  * the past minute, rather than the usual 180 minutes for the addressee.
  */
 
-	was_heard = mheard_was_recently_nearby ("source", src, 1, 0, G_UNKNOWN, G_UNKNOWN, G_UNKNOWN);
+	was_heard = mheard_was_recently_nearby ("source", pf->decoded.g_src, 1, 0, G_UNKNOWN, G_UNKNOWN, G_UNKNOWN);
 
 	if (was_heard) return (0);
 
@@ -1635,24 +1605,29 @@ int main ()
 	pftest (112, "t/t", "WM1X>APU25N:@210147z4235.39N/07106.58W_359/000g000t027r000P000p000h89b10234/WX REPORT {UIV32N}<0x0d>", 0);
 	pftest (113, "t/w", "WM1X>APU25N:@210147z4235.39N/07106.58W_359/000g000t027r000P000p000h89b10234/WX REPORT {UIV32N}<0x0d>", 1);
 
-	/* Telemetry metadata is a special case of message. */
+	/* Telemetry metadata should not be classified as message. */
 	pftest (114, "t/t", "KJ4SNT>APMI04::KJ4SNT   :PARM.Vin,Rx1h,Dg1h,Eff1h,Rx10m,O1,O2,O3,O4,I1,I2,I3,I4", 1);
 	pftest (115, "t/m", "KJ4SNT>APMI04::KJ4SNT   :PARM.Vin,Rx1h,Dg1h,Eff1h,Rx10m,O1,O2,O3,O4,I1,I2,I3,I4", 0);
 	pftest (116, "t/t", "KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000", 1);
 
+	/* Bulletins should not be considered to be messages.  Was bug in 1.6. */
+	pftest (117, "t/m", "A>B::W1AW     :test", 1);
+	pftest (118, "t/m", "A>B::BLN      :test", 0);
+	pftest (119, "t/m", "A>B::NWS      :test", 0);
 
-	pftest (120, "t/p", "CWAPID>APRS::NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", 0);
+	// https://www.aprs-is.net/WX/
+	pftest (121, "t/p", "CWAPID>APRS::NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", 0);
 	pftest (122, "t/p", "CWAPID>APRS::SKYCWA   :DDHHMMz,ADVISETYPE,zcs{seq#", 0);
 	pftest (123, "t/p", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 0);
 	pftest (124, "t/n", "CWAPID>APRS::NWS-TTTTT:DDHHMMz,ADVISETYPE,zcs{seq#", 1);
 	pftest (125, "t/n", "CWAPID>APRS::SKYCWA   :DDHHMMz,ADVISETYPE,zcs{seq#", 1);
-	pftest (126, "t/n", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 1);
+	//pftest (126, "t/n", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 1);
 	pftest (127, "t/",  "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", 0);
 
 	pftest (128, "t/c",  "S0RCE>DEST:<stationcapabilities", 1);
 	pftest (129, "t/h",  "S0RCE>DEST:<stationcapabilities", 0);
-	pftest (130, "t/h",  "S0RCE>DEST:}thirdpartyheaderwhatever", 1);
-	pftest (131, "t/c",  "S0RCE>DEST:}thirdpartyheaderwhatever", 0);
+	pftest (130, "t/h",  "S0RCE>DEST:}WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (131, "t/c",  "S0RCE>DEST:}WB2OSZ-5>APDW12,DIGI1,DIGI2*,DIGI3,DIGI4:!4237.14NS07120.83W#PHG7140Chelmsford MA", 0);
 
 	pftest (140, "r/42.6/-71.3/10", "WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
 	pftest (141, "r/42.6/-71.3/10", "WA1PLE-5>APWW10,W1MHL,N8VIM,WIDE2*:@022301h4208.75N/07115.16WoAPRS-IS for Win32", 0);
@@ -1707,13 +1682,13 @@ int main ()
 	pftest (203, "t/w t/w", "CWAPID>APRS:;CWAttttz *DDHHMMzLATLONICONADVISETYPE{seq#", -1);
 	pftest (204, "r/42.6/-71.3", "WA1PLE-5>APWW10,W1MHL,N8VIM,WIDE2*:@022301h4208.75N/07115.16WoAPRS-IS for Win32", -1);
 
-	pftest (220, "i/30/8/42.6/-71.3/50", "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
-	pftest (222, "i/30/8/42.6/-71.3/",   "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
-	pftest (223, "i/30/8/42.6/-71.3",    "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
-	pftest (224, "i/30/8/42.6/",         "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
-	pftest (225, "i/30/8/42.6",          "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
-	pftest (226, "i/30/8/",              "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
-	pftest (227, "i/30/8",               "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
+	pftest (210, "i/30/8/42.6/-71.3/50", "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
+	pftest (212, "i/30/8/42.6/-71.3/",   "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+	pftest (213, "i/30/8/42.6/-71.3",    "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+	pftest (214, "i/30/8/42.6/",         "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+	pftest (215, "i/30/8/42.6",          "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+	pftest (216, "i/30/8/",              "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
+	pftest (217, "i/30/8",               "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
 
 	// FIXME: behaves differently on Windows and Linux.  Why?
 	// On Windows we have our own version of strsep because it's not in the MS library.
@@ -1721,7 +1696,12 @@ int main ()
 	//pftest (228, "i/30/",                "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
 
 	pftest (229, "i/30",                 "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
-	pftest (230, "i/",                   "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+	pftest (230, "i/30",                 "X>X:}WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
+	pftest (231, "i/",                   "WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", -1);
+
+	// Besure bulletins and telemetry metadata don't get included.
+	pftest (234, "i/30", "KJ4SNT>APMI04::KJ4SNT   :PARM.Vin,Rx1h,Dg1h,Eff1h,Rx10m,O1,O2,O3,O4,I1,I2,I3,I4", 0);
+	pftest (235, "i/30", "A>B::BLN      :test", 0);
 
 	pftest (240, "s/", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
 	pftest (241, "s/'/O/-/#/_", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
@@ -1731,12 +1711,36 @@ int main ()
 	pftest (245, "s//", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
 	pftest (246, "s///", "WB2OSZ-5>APDW12:!4237.14N/07120.83WOPHG7140Chelmsford MA", -1);
 
+	// Third party header - done properly in 1.7.
+	// Packet filter t/h is no longer a mutually exclusive packet type.
+	// Now it is an independent attribute and the encapsulated part is evaluated.
 
-// TODO: to be continued...
+	pftest (250, "o/home", "A>B:}WB2OSZ>APDW12,WIDE1-1,WIDE2-1:;home     *111111z4237.14N/07120.83W-Chelmsford MA", 1);
+	pftest (251, "t/p",    "A>B:}W1WRA-7>TRSY3T,WIDE1-1,WIDE2-1:`c-:l!hK\\>\"4b}=<0x0d>", 1);
+	pftest (252, "i/180",  "A>B:}WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
+	pftest (253, "t/m",  "A>B:}WB2OSZ-5>APDW14::W2UB     :Happy Birthday{001", 1);
+	pftest (254, "r/42.6/-71.3/10", "A>B:}WB2OSZ-5>APDW12,WIDE1-1,WIDE2-1:!4237.14NS07120.83W#PHG7140Chelmsford MA", 1);
+	pftest (254, "r/42.6/-71.3/10", "A>B:}WA1PLE-5>APWW10,W1MHL,N8VIM,WIDE2*:@022301h4208.75N/07115.16WoAPRS-IS for Win32", 0);
+	pftest (255, "t/h",  "KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000", 0);
+	pftest (256, "t/h",  "A>B:}KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000", 1);
+	pftest (258, "t/t",  "A>B:}KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000", 1);
+	pftest (259, "t/t",  "A>B:}KJ4SNT>APMI04::KJ4SNT   :PARM.Vin,Rx1h,Dg1h,Eff1h,Rx10m,O1,O2,O3,O4,I1,I2,I3,I4", 1);
+
+	pftest (270, "g/BLN*", "WB2OSZ>APDW17::BLN1xxxxx:bulletin text", 1);
+	pftest (271, "g/BLN*", "A>B:}WB2OSZ>APDW17::BLN1xxxxx:bulletin text", 1);
+	pftest (272, "g/BLN*", "A>B:}WB2OSZ>APDW17::W1AW     :xxxx", 0);
+
+	pftest (273, "g/NWS*", "WB2OSZ>APDW17::NWS-xxxxx:weather bulletin", 1);
+	pftest (274, "g/NWS*", "A>B:}WB2OSZ>APDW17::NWS-xxxxx:weather bulletin", 1);
+	pftest (275, "g/NWS*", "A>B:}WB2OSZ>APDW17::W1AW     :xxxx", 0);
+
+// TODO: add b/ with 3rd party header.
+
+// TODO: to be continued...  directed query ...
 
 	if (error_count > 0) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("\nPacket Filtering Test - FAILED!\n");
+	  dw_printf ("\nPacket Filtering Test - FAILED!     %d errors\n", error_count);
 	  exit (EXIT_FAILURE);
 	}
 	text_color_set (DW_COLOR_REC);

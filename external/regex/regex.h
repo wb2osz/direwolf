@@ -208,7 +208,8 @@ typedef unsigned long int reg_syntax_t;
    some interfaces).  When a regexp is compiled, the syntax used is
    stored in the pattern buffer, so changing this does not affect
    already-compiled regexps.  */
-REGEX_VARIABLE_IMPEXP reg_syntax_t re_syntax_options;
+//REGEX_VARIABLE_IMPEXP reg_syntax_t re_syntax_options;
+extern reg_syntax_t re_syntax_options;
 
 /* Define combinations of the above bits for the standard possibilities.
    (The [[[ comments delimit what gets put into the Texinfo file, so

@@ -882,7 +882,7 @@ static void xmit_object_report (int i, int first_time)
  * 	IGate.
  *
  * When transmitting over the radio, it gets sent multiple times, to help
- * probablity of being heard, with increasing delays between.
+ * probability of being heard, with increasing delays between.
  *
  * The other methods are reliable so we only want to send it once.
  */

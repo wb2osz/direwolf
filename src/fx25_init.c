@@ -371,6 +371,7 @@ int fx25_pick_mode (int fx_mode, int dlen)
 // The PRUG FX.25 TNC has additional modes that will handle larger frames
 // by using multiple RS blocks.  This is a future possibility but needs
 // to be coordinated with other FX.25 developers so we maintain compatibility.
+// See https://web.tapr.org/meetings/DCC_2020/JE1WAZ/DCC-2020-PRUG-FINAL.pptx
 
 	static const int prefer[6] = { 0x04, 0x03, 0x06, 0x09, 0x05, 0x01 };
 	for (int k = 0; k < 6; k++) {

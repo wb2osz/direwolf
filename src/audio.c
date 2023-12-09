@@ -354,6 +354,10 @@ int audio_open (struct audio_s *pa)
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Could not open audio device %s for input\n%s\n", 
 	  		audio_in_name, snd_strerror(err));
+		  if (err == -EBUSY) {
+	            dw_printf ("This means that some other application is using that device.\n");
+	            dw_printf ("The solution is to identify that other application and stop it.\n");
+	          }
 	          return (-1);
 	        }
 
@@ -459,6 +463,10 @@ int audio_open (struct audio_s *pa)
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Could not open audio device %s for output\n%s\n", 
 			audio_out_name, snd_strerror(err));
+	      if (err == -EBUSY) {
+	        dw_printf ("This means that some other application is using that device.\n");
+	        dw_printf ("The solution is to identify that other application and stop it.\n");
+	      }
 	      return (-1);
 	    }
 
@@ -1532,7 +1540,7 @@ int audio_flush (int a)
  *		(3) Call this function, which might or might not wait long enough.
  *		(4) Add (1) and (2) resulting in when PTT should be turned off.
  *		(5) Take difference between current time and desired PPT off time
- *			and wait for additoinal time if required.
+ *			and wait for additional time if required.
  *
  *----------------------------------------------------------------*/
 

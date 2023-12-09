@@ -67,7 +67,6 @@
 #include "serial_port.h"
 #include "kiss_frame.h"
 #include "dwsock.h"
-#include "dtime_now.h"
 #include "audio.h"		// for DEFAULT_TXDELAY, etc.
 #include "dtime_now.h"
 

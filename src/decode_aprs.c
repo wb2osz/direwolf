@@ -17,6 +17,7 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+// TODO:  Better error messages for examples here: http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2023-July/date.html
 
 /*------------------------------------------------------------------
  *
@@ -140,10 +141,11 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *		quiet	- Suppress error messages.
  *
- *		third_party - True when parsing a third party header.
+ *		third_party_src - Specify when parsing a third party header.
  *			(decode_aprs is called recursively.)
  *			This is mostly found when an IGate transmits a message
  *			that came via APRS-IS.
+ *			NULL when not third party payload.
  *
  * Outputs:	A->	g_symbol_table, g_symbol_code,
  *			g_lat, g_lon, 
@@ -156,11 +158,10 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen);
  *
  *------------------------------------------------------------------*/
 
-void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
+void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_src)
 {
-	//dw_printf ("DEBUG decode_aprs quiet=%d, third_party=%d\n", quiet, third_party);
+	//dw_printf ("DEBUG decode_aprs quiet=%d, third_party=%p\n", quiet, third_party_src);
 
-	//char dest[AX25_MAX_ADDR_LEN];
 	unsigned char *pinfo;
 	int info_len;
 
@@ -169,15 +170,17 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 
 	//dw_printf ("DEBUG decode_aprs info=\"%s\"\n", pinfo);
 
-	memset (A, 0, sizeof (*A));
+	if (third_party_src == NULL) {
+	  memset (A, 0, sizeof (*A));
+	}
 
 	A->g_quiet = quiet;
 
 	if (isprint(*pinfo)) {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Unknown APRS Data Type Indicator \"%c\"", *pinfo);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!!  Unknown APRS Data Type Indicator \"%c\"", *pinfo);
 	}
 	else {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!! Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "ERROR!!!  Unknown APRS Data Type Indicator: unprintable 0x%02x", *pinfo);
 	}
 
 	A->g_symbol_table = '/';	/* Default to primary table. */
@@ -204,6 +207,15 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	A->g_footprint_lon = G_UNKNOWN;
 	A->g_footprint_radius = G_UNKNOWN;
 
+// TODO: Complain if obsolete WIDE or RELAY is found in via path.
+
+// TODO: complain if unused WIDEn is see in path.
+// There is a report of UIDIGI decrementing ssid 1 to 0 and not marking it used.
+// http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2022-May/049397.html
+
+// TODO: Complain if used digi is found after unused.  Should never happen.
+
+
 // If third-party header, try to decode just the payload.
 
 	if (*pinfo == '}') {
@@ -220,7 +232,13 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 
 	  packet_t pp_payload = ax25_from_text ((char*)pinfo+1, 0);
 	  if (pp_payload != NULL) {
-	    decode_aprs (A, pp_payload, quiet, 1);	// 1 means used recursively
+	    char payload_src[AX25_MAX_ADDR_LEN];
+	    memset(payload_src, 0, sizeof(payload_src));
+	    memcpy(payload_src, (char*)pinfo+1, sizeof(payload_src)-1);
+	    char *q = strchr(payload_src, '>');
+	    if (q != NULL) *q = '\0';
+	    A->g_has_thirdparty_header = 1;
+	    decode_aprs (A, pp_payload, quiet, payload_src);	// 1 means used recursively
 	    ax25_delete (pp_payload);
 	    return;
 	  }
@@ -234,8 +252,12 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 /*
  * Extract source and destination including the SSID.
  */
-	
-	ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
+	if (third_party_src != NULL) {
+	    strlcpy (A->g_src, third_party_src, sizeof(A->g_src));
+	}
+	else {
+	    ax25_get_addr_with_ssid (pp, AX25_SOURCE, A->g_src);
+	}
 	ax25_get_addr_with_ssid (pp, AX25_DESTINATION, A->g_dest);
 
 	//dw_printf ("DEBUG decode_aprs source=%s, dest=%s\n", A->g_src, A->g_dest);
@@ -294,16 +316,17 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 
 	      if (strncmp((char*)pinfo, "!!", 2) == 0)
 	      {
-		aprs_ultimeter (A, (char*)pinfo, info_len);
+		aprs_ultimeter (A, (char*)pinfo, info_len);		// TODO: produce obsolete error.
 	      }
 	      else
 	      {	     
 	        aprs_ll_pos (A, pinfo, info_len);
 	      }
+	      A->g_packet_type = packet_type_position;
 	      break;
 
 
-	    //case '#':		/* Peet Bros U-II Weather station */
+	    //case '#':		/* Peet Bros U-II Weather station */		// TODO: produce obsolete error.
 	    //case '*':		/* Peet Bros U-II Weather station */
 	      //break;
 		
@@ -311,11 +334,13 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 		
 	      if (strncmp((char*)pinfo, "$ULTW", 5) == 0)
 	      {
-		aprs_ultimeter (A, (char*)pinfo, info_len);
+		aprs_ultimeter (A, (char*)pinfo, info_len);		// TODO: produce obsolete error.
+	        A->g_packet_type = packet_type_weather;
 	      }
 	      else
 	      {
 	        aprs_raw_nmea (A, pinfo, info_len);
+	        A->g_packet_type = packet_type_position;
 	      }
 	      break;
 
@@ -323,17 +348,20 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 	    case '`':		/* Current Mic-E Data (not used in TM-D700) */
 
 	      aprs_mic_e (A, pp, pinfo, info_len);
+	      A->g_packet_type = packet_type_position;
 	      break;
 
 	    case ')':		/* Item. */
 
 	      aprs_item (A, pinfo, info_len);
+	      A->g_packet_type = packet_type_item;
 	      break;
 		
 	    case '/':		/* Position with timestamp (no APRS messaging) */
 	    case '@':		/* Position with timestamp (with APRS messaging) */
 
 	      aprs_ll_pos_time (A, pinfo, info_len);
+	      A->g_packet_type = packet_type_position;
 	      break;
 
 
@@ -342,42 +370,76 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 				/* Telemetry metadata. */
 
 	      aprs_message (A, pinfo, info_len, quiet);
+
+	      switch (A->g_message_subtype) {
+		case message_subtype_message:
+		case message_subtype_ack:
+		case message_subtype_rej:
+	          A->g_packet_type = packet_type_message;
+	          break;
+
+		case message_subtype_nws:
+	           A->g_packet_type = packet_type_nws;
+	           break;
+
+		case message_subtype_bulletin:
+	        default:
+		  break;
+
+		case message_subtype_telem_parm:
+		case message_subtype_telem_unit:
+		case message_subtype_telem_eqns:
+		case message_subtype_telem_bits:
+	          A->g_packet_type = packet_type_telemetry;
+	          break;
+
+		case message_subtype_directed_query:
+	          A->g_packet_type = packet_type_query;
+	          break;
+	      }
 	      break;
 
 	    case ';':		/* Object */
 
 	      aprs_object (A, pinfo, info_len);
+	      A->g_packet_type = packet_type_object;
 	      break;
 
 	    case '<':		/* Station Capabilities */
 
 	      aprs_station_capabilities (A, (char*)pinfo, info_len);
+	      A->g_packet_type = packet_type_capabilities;
 	      break;
 
 	    case '>':		/* Status Report */
 
 	      aprs_status_report (A, (char*)pinfo, info_len);
+	      A->g_packet_type = packet_type_status;
 	      break;
 
 	    
 	    case '?':		/* General Query */
 
 	      aprs_general_query (A, (char*)pinfo, info_len, quiet);
+	      A->g_packet_type = packet_type_query;
 	      break;
 		
 	    case 'T':		/* Telemetry */
 
 	      aprs_telemetry (A, (char*)pinfo, info_len, quiet);
+	      A->g_packet_type = packet_type_telemetry;
 	      break;
 
 	    case '_':		/* Positionless Weather Report */
 
 	      aprs_positionless_weather_report (A, pinfo, info_len);
+	      A->g_packet_type = packet_type_weather;
 	      break;
 
 	    case '{':		/* user defined data */
 
 	      aprs_user_defined (A, (char*)pinfo, info_len);
+	      A->g_packet_type = packet_type_userdefined;
 	      break;
 
 	    case 't':		/* Raw touch tone data - NOT PART OF STANDARD */
@@ -386,6 +448,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 				/* Might move into user defined data, above. */
 
 	      aprs_raw_touch_tone (A, (char*)pinfo, info_len);
+	      // no packet type for t/ filter
 	      break;
 
 	    case 'm':		/* Morse Code data - NOT PART OF STANDARD */
@@ -395,6 +458,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, int third_party)
 				/* Might move into user defined data, above. */
 
 	      aprs_morse_code (A, (char*)pinfo, info_len);
+	      // no packet type for t/ filter
 	      break;
 
 	    //case '}':		/* third party header */
@@ -486,13 +550,17 @@ void decode_aprs_print (decode_aprs_t *A) {
 	//dw_printf ("DEBUG decode_aprs_print stemp3=%s mfr=%s\n", stemp, A->g_mfr);
 
 	if (strlen(A->g_mfr) > 0) {
-	  if (strcmp(A->g_dest, "APRS") == 0) {
-	    strlcat (stemp, "\nUse of \"APRS\" in the destination field is obsolete.", sizeof(stemp));
+	  if (strcmp(A->g_dest, "APRS") == 0  ||
+		strcmp(A->g_dest, "BEACON") == 0 ||
+		strcmp(A->g_dest, "ID") == 0) {
+	    strlcat (stemp, "\nUse of \"", sizeof(stemp));
+	    strlcat (stemp, A->g_dest, sizeof(stemp));
+	    strlcat (stemp, "\" in the destination field is obsolete.", sizeof(stemp));
 	    strlcat (stemp, "  You can help to improve the quality of APRS signals.", sizeof(stemp));
 	    strlcat (stemp, "\nTell the sender (", sizeof(stemp));
 	    strlcat (stemp, A->g_src, sizeof(stemp));
-	    strlcat (stemp, ") to use the proper product code from", sizeof(stemp));
-	    strlcat (stemp, " http://www.aprs.org/aprs11/tocalls.txt", sizeof(stemp));
+	    strlcat (stemp, ") to use the proper product identifier from", sizeof(stemp));
+	    strlcat (stemp, " https://github.com/aprsorg/aprs-deviceid ", sizeof(stemp));
 	  }
 	  else {
 	    strlcat (stemp, ", ", sizeof(stemp));
@@ -517,7 +585,7 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  /* http://eng.usna.navy.mil/~bruninga/aprs/aprs11.html */
 	  /* "The Antenna Gain in the PHG format on page 28 is in dBi." */
 
-	  snprintf (phg, sizeof(phg), ", %d W height=%d %ddBi %s", A->g_power, A->g_height, A->g_gain, A->g_directivity);
+	  snprintf (phg, sizeof(phg), ", %d W height(HAAT)=%dft=%.0fm %ddBi %s", A->g_power, A->g_height, DW_FEET_TO_METERS(A->g_height), A->g_gain, A->g_directivity);
 	  strlcat (stemp, phg, sizeof(stemp));
 	}
 
@@ -527,7 +595,13 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  snprintf (rng, sizeof(rng), ", range=%.1f", A->g_range);
 	  strlcat (stemp, rng, sizeof(stemp));
 	}
-	text_color_set(DW_COLOR_DECODED);
+
+	if (strncmp(stemp, "ERROR", 5) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	}
+	else {
+	  text_color_set(DW_COLOR_DECODED);
+	}
 	dw_printf("%s\n", stemp);
 
 /*
@@ -547,7 +621,6 @@ void decode_aprs_print (decode_aprs_t *A) {
  * Any example was checked for each hemihemisphere using
  * http://www.amsat.org/cgi-bin/gridconv
  */
-// FIXME soften language about upper case.
 
 	if (strlen(A->g_maidenhead) > 0) {
 
@@ -835,6 +908,32 @@ static void aprs_ll_pos (decode_aprs_t *A, unsigned char *info, int ilen)
 
 	    strlcpy (A->g_data_type_desc, "Weather Report", sizeof(A->g_data_type_desc));
 	    weather_data (A, p->comment, TRUE);
+/*
+Here is an interesting case.
+The protocol spec states that a position report with symbol _ is a special case
+and the information part must contain wxnow.txt format weather data.
+But, here we see it being generated like a normal position report.
+
+N8VIM>BEACON,AB1OC-10*,WIDE2-1:!4240.85N/07133.99W_PHG72604/ Pepperell, MA. WX. 442.9+ PL100<0x0d>
+Didn't find wind direction in form c999.
+Didn't find wind speed in form s999.
+Didn't find wind gust in form g999.
+Didn't find temperature in form t999.
+Weather Report, WEATHER Station (blue)
+N 42 40.8500, W 071 33.9900
+, "PHG72604/ Pepperell, MA. WX. 442.9+ PL100"
+
+It seems, to me, that this is a violation of the protocol spec.
+Then, immediately following, we have a positionless weather report in Ultimeter format.
+
+N8VIM>APN391,AB1OC-10*,WIDE2-1:$ULTW006F00CA01421C52275800008A00000102FA000F04A6000B002A<0x0d><0x0a>
+Ultimeter, Kantronics KPC-3 rom versions
+wind 6.9 mph, direction 284, temperature 32.2, barometer 29.75, humidity 76
+
+aprs.fi merges these two together.  Is that anywhere in the protocol spec or
+just a heuristic added after noticing a pair of packets like this?
+*/
+
 	  } 
 	  else {
 	    /* Regular position report. */
@@ -1040,7 +1139,9 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  * Function:	aprs_mic_e
  *
- * Purpose:	Decode MIC-E (also Kenwood D7 & D700) packet.
+ * Purpose:	Decode MIC-E (e.g. Kenwood D7 & D700) packet.
+ *		This format is an overzelous quest to make the packet as short as possible.
+ *		It uses non-printable characters and hacks wrapped in kludges.
  *
  * Inputs:	info 	- Pointer to Information field.
  *		ilen 	- Information field length.
@@ -1049,31 +1150,120 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  * Description:	
  *
- *		Destination Address Field - 
+ *		AX.25 Destination Address Field -
  *
- *		The 7-byte Destination Address field contains
+ *		The 6-byte Destination Address field contains
  *		the following encoded information:
  *
- *		* The 6 latitude digits.
- *		* A 3-bit Mic-E message identifier, specifying one of 7 Standard Mic-E
- *		   Message Codes or one of 7 Custom Message Codes or an Emergency
- *		   Message Code.
- *		* The North/South and West/East Indicators.
- *		* The Longitude Offset Indicator.
- *		* The generic APRS digipeater path code.
- *
+ *			Byte 1: Lat digit 1, message bit A
+ *			Byte 2: Lat digit 2, message bit B
+ *			Byte 3: Lat digit 3, message bit C
+ *			Byte 4: Lat digit 4, N/S lat indicator
+ *			Byte 5: Lat digit 5, Longitude offset
+ *			Byte 6: Lat digit 6, W/E Long indicator
+ * *
  *		"Although the destination address appears to be quite unconventional, it is
  *		still a valid AX.25 address, consisting only of printable 7-bit ASCII values."
  *
- * References:	Mic-E TYPE CODES -- http://www.aprs.org/aprs12/mic-e-types.txt
+ *		AX.25 Information Field - Starts with ' or `
  *
- *			This is up to date with the 24 Aug 16 version mentioning the TH-D74.
+ *			Bytes 1,2,3: Longitude
+ *			Bytes 4,5,6: Speed and Course
+ *			Byte 6: Symbol code
+ *			Byte 7: Symbol Table ID
+ *
+ *		The rest of it is a complicated comment field which can hold various information
+ *		and must be intrepreted in a particular order.  At this point we look for any
+ *		prefix and/or suffix to identify the equipment type.
+ *
+ * 		References:	Mic-E TYPE CODES -- http://www.aprs.org/aprs12/mic-e-types.txt
+ *				Mic-E TEST EXAMPLES -- http://www.aprs.org/aprs12/mic-e-examples.txt
+ *
+ *		Next, we have what Addedum 1.2 calls the "type byte."  This prefix can be
+ *			space	Original MIC-E.
+ *			>	Kenwood HT.
+ *			]	Kenwood Mobile.
+ *			none.
+ *
+ *		We also need to look at the last byte or two
+ *		for a possible suffix to distinguish equipment types.  Examples:
+ *			>......		is D7
+ *			>......=	is D72
+ *			>......^	is D74
+ *
+ *		For other brands, it gets worse.  There might a 2 character suffix.
+ *		The prefix indicates whether messaging-capable.  Examples:
+ *			`....._.%	Yaesu FTM-400DR
+ *			`......_)	Yaesu FTM-100D
+ *			`......_3	Yaesu FT5D
+ *
+ *			'......|3	Byonics TinyTrack3
+ *			'......|4	Byonics TinyTrack4
+ *
+ *		Any prefix and suffix must be removed before futher processsing.
+ *
+ *		Pick one: MIC-E Telemetry Data or "Status Text" (called a comment everywhere else).
+ *
+ *		If the character after the symbol table id is "," (comma) or 0x1d, we have telemetry.
+ *		(Is this obsoleted by the base-91 telemetry?)
+ *
+ *			`	Two 2-character hexadecimal numbers. (Channels 1 & 3)
+ *			'	Five 2-character hexadecimal numbers.
+ *
+ *		Anything left over is a comment which can contain various types of information.
+ *
+ *		If present, the MIC-E compressed altitude must be first.
+ *		It is three base-91 characters followed by "}".
+ *		Examples:    "4T}	"4T}	]"4T}
+ *
+ *		We can also have frequency specification  --  http://www.aprs.org/info/freqspec.txt
+ *
+ * Warning:	Some Kenwood radios add CR at the end, in apparent violation of the spec.
+ *		Watch out so it doesn't get included when looking for equipment type suffix.
  *
  *		Mic-E TEST EXAMPLES -- http://www.aprs.org/aprs12/mic-e-examples.txt 
  *		
- * Examples:	`b9Z!4y>/>"4N}Paul's_TH-D7
+ * Examples:	Observed on the air.
  *
- * TODO:	Destination SSID can contain generic digipeater path.
+ *		KB1HNZ-9>TSSP5P,W1IMD,WIDE1,KQ1L-8,N3LLO-3,WIDE2*:`b6,l}#>/]"48}449.225MHz<0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff><0xff>=<0x0d>
+ *
+ *		`       b6,    l}#   >/     ]         "48}    449.225MHz   ......    =       <0x0d>
+ *		mic-e  long.   cs    sym    prefix    alt.    freq         comment   suffix   must-ignore
+ *		                            Kenwood                                  D710
+ *---------------
+ *
+ *		N1JDU-9>ECCU8Y,W1MHL*,WIDE2-1:'cZ<0x7f>l#H>/]Go fly a kite!<0x0d>
+ *
+ *		'      cZ<0x7f>   l#H     >/     ]         .....                 <0x0d>
+ *		mic-e  long.      cs      sym    prefix    comment   no-suffix   must-ignore
+ *		                                 Kenwood              D700
+ *---------------
+ *
+ *		KC1HHO-7>T2PX5R,WA1PLE-4,WIDE1*,WIDE2-1:`c_snp(k/`"4B}official relay station NTS_(<0x0d>
+ *
+ *		`       c_s     np(  k/     `       "4B}      .......   _(       <0x0d>
+ *		mic-e  long.    cs   sym    prefix   alt      comment   suffix   must-ignore
+ *		                                                         FT2D
+ *---------------
+ *
+ *		N1CMD-12>T3PQ1Y,KA1GJU-3,WIDE1,WA1PLE-4*:`cP#l!Fk/'"7H}|!%&-']|!w`&!|3
+ *
+ *		`      cP#      l!F   k/     '       "7H}    |!%&-']|         !w`&!   |3
+ *		mic-e  long.    cs   sym    prefix   alt     base91telemetry  DAO     suffix
+ *		                                                                      TinyTrack3
+ *---------------
+ *
+ *		 W1STJ-3>T2UR4X,WA1PLE-4,WIDE1*,WIDE2-1:`c@&l#.-/`"5,}146.685MHz T100 -060 146.520 Simplex or Voice Alert_%<0x0d>
+ *
+ *		`      c@&     l#.   -/     `        "5,}    146.685MHz T100 -060     ..............  _%       <0x0d>
+ *		mic-e  long.    cs   sym    prefix   alt     frequency-specification     comment     suffix   must-ignore
+ *		                                                                                    FTM-400DR
+ *---------------
+ *
+ *
+ *
+ *
+ * TODO:	Destination SSID can contain generic digipeater path.  (?)
  *
  * Bugs:	Doesn't handle ambiguous position.  "space" treated as zero.
  *		Invalid data results in a message but latitude is not set to unknown.
@@ -1352,7 +1542,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  }
 	}
 
-/* 6th character of destintation indicates east / west. */
+/* 6th character of destination indicates east / west. */
 
 /*
  * Example of apparently invalid encoding.  6th character missing.
@@ -1456,14 +1646,17 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 // This does not change very often but I'm wondering if we could parse
 // http://www.aprs.org/aprs12/mic-e-types.txt similar to how we use tocalls.txt.
 
+// TODO:  Use https://github.com/aprsorg/aprs-deviceid rather than hardcoding.
+
 	if (isT(*pfirst)) {
 
 // "legacy" formats.
-	
+
 	  if      (*pfirst == ' '                                       )  { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
 
 	  else if (*pfirst == '>'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
 	  else if (*pfirst == '>'                       && *plast == '^')  { strlcpy (A->g_mfr, "Kenwood TH-D74", sizeof(A->g_mfr)); pfirst++; plast--; }
+	  else if (*pfirst == '>'                       && *plast == '&')  { strlcpy (A->g_mfr, "Kenwood TH-D75", sizeof(A->g_mfr)); pfirst++; plast--; }
 	  else if (*pfirst == '>'                                       )  { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
 
 	  else if (*pfirst == ']'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
@@ -1481,6 +1674,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '0')  { strlcpy (A->g_mfr, "Yaesu FT3D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '3')  { strlcpy (A->g_mfr, "Yaesu FT5D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '1')  { strlcpy (A->g_mfr, "Yaesu FTM-300D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '5')  { strlcpy (A->g_mfr, "Yaesu FTM-500D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
@@ -1489,6 +1683,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 // ' should be used for trackers (not message capable).
 
+	  else if (*pfirst == '\'' && *(plast-1) == '(' && *plast == '5')  { strlcpy (A->g_mfr, "Anytone D578UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 	  else if (*pfirst == '\'' && *(plast-1) == '(' && *plast == '8')  { strlcpy (A->g_mfr, "Anytone D878UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
 
 	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3')  { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
@@ -1556,7 +1751,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  * Purpose:	Decode "Message Format."
  *		The word message is used loosely all over the place, but it has a very specific meaning here.
  *
- * Inputs:	info 	- Pointer to Information field.
+ * Inputs:	info 	- Pointer to Information field.  Be careful not to modify it here!
  *		ilen 	- Information field length.
  *		quiet	- suppress error messages.
  *
@@ -1577,10 +1772,19 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		It's a lot more complicated with different types of addressees
  *		and replies with acknowledgement or rejection.
  *
- *		There is even a special case for telemetry metadata.
+ *		Is it an elegant generalization to lump all of these special cases
+ *		together or was it a big mistake that will cause confusion and incorrect
+ *		implementations?  The decision to put telemetry metadata here is baffling.
  *
  *
- * Cases:	:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
+ * Cases:	:BLNxxxxxx: ...			Bulletin.
+ *		:NWSxxxxxx: ...			National Weather Service Bulletin.
+ *							http://www.aprs.org/APRS-docs/WX.TXT
+ *		:SKYxxxxxx: ...			Need reference.
+ *		:CWAxxxxxx: ...			Need reference.
+ *		:BOMxxxxxx: ...			Australian version.
+ *
+ *		:xxxxxxxxx:PARM.		Telemetry metadata, parameter name
  *		:xxxxxxxxx:UNIT.		Telemetry metadata, unit/label
  *		:xxxxxxxxx:EQNS.		Telemetry metadata, Equation Coefficients
  *		:xxxxxxxxx:BITS.		Telemetry metadata, Bit Sense/Project Name
@@ -1596,11 +1800,12 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		:xxxxxxxxx: ... {mm}aa		Message with new style message number and ack.
  *
  *
- * Reference:	See new message id style:  http://www.aprs.org/aprs11/replyacks.txt
+ * Reference:	http://www.aprs.org/txt/messages101.txt
+ *		http://www.aprs.org/aprs11/replyacks.txt	<-- New (1999) adding ack to outgoing message.
  *
  *------------------------------------------------------------------*/
 
-static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int quiet) 
+static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int quiet)
 {
 
 	struct aprs_message_s {
@@ -1610,7 +1815,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char message[256-1-9-1];	/* Officially up to 67 characters for message text. */
 					/* Relaxing seemingly arbitrary restriction here; it doesn't need to fit on a punched card. */
 					/* Wouldn't surprise me if others did not pay attention to the limit. */
-					/* Optional { followed by 1-5 alphanumeric characters for message number */
+					/* Optional '{' followed by 1-5 alphanumeric characters for message number */
 
 					/* If the first character is '?' it is a Directed Station Query. */
 	} *p;
@@ -1685,6 +1890,62 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 
 	strlcpy (A->g_addressee, addressee, sizeof(A->g_addressee));
 
+/*
+ * Addressee starting with BLN or NWS is a bulletin.
+ */
+	if (strlen(addressee) >= 3 && strncmp(addressee,"BLN",3) == 0) {
+
+	  // Interpret 3 cases of identifiers.
+	  // BLN9	"general bulletin" has a single digit.
+	  // BLNX	"announcement" has a single uppercase letter.
+	  // BLN9xxxxx	"group bulletin" has single digit group id and group name up to 5 characters.
+
+	  if (strlen(addressee) == 4 && isdigit(addressee[3])) {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "General Bulletin with identifier \"%s\"", addressee+3);
+	  }
+	  else if (strlen(addressee) == 4 && isupper(addressee[3])) {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Announcement with identifier \"%s\"", addressee+3);
+	  }
+	  if (strlen(addressee) >=5 && isdigit(addressee[3])) {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Group Bulletin with identifier \"%c\", group name \"%s\"", addressee[3], addressee+4);
+	  }
+	  else {
+	    // Not one of the official formats.
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Bulletin with identifier \"%s\"", addressee+3);
+	  }
+	  A->g_message_subtype = message_subtype_bulletin;
+	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	}
+
+
+	// Weather bulletins have addressee starting with NWS, SKY, CWA, or BOM.
+	// The protocol spec and http://www.aprs.org/APRS-docs/WX.TXT state that
+	// the 3 letter prefix must be followed by a dash.
+	// However, https://www.aprs-is.net/WX/ also lists the underscore
+	// alternative for the compressed format.  Xastir implements this.
+
+	else if (strlen(addressee) >= 3 && strncmp(addressee,"NWS",3) == 0) {
+
+	  if (strlen(addressee) >=4 && addressee[3] == '-') {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Weather bulletin with identifier \"%s\"", addressee+4);
+	  }
+	  else if (strlen(addressee) >=4 && addressee[3] == '_') {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Compressed Weather bulletin with identifier \"%s\"", addressee+4);
+	  }
+	  else {
+	    snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Weather bulletin is missing - or _ after %.3s", addressee);
+	  }
+	  A->g_message_subtype = message_subtype_nws;
+	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	}
+
+	else if (strlen(addressee) >= 3 && (strncmp(addressee,"SKY",3) == 0 || strncmp(addressee,"CWA",3) == 0 || strncmp(addressee,"BOM",3) == 0)) {
+	  // SKY... or CWA...   https://www.aprs-is.net/WX/
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Weather bulletin with identifier \"%s\"", addressee+4);
+	  A->g_message_subtype = message_subtype_nws;
+	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	}
+
 
 /*
  * Special message formats contain telemetry metadata.
@@ -1697,23 +1958,23 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
  * Why not use other characters after the "T" for metadata?
  */
 
-	if (strncmp(p->message,"PARM.",5) == 0) {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Parameter Name Message for \"%s\"", addressee);
+	else if (strncmp(p->message,"PARM.",5) == 0) {
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Parameter Name for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_parm;
 	  telemetry_name_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"UNIT.",5) == 0) {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Unit/Label Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Unit/Label for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_unit;
 	  telemetry_unit_label_message (addressee, p->message+5);
 	}
 	else if (strncmp(p->message,"EQNS.",5) == 0) {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Equation Coefficients Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Equation Coefficients for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_eqns;
 	  telemetry_coefficents_message (addressee, p->message+5, quiet);
 	}
 	else if (strncmp(p->message,"BITS.",5) == 0) {
-	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Bit Sense/Project Name Message for \"%s\"", addressee);
+	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "Telemetry Bit Sense/Project Name for \"%s\"", addressee);
 	  A->g_message_subtype = message_subtype_telem_bits;
 	  telemetry_bit_sense_message (addressee, p->message+5, quiet);
 	}
@@ -1737,11 +1998,23 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: \"%s\" must be lower case \"ack\"\n", p->message);
 	  }
-	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
-	  if (strlen(A->g_message_number) == 0) {
+	  else {
+	    strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	    if (strlen(A->g_message_number) == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: Message number is missing after \"ack\".\n");
+	    }
 	  }
+
+	  // Xastir puts a carriage return on the end.
+	  char *p = strchr(A->g_message_number, '\r');
+	  if (p != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("The APRS protocol specification says nothing about a possible carriage return after the\n");
+	      dw_printf("message id.  Adding CR might prevent proper interoperability with with other applications.\n");
+	      *p = '\0';
+	  }
+ 
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -1751,11 +2024,23 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: \"%s\" must be lower case \"rej\"\n", p->message);
 	  }
-	  strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
-	  if (strlen(A->g_message_number) == 0) {
+	  else {
+	    strlcpy (A->g_message_number, p->message + 3, sizeof(A->g_message_number));
+	    if (strlen(A->g_message_number) == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf("ERROR: Message number is missing after \"rej\".\n");
+	    }
 	  }
+
+	  // Xastir puts a carriage return on the end.
+	  char *p = strchr(A->g_message_number, '\r');
+	  if (p != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("The APRS protocol specification says nothing about a possible carriage return after the\n");
+	      dw_printf("message id.  Adding CR might prevent proper interoperability with with other applications.\n");
+	      *p = '\0';
+	  }
+
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -1776,16 +2061,26 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{toolong
 
 	else {
-	  // Look for message number.
+	  // Normal messaage case.  Look for message number.
 	  char *pno = strchr(p->message, '{');
 	  if (pno != NULL) {
-	    *pno = '\0';
-	    int mlen = strlen(pno+1);
+	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+
+	    // Xastir puts a carriage return on the end.
+	    char *p = strchr(A->g_message_number, '\r');
+	    if (p != NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("The APRS protocol specification says nothing about a possible carriage return after the\n");
+	        dw_printf("message id.  Adding CR might prevent proper interoperability with with other applications.\n");
+	        *p = '\0';
+	    }
+
+	    int mlen = strlen(A->g_message_number);
 	    if (mlen < 1 || mlen > 5) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Message number \"%s\" has length outside range of 1 to 5.\n", pno+1);
+	      dw_printf("Message number \"%s\" has length outside range of 1 to 5.\n", A->g_message_number);
 	    }
-	    strlcpy (A->g_message_number, pno+1, sizeof(A->g_message_number));
+
 	    // TODO: Complain if not alphanumeric.
 
 	    char ack[8] = "";
@@ -1815,6 +2110,11 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  /* No location so don't use  process_comment () */
 
 	  strlcpy (A->g_comment, p->message, sizeof(A->g_comment));
+	  // Remove message number when displaying message text.
+	  pno = strchr(A->g_comment, '{');
+	  if (pno != NULL) {
+	    *pno = '\0';
+	  }
 	}
 
 }
@@ -2314,6 +2614,20 @@ static void aprs_status_report (decode_aprs_t *A, char *info, int ilen)
  *	
  *------------------------------------------------------------------*/
 
+/*
+https://groups.io/g/direwolf/topic/95961245#7357
+
+What APRS queries should DireWolf respond to? Well, it should be configurable whether it responds to queries at all, in case some other application is using DireWolf as a dumb TNC (KISS or AGWPE style) and wants to handle the queries itself.
+
+Assuming query responding is enabled, the following broadcast queries should be supported (if the corresponding data is configured in DireWolf):
+
+?APRS (I am an APRS station)
+?IGATE (I am operating as a I-gate)
+?WX (I am providing local weather data in my beacon)
+
+*/
+
+
 static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quiet) 
 {
 	char *q2;
@@ -2465,6 +2779,28 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
  *		"PING?" contains "?" only to pad it out to exactly 5 characters.
  *
  *------------------------------------------------------------------*/
+
+/*
+https://groups.io/g/direwolf/topic/95961245#7357
+
+The following directed queries (sent as bodies of APRS text messages) would also be useful (if corresponding data configured):
+
+?APRSP (force my current beacon)
+?APRST and ?PING (trace my path to requestor)
+?APRSD (all stations directly heard [no digipeat hops] by local station)
+?APRSO (any Objects/Items originated by this station)
+?APRSH (how often or how many times the specified 3rd station was heard by the queried station)
+?APRSS (immediately send the Status message if configured) (can DireWolf do Status messages?)
+
+Lynn KJ4ERJ and I have implemented a non-standard query which might be useful:
+
+?VER (send the human-readable software version of the queried station)
+
+Hope this is useful. It's just my $.02.
+
+Andrew, KA2DDO
+author of YAAC
+*/
 
 static void aprs_directed_station_query (decode_aprs_t *A, char *addressee, char *query, int quiet)
 {
@@ -3743,9 +4079,14 @@ time_t get_timestamp (decode_aprs_t *A, char *p)
  *		It is composed of:
  *			a pair of letters in range A to R.
  *			a pair of digits in range of 0 to 9.
- *			a pair of letters in range of A to X.
+ *			an optional pair of letters in range of A to X.
  *
- * 		The APRS spec says that all letters must be transmitted in upper case.
+ *		The spec says:
+ *				"All letters must be transmitted in upper case.
+ *				Letters may be received in upper case or lower case."
+ *
+ *		Typically the second set of letters is written in lower case.
+ *		An earlier version incorrectly produced an error if lower case found.
  *
  *
  * Examples from APRS spec:	
@@ -3766,25 +4107,10 @@ int get_maidenhead (decode_aprs_t *A, char *p)
 
 	  /* We have 4 characters matching the rule. */
 
-	  if (islower(p[0]) || islower(p[1])) {
-	    if ( ! A->g_quiet) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");
-	    }	  
-	  }
-
 	  if (toupper(p[4]) >= 'A' && toupper(p[4]) <= 'X' &&
 	      toupper(p[5]) >= 'A' && toupper(p[5]) <= 'X') {
 
 	    /* We have 6 characters matching the rule. */
-
-	    if (islower(p[4]) || islower(p[5])) {
-	      if ( ! A->g_quiet) {
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf("Warning: Lower case letter in Maidenhead locator.  Specification requires upper case.\n");	
-	      }	  
-	    }
-	  
 	    return 6;
 	  }
 	
@@ -4113,11 +4439,8 @@ static void decode_tocall (decode_aprs_t *A, char *dest)
  * models before getting to the more generic APY.
  */
 
-#if defined(__WIN32__) || defined(__OpenBSD__) || defined(__FreeBSD__) || defined(__APPLE__)
 	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), tocall_cmp);
-#else
-	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), (__compar_fn_t)tocall_cmp);
-#endif
+
 	  }
 	  else {
 	    if ( ! A->g_quiet) {
@@ -4643,7 +4966,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  int a = A->g_comment[match[0].rm_so+2];
 	  int o = A->g_comment[match[0].rm_so+3];
 
-	  dw_printf("DAO start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
+	  //dw_printf("DAO start=%d, end=%d\n", (int)(match[0].rm_so), (int)(match[0].rm_eo));
 
 
 /*
@@ -5029,7 +5352,9 @@ int main (int argc, char *argv[])
 	    /* Try to process it. */
 
 	    text_color_set(DW_COLOR_REC);
-	    dw_printf("\n%s\n", stuff);	    
+	    dw_printf("\n");
+	    ax25_safe_print (stuff, -1, 0);
+	    dw_printf("\n");
 
 // Do we have monitor format, KISS, or AX.25 frame?
 
@@ -5138,7 +5463,7 @@ int main (int argc, char *argv[])
 	        ax25_safe_print ((char *)pinfo, info_len, 1);	// Display non-ASCII to hexadecimal.
 	        dw_printf ("\n");
 
-	        decode_aprs (&A, pp, 0, 0);			// Extract information into structure.
+	        decode_aprs (&A, pp, 0, NULL);			// Extract information into structure.
 
 	        decode_aprs_print (&A);			// Now print it in human readable format.
 
@@ -5159,7 +5484,7 @@ int main (int argc, char *argv[])
 	      if (pp != NULL) {
 	        decode_aprs_t A;
 
-	        decode_aprs (&A, pp, 0, 0);	// Extract information into structure.
+	        decode_aprs (&A, pp, 0, NULL);	// Extract information into structure.
 
 	        decode_aprs_print (&A);		// Now print it in human readable format.
 

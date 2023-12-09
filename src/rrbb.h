@@ -33,6 +33,7 @@ typedef struct rrbb_s {
 	int slice;		/* Which slicer. */
 
 	alevel_t alevel;	/* Received audio level at time of frame capture. */
+	float speed_error;	/* Received data speed error as percentage. */
 	unsigned int len;	/* Current number of samples in array. */
 
 	int is_scrambled;	/* Is data scrambled G3RUH / K9NG style? */
@@ -83,6 +84,9 @@ int rrbb_get_slice (rrbb_t b);
 
 void rrbb_set_audio_level (rrbb_t b, alevel_t alevel);
 alevel_t rrbb_get_audio_level (rrbb_t b);
+
+void rrbb_set_speed_error (rrbb_t b, float speed_error);
+float rrbb_get_speed_error (rrbb_t b);
 
 int rrbb_get_is_scrambled (rrbb_t b);
 int rrbb_get_descram_state (rrbb_t b);

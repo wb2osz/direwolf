@@ -28,7 +28,8 @@
 enum ptt_method_e { 
 	PTT_METHOD_NONE,	/* VOX or no transmit. */
 	PTT_METHOD_SERIAL,	/* Serial port RTS or DTR. */
-	PTT_METHOD_GPIO,	/* General purpose I/O, Linux only. */
+	PTT_METHOD_GPIO,	/* General purpose I/O using sysfs, deprecated after 2020, Linux only. */
+	PTT_METHOD_GPIOD,	/* General purpose I/O, using libgpiod, Linux only. */
 	PTT_METHOD_LPT,	    	/* Parallel printer port, Linux only. */
 	PTT_METHOD_HAMLIB, 	/* HAMLib, Linux only. */
 	PTT_METHOD_CM108 };	/* GPIO pin of CM108/CM119/etc.  Linux only. */
@@ -72,18 +73,25 @@ struct audio_s {
 
 	struct adev_param_s {
 
-	    /* Properites of the sound device. */
+	    /* Properties of the sound device. */
 
-	    int defined;		/* Was device defined? */
-					/* First one defaults to yes. */
+	    int defined;		/* Was device defined?   0=no.  >0 for yes.  */
+					/* First channel defaults to 2 for yes with default config. */
+					/* 1 means it was defined by user. */
+
+	    int copy_from;		/* >=0  means copy contents from another audio device. */
+					/* In this case we don't have device names, below. */
+					/* Num channels, samples/sec, and bit/sample are copied from */
+					/* original device and can't be changed. */
+					/* -1 for normal case. */
 
 	    char adevice_in[80];	/* Name of the audio input device (or file?). */
-					/* TODO: Can be "-" to read from stdin. */
+					/* Can be udp:nnn for UDP or "-" to read from stdin. */
 
 	    char adevice_out[80];	/* Name of the audio output device (or file?). */
 
 	    int num_channels;		/* Should be 1 for mono or 2 for stereo. */
-	    int samples_per_sec;	/* Audio sampling rate.  Typically 11025, 22050, or 44100. */
+	    int samples_per_sec;	/* Audio sampling rate.  Typically 11025, 22050, 44100, or 48000. */
 	    int bits_per_sample;	/* 8 (unsigned char) or 16 (signed short). */
 
 	} adev[MAX_ADEVS];
@@ -102,7 +110,7 @@ struct audio_s {
 					/* This is the probability, in per cent, of randomly corrupting it. */
 					/* Normally this is 0.  25 would mean corrupt it 25% of the time. */
 
-	int recv_error_rate;		/* Similar but the % probablity of dropping a received frame. */
+	int recv_error_rate;		/* Similar but the % probability of dropping a received frame. */
 
 	float recv_ber;			/* Receive Bit Error Rate (BER). */
 					/* Probability of inverting a bit coming out of the modem. */
@@ -150,6 +158,17 @@ struct audio_s {
 	/* Can be different for each radio channel. */
 
 	struct achan_param_s {
+
+	    // Currently, we have a fixed mapping from audio sources to channel.
+	    //
+	    //		ADEVICE		CHANNEL (mono)		(stereo)
+	    //		0		0			0, 1
+	    //		1		2			2, 3
+	    //		2		4			4, 5
+	    //
+	    // A future feauture might allow the user to specify a different audio source.
+	    // This would allow multiple modems (with associated channel) to share an audio source.
+	    // int audio_source;	// Default would be [0,1,2,3,4,5]
 
 	    // What else should be moved out of structure and enlarged when NETTNC is implemented.  ???
 	    char mycall[AX25_MAX_ADDR_LEN];      /* Call associated with this radio channel. */
@@ -295,6 +314,7 @@ struct audio_s {
 					/* the case for CubieBoard where it was longer. */
 					/* This is filled in by ptt_init so we don't have to */
 					/* recalculate it each time we access it. */
+					/* Also GPIO chip name for GPIOD method. Looks like 'gpiochip4' */
 
 					/* This could probably be collapsed into ptt_device instead of being separate. */
 
@@ -417,7 +437,8 @@ struct audio_s {
 
 #define DEFAULT_BITS_PER_SAMPLE	16
 
-#define DEFAULT_FIX_BITS RETRY_INVERT_SINGLE
+#define DEFAULT_FIX_BITS RETRY_NONE	// Interesting research project but even a single bit fix up
+					// will occasionally let corrupted packets through.
 
 /* 
  * Standard for AFSK on VHF FM. 
@@ -447,11 +468,11 @@ struct audio_s {
  */
 
 #define DEFAULT_DWAIT		0
-#define DEFAULT_SLOTTIME	10
+#define DEFAULT_SLOTTIME	10	// *10mS = 100mS
 #define DEFAULT_PERSIST		63
-#define DEFAULT_TXDELAY		30
-#define DEFAULT_TXTAIL		10	
-#define DEFAULT_FULLDUP		0
+#define DEFAULT_TXDELAY		30	// *10mS = 300mS
+#define DEFAULT_TXTAIL		10	// *10mS = 100mS	
+#define DEFAULT_FULLDUP		0	// false = half duplex
 
 /* 
  * Interlocks are used to 'bind' channels together to share DCD and PTT signaling.

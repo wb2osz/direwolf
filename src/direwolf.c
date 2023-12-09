@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -128,6 +128,7 @@
 #include "il2p.h"
 #include "dwsock.h"
 #include "dns_sd_dw.h"
+#include "dlq.h"		// for fec_type_t definition.
 
 
 //static int idx_decoded = 0;
@@ -138,7 +139,7 @@ static BOOL cleanup_win (int);
 static void cleanup_linux (int);
 #endif
 
-static void usage (char **argv);
+static void usage ();
 
 #if defined(__SSE__) && !defined(__APPLE__)
 
@@ -185,7 +186,7 @@ static int d_u_opt = 0;			/* "-d u" command line option to print UTF-8 also in h
 static int d_p_opt = 0;			/* "-d p" option for dumping packets over radio. */				
 
 static int q_h_opt = 0;			/* "-q h" Quiet, suppress the "heard" line with audio level. */
-static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of decoded of APRS packets. */
+static int q_d_opt = 0;			/* "-q d" Quiet, suppress the printing of description of APRS packets. */
 
 static int A_opt_ais_to_obj = 0;	/* "-A" Convert received AIS to APRS "Object Report." */
 
@@ -283,6 +284,8 @@ int main (int argc, char *argv[])
 				/* 1 = normal, 0 = no text colors. */
 				/* 2, 3, ... alternate escape sequences for different terminals. */
 
+// FIXME: consider case of no space between t and number.
+
 	for (j=1; j<argc-1; j++) {
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
@@ -298,25 +301,28 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
+	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 7\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
-#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD
+#if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD || USE_GPIOD
 	dw_printf ("Includes optional support for: ");
-#if defined(ENABLE_GPSD)
+ #if defined(ENABLE_GPSD)
 	dw_printf (" gpsd");
-#endif
-#if defined(USE_HAMLIB)
+ #endif
+ #if defined(USE_HAMLIB)
 	dw_printf (" hamlib");
-#endif
-#if defined(USE_CM108)
+ #endif
+ #if defined(USE_CM108)
 	dw_printf (" cm108-ptt");
-#endif
-#if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
+ #endif
+ #if defined(USE_GPIOD)
+	dw_printf (" libgpiod");
+ #endif
+ #if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
 	dw_printf (" dns-sd");
-#endif
+ #endif
 	dw_printf ("\n");
 #endif
 
@@ -374,16 +380,19 @@ int main (int argc, char *argv[])
 
 // I've seen many references to people running this as root.
 // There is no reason to do that.
-// There is for some privileges to access the audio system, GPIO (if needed for PTT),
-// etc. but ordinary users have those abilities.
+// Ordinary users can access audio, gpio, etc. if they are in the correct groups.
 // Giving an applications permission to do things it does not need to do
 // is a huge security risk.
 
 #ifndef __WIN32__
 	if (getuid() == 0 || geteuid() == 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
-	    dw_printf ("Running this as root is an unnecessary security risk.\n");
+	    for (int n=0; n<15; n++) {
+	      dw_printf ("\n");
+	      dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
+	      dw_printf ("Running this as root is an unnecessary security risk.\n");
+	      //SLEEP_SEC(1);
+	    }
 	}
 #endif
 
@@ -593,7 +602,7 @@ int main (int argc, char *argv[])
           case '?':
 
             /* For '?' unknown option message was already printed. */
-            usage (argv);
+            usage ();
             break;
 
 	  case 'd':				/* Set debug option. */
@@ -737,7 +746,7 @@ int main (int argc, char *argv[])
             /* Should not be here. */
 	    text_color_set(DW_COLOR_DEBUG);
             dw_printf("?? getopt returned character code 0%o ??\n", c);
-            usage (argv);
+            usage ();
           }
 	}  /* end while(1) for options */
 
@@ -982,6 +991,7 @@ int main (int argc, char *argv[])
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Pointless to continue without audio device.\n");
 	  SLEEP_SEC(5);
+	  usage ();
 	  exit (1);
 	}
 
@@ -1053,7 +1063,7 @@ int main (int argc, char *argv[])
 						audio_config.achan[x_opt_chan].mark_freq,
 						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(x_opt_chan, 0);
+					tone_gen_put_bit(x_opt_chan, 1);
 				}
 				break;
 			case 's':  // "Space" tone: -x s
@@ -1061,7 +1071,7 @@ int main (int argc, char *argv[])
 						audio_config.achan[x_opt_chan].space_freq,
 						x_opt_chan);
 				while (n-- > 0) {
-					tone_gen_put_bit(x_opt_chan, 1);
+					tone_gen_put_bit(x_opt_chan, 0);
 				}
 				break;
 			case 'p':  // Silence - set PTT only: -x p
@@ -1173,7 +1183,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -1182,7 +1192,8 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	char heard[AX25_MAX_ADDR_LEN];
 	//int j;
 	int h;
-	char display_retries[32];
+	char display_retries[32];				// Extra stuff before slice indicators.
+								// Can indicate FX.25/IL2P or fix_bits.
 
 	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);		// TOTAL for virtual channels
 	assert (subchan >= -2 && subchan < MAX_SUBCHANS);
@@ -1191,12 +1202,21 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
      
 	strlcpy (display_retries, "", sizeof(display_retries));
 
-	if (is_fx25) {
-	  ;
-	}
-	else if (audio_config.achan[chan].fix_bits != RETRY_NONE || audio_config.achan[chan].passall) {
-	  assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
-	  snprintf (display_retries, sizeof(display_retries), " [%s] ", retry_text[(int)retries]);
+	switch (fec_type) {
+	  case fec_type_fx25:
+	    strlcpy (display_retries, " FX.25 ", sizeof(display_retries));
+	    break;
+	  case fec_type_il2p:
+	    strlcpy (display_retries, " IL2P ", sizeof(display_retries));
+	    break;
+	  case fec_type_none:
+	  default:
+	    // Possible fix_bits indication.
+	    if (audio_config.achan[chan].fix_bits != RETRY_NONE || audio_config.achan[chan].passall) {
+	      assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
+	      snprintf (display_retries, sizeof(display_retries), " [%s] ", retry_text[(int)retries]);
+	    }
+	    break;
 	}
 
 	ax25_format_addrs (pp, stemp);
@@ -1426,7 +1446,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // we still want to decode it for logging and other processing.
 	  // Just be quiet about errors if "-qd" is set.
 
-	  decode_aprs (&A, pp, q_d_opt, 0);
+	  decode_aprs (&A, pp, q_d_opt, NULL);
 
 	  if ( ! q_d_opt ) {
 
@@ -1554,10 +1574,14 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	}
 	else { 
 	
-/* Send to Internet server if option is enabled. */
-/* Consider only those with correct CRC. */
-
-	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
+/*
+ * Send to the IGate processing.
+ * Use only those with correct CRC; We don't want to spread corrupted data!
+ * Our earlier "fix bits" hack could allow corrupted information to get thru.
+ * However, if it used FEC mode (FX.25. IL2P), we have much higher level of
+ * confidence that it is correct.
+ */
+	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) ) {
 
 	    igate_send_rec_packet (chan, pp);
 	  }
@@ -1572,24 +1596,23 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 
 /*
- * APRS digipeater.
+ * Send to APRS digipeater.
  * Use only those with correct CRC; We don't want to spread corrupted data!
+ * Our earlier "fix bits" hack could allow corrupted information to get thru.
+ * However, if it used FEC mode (FX.25. IL2P), we have much higher level of
+ * confidence that it is correct.
  */
-
-// TODO: Should also use anything received with FX.25 because it is known to be good.
-// Our earlier "fix bits" hack could allow corrupted information to get thru.
-
-	  if (ax25_is_aprs(pp) && retries == RETRY_NONE) {
+	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) ) {
 
 	    digipeater (chan, pp);
 	  }
 
 /*
  * Connected mode digipeater.
- * Use only those with correct CRC.
+ * Use only those with correct CRC (or using FEC.)
  */
 
-	  if (retries == RETRY_NONE) {
+	  if (retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) {
 
 	    cdigipeater (chan, pp);
 	  }
@@ -1688,7 +1711,7 @@ static void usage (char **argv)
 	dw_printf ("       d             d = APRStt (DTMF to APRS object translation).\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
-	dw_printf ("       d             d = Decoding of APRS packets.\n");
+	dw_printf ("       d             d = Description of APRS packets.\n");
 	dw_printf ("       x             x = Silence FX.25 information.\n");
 	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.\n");
 	dw_printf ("                     Use 9 to test compatibility with your terminal.\n");
@@ -1710,20 +1733,20 @@ static void usage (char **argv)
 	dw_printf ("\n");
 
 	dw_printf ("After any options, there can be a single command line argument for the source of\n");
-	dw_printf ("received audio.  This can overrides the audio input specified in the configuration file.\n");
+	dw_printf ("received audio.  This can override the audio input specified in the configuration file.\n");
 	dw_printf ("\n");
   
 #if __WIN32__
-	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
+	dw_printf ("Documentation can be found in the 'doc' folder\n");
 #else
 	// TODO: Could vary by platform and build options.
-	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
+	dw_printf ("Documentation can be found in /usr/local/share/doc/direwolf\n");
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("additional topics: https://github.com/wb2osz/direwolf-doc\n");
 	text_color_set(DW_COLOR_INFO);
 	exit (EXIT_FAILURE);
 }
-
 
 
 /* end direwolf.c */

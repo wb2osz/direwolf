@@ -214,7 +214,7 @@ struct misc_config_s {
 	  char symbol;		/* Symbol code. */
 
 	  float power;		/* For PHG. */
-	  float height;
+	  float height;		/* HAAT in feet */
 	  float gain;		/* Original protocol spec was unclear. */
 				/* Addendum 1.1 clarifies it is dBi not dBd. */
 

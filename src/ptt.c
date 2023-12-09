@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -162,6 +162,10 @@
 #include <hamlib/rig.h>
 #endif
 
+#ifdef USE_GPIOD
+#include <gpiod.h>
+#endif 
+
 /* So we can have more common code for fd. */
 typedef int HANDLE;
 #define INVALID_HANDLE_VALUE (-1)
@@ -176,6 +180,7 @@ typedef int HANDLE;
 #include "audio.h"
 #include "ptt.h"
 #include "dlq.h"
+#include "demod.h"	// to mute recv audio during xmit if half duplex.
 
 
 #if __WIN32__
@@ -357,6 +362,9 @@ static void get_access_to_gpio (const char *path)
  * We don't have permission.
  * Try a hack which requires that the user be set up to use sudo without a password.
  */
+// FIXME: I think this was a horrible work around for some early release that
+// did not give gpio permission to the pi user.  This should go.
+// Provide recovery instructions when there is a permission failure.
 
 	if (ptt_debug_level >= 2) {
 	  text_color_set(DW_COLOR_ERROR);	// debug message but different color so it stands out.
@@ -464,6 +472,20 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error writing \"%s\" to %s, errno=%d\n", stemp, gpio_export_path, e);
 	    dw_printf ("%s\n", strerror(e));
+
+	    if (e == 22) {
+	      // It appears that error 22 occurs when sysfs gpio is not available.
+	      // (See https://github.com/wb2osz/direwolf/issues/503)
+	      //
+	      // The solution might be to use the new gpiod approach.
+
+	      dw_printf ("It looks like gpio with sysfs is not supported on this operating system.\n");
+	      dw_printf ("Rather than the following form, in the configuration file,\n");
+	      dw_printf ("    PTT GPIO  %s\n", stemp);
+	      dw_printf ("try using gpiod form instead.  e.g.\n");
+	      dw_printf ("    PTT GPIOD  gpiochip0  %s\n", stemp);
+	      dw_printf ("You can get a list of gpio chip names and corresponding I/O lines with \"gpioinfo\" command.\n");
+	    }
 	    exit (1);
 	  }
 	}
@@ -494,6 +516,13 @@ void export_gpio(int ch, int ot, int invert, int direction)
  *		matching the pattern "gpio61_*".
  *
  *	We are finally implementing the third choice.
+ */
+
+/*
+ * Then we have the Odroid board with GPIO numbers starting around 480.
+ * Can we simply use those numbers?
+ * Apparently, the export names look like GPIOX.17
+ * https://wiki.odroid.com/odroid-c4/hardware/expansion_connectors#gpio_map_for_wiringpi_library
  */
 
 	struct dirent **file_list;
@@ -623,6 +652,31 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	get_access_to_gpio (gpio_value_path);
 }
 
+#if defined(USE_GPIOD)
+int gpiod_probe(const char *chip_name, int line_number)
+{
+	struct gpiod_chip *chip;
+	chip = gpiod_chip_open_by_name(chip_name);
+	if (chip == NULL) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Can't open GPIOD chip %s.\n", chip_name);
+		return -1;
+	}
+
+	struct gpiod_line *line;
+	line = gpiod_chip_get_line(chip, line_number);
+	if (line == NULL) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Can't get GPIOD line %d.\n", line_number);
+		return -1;
+	}
+	if (ptt_debug_level >= 2) {
+		text_color_set(DW_COLOR_DEBUG);
+		dw_printf("GPIOD probe OK. Chip: %s line: %d\n", chip_name, line_number);
+	}
+	return 0;
+}
+#endif   /* USE_GPIOD */
 #endif   /* not __WIN32__ */
 
 
@@ -639,7 +693,8 @@ void export_gpio(int ch, int ot, int invert, int direction)
  *			ptt_method	Method for PTT signal. 
  *					PTT_METHOD_NONE - not configured.  Could be using VOX. 
  *					PTT_METHOD_SERIAL - serial (com) port. 
- *					PTT_METHOD_GPIO - general purpose I/O. 
+ *					PTT_METHOD_GPIO - general purpose I/O (sysfs). 
+ *					PTT_METHOD_GPIOD - general purpose I/O (libgpiod). 
  *					PTT_METHOD_LPT - Parallel printer port. 
  *                  			PTT_METHOD_HAMLIB - HAMLib rig control.
  *					PTT_METHOD_CM108 - GPIO pins of CM108 etc. USB Audio.
@@ -718,12 +773,13 @@ void ptt_init (struct audio_s *audio_config_p)
 	    if (ptt_debug_level >= 2) {
 
 	      text_color_set(DW_COLOR_DEBUG);
-              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, gpio=%d, lpt_bit=%d, invert=%d\n",
+              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, name=%s, gpio=%d, lpt_bit=%d, invert=%d\n",
 		ch,
 		otnames[ot],
 		audio_config_p->achan[ch].octrl[ot].ptt_method, 
 		audio_config_p->achan[ch].octrl[ot].ptt_device,
 		audio_config_p->achan[ch].octrl[ot].ptt_line,
+		audio_config_p->achan[ch].octrl[ot].out_gpio_name,
 		audio_config_p->achan[ch].octrl[ot].out_gpio_num,
 		audio_config_p->achan[ch].octrl[ot].ptt_lpt_bit,
 		audio_config_p->achan[ch].octrl[ot].ptt_invert);
@@ -869,7 +925,28 @@ void ptt_init (struct audio_s *audio_config_p)
 	if (using_gpio) {
 	  get_access_to_gpio ("/sys/class/gpio/export");
 	}
-
+#if defined(USE_GPIOD)
+    // GPIOD
+	for (ch = 0; ch < MAX_CHANS; ch++) {
+	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
+	    for (int ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+	        const char *chip_name = audio_config_p->achan[ch].octrl[ot].out_gpio_name;
+	        int line_number = audio_config_p->achan[ch].octrl[ot].out_gpio_num;
+	        int rc = gpiod_probe(chip_name, line_number);
+	        if (rc < 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Disable PTT for channel %d\n", ch);
+	          audio_config_p->achan[ch].octrl[ot].ptt_method = PTT_METHOD_NONE;
+	        } else {
+	          // Set initial state off ptt_set will invert output signal if appropriate.
+	          ptt_set (ot, ch, 0);
+	        }
+	      }
+	    }
+	  }
+	}
+#endif /* USE_GPIOD */
 /*
  * We should now be able to create the device nodes for 
  * the pins we want to use.
@@ -980,6 +1057,8 @@ void ptt_init (struct audio_s *audio_config_p)
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_HAMLIB) {
 	        if (ot == OCTYPE_PTT) {
+		  int err = -1;
+		  int tries = 0;
 
 	          /* For "AUTO" model, try to guess what is out there. */
 
@@ -1044,13 +1123,24 @@ void ptt_init (struct audio_s *audio_config_p)
 	            rig[ch][ot]->state.rigport.parm.serial.parity = RIG_PARITY_NONE;
 	            rig[ch][ot]->state.rigport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
 	          }
-	          int err = rig_open(rig[ch][ot]);
+		  tries = 0;
+		  do {
+		    // Try up to 5 times, Hamlib can take a moment to finish init
+	            err = rig_open(rig[ch][ot]);
+		    if (++tries > 5) {
+			break;
+		    } else if (err != RIG_OK) {
+			text_color_set(DW_COLOR_INFO);
+			dw_printf ("Retrying Hamlib Rig open...\n");
+			sleep (5);
+		    }
+		  } while (err != RIG_OK);
 	          if (err != RIG_OK) {
 	            text_color_set(DW_COLOR_ERROR);
 	            dw_printf ("Hamlib Rig open error %d: %s\n", err, rigerror(err));
 	            rig_cleanup (rig[ch][ot]);
 	            rig[ch][ot] = NULL;
-	            continue;
+	            exit (1);
 	          }
 
        		  /* Successful.  Later code should check for rig[ch][ot] not NULL. */
@@ -1131,6 +1221,8 @@ void ptt_init (struct audio_s *audio_config_p)
  *
  *--------------------------------------------------------------------*/
 
+// JWL - save status and new get_ptt function.
+
 
 void ptt_set (int ot, int chan, int ptt_signal)
 {
@@ -1153,6 +1245,19 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  dw_printf ("Internal error, ptt_set ( %s, %d, %d ), did not expect invalid channel.\n", otnames[ot], chan, ptt);
 	  return;
 	}
+
+// New in 1.7.
+// A few people have a really bad audio cross talk situation where they receive their own transmissions.
+// It usually doesn't cause a problem but it is confusing to look at.
+// "half duplex" setting applied only to the transmit logic.  i.e. wait for clear channel before sending.
+// Receiving was still active.
+// I think the simplest solution is to mute/unmute the audio input at this point if not full duplex.
+
+#ifndef TEST
+	if ( ot == OCTYPE_PTT && ! save_audio_config_p->achan[chan].fulldup) {
+	  demod_mute_input (chan, ptt_signal);
+	}
+#endif
 
 /*
  * The data link state machine has an interest in activity on the radio channel.
@@ -1259,6 +1364,18 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  close (fd);
 
 	}
+
+#if defined(USE_GPIOD)
+	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+		const char *chip = save_audio_config_p->achan[chan].octrl[ot].out_gpio_name;
+		int line = save_audio_config_p->achan[chan].octrl[ot].out_gpio_num;
+		int rc = gpiod_ctxless_set_value(chip, line, ptt, false, "direwolf", NULL, NULL);
+		if (ptt_debug_level >= 1) {
+			text_color_set(DW_COLOR_DEBUG);
+			dw_printf("PTT_METHOD_GPIOD chip: %s line: %d ptt: %d  rc: %d\n", chip, line, ptt, rc);
+		}
+	}
+#endif /* USE_GPIOD */
 #endif
 	
 /*

@@ -28,3 +28,9 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", GROUP="audio", MODE="0660"
 #
 # Read the User Guide and run the "cm108" application for more information.
 #
+
+#
+# Same thing for the "All In One Cable."
+#
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7388", GROUP="audio", MODE="0660"

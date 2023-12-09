@@ -551,6 +551,15 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 	int result_len = 0;
 
 	if (compressed) {
+
+// Thought:
+// https://groups.io/g/direwolf/topic/92718535#6886
+// When speed is zero, we could put the altitude in the compressed
+// position rather than having /A=999999.
+// However, the resolution would be decreased and that could be important
+// when hiking in hilly terrain.  It would also be confusing to
+// flip back and forth between two different representations.
+
 	  aprs_compressed_pos_t *p = (aprs_compressed_pos_t *)presult;
 
 	  p->dti = messaging ? '=' : '!';

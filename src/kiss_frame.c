@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2017, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -40,7 +40,8 @@
  *
  *		The first byte of the frame contains:
  *	
- *			* port number (radio channel) in upper nybble.
+ *			* radio channel in upper nybble.
+ *				(KISS doc uses "port" but I don't like that because it has too many meanings.)
  *			* command in lower nybble.
  *
  *	
@@ -611,7 +612,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	    /* Verify that the radio channel number is valid. */
 	    /* Any sort of medium should be OK here. */
 
-	    if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) {
+	    if ((chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) 
+		&& save_audio_config_p->chan_medium[chan]  != MEDIUM_IGATE) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", chan);
 	      dw_printf ("\n");
@@ -953,7 +955,7 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 	  p = pmsg;
 	  if (*p == FEND) p++;
 
-	  dw_printf ("%s %s %s KISS client application, port %d, total length = %d\n",
+	  dw_printf ("%s %s %s KISS client application, channel %d, total length = %d\n",
 			prefix[(int)fromto], function[p[0] & 0xf], direction[(int)fromto], 
 			(p[0] >> 4) & 0xf, msg_len);
 	}
