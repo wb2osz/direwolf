@@ -207,17 +207,25 @@ Results will vary depending on your hardware platform and operating system versi
 	sudo yum list direwolf
 	sudo yum install direwolf
 
+### Macintosh OS X
 
-### Macintosh OS X ###
+Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc). It is more complicated than Linux.
 
-Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).   It is more complicated than Linux.
+If you have problems, post them to the [Dire Wolf packet TNC](https://groups.io/g/direwolf) discussion group.
 
-If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.io/g/direwolf) discussion group.
+There are also two package definitions maintained by volunteers. Note that these versions can lag behind development, as a new package definition must be released for each version.
 
-You can also install a pre-built version from Mac Ports.  Keeping this up to date depends on volunteers who perform the packaging. This version could lag behind development.
+#### MacPorts
 
-	sudo port install direwolf
+    sudo port install direwolf
 
+#### Homebrew
+
+    brew install direwolf
+
+You can also pull from the latest master branch. If the build configuration has changed, this may not work until the [formula](https://github.com/Homebrew/homebrew-core/blob/master/Formula/d/direwolf.rb) is updated
+
+    brew install --HEAD direwolf
 
 ## Join the conversation  ##
  
