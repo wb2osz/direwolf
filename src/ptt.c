@@ -1189,7 +1189,27 @@ void ptt_init (struct audio_s *audio_config_p)
 	  if (audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    if(audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_NONE) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("Note: PTT not configured for channel %d. (Ignore this if using VOX.)\n", ch);
+	      dw_printf ("\n");
+	      dw_printf ("Note: PTT not configured for channel %d. (OK if using VOX.)\n", ch);
+	      dw_printf ("When using VOX, ensure that it adds very little delay (e.g. 10-20) milliseconds\n");
+	      dw_printf ("between the time that transmit audio ends and PTT is deactivated.\n");
+	      dw_printf ("For example, if using a SignaLink USB, turn the DLY control all the\n");
+	      dw_printf ("way counter clockwise.\n");
+	      dw_printf ("\n");
+	      dw_printf ("Using VOX built in to the radio is a VERY BAD idea.  This is intended\n");
+	      dw_printf ("for voice operation, with gaps in the sound, and typically has a delay of about a\n");
+	      dw_printf ("half second between the time the audio stops and the transmitter is turned off.\n");
+	      dw_printf ("When using APRS your transmiter will be sending a quiet carrier for\n");
+	      dw_printf ("about a half second after your packet ends.  This may interfere with the\n");
+	      dw_printf ("the next station to transmit.  This is being inconsiderate.\n");
+	      dw_printf ("\n");
+	      dw_printf ("If you are trying to use VOX with connected mode packet, expect\n");
+	      dw_printf ("frustration and disappointment.  Connected mode involves rapid responses\n");
+	      dw_printf ("which you will probably miss because your transmitter is still on when\n");
+	      dw_printf ("the response is being transmitted.\n");
+	      dw_printf ("\n");
+	      dw_printf ("Read the User Guide 'Transmit Timing' section for more details.\n");
+	      dw_printf ("\n");
 	    }
 	  }
 	}
