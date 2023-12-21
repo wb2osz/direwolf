@@ -2204,6 +2204,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * DWAIT n		- Extra delay for receiver squelch. n = 10 mS units.
+ *
+ * Why did I do this?  Just add more to TXDELAY.
+ * Now undocumented in User Guide.  Might disappear someday.
  */
 
 	  else if (strcasecmp(t, "DWAIT") == 0) {
@@ -2239,14 +2242,20 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= 0 && n <= 255) {
+            if (n >= 5 && n < 50) {
+	      // 0 = User has no clue.  This would be no delay.
+	      // 10 = Default.
+	      // 50 = Half second.  User might think it is mSec and use 100.
 	      p_audio_config->achan[channel].slottime = n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].slottime = DEFAULT_SLOTTIME;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid delay time for persist algorithm. Using default %d.\n", 
+              dw_printf ("Line %d: Invalid delay time for persist algorithm. Using default %d.\n",
 			line, p_audio_config->achan[channel].slottime);
+              dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+              dw_printf ("section, to understand what this means.\n");
+              dw_printf ("Why don't you just use the default?\n");
    	    }
 	  }
 
@@ -2263,14 +2272,17 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= 0 && n <= 255) {
+            if (n >= 5 && n <= 250) {
 	      p_audio_config->achan[channel].persist = n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].persist = DEFAULT_PERSIST;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid probability for persist algorithm. Using default %d.\n", 
+              dw_printf ("Line %d: Invalid probability for persist algorithm. Using default %d.\n",
 			line, p_audio_config->achan[channel].persist);
+              dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+              dw_printf ("section, to understand what this means.\n");
+              dw_printf ("Why don't you just use the default?\n");
    	    }
 	  }
 
@@ -2289,17 +2301,21 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
 	      text_color_set(DW_COLOR_ERROR);
-	      if (n == 0) {
-                dw_printf ("Line %d: Setting TXDELAY to 0 is a REALLY BAD idea if you want other stations to hear you.\n", 
+	      if (n < 10) {
+                dw_printf ("Line %d: Setting TXDELAY this small is a REALLY BAD idea if you want other stations to hear you.\n", 
 			line);
-                dw_printf ("Line %d: See User Guide, \"Radio Channel - Transmit Timing\" for an explanation.\n", 
-			line);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default rather than reducing reliability?\n");
 	      }
-	      if (n >= 100) {
+	      else if (n >= 100) {
                 dw_printf ("Line %d: Keeping with tradition, going back to the 1980s, TXDELAY is in 10 millisecond units.\n", 
 			line);
                 dw_printf ("Line %d: The value %d would be %.3f seconds which seems rather excessive.  Are you sure you want that?\n", 
 			line, n, (double)n * 10. / 1000.);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default?\n");
 	      }
 	      p_audio_config->achan[channel].txdelay = n;
 	    }
@@ -2325,24 +2341,28 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
-	      if (n == 0) {
-                dw_printf ("Line %d: Setting TXTAIL to 0 is a REALLY BAD idea if you want other stations to hear you.\n", 
+	      if (n < 5) {
+                dw_printf ("Line %d: Setting TXTAIL that small is a REALLY BAD idea if you want other stations to hear you.\n", 
 			line);
-                dw_printf ("Line %d: See User Guide, \"Radio Channel - Transmit Timing\" for an explanation.\n", 
-			line);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default rather than reducing reliability?\n");
 	      }
-	      if (n >= 50) {
+	      else if (n >= 50) {
                 dw_printf ("Line %d: Keeping with tradition, going back to the 1980s, TXTAIL is in 10 millisecond units.\n", 
 			line);
                 dw_printf ("Line %d: The value %d would be %.3f seconds which seems rather excessive.  Are you sure you want that?\n", 
 			line, n, (double)n * 10. / 1000.);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default?\n");
 	      }
 	      p_audio_config->achan[channel].txtail = n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].txtail = DEFAULT_TXTAIL;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid time for transmit timing. Using %d.\n", 
+              dw_printf ("Line %d: Invalid time for transmit timing. Using %d.\n",
 			line, p_audio_config->achan[channel].txtail);
    	    }
 	  }
@@ -2891,7 +2911,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: FILTER IG ... on line %d.\n", line);
 	      dw_printf ("Warning! Don't mess with IS>RF filtering unless you are an expert and have an unusual situation.\n");
 	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
-	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  \"Successful-APRS-Gateway-Operation.pdf\" .\n");
 	      dw_printf ("Warning! If you insist, be sure to add \" | i/180 \" so you don't break messaging.\n");
 	    }
 	    else {
@@ -2931,7 +2951,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Warning! Don't mess with RF>IS filtering unless you are an expert and have an unusual situation.\n");
 	      dw_printf ("Warning! Expected behavior is for everything to go from RF to IS.\n");
 	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
-	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  \"Successful-APRS-Gateway-Operation.pdf\" .\n");
 	    }
 	    else {
 	      to_chan = isdigit(*t) ? atoi(t) : -999;
@@ -4567,6 +4587,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (t != NULL && strlen(t) > 0) {
 	      p_igate_config->t2_filter = strdup (t);
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Warning - IGFILTER is a rarely needed expert level feature.\n", line);
+	      dw_printf ("If you don't have a special situation and a good understanding of\n");
+	      dw_printf ("how this works, you probably should not be messing with it.\n");
+	      dw_printf ("The default behavior is appropriate for most situations.\n");
+	      dw_printf ("Please read \"Successful-APRS-IGate-Operation.pdf\".\n");
 	    }
 	  }
 
