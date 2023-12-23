@@ -1,0 +1,1481 @@
+#
+# This is a machine-readable index of APRS device and software
+# identification strings.  For easy manual editing and validation, the
+# master file is in YAML format.  A conversion tool and pre-converted
+# versions in XML and JSON are also provided for environments where those
+# are more convenient to parse.
+#
+# This list is maintained by Hessu, OH7LZB, for the aprs.fi service.
+# It is licensed under the CC BY-SA 2.0 license, so you're free to use
+# it in any of your applications. For free. Just mention the source
+# somewhere in the small print.
+# http://creativecommons.org/licenses/by-sa/2.0/
+#
+
+---
+
+#
+# English shown names and descriptions for device classes
+#
+classes:
+ - class: wx
+   shown: Weather station
+   description: Dedicated weather station
+   
+ - class: tracker
+   shown: Tracker
+   description: Tracker device
+ 
+ - class: rig
+   shown: Rig
+   description: Mobile or desktop radio
+ 
+ - class: ht
+   shown: HT
+   description: Hand-held radio
+
+ - class: app
+   shown: Mobile app
+   description: Mobile phone or tablet app
+ 
+ - class: software
+   shown: Software
+   description: Desktop software
+
+ - class: digi
+   shown: Digipeater
+   description: Digipeater software
+
+ - class: igate
+   shown: iGate
+   description: iGate software
+ 
+ - class: dstar
+   shown: D-Star
+   description: D-Star radio
+ 
+ - class: satellite
+   shown: Satellite
+   description: Satellite-based station
+
+ - class: service
+   shown: Service
+   description: Software running as a web service
+
+#
+# mic-e device identifier index for new-style 2-character device
+# suffixes. The first prefix byte indicates messaging capability.
+#
+mice:
+ - suffix: "_ "
+   vendor: Yaesu
+   model: VX-8
+   class: ht
+   
+ - suffix: "_\""
+   vendor: Yaesu
+   model: FTM-350
+   class: rig
+   
+ - suffix: "_#"
+   vendor: Yaesu
+   model: VX-8G
+   class: ht
+   
+ - suffix: "_$"
+   vendor: Yaesu
+   model: FT1D
+   class: ht
+
+ - suffix: "_("
+   vendor: Yaesu
+   model: FT2D
+   class: ht
+
+ - suffix: "_0"
+   vendor: Yaesu
+   model: FT3D
+   class: ht
+   
+ - suffix: "_3"
+   vendor: Yaesu
+   model: FT5D
+   class: ht
+
+ - suffix: "_1"
+   vendor: Yaesu
+   model: FTM-300D
+   class: rig
+
+ - suffix: "_)"
+   vendor: Yaesu
+   model: FTM-100D
+   class: rig 
+   
+ - suffix: "_%"
+   vendor: Yaesu
+   model: FTM-400DR
+   class: rig
+
+ - suffix: "(5"
+   vendor: Anytone
+   model: D578UV
+   class: ht
+
+ - suffix: "(8"
+   vendor: Anytone
+   model: D878UV
+   class: ht
+
+ - suffix: "|3"
+   vendor: Byonics
+   model: TinyTrak3
+   class: tracker
+ 
+ - suffix: "|4"
+   vendor: Byonics
+   model: TinyTrak4
+   class: tracker
+ 
+ - suffix: "^v"
+   vendor: HinzTec
+   model: anyfrog
+ 
+ - suffix: "*v"
+   vendor: KissOZ
+   model: Tracker
+   class: tracker
+
+#
+# mic-e legacy devices, with an unique comment suffix and prefix
+#
+
+micelegacy:
+ - prefix: ">"
+   vendor: Kenwood
+   model: TH-D7A
+   class: ht
+   features:
+     - messaging
+
+ - prefix: ">"
+   suffix: "="
+   vendor: Kenwood
+   model: TH-D72
+   class: ht
+   features:
+     - messaging
+
+ - prefix: ">"
+   suffix: "^"
+   vendor: Kenwood
+   model: TH-D74
+   class: ht
+   features:
+     - messaging
+
+ - prefix: ">"
+   suffix: "&"
+   vendor: Kenwood
+   model: TH-D75
+   class: ht
+   features:
+     - messaging
+
+ - prefix: "]"
+   vendor: Kenwood
+   model: TM-D700
+   class: rig
+   features:
+     - messaging
+
+ - prefix: "]"
+   suffix: "="
+   vendor: Kenwood
+   model: TM-D710
+   class: rig
+   features:
+     - messaging
+
+#
+# TOCALL index
+#
+tocalls:
+ - tocall: AP1WWX
+   vendor: TAPR
+   model: T-238+
+   class: wx
+
+ - tocall: AP4R??
+   vendor: Open Source
+   model: APRS4R
+   class: software
+
+ - tocall: APAEP1
+   vendor: Paraguay Space Agency (AEP)
+   model: "EIRUAPRSDIGIS&FV1"
+   class: satellite
+
+ - tocall: APAF??
+   model: AFilter
+
+ - tocall: APAG??
+   model: AGate
+
+ - tocall: APAGW
+   vendor: SV2AGW
+   model: AGWtracker
+   class: software
+   os: Windows
+
+ - tocall: APAGW?
+   vendor: SV2AGW
+   model: AGWtracker
+   class: software
+   os: Windows
+
+ - tocall: APAH??
+   model: AHub
+
+ - tocall: APAM??
+   vendor: Altus Metrum
+   model: AltOS
+   class: tracker
+
+ - tocall: APAND?
+   vendor: Open Source
+   model: APRSdroid
+   os: Android
+   class: app
+
+ - tocall: APAT51
+   vendor: Anytone
+   model: AT-D578
+   class: rig
+
+ - tocall: APAT81
+   vendor: Anytone
+   model: AT-D878
+   class: ht
+
+ - tocall: APAT??
+   vendor: Anytone
+
+ - tocall: APATAR
+   vendor: TA7W/OH2UDS Baris Dinc and TA6AEU
+   model: ATA-R APRS Digipeater
+   class: digi
+
+ - tocall: APAVT5
+   vendor: SainSonic
+   model: AP510
+   class: tracker
+
+ - tocall: APAW??
+   vendor: SV2AGW
+   model: AGWPE
+   class: software
+   os: Windows
+
+ - tocall: APAX??
+   model: AFilterX
+
+ - tocall: APB2MF
+   vendor: Mike, DL2MF
+   model: MF2APRS Radiosonde tracking tool
+   class: software
+   os: Windows
+
+ - tocall: APBK??
+   vendor: PY5BK
+   model: Bravo Tracker
+   class: tracker
+
+ - tocall: APBL??
+   vendor: BigRedBee
+   model: BeeLine GPS
+   class: tracker
+
+ - tocall: APBM??
+   vendor: R3ABM
+   model: BrandMeister DMR
+
+ - tocall: APBPQ?
+   vendor: John Wiseman, G8BPQ
+   model: BPQ32
+   class: software
+   os: Windows
+
+ - tocall: APBSD?
+   vendor: hambsd.org
+   model: HamBSD
+
+ - tocall: APBT62
+   vendor: BTech
+   model: DMR 6x2
+
+ - tocall: APC???
+   vendor: Rob Wittner, KZ5RW
+   model: APRS/CE
+   class: app
+
+ - tocall: APCDS0
+   vendor: ZS6LMG
+   model: cell tracker
+   class: tracker
+
+ - tocall: APCLEY
+   vendor: ZS6EY
+   model: EYTraker
+   class: tracker
+
+ - tocall: APCLEZ
+   vendor: ZS6EY
+   model: Telit EZ10 GSM application
+   class: tracker
+
+ - tocall: APCLUB
+   model: Brazil APRS network
+
+ - tocall: APCLWX
+   vendor: ZS6EY
+   model: EYWeather
+   class: wx
+
+ - tocall: APCN??
+   vendor: DG5OAW
+   model: carNET
+
+ - tocall: APCSMS
+   vendor: USNA
+   model: Cosmos
+
+ - tocall: APCSS
+   vendor: AMSAT
+   model: CubeSatSim CubeSat Simulator
+
+ - tocall: APCTLK
+   vendor: Open Source
+   model: Codec2Talkie
+   class: app
+
+ - tocall: APCWP8
+   vendor: GM7HHB
+   model: WinphoneAPRS
+   class: app
+
+ - tocall: APDF??
+   model: Automatic DF units
+
+ - tocall: APDG??
+   vendor: Jonathan, G4KLX
+   model: ircDDB Gateway
+   class: dstar
+
+ - tocall: APDI??
+   vendor: Bela, HA5DI
+   model: DIXPRS
+   class: software
+
+ - tocall: APDNO?
+   vendor: DO3SWW
+   model: APRSduino
+   class: tracker
+   os: embedded
+
+ - tocall: APDPRS
+   vendor: unknown
+   model: D-Star APDPRS
+   class: dstar
+
+ - tocall: APDR??
+   vendor: Open Source
+   model: APRSdroid
+   os: Android
+   class: app
+
+ - tocall: APDS??
+   vendor: SP9UOB
+   model: dsDIGI
+   os: embedded
+
+ - tocall: APDST?
+   vendor: SP9UOB
+   model: dsTracker
+   os: embedded
+
+ - tocall: APDT??
+   vendor: unknown
+   model: APRStouch Tone (DTMF)
+
+ - tocall: APDU??
+   vendor: JA7UDE
+   model: U2APRS
+   class: app
+   os: Android
+
+ - tocall: APDV??
+   vendor: OE6PLD
+   model: SSTV with APRS
+   class: software
+
+ - tocall: APDW??
+   vendor: WB2OSZ
+   model: DireWolf
+
+ - tocall: APDnnn
+   vendor: Open Source
+   model: aprsd
+   class: software
+   os: Linux/Unix
+
+ - tocall: APE2A?
+   vendor: NoseyNick, VA3NNW
+   model: Email-2-APRS gateway
+   class: software
+   os: Linux/Unix
+
+ - tocall: APE???
+   model: Telemetry devices
+
+ - tocall: APECAN
+   vendor: KT5TK/DL7AD
+   model: Pecan Pico APRS Balloon Tracker
+   class: tracker
+
+ - tocall: APELK?
+   vendor: WB8ELK
+   model: Balloon tracker
+   class: tracker
+
+ - tocall: APERS?
+   vendor: Jason, KG7YKZ
+   model: Runner tracking
+   class: tracker
+
+ - tocall: APERXQ
+   vendor: PE1RXQ
+   model: PE1RXQ APRS Tracker
+   class: tracker
+
+ - tocall: APESP?
+   vendor: LY3PH
+   model: APRS-ESP
+   os: embedded
+ 
+ - tocall: APFG??
+   vendor: KP4DJT
+   model: Flood Gage
+   class: software
+
+ - tocall: APFI??
+   vendor: aprs.fi
+   class: app
+
+ - tocall: APFII?
+   model: iPhone/iPad app
+   vendor: aprs.fi
+   os: ios
+   class: app
+
+ - tocall: APGBLN
+   vendor: NW5W
+   model: GoBalloon
+   class: tracker
+
+ - tocall: APGO??
+   vendor: AA3NJ
+   model: APRS-Go
+   class: app
+
+ - tocall: APHAX?
+   vendor: PY2UEP
+   model: SM2APRS SondeMonitor
+   class: software
+   os: Windows
+
+ - tocall: APHBL?
+   vendor: KF7EEL
+   model: HBLink D-APRS Gateway
+   class: software
+
+ - tocall: APHH?
+   vendor: Steven D. Bragg, KA9MVA
+   model: HamHud
+   class: tracker
+
+ - tocall: APHK??
+   vendor: LA1BR
+   model: Digipeater/tracker
+
+ - tocall: APHMEY
+   vendor: Tapio Heiskanen, OH2TH
+   model: APRS-IS Client for Athom Homey
+   contact: oh2th@iki.fi
+
+ - tocall: APHPIA
+   vendor: HP3ICC
+   model: Arduino APRS
+
+ - tocall: APHPIB
+   vendor: HP3ICC
+   model: Python APRS Beacon
+
+ - tocall: APHPIW
+   vendor: HP3ICC
+   model: Python APRS WX
+
+ - tocall: APHT??
+   vendor: IU0AAC
+   model: HMTracker
+   class: tracker
+
+ - tocall: APHW??
+   vendor: HamWAN
+
+ - tocall: API282
+   vendor: Icom
+   model: IC-2820
+   class: dstar
+
+ - tocall: API31
+   vendor: Icom
+   model: IC-31
+   class: dstar
+
+ - tocall: API410
+   vendor: Icom
+   model: IC-4100
+   class: dstar
+
+ - tocall: API51
+   vendor: Icom
+   model: IC-51
+   class: dstar
+
+ - tocall: API510
+   vendor: Icom
+   model: IC-5100
+   class: dstar
+
+ - tocall: API710
+   vendor: Icom
+   model: IC-7100
+   class: dstar
+
+ - tocall: API80
+   vendor: Icom
+   model: IC-80
+   class: dstar
+
+ - tocall: API880
+   vendor: Icom
+   model: IC-880
+   class: dstar
+
+ - tocall: API910
+   vendor: Icom
+   model: IC-9100
+   class: dstar
+
+ - tocall: API92
+   vendor: Icom
+   model: IC-92
+   class: dstar
+
+ - tocall: API970
+   vendor: Icom
+   model: IC-9700
+   class: dstar
+
+ - tocall: API???
+   vendor: Icom
+   model: unknown
+   class: dstar
+
+ - tocall: APIC??
+   vendor: HA9MCQ
+   model: PICiGATE
+
+ - tocall: APIE??
+   vendor: W7KMV
+   model: PiAPRS
+
+ - tocall: APIN??
+   vendor: AB0WV
+   model: PinPoint
+
+ - tocall: APIZCI
+   vendor: TA7W/OH2UDS and TA6AEU
+   model: hymTR IZCI Tracker
+   class: tracker
+   os: embedded
+
+ - tocall: APJ8??
+   vendor: KN4CRD
+   model: JS8Call
+   class: software
+
+ - tocall: APJA??
+   vendor: K4HG & AE5PL
+   model: JavAPRS
+
+ - tocall: APJE??
+   vendor: Gregg Wonderly, W5GGW
+   model: JeAPRS
+
+ - tocall: APJI??
+   vendor: Peter Loveall, AE5PL
+   model: jAPRSIgate
+   class: software
+
+ - tocall: APJID2
+   vendor: Peter Loveall, AE5PL
+   model: D-Star APJID2
+   class: dstar
+
+ - tocall: APJS??
+   vendor: Peter Loveall, AE5PL
+   model: javAPRSSrvr
+
+ - tocall: APJY??
+   vendor: KA2DDO
+   model: YAAC
+   class: software
+
+ - tocall: APK003
+   vendor: Kenwood
+   model: TH-D72
+   class: ht
+
+ - tocall: APK004
+   vendor: Kenwood
+   model: TH-D74
+   class: ht
+
+ - tocall: APK005
+   vendor: Kenwood
+   model: TH-D75
+   class: ht
+
+ - tocall: APK0??
+   vendor: Kenwood
+   model: TH-D7
+   class: ht
+
+ - tocall: APK1??
+   vendor: Kenwood
+   model: TM-D700
+   class: rig
+
+ - tocall: APKHTW
+   vendor: Kip, W3SN
+   model: Tempest Weather Bridge
+   class: wx
+   os: embedded
+   contact: w3sn@moxracing.33mail.com
+
+ - tocall: APKRAM
+   vendor: kramstuff.com
+   model: Ham Tracker
+   class: app
+   os: ios
+
+ - tocall: APLC??
+   vendor: DL3DCW
+   model: APRScube
+
+ - tocall: APLDI?
+   vendor: David, OK2DDS
+   model: LoRa IGate/Digipeater
+   class: digi
+
+ - tocall: APLDM?
+   vendor: David, OK2DDS
+   model: LoRa Meteostation
+   class: wx
+
+ - tocall: APLETK
+   vendor: DL5TKL
+   model: T-Echo
+   class: tracker
+   os: embedded
+   contact: cfr34k-git@tkolb.de
+
+ - tocall: APLG??
+   vendor: OE5BPA
+   model: LoRa Gateway/Digipeater
+   class: digi
+
+ - tocall: APLIG?
+   vendor: TA2MUN/TA9OHC
+   model: LightAPRS Tracker
+   class: tracker
+
+ - tocall: APLM??
+   vendor: WA0TQG
+   class: software
+
+ - tocall: APLO??
+   vendor: SQ9MDD
+   model: LoRa KISS TNC/Tracker
+   class: tracker
+
+ - tocall: APLP0?
+   vendor: SQ9P
+   model: fajne digi
+   class: digi
+   os: embedded
+   contact: sq9p.peter@gmail.com
+
+ - tocall: APLP1?
+   vendor: SQ9P
+   model: LORA/FSK/AFSK fajny tracker
+   class: tracker
+   os: embedded
+   contact: sq9p.peter@gmail.com
+
+ - tocall: APLRG?
+   vendor: Ricardo, CD2RXU
+   model: ESP32 LoRa iGate
+   class: igate
+   os: embedded
+   contact: richonguzman@gmail.com
+
+ - tocall: APLRT?
+   vendor: Ricardo, CD2RXU
+   model: ESP32 LoRa Tracker
+   class: tracker
+   os: embedded
+   contact: richonguzman@gmail.com
+
+ - tocall: APLS??
+   vendor: SARIMESH
+   model: SARIMESH
+   class: software
+
+ - tocall: APLT??
+   vendor: OE5BPA
+   model: LoRa Tracker
+   class: tracker
+
+ - tocall: APLU0?
+   vendor: SP9UP
+   model: ESP32/SX12xx LoRa iGate / Digi
+   class: digi
+   os: embedded
+   contact: wajdzik.m@gmail.com
+
+ - tocall: APLU1?
+   vendor: SP9UP
+   model: ESP32/SX12xx LoRa Tracker
+   class: tracker
+   os: embedded
+   contact: wajdzik.m@gmail.com
+
+ - tocall: APMG??
+   vendor: Alex, AB0TJ
+   model: PiCrumbs and MiniGate
+   class: software
+
+ - tocall: APMI01
+   vendor: Microsat
+   os: embedded
+   model: WX3in1
+
+ - tocall: APMI02
+   vendor: Microsat
+   os: embedded
+   model: WXEth
+
+ - tocall: APMI03
+   vendor: Microsat
+   os: embedded
+   model: PLXDigi
+
+ - tocall: APMI04
+   vendor: Microsat
+   os: embedded
+   model: WX3in1 Mini
+
+ - tocall: APMI05
+   vendor: Microsat
+   os: embedded
+   model: PLXTracker
+
+ - tocall: APMI06
+   vendor: Microsat
+   os: embedded
+   model: WX3in1 Plus 2.0
+
+ - tocall: APMI??
+   vendor: Microsat
+   os: embedded
+
+ - tocall: APMON?
+   vendor: Amon Schumann, DL9AS
+   model: APRS Balloon Tracker
+   class: tracker
+   os: embedded
+
+ - tocall: APMPAD
+   vendor: DF1JSL
+   model: Multi-Purpose APRS Daemon
+   class: service
+   contact: joerg.schultze.lutter@gmail.com
+   features:
+     - messaging
+
+ - tocall: APMQ??
+   vendor: WB2OSZ
+   model: Ham Radio of Things
+ 
+ - tocall: APMT??
+   vendor: LZ1PPL
+   model: Micro APRS Tracker
+   class: tracker
+
+ - tocall: APN102
+   vendor: Gregg Wonderly, W5GGW
+   model: APRSNow
+   class: app
+   os: ipad
+
+ - tocall: APN2??
+   vendor: VE4KLM
+   model: NOSaprs for JNOS 2.0
+
+ - tocall: APN3??
+   vendor: Kantronics
+   model: KPC-3
+
+ - tocall: APN9??
+   vendor: Kantronics
+   model: KPC-9612
+
+ - tocall: APNCM
+   vendor: Keith Kaiser, WA0TJT
+   model: Net Control Manager
+   class: software
+   os: browser
+   contact: wa0tjt@gmail.com
+
+ - tocall: APND??
+   vendor: PE1MEW
+   model: DIGI_NED
+
+ - tocall: APNIC4
+   vendor: SQ5EKU
+   model: BidaTrak
+   class: tracker
+   os: embedded
+
+ - tocall: APNJS?
+   vendor: Julien Sansonnens, HB9HRD
+   model: Web messaging service
+   class: service
+   contact: julien.owls@gmail.com
+   features:
+     - messaging
+
+ - tocall: APNK01
+   vendor: Kenwood
+   model: TM-D700
+   class: rig
+   features:
+     - messaging
+
+ - tocall: APNK80
+   vendor: Kantronics
+   model: KAM
+
+ - tocall: APNKMP
+   vendor: Kantronics
+   model: KAM+
+
+ - tocall: APNKMX
+   vendor: Kantronics
+   model: KAM-XL
+
+ - tocall: APNM??
+   vendor: MFJ
+   model: TNC
+
+ - tocall: APNP??
+   vendor: PacComm
+   model: TNC
+
+ - tocall: APNT??
+   vendor: SV2AGW
+   model: TNT TNC as a digipeater
+   class: digi
+
+ - tocall: APNU??
+   vendor: IW3FQG
+   model: UIdigi
+   class: digi
+
+ - tocall: APNV0?
+   vendor: SQ8L
+   model: VP-Digi
+   os: embedded
+
+ - tocall: APNV1?
+   vendor: SQ8L
+   model: VP-Node
+   os: embedded
+
+ - tocall: APNV??
+   vendor: SQ8L
+
+ - tocall: APNW??
+   vendor: SQ3FYK
+   model: WX3in1
+   os: embedded
+
+ - tocall: APNX??
+   vendor: K6DBG
+   model: TNC-X
+
+ - tocall: APOA??
+   vendor: OpenAPRS
+   model: app
+   class: app
+   os: ios
+
+ - tocall: APOCSG
+   vendor: N0AGI
+   model: POCSAG
+
+ - tocall: APOG7?
+   vendor: OpenGD77
+   model: OpenGD77
+   os: embedded
+   contact: Roger VK3KYY/G4KYF
+
+ - tocall: APOLU?
+   vendor: AMSAT-LU
+   model: Oscar
+   class: satellite
+
+ - tocall: APOSAT
+   vendor: Mike, NA7Q
+   model: Open Source Satellite Gateway
+   class: service
+   contact: mike.ph4@gmail.com
+
+ - tocall: APOSMS
+   vendor: Mike, NA7Q
+   model: Open Source SMS Gateway
+   class: service
+   contact: mike.ph4@gmail.com
+   features:
+     - messaging
+
+ - tocall: APOT??
+   vendor: Argent Data Systems
+   model: OpenTracker
+   class: tracker
+
+ - tocall: APOVU?
+   vendor: K J Somaiya Institute
+   model: BeliefSat
+
+ - tocall: APOZ??
+   vendor: OZ1EKD, OZ7HVO
+   model: KissOZ
+   class: tracker
+
+ - tocall: APP6??
+   model: APRSlib
+
+ - tocall: APPCO?
+   vendor: RadCommSoft, LLC
+   model: PicoAPRSTracker
+   class: tracker
+   os: embedded
+   contact: ab4mw@radcommsoft.com
+
+ - tocall: APPIC?
+   vendor: DB1NTO
+   model: PicoAPRS
+   class: tracker
+
+ - tocall: APPM??
+   vendor: DL1MX
+   model: rtl-sdr Python iGate
+   class: software
+
+ - tocall: APPRIS
+   vendor: DF1JSL
+   model: Apprise APRS plugin
+   class: service
+   contact: joerg.schultze.lutter@gmail.com
+   features:
+     - messaging
+
+ - tocall: APPT??
+   vendor: JF6LZE
+   model: KetaiTracker
+   class: tracker
+
+ - tocall: APQTH?
+   vendor: Weston Bustraan, W8WJB
+   model: QTH.app
+   class: software
+   os: macOS
+   features:
+     - messaging
+
+ - tocall: APR2MF
+   vendor: Mike, DL2MF
+   model: MF2wxAPRS Tinkerforge gateway
+   class: wx
+   os: Windows
+
+ - tocall: APR8??
+   vendor: Bob Bruninga, WB4APR
+   model: APRSdos
+   class: software
+
+ - tocall: APRARX
+   vendor: Open Source
+   model: radiosonde_auto_rx
+   class: software
+   os: Linux/Unix
+
+ - tocall: APRFG?
+   vendor: RF.Guru
+   contact: info@rf.guru
+
+ - tocall: APRFGB
+   vendor: RF.Guru
+   model: APRS LoRa Pager
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGD
+   vendor: RF.Guru
+   model: APRS Digipeater
+   class: digi
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGH
+   vendor: RF.Guru
+   model: Hotspot
+   class: rig
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGI
+   vendor: RF.Guru
+   model: LoRa APRS iGate
+   class: igate
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGL
+   vendor: RF.Guru
+   model: Lora APRS Digipeater
+   class: digi
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGM
+   vendor: RF.Guru
+   model: Mobile Radio
+   class: rig
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGP
+   vendor: RF.Guru
+   model: Portable Radio
+   class: ht
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGR
+   vendor: RF.Guru
+   model: Repeater
+   class: rig
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGT
+   vendor: RF.Guru
+   model: LoRa APRS Tracker
+   class: tracker
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRFGW
+   vendor: RF.Guru
+   model: LoRa APRS Weather Station
+   class: wx
+   os: embedded
+   contact: info@rf.guru
+
+ - tocall: APRG??
+   vendor: OH2GVE
+   model: aprsg
+   class: software
+   os: Linux/Unix
+
+ - tocall: APRHH?
+   vendor: Steven D. Bragg, KA9MVA
+   model: HamHud
+   class: tracker
+
+ - tocall: APRNOW
+   vendor: Gregg Wonderly, W5GGW
+   model: APRSNow
+   class: app
+   os: ipad
+
+ - tocall: APRPR?
+   vendor: Robert DM4RW, Peter DL6MAA
+   model: Teensy RPR TNC
+   class: tracker
+   os: embedded
+   contact: dm4rw@skywaves.de
+
+ - tocall: APRRDZ
+   model: rdzTTGOsonde
+   vendor: DL9RDZ
+   class: tracker
+
+ - tocall: APRRF?
+   vendor: Jean-Francois Huet F1EVM
+   model: Tracker for RRF
+   class: tracker
+   os: embedded
+   contact: f1evm@f1evm.fr
+   features:
+     - messaging
+
+ - tocall: APRRT?
+   vendor: RPC Electronics
+   model: RTrak
+   class: tracker
+
+ - tocall: APRS
+   vendor: Unknown
+   model: Unknown
+
+ - tocall: APRX??
+   vendor: Kenneth W. Finnegan, W6KWF
+   model: Aprx
+   class: igate
+   os: Linux/Unix
+
+ - tocall: APS???
+   vendor: Brent Hildebrand, KH2Z
+   model: APRS+SA
+   class: software
+
+ - tocall: APSAR
+   vendor: ZL4FOX
+   model: SARTrack
+   class: software
+   os: Windows
+   
+ - tocall: APSC??
+   vendor: OH2MQK, OH7LZB
+   model: aprsc
+   class: software
+
+ - tocall: APSF??
+   vendor: F5OPV, SFCP_LABS
+   model: embedded APRS devices
+   os: embedded
+
+ - tocall: APSFLG
+   vendor: F5OPV, SFCP_LABS
+   model: LoRa/APRS Gateway
+   class: digi
+   os: embedded
+
+ - tocall: APSFRP
+   vendor: F5OPV, SFCP_LABS
+   model: VHF/UHF Repeater
+   os: embedded
+
+ - tocall: APSFTL
+   vendor: F5OPV, SFCP_LABS
+   model: LoRa/APRS Telemetry Reporter
+   os: embedded
+
+ - tocall: APSFWX
+   vendor: F5OPV, SFCP_LABS
+   model: embedded Weather Station
+   class: wx
+   os: embedded
+
+ - tocall: APSK63
+   vendor: Chris Moulding, G4HYG
+   model: APRS Messenger
+   class: software
+   os: Windows
+
+ - tocall: APSMS?
+   vendor: Paul Dufresne
+   model: SMS gateway
+   class: software
+
+ - tocall: APSRF?
+   vendor: SoftRF
+   model: Ham Edition
+   class: tracker
+   os: embedded
+
+ - tocall: APSTM?
+   vendor: W7QO
+   model: Balloon tracker
+   class: tracker
+
+ - tocall: APSTPO
+   vendor: N0AGI
+   model: Satellite Tracking and Operations
+   class: software
+
+ - tocall: APT2??
+   vendor: Byonics
+   model: TinyTrak2
+   class: tracker
+
+ - tocall: APT3??
+   vendor: Byonics
+   model: TinyTrak3
+   class: tracker
+
+ - tocall: APT4??
+   vendor: Byonics
+   model: TinyTrak4
+   class: tracker
+
+ - tocall: APTB??
+   vendor: BG5HHP
+   model: TinyAPRS
+
+ - tocall: APTCHE
+   vendor: PU3IKE
+   model: TcheTracker, Tcheduino
+   class: tracker
+
+ - tocall: APTCMA
+   vendor: Cleber, PU1CMA
+   model: CAPI Tracker
+   class: tracker
+
+ - tocall: APTEMP
+   vendor: KL7AF
+   model: APRS-Tempest Weather Gateway
+   class: wx
+   os: Linux/Unix
+   contact: kl7af@foghaven.net
+
+ - tocall: APTKJ?
+   vendor: W9JAJ
+   model: ATTiny APRS Tracker
+   os: embedded
+
+ - tocall: APTNG?
+   vendor: Filip YU1TTN
+   model: Tango Tracker
+   class: tracker
+
+ - tocall: APTPN?
+   vendor: KN4ORB
+   model: TARPN Packet Node Tracker
+   class: tracker
+
+ - tocall: APTR??
+   vendor: Motorola
+   model: MotoTRBO
+
+ - tocall: APTT*
+   vendor: Byonics
+   model: TinyTrak
+   class: tracker
+
+ - tocall: APTW??
+   vendor: Byonics
+   model: WXTrak
+   class: wx
+
+ - tocall: APU1??
+   vendor: Roger Barker, G4IDE
+   model: UI-View16
+   class: software
+   os: Windows
+
+ - tocall: APU2*
+   vendor: Roger Barker, G4IDE
+   model: UI-View32
+   class: software
+   os: Windows
+
+ - tocall: APUDR?
+   vendor: NW Digital Radio
+   model: UDR
+
+ - tocall: APVE??
+   vendor: unknown
+   model: EchoLink
+
+ - tocall: APVM??
+   vendor: Digital Radio China Club
+   model: DRCC-DVM
+   class: igate
+
+ - tocall: APVR??
+   vendor: unknown
+   model: IRLP
+
+ - tocall: APW9??
+   vendor: Mile Strk, 9A9Y
+   model: WX Katarina
+   class: wx
+   os: embedded
+   features:
+     - messaging
+
+ - tocall: APWA??
+   vendor: KJ4ERJ
+   model: APRSISCE
+   class: software
+   os: Android
+
+ - tocall: APWEE?
+   vendor: Tom Keffer and Matthew Wall
+   model: WeeWX Weather Software
+   class: software
+   os: Linux/Unix
+
+ - tocall: APWM??
+   vendor: KJ4ERJ
+   model: APRSISCE
+   class: software
+   os: Windows Mobile
+   features:
+     - messaging
+     - item-in-msg
+
+ - tocall: APWW??
+   vendor: KJ4ERJ
+   model: APRSIS32
+   class: software
+   os: Windows
+   features:
+     - messaging
+     - item-in-msg
+
+ - tocall: APWnnn
+   vendor: Sproul Brothers
+   model: WinAPRS
+   class: software
+   os: Windows
+
+ - tocall: APX???
+   vendor: Open Source
+   model: Xastir
+   class: software
+   os: Linux/Unix
+
+ - tocall: APXR??
+   vendor: G8PZT
+   model: Xrouter
+
+ - tocall: APY01D
+   vendor: Yaesu
+   model: FT1D
+   class: ht
+
+ - tocall: APY02D
+   vendor: Yaesu
+   model: FT2D
+   class: ht
+
+ - tocall: APY05D
+   vendor: Yaesu
+   model: FT5D
+   class: ht
+
+ - tocall: APY300
+   vendor: Yaesu
+   model: FTM-300D
+   class: rig
+   
+ - tocall: APY400
+   vendor: Yaesu
+   model: FTM-400
+   class: rig
+   
+ - tocall: APYS??
+   vendor: W2GMD
+   model: Python APRS
+   class: software
+
+ - tocall: APZ18
+   vendor: IW3FQG
+   model: UIdigi
+   class: digi
+
+ - tocall: APZ186
+   vendor: IW3FQG
+   model: UIdigi
+   class: digi
+
+ - tocall: APZ19
+   vendor: IW3FQG
+   model: UIdigi
+   class: digi
+
+ - tocall: APZ247
+   model: UPRS
+   vendor: NR0Q
+
+ - tocall: APZG??
+   vendor: OH2GVE
+   model: aprsg
+   class: software
+   os: Linux/Unix
+
+ - tocall: APZMAJ
+   vendor: M1MAJ
+   model: DeLorme inReach Tracker
+
+ - tocall: APZMDR
+   vendor: Open Source
+   model: HaMDR
+   class: tracker
+   os: embedded
+
+ - tocall: APZTKP
+   vendor: Nick Hanks, N0LP
+   model: TrackPoint
+   class: tracker
+   os: embedded
+   
+ - tocall: APZWKR
+   vendor: GM1WKR
+   model: NetSked
+   class: software
+
+ - tocall: APnnnD
+   vendor: Painter Engineering
+   model: uSmartDigi D-Gate
+   class: dstar
+
+ - tocall: APnnnU
+   vendor: Painter Engineering
+   model: uSmartDigi Digipeater
+   class: digi
+
+ - tocall: PSKAPR
+   vendor: Open Source
+   model: PSKmail
+   class: software
+

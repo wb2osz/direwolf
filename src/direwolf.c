@@ -129,6 +129,7 @@
 #include "dwsock.h"
 #include "dns_sd_dw.h"
 #include "dlq.h"		// for fec_type_t definition.
+#include "deviceid.h"
 
 
 //static int idx_decoded = 0;
@@ -985,6 +986,7 @@ int main (int argc, char *argv[])
  * Files not supported at this time.
  * Can always "cat" the file and pipe it into stdin.
  */
+	deviceid_init();
 
 	err = audio_open (&audio_config);
 	if (err < 0) {
