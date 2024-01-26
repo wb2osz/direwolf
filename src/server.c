@@ -1559,6 +1559,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	            case MEDIUM_RADIO:
 	              {
+	                // Misleading if using stdin or udp.
 		        char stemp[100];
 		        int a = ACHAN2ADEV(j);
 		        // If I was really ambitious, some description could be provided.
@@ -1593,12 +1594,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	              break;
 
 	            default:
-	              {
-	                // could elaborate with hostname, etc.
-		        char stemp[100];
-		        snprintf (stemp, sizeof(stemp), "Port%d INVALID CHANNEL;", j+1);
-		        strlcat (reply.info, stemp, sizeof(reply.info));
-	              }
+	              ; // Only list valid channels.
 	              break;
 
 		  }  // switch
