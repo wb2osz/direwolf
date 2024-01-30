@@ -4642,6 +4642,8 @@ static void dm_frame (ax25_dlsm_t *S, int f)
 	    if (f == 1) {
 	      text_color_set(DW_COLOR_INFO);
 	      dw_printf ("%s doesn't understand AX.25 v2.2.  Trying v2.0 ...\n", S->addrs[PEERCALL]);
+	      dw_printf ("You can avoid this failed attempt and speed up the\n");
+	      dw_printf ("process by putting \"V20 %s\" in the configuration file.\n", S->addrs[PEERCALL]);
 	
 	      INIT_T1V_SRT;
 
@@ -4930,6 +4932,8 @@ static void frmr_frame (ax25_dlsm_t *S)
 
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf ("%s doesn't understand AX.25 v2.2.  Trying v2.0 ...\n", S->addrs[PEERCALL]);
+	    dw_printf ("You can avoid this failed attempt and speed up the\n");
+	    dw_printf ("process by putting \"V20 %s\" in the configuration file.\n", S->addrs[PEERCALL]);
 	
 	    INIT_T1V_SRT;
 
