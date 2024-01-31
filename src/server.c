@@ -820,7 +820,7 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 
 	    /* Stick in extra byte for the "TNC" to use. */
 
-	    agwpe_msg.data[0] = 0;
+	    agwpe_msg.data[0] = chan << 4;		// Was 0.  Fixed in 1.8.
 	    memcpy (agwpe_msg.data + 1, fbuf, (size_t)flen);
 
 	    if (debug_client) {
