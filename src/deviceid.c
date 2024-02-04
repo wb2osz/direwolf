@@ -240,7 +240,10 @@ void deviceid_init(void)
 {
 	FILE *fp = NULL;
 	for (int n = 0; search_locations[n] != NULL && fp == NULL; n++) {
+#if TEST
+	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("Trying %s\n", search_locations[n]);
+#endif
 	  fp = fopen(search_locations[n], "r");
 #if TEST
 	  if (fp != NULL) {
