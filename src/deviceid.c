@@ -107,6 +107,11 @@ int main (int argc, char *argv[])
 	assert (strcmp(comment_out, "Comment") == 0);
 	assert (strcmp(device, "Kenwood TM-D710") == 0);
 
+	deviceid_decode_mice ("]\"4V}=", comment_out, sizeof(comment_out), device, sizeof(device));
+	dw_printf ("%s %s\n", comment_out, device);
+	assert (strcmp(comment_out, "\"4V}") == 0);
+	assert (strcmp(device, "Kenwood TM-D710") == 0);
+
 
 // Modern MIC-E.
 
@@ -622,13 +627,13 @@ void deviceid_decode_mice (char *comment, char *trimmed, size_t trimmed_size, ch
 	      strncmp_z(comment, 						// prefix from table
 		  pmice[n].prefix,
 	          strlen(pmice[n].prefix)) == 0 &&
-	      strncmp_z(comment + strlen(comment) - strlen(pmice[n].suffix),	//suffix
+	      strncmp_z(comment + strlen(comment) - strlen(pmice[n].suffix),	// possible suffix
 		pmice[n].suffix,
 	        strlen(pmice[n].suffix)) == 0) ||
 
 	     (strlen(pmice[n].prefix) == 0 &&					// Later
 	      (comment[0] == '`' || comment[0] == '\'')	&&			// prefix ` or '
-	      strncmp_z(comment + strlen(comment) - strlen(pmice[n].suffix),	//suffix
+	      strncmp_z(comment + strlen(comment) - strlen(pmice[n].suffix),	// suffix
 		pmice[n].suffix,
 	        strlen(pmice[n].suffix)) == 0)  ) {
 

@@ -146,6 +146,11 @@ mice:
    model: Tracker
    class: tracker
 
+ - suffix: ":2"
+   vendor: SQ8L
+   model: VP-Tracker
+   class: tracker
+
 #
 # mic-e legacy devices, with an unique comment suffix and prefix
 #
@@ -237,6 +242,15 @@ tocalls:
  - tocall: APAH??
    model: AHub
 
+ - tocall: APAIOR
+   vendor: J. Angelo Racoma DU2XXR/N2RAC
+   model: APRSPH net bot based on Ioreth
+   class: service
+   os: linux
+   contact: info@aprsph.net
+   features:
+     - messaging
+
  - tocall: APAM??
    vendor: Altus Metrum
    model: AltOS
@@ -247,6 +261,12 @@ tocalls:
    model: APRSdroid
    os: Android
    class: app
+
+ - tocall: APAR??
+   vendor: Øyvind, LA7ECA
+   model: Arctic Tracker
+   class: tracker
+   os: embedded
 
  - tocall: APAT51
    vendor: Anytone
@@ -364,6 +384,12 @@ tocalls:
    model: WinphoneAPRS
    class: app
 
+ - tocall: APD5T?
+   vendor: Geoffrey, F4FXL
+   model: Open Source DStarGateway
+   class: dstar
+   contact: f4fxl@dstargateway.digital
+
  - tocall: APDF??
    model: Automatic DF units
 
@@ -448,6 +474,19 @@ tocalls:
    model: Balloon tracker
    class: tracker
 
+ - tocall: APEML?
+   vendor: Leszek, SP9MLI
+   model: SP9MLI for WX, Telemetry
+   class: software
+   contact: sp9mli@gmail.com
+
+ - tocall: APEP??
+   vendor: Patrick EGLOFF, TK5EP
+   model: LoRa WX station
+   class: wx
+   os: embedded
+   contact: pegloff@gmail.com
+
  - tocall: APERS?
    vendor: Jason, KG7YKZ
    model: Runner tracking
@@ -524,6 +563,17 @@ tocalls:
  - tocall: APHPIW
    vendor: HP3ICC
    model: Python APRS WX
+
+ - tocall: APHRM?
+   vendor: Giovanni, IW1CGW
+   model: Meteo
+   class: wx
+   contact: iw1cgw@libero.it
+
+ - tocall: APHRT?
+   vendor: Giovanni, IW1CGW
+   model: Telemetry
+   contact: iw1cgw@libero.it
 
  - tocall: APHT??
    vendor: IU0AAC
@@ -702,10 +752,28 @@ tocalls:
    os: embedded
    contact: cfr34k-git@tkolb.de
 
+ - tocall: APLFM?
+   vendor: DO1MA
+   model: FemtoAPRS
+   class: tracker
+   os: embedded
+
  - tocall: APLG??
    vendor: OE5BPA
    model: LoRa Gateway/Digipeater
    class: digi
+
+ - tocall: APLHI?
+   vendor: Giovanni, IW1CGW
+   model: LoRa IGate/Digipeater/Telemetry
+   class: digi
+   contact: iw1cgw@libero.it
+
+ - tocall: APLHM?
+   vendor: Giovanni, IW1CGW
+   model: LoRa Meteostation
+   class: wx
+   contact: iw1cgw@libero.it
 
  - tocall: APLIG?
    vendor: TA2MUN/TA9OHC
@@ -736,14 +804,14 @@ tocalls:
    contact: sq9p.peter@gmail.com
 
  - tocall: APLRG?
-   vendor: Ricardo, CD2RXU
+   vendor: Ricardo, CA2RXU
    model: ESP32 LoRa iGate
    class: igate
    os: embedded
    contact: richonguzman@gmail.com
 
  - tocall: APLRT?
-   vendor: Ricardo, CD2RXU
+   vendor: Ricardo, CA2RXU
    model: ESP32 LoRa Tracker
    class: tracker
    os: embedded
@@ -919,11 +987,17 @@ tocalls:
    vendor: SQ8L
    model: VP-Digi
    os: embedded
+   class: digi
 
  - tocall: APNV1?
    vendor: SQ8L
    model: VP-Node
    os: embedded
+
+ - tocall: APNV2?
+   vendor: SQ8L
+   model: VP-Tracker
+   class: tracker
 
  - tocall: APNV??
    vendor: SQ8L
@@ -947,6 +1021,11 @@ tocalls:
    vendor: N0AGI
    model: POCSAG
 
+ - tocall: APODOT
+   vendor: Mike, NA7Q
+   model: Oregon Department of Transportion Traffic Alerts
+   class: service
+
  - tocall: APOG7?
    vendor: OpenGD77
    model: OpenGD77
@@ -957,6 +1036,12 @@ tocalls:
    vendor: AMSAT-LU
    model: Oscar
    class: satellite
+
+ - tocall: APOPYT
+   vendor: Mike, NA7Q
+   model: NA7Q Messenger
+   class: software
+   contact: mike.ph4@gmail.com
 
  - tocall: APOSAT
    vendor: Mike, NA7Q
@@ -1013,6 +1098,12 @@ tocalls:
    contact: joerg.schultze.lutter@gmail.com
    features:
      - messaging
+
+ - tocall: APPS??
+   vendor: Øyvind, LA7ECA (for the Norwegian Radio Relay League)
+   model: Polaric Server
+   class: software
+   os: Linux
 
  - tocall: APPT??
    vendor: JF6LZE
@@ -1276,10 +1367,24 @@ tocalls:
    os: Linux/Unix
    contact: kl7af@foghaven.net
 
+ - tocall: APTHUR
+   model: APRSThursday weekly event mapbot daemon
+   contact: harihend1973@gmail.com
+   vendor: YD0BCX
+   class: service
+   os: linux/unix
+   features:
+     - messaging
+
  - tocall: APTKJ?
    vendor: W9JAJ
    model: ATTiny APRS Tracker
    os: embedded
+
+ - tocall: APTLVC
+   vendor: TA5LVC
+   model: TR80 APRS Tracker
+   class: tracker
 
  - tocall: APTNG?
    vendor: Filip YU1TTN
@@ -1417,6 +1522,10 @@ tocalls:
    vendor: W2GMD
    model: Python APRS
    class: software
+
+ - tocall: "APZ*"
+   vendor: Unknown
+   model: Experimental
 
  - tocall: APZ18
    vendor: IW3FQG

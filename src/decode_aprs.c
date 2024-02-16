@@ -1638,28 +1638,23 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 
 
-// Possible altitude.  3 characters followed by }
+// Possible altitude at beginning of remaining comment.
+// Three base 91 characters followed by }
 
 
-	if (strlen(trimmed) >=4 && trimmed[3] == '}') {
+	if (strlen(trimmed) >=4 &&
+			isdigit91(trimmed[0]) &&
+			isdigit91(trimmed[1]) &&
+			isdigit91(trimmed[2]) &&
+			trimmed[3] == '}') {
 
 	  A->g_altitude_ft = DW_METERS_TO_FEET((trimmed[0]-33)*91*91 + (trimmed[1]-33)*91 + (trimmed[2]-33) - 10000);
 
-	  if ( ! isdigit91(trimmed[0]) || ! isdigit91(trimmed[1]) || ! isdigit91(trimmed[2])) 
-	  {
-	    if ( ! A->g_quiet) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.\n");
-	      dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude_ft);
-	    }
-	    A->g_altitude_ft = G_UNKNOWN;
-	  }
-	  
-	  process_comment (A, mcomment+4, strlen(mcomment) - 4);
+	  process_comment (A, trimmed+4, strlen(trimmed) - 4);
 	  return;
 	}
 
-	process_comment (A, mcomment, strlen(mcomment));
+	process_comment (A, trimmed, strlen(trimmed));
 
 }  // end aprs_mic_e
 
