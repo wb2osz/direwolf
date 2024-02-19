@@ -17,6 +17,7 @@
 
 # Versioning (this file, not direwolf version)
 #-----------
+# v1.4 - OK1BIL - added support for multiple instances, tweaked screen execution
 # v1.3 - KI6ZHD - added variable support for direwolf binary location
 # v1.2 - KI6ZHD - support different versions of VNC
 # v1.1 - KI6ZHD - expanded version to support running on text-only displays with 
@@ -24,6 +25,9 @@
 # v1.0 - WB2OSZ - original version for Xwindow displays only
 
 
+#-------------------------------------
+# Configuration 
+#-------------------------------------
 
 #How are you running Direwolf : within a GUI (Xwindows / VNC) or CLI mode
 #
@@ -36,7 +40,7 @@
 #  CLI mode is suited for say a Raspberry Pi running the Jessie LITE version
 #      where it will run from the CLI w/o requiring Xwindows - uses screen
 
-RUNMODE=AUTO
+RUNMODE="AUTO"
 
 # Location of the direwolf binary.  Depends on $PATH as shown.
 # change this if you want to use some other specific location.
@@ -44,32 +48,69 @@ RUNMODE=AUTO
 
 DIREWOLF="direwolf"
 
+# In case direwolf is run in CLI, it is running in a screen session in the background.
+# Each screen session has a name. If you want to run multiple instances of direwolf
+# in parallel (i.e. two SDRs over STDIN), you need to specify unique names for the sessions.
+# Note: screen is a linux tool to run user-interactive software in background.
 
-#Direwolf start up command :: Uncomment only one of the examples.
-#
+
+INSTANCE="direwolf"
+
+
+# Parameters for the direwolf binary can be set here. This replaces the DWCMD variable.
+# Uncomment onlye on of the variables.
+
 # 1. For normal operation as TNC, digipeater, IGate, etc.
 #    Print audio statistics each 100 seconds for troubleshooting.
 #    Change this command to however you wish to start Direwolf
 
-DWCMD="$DIREWOLF -a 100"
+DWPARAMS="-a 100"
 
 # 2. FX.25 Forward Error Correction (FEC) will allow your signal to
 #    go farther under poor radio conditions.  Add "-X 1" to the command line.
 
-#DWCMD="$DIREWOLF -a 100 -X 1"
+#DWPARAMS="-a 100 -X 1"
 
-#---------------------------------------------------------------
-#
-# 3. Alternative for running with SDR receiver.
-#    Piping one application into another makes it a little more complicated.
-#    We need to use bash for the | to be recognized.
+# 3. Alternative for running with SDR receiver. In case of using this, please pay attention
+#    to variable DWSTDIN below.
 
-#DWCMD="bash -c 'rtl_fm -f 144.39M - | direwolf -c sdr.conf -r 24000 -D 1 -'"
+#DWPARAMS="-c /etc/direwolf/ok1abc-sdr.conf -t 0 -r 24000 -D 1 -"
+
+# A command to be fed into the STDIN of the direwolf binary. Main use for this is to configure rtl-sdr input.
+# Leave commented if using soundcard inputs. If using rtl-sdr, uncomment folllowing lines and set parameters as needed.
+
+#QRG="144.8M"
+#GAIN="43"
+#PPM="1"
+#DWSTDIN="rtl_fm -f $QRG -g $GAIN -p $PPM -" 
 
 
-#Where will logs go - needs to be writable by non-root users
-LOGFILE=/var/tmp/dw-start.log
+# Where will logs go - needs to be writable by non-root users
+LOGFILE="/var/tmp/dw-start.log"
 
+# Startup delay in seconds - how long should the script wait before executing (default 30)
+STARTUP_DELAY=30
+
+#-------------------------------------
+# Internal use functions
+#-------------------------------------
+
+# This function is to be recursively called from outside of this script. Its purpose 
+# is to avoid passing commands to screen or bash as strings, which is tricky.
+
+function RUN_CLI () {
+
+   PARAMS=$1
+   STDIN=$2
+
+   if [ -z "$2" ]; then
+      $DIREWOLF $PARAMS
+   else
+      $STDIN | $DIREWOLF $PARAMS
+   fi
+   exit 0
+
+}
 
 #-------------------------------------
 # Main functions of the script
@@ -91,11 +132,15 @@ function CLI {
    # Screen commands
    #  -d m :: starts the command in detached mode
    #  -S   :: name the session
-   $SCREEN -d -m -S direwolf $DWCMD >> $LOGFILE
+   # 
+   # Screen is instructed to run this script again with a parameter (to execute direwolf with
+   # necessary parameters). This way commands do not need to be passed as string. Additionally,
+   # this allows for some pre-flight checks withing the screen session, should they be needed.
+   $SCREEN -d -m -S $INSTANCE $0 -runcli >> $LOGFILE
    SUCCESS=1
 
-   $SCREEN -list direwolf
-   $SCREEN -list direwolf >> $LOGFILE
+   $SCREEN -list $INSTANCE
+   $SCREEN -list $INSTANCE >> $LOGFILE
 
    echo "-----------------------"
    echo "-----------------------" >> $LOGFILE
@@ -165,19 +210,25 @@ date >> $LOGFILE
 # First wait a little while in case we just rebooted
 # and the desktop hasn't started up yet.
 #
-sleep 30
+sleep $STARTUP_DELAY
 
 
 #
 # Nothing to do if Direwolf is already running.
 #
 
-a=`ps ax | grep direwolf | grep -vi -e bash -e screen -e grep | awk '{print $1}'`
+a=`ps ax | grep $INSTANCE | grep -vi -e bash -e screen -e grep | awk '{print $1}'`
 if [ -n "$a" ] 
 then
   #date >> /tmp/dw-start.log
   #echo "Direwolf already running." >> $LOGFILE
   exit
+fi
+
+# Check for parameter to recursively run this script and execute direwolf in cli
+if [ $# -eq 1 ] && [ $1 == "-runcli" ]; then
+  RUN_CLI "$DWPARAMS" "$DWSTDIN"
+  exit 0
 fi
 
 # Main execution of the script
