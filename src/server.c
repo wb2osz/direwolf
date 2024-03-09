@@ -1780,10 +1780,16 @@ static THREAD_F cmd_listen_thread (void *arg)
 		//		00=Port 1
 		//		16=Port 2
 		//
-		// I don't know what that means; we already a port number in the header.
+		// The seems to be redundant; we already a port number in the header.
 		// Anyhow, the original code here added one to cmd.data to get the 
 		// first byte of the frame.  Unfortunately, it did not subtract one from
 		// cmd.hdr.data_len so we ended up sending an extra byte.
+
+	        // TODO: Right now I just use the port (channel) number in the header.
+		// What if the second one is inconsistent?  
+		// - Continue to ignore port number at beginning of data?
+		// - Use second one instead?
+		// - Error message if a mismatch?
 
 		memset (&alevel, 0xff, sizeof(alevel));
 		pp = ax25_from_frame ((unsigned char *)cmd.data+1, data_len - 1, alevel);
