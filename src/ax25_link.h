@@ -76,6 +76,7 @@ void lm_seize_confirm (dlq_item_t *E);
 
 void lm_channel_busy (dlq_item_t *E);
 
+int is_channel_busy(int chan);
 
 void dl_timer_expiry (void);
 

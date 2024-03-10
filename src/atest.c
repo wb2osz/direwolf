@@ -87,6 +87,7 @@
 #include "hdlc_rec.h"
 
 
+
 #if 0	/* Typical but not flexible enough. */
 
 struct wav_header {             /* .WAV file header. */
@@ -916,6 +917,13 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	ax25_delete (pp);
 
 } /* end fake dlq_append */
+
+
+/* Fake is_channel_busy */
+int is_channel_busy(int chan) 
+{
+	return 0;
+}
 
 
 void ptt_set (int ot, int chan, int ptt_signal)

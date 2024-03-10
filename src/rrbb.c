@@ -101,7 +101,11 @@ rrbb_t rrbb_new (int chan, int subchan, int slice, int is_scrambled, int descram
 
 	new_count++;
 
-	if (new_count > delete_count + 100) {
+	/* 
+	  A value of delete_count + 100 seems to give issues with multiple channels and freq. offset decoding configured
+	  extended to 168 for testing a max. with 3 channels and 7 offset decoders p/channel
+	*/
+	if (new_count > delete_count + 168) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("MEMORY LEAK, rrbb_new, new_count=%d, delete_count=%d\n", new_count, delete_count);
 	}
