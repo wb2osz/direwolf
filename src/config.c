@@ -5663,6 +5663,7 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	b->symtab = '/';
 	b->symbol = '-';	/* house */
 	b->freq = G_UNKNOWN;
+	b->tone_type = 'T';
 	b->tone = G_UNKNOWN;
 	b->offset = G_UNKNOWN;
 	b->source = NULL;
@@ -5913,7 +5914,18 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    b->freq = atof(value);
 	  }
 	  else if (strcasecmp(keyword, "TONE") == 0) {
-	    b->tone = atof(value);
+	    b->tone_type = 'T';
+	    /* Try the legacy tone config, just a number */
+	    if((b->tone = atof(value)) == 0) {
+	      /* Legacy parsing failed, try with leading type char */
+	      if(sscanf(value, "%c%f", &b->tone_type, &b->tone) != 2) {
+	        /* That failed. Bad tone format, set to no tone */
+	        b->tone_type = 'T';
+	        b->tone = 0;
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file, line %d: Bad tone format, %s.\n", line, value);
+	      }
+	    }
 	  }
 	  else if (strcasecmp(keyword, "OFFSET") == 0 || strcasecmp(keyword, "OFF") == 0) {
 	    b->offset = atof(value);
