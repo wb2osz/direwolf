@@ -1341,9 +1341,19 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	else {
 	  if (ax25_is_aprs(pp)) {
 	    text_color_set(DW_COLOR_REC);
+            dw_printf("[APRS] ");
 	  }
 	  else {
 	    text_color_set(DW_COLOR_DECODED);
+            if (is_fx25) {  // really means 'FEC enabled'
+              if (audio_config.achan[0].layer2_xmit == LAYER2_FX25) {
+                dw_printf("[FX.25] ");
+              } else {
+                dw_printf("[IL2P] ");
+              }
+            } else {
+              dw_printf("[AX.25] ");
+            }
 	  }
 
 	  if (audio_config.achan[chan].num_subchan > 1 && audio_config.achan[chan].num_slicers == 1) {
