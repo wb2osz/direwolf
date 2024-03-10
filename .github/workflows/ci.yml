@@ -92,7 +92,7 @@ jobs:
           # this is not perfect but enought for now
           if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get update
-            sudo apt-get install libasound2-dev libudev-dev libhamlib-dev gpsd
+            sudo apt-get install libasound2-dev libudev-dev libhamlib-dev libgps-dev
           elif [ "$RUNNER_OS" == "macOS" ]; then
             # just to simplify I use homebrew but
             # we can use macports (latest direwolf is already available as port)
