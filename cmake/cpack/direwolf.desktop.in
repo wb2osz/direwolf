@@ -1,10 +1,10 @@
 [Desktop Entry]
 Name=@APPLICATION_NAME@
 Comment=APRS Soundcard TNC
-Exec=@APPLICATION_DESKTOP_EXEC@
-Icon=@CMAKE_PROJECT_NAME@_icon.png
+Exec=@CMAKE_PROJECT_NAME@
+Icon=@CMAKE_PROJECT_NAME@_icon
 StartupNotify=true
-Terminal=false
+Terminal=true
 Type=Application
 Categories=HamRadio
 Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25
