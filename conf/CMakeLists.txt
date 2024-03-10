@@ -26,7 +26,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/direwolf.conf" "${file_content}")
 
 # install udev rules for CM108
 if(LINUX)
-  install(FILES "${CUSTOM_CONF_DIR}/99-direwolf-cmedia.rules" DESTINATION /etc/udev/rules.d/)
+  install(FILES "${CUSTOM_CONF_DIR}/99-direwolf-cmedia.rules" DESTINATION ${INSTALL_UDEV_DIR})
 endif()
 
 install(FILES "${CMAKE_BINARY_DIR}/direwolf.conf" DESTINATION ${INSTALL_CONF_DIR})
