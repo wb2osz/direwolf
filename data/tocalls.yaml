@@ -107,10 +107,20 @@ mice:
    model: FTM-300D
    class: rig
 
+ - suffix: "_2"
+   vendor: Yaesu
+   model: FTM-200D
+   class: rig
+
+ - suffix: "_4"
+   vendor: Yaesu
+   model: FTM-500D
+   class: rig
+
  - suffix: "_)"
    vendor: Yaesu
    model: FTM-100D
-   class: rig 
+   class: rig
    
  - suffix: "_%"
    vendor: Yaesu
@@ -735,6 +745,20 @@ tocalls:
    vendor: DL3DCW
    model: APRScube
 
+ - tocall: APLDG?
+   vendor: Eddie, 9W2LWK
+   model: LoRAIGate
+   class: igate
+   os: embedded
+   contact: 9w2lwk@gmail.com
+
+ - tocall: APLDH?
+   vendor: Eddie, 9W2LWK
+   model: LoraTracker
+   class: tracker
+   os: embedded
+   contact: 9w2lwk@gmail.com
+
  - tocall: APLDI?
    vendor: David, OK2DDS
    model: LoRa IGate/Digipeater
@@ -751,6 +775,13 @@ tocalls:
    class: tracker
    os: embedded
    contact: cfr34k-git@tkolb.de
+
+ - tocall: APLFG?
+   vendor: Gabor, HG3FUG
+   model: LoRa WX station
+   class: wx
+   os: embedded
+   contact: hg3fug@fazi.hu
 
  - tocall: APLFM?
    vendor: DO1MA
@@ -840,6 +871,12 @@ tocalls:
    class: tracker
    os: embedded
    contact: wajdzik.m@gmail.com
+
+ - tocall: APMAIL
+   vendor: Mike, NA7Q
+   model: APRS Mailbox
+   class: service
+   contact: mike.ph4@gmail.com
 
  - tocall: APMG??
    vendor: Alex, AB0TJ
@@ -1508,6 +1545,11 @@ tocalls:
    model: FT5D
    class: ht
 
+ - tocall: APY200
+   vendor: Yaesu
+   model: FTM-200D
+   class: rig
+
  - tocall: APY300
    vendor: Yaesu
    model: FTM-300D
@@ -1517,7 +1559,12 @@ tocalls:
    vendor: Yaesu
    model: FTM-400
    class: rig
-   
+
+ - tocall: APY500
+   vendor: Yaesu
+   model: FTM-500D
+   class: rig
+
  - tocall: APYS??
    vendor: W2GMD
    model: Python APRS
