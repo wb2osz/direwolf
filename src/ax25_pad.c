@@ -2581,6 +2581,59 @@ int ax25_get_c2 (packet_t this_p)
 
 /*------------------------------------------------------------------
  *
+ * Function:	ax25_set_pid
+ *
+ * Purpose:	Set protocol ID in packet.
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *
+ *		pid - usually 0xF0 for APRS or 0xCF for NET/ROM.
+ *
+ * AX.25:	"The Protocol Identifier (PID) field appears in information
+ *		 frames (I and UI) only. It identifies which kind of
+ *		 Layer 3 protocol, if any, is in use."
+ *
+ *------------------------------------------------------------------*/
+
+void ax25_set_pid (packet_t this_p, int pid)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	// Some applications set this to 0 which is an error.
+	// Change 0 to 0xF0 meaning no layer 3 protocol.
+
+	if (pid == 0) {
+	  pid = AX25_PID_NO_LAYER_3;
+	}
+
+	// Sanity check: is it I or UI frame?
+
+	if (this_p->frame_len == 0) return;
+
+	ax25_frame_type_t frame_type;
+	cmdres_t cr;			// command or response.
+	char description[64];
+	int pf;				// Poll/Final.
+	int nr, ns;			// Sequence numbers.
+
+	frame_type = ax25_frame_type (this_p, &cr, description, &pf, &nr, &ns);
+
+	if (frame_type != frame_type_I && frame_type != frame_type_U_UI) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("ax25_set_pid(0x%2x): Packet type is not I or UI.\n", pid);
+	  return;
+	}
+
+	// TODO: handle 2 control byte case.
+	if (this_p->num_addr >= 2) {
+	  this_p->frame_data[ax25_get_pid_offset(this_p)] = pid;
+	}
+}
+
+
+/*------------------------------------------------------------------
+ *
  * Function:	ax25_get_pid
  *
  * Purpose:	Get protocol ID from packet.
