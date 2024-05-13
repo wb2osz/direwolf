@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2021, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -755,12 +755,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  strlcpy (p_audio_config->adev[adevice].adevice_out, DEFAULT_ADEVICE, sizeof(p_audio_config->adev[adevice].adevice_out));
 
 	  p_audio_config->adev[adevice].defined = 0;
+	  p_audio_config->adev[adevice].copy_from = -1;
 	  p_audio_config->adev[adevice].num_channels = DEFAULT_NUM_CHANNELS;		/* -2 stereo */
 	  p_audio_config->adev[adevice].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;	/* -r option */
 	  p_audio_config->adev[adevice].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	/* -8 option for 8 instead of 16 bits */
 	}
 
-	p_audio_config->adev[0].defined = 1;
+	p_audio_config->adev[0].defined = 2;		// 2 means it was done by default and not the user's config file.
 
 	for (channel=0; channel<MAX_CHANS; channel++) {
 	  int ot, it;
@@ -925,10 +926,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	p_misc_config->maxframe_extended = AX25_K_MAXFRAME_EXTENDED_DEFAULT;	/* Max frames to send before ACK.  mod 128 "Window" size. */
 
-	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 3;	/* Max SABME before falling back to SABM. */
-	p_misc_config->v20_addrs = NULL;			/* Go directly to v2.0 for stations listed. */
+	p_misc_config->maxv22 = AX25_N2_RETRY_DEFAULT / 3;	/* Send SABME this many times before falling back to SABM. */
+	p_misc_config->v20_addrs = NULL;			/* Go directly to v2.0 for stations listed */
+								/* without trying v2.2 first. */
 	p_misc_config->v20_count = 0;
 	p_misc_config->noxid_addrs = NULL;			/* Don't send XID to these stations. */
+								/* Might work with a partial v2.2 implementation */
+								/* on the other end. */
 	p_misc_config->noxid_count = 0;
 
 /* 
@@ -1012,7 +1016,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *			ADEVICE    plughw:1,0			-- same for in and out.
  *			ADEVICE	   plughw:2,0  plughw:3,0	-- different in/out for a channel or channel pair.
  *			ADEVICE1   udp:7355  default		-- from Software defined radio (SDR) via UDP.
- *	
+ *
+ *	New in 1.8: Ability to map to another audio device.
+ *	This allows multiple modems (i.e. data speeds) on the same audio interface.
+ *
+ *			ADEVICEn   = n				-- Copy from different already defined channel.
  */
 
 	  /* Note that ALSA name can contain comma such as hw:1,0 */
@@ -1040,17 +1048,42 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      exit(EXIT_FAILURE);
 	    }
 
+	    // Do not allow same adevice to be defined more than once.
+	    // Overriding the default for adevice 0 is ok.
+	    // In that case definded was 2.  That's why we check for 1, not just non-zero.
+
+	    if (p_audio_config->adev[adevice].defined == 1) {		// 1 means defined by user.
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: ADEVICE%d can't be defined more than once. Line %d.\n", adevice, line);
+	      continue;
+	    }
+
 	    p_audio_config->adev[adevice].defined = 1;
-	
-	    /* First channel of device is valid. */
-	    p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice)] = MEDIUM_RADIO;
 
-	    strlcpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in));
-	    strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));
+	    // New case for release 1.8.
 
-	    t = split(NULL,0);
-	    if (t != NULL) {
+	    if (strcmp(t, "=") == 0) {
+	      t = split(NULL,0);
+	      if (t != NULL) {
+	        
+	      }
+
+/////////  to be continued....  FIXME
+
+	    }
+	    else {
+	      /* First channel of device is valid. */
+	      // This might be changed to UDP or STDIN when the device name is examined.
+	      p_audio_config->chan_medium[ADEVFIRSTCHAN(adevice)] = MEDIUM_RADIO;
+
+	      strlcpy (p_audio_config->adev[adevice].adevice_in, t, sizeof(p_audio_config->adev[adevice].adevice_in));
 	      strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));
+
+	      t = split(NULL,0);
+	      if (t != NULL) {
+		// Different audio devices for receive and transmit.
+	        strlcpy (p_audio_config->adev[adevice].adevice_out, t, sizeof(p_audio_config->adev[adevice].adevice_out));
+	      }
 	    }
 	  }
 
@@ -1810,6 +1843,45 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIO;
 #endif
 	    }
+	    else if (strcasecmp(t, "GPIOD") == 0) {
+#if __WIN32__
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file line %d: %s with GPIOD is only available on Linux.\n", line, otname);
+#else		
+#if defined(USE_GPIOD)
+	      t = split(NULL,0);
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file line %d: Missing GPIO chip name for %s.\n", line, otname);
+	        dw_printf ("Use the \"gpioinfo\" command to get a list of gpio chip names and corresponding I/O lines.\n");
+	        continue;
+	      }
+	      strlcpy(p_audio_config->achan[channel].octrl[ot].out_gpio_name, t, 
+	              sizeof(p_audio_config->achan[channel].octrl[ot].out_gpio_name));
+
+	      t = split(NULL,0);
+	      if (t == NULL) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Config file line %d: Missing GPIO number for %s.\n", line, otname);
+	        continue;
+	      }
+
+	      if (*t == '-') {
+	        p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t+1);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 1;
+	      }
+	      else {
+	        p_audio_config->achan[channel].octrl[ot].out_gpio_num = atoi(t);
+		p_audio_config->achan[channel].octrl[ot].ptt_invert = 0;
+	      }
+	      p_audio_config->achan[channel].octrl[ot].ptt_method = PTT_METHOD_GPIOD;
+#else
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Application was not built with optional support for GPIOD.\n");
+	      dw_printf ("Install packages gpiod and libgpiod-dev, remove 'build' subdirectory, then rebuild.\n");
+#endif /* USE_GPIOD*/
+#endif /* __WIN32__ */
+	    }
 	    else if (strcasecmp(t, "LPT") == 0) {
 
 /* Parallel printer case, x86 Linux only. */
@@ -2132,6 +2204,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 /*
  * DWAIT n		- Extra delay for receiver squelch. n = 10 mS units.
+ *
+ * Why did I do this?  Just add more to TXDELAY.
+ * Now undocumented in User Guide.  Might disappear someday.
  */
 
 	  else if (strcasecmp(t, "DWAIT") == 0) {
@@ -2167,14 +2242,20 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= 0 && n <= 255) {
+            if (n >= 5 && n < 50) {
+	      // 0 = User has no clue.  This would be no delay.
+	      // 10 = Default.
+	      // 50 = Half second.  User might think it is mSec and use 100.
 	      p_audio_config->achan[channel].slottime = n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].slottime = DEFAULT_SLOTTIME;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid delay time for persist algorithm. Using %d.\n", 
+              dw_printf ("Line %d: Invalid delay time for persist algorithm. Using default %d.\n",
 			line, p_audio_config->achan[channel].slottime);
+              dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+              dw_printf ("section, to understand what this means.\n");
+              dw_printf ("Why don't you just use the default?\n");
    	    }
 	  }
 
@@ -2191,14 +2272,17 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    n = atoi(t);
-            if (n >= 0 && n <= 255) {
+            if (n >= 5 && n <= 250) {
 	      p_audio_config->achan[channel].persist = n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].persist = DEFAULT_PERSIST;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid probability for persist algorithm. Using %d.\n", 
+              dw_printf ("Line %d: Invalid probability for persist algorithm. Using default %d.\n",
 			line, p_audio_config->achan[channel].persist);
+              dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+              dw_printf ("section, to understand what this means.\n");
+              dw_printf ("Why don't you just use the default?\n");
    	    }
 	  }
 
@@ -2216,6 +2300,23 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
+	      text_color_set(DW_COLOR_ERROR);
+	      if (n < 10) {
+                dw_printf ("Line %d: Setting TXDELAY this small is a REALLY BAD idea if you want other stations to hear you.\n", 
+			line);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default rather than reducing reliability?\n");
+	      }
+	      else if (n >= 100) {
+                dw_printf ("Line %d: Keeping with tradition, going back to the 1980s, TXDELAY is in 10 millisecond units.\n", 
+			line);
+                dw_printf ("Line %d: The value %d would be %.3f seconds which seems rather excessive.  Are you sure you want that?\n", 
+			line, n, (double)n * 10. / 1000.);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default?\n");
+	      }
 	      p_audio_config->achan[channel].txdelay = n;
 	    }
 	    else {
@@ -2240,12 +2341,28 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    n = atoi(t);
             if (n >= 0 && n <= 255) {
+	      if (n < 5) {
+                dw_printf ("Line %d: Setting TXTAIL that small is a REALLY BAD idea if you want other stations to hear you.\n", 
+			line);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default rather than reducing reliability?\n");
+	      }
+	      else if (n >= 50) {
+                dw_printf ("Line %d: Keeping with tradition, going back to the 1980s, TXTAIL is in 10 millisecond units.\n", 
+			line);
+                dw_printf ("Line %d: The value %d would be %.3f seconds which seems rather excessive.  Are you sure you want that?\n", 
+			line, n, (double)n * 10. / 1000.);
+                dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+                dw_printf ("section, to understand what this means.\n");
+                dw_printf ("Why don't you just use the default?\n");
+	      }
 	      p_audio_config->achan[channel].txtail = n;
 	    }
 	    else {
 	      p_audio_config->achan[channel].txtail = DEFAULT_TXTAIL;
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid time for transmit timing. Using %d.\n", 
+              dw_printf ("Line %d: Invalid time for transmit timing. Using %d.\n",
 			line, p_audio_config->achan[channel].txtail);
    	    }
 	  }
@@ -2794,7 +2911,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: FILTER IG ... on line %d.\n", line);
 	      dw_printf ("Warning! Don't mess with IS>RF filtering unless you are an expert and have an unusual situation.\n");
 	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
-	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  \"Successful-APRS-Gateway-Operation.pdf\" .\n");
 	      dw_printf ("Warning! If you insist, be sure to add \" | i/180 \" so you don't break messaging.\n");
 	    }
 	    else {
@@ -2834,7 +2951,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Warning! Don't mess with RF>IS filtering unless you are an expert and have an unusual situation.\n");
 	      dw_printf ("Warning! Expected behavior is for everything to go from RF to IS.\n");
 	      dw_printf ("Warning! The default is fine for nearly all situations.\n");
-	      dw_printf ("Warning! Be sure to read carefully and understand  Successful-APRS-Gateway-Operation.pdf .\n");
+	      dw_printf ("Warning! Be sure to read carefully and understand  \"Successful-APRS-Gateway-Operation.pdf\" .\n");
 	    }
 	    else {
 	      to_chan = isdigit(*t) ? atoi(t) : -999;
@@ -4470,6 +4587,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (t != NULL && strlen(t) > 0) {
 	      p_igate_config->t2_filter = strdup (t);
+
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Warning - IGFILTER is a rarely needed expert level feature.\n", line);
+	      dw_printf ("If you don't have a special situation and a good understanding of\n");
+	      dw_printf ("how this works, you probably should not be messing with it.\n");
+	      dw_printf ("The default behavior is appropriate for most situations.\n");
+	      dw_printf ("Please read \"Successful-APRS-IGate-Operation.pdf\".\n");
 	    }
 	  }
 

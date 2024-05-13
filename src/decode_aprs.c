@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022, 2023  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@
 #include "decode_aprs.h"
 #include "telemetry.h"
 #include "ais.h"
-
+#include "deviceid.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -124,7 +124,6 @@ static double get_longitude_9 (char *p, int quiet);
 static time_t get_timestamp (decode_aprs_t *A, char *p);
 static int get_maidenhead (decode_aprs_t *A, char *p);
 static int data_extension_comment (decode_aprs_t *A, char *pdext);
-static void decode_tocall (decode_aprs_t *A, char *dest);
 //static void get_symbol (decode_aprs_t *A, char dti, char *src, char *dest);
 static void process_comment (decode_aprs_t *A, char *pstart, int clen);
 
@@ -292,7 +291,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	}
 
 /*
- * Application might be in the destination field for most message types.
+ * Device/Application is in the destination field for most packet types.
  * MIC-E format has part of location in the destination field.
  */
 
@@ -303,7 +302,7 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	    break;
 
 	  default:
-	    decode_tocall (A, A->g_dest);
+	    deviceid_decode_dest (A->g_dest, A->g_mfr, sizeof(A->g_mfr));
 	    break;
 	}
 
@@ -1392,7 +1391,6 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	int cust_msg = 0;
 	const char *std_text[8] = {"Emergency", "Priority", "Special", "Committed", "Returning", "In Service", "En Route", "Off Duty" };
 	const char *cust_text[8] = {"Emergency", "Custom-6", "Custom-5", "Custom-4", "Custom-3", "Custom-2", "Custom-1", "Custom-0" }; 
-	unsigned char *pfirst, *plast;
 
 	strlcpy (A->g_data_type_desc, "MIC-E", sizeof(A->g_data_type_desc));
 
@@ -1622,126 +1620,43 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  A->g_course = n;
 
 
+// The rest is a comment which can have other information cryptically embedded.
+// Remove any trailing CR, which I would argue, violates the protocol spec.
+// It is essential to keep trailing spaces.  e.g. VX-8 suffix is "_ "
+
+	char mcomment[256];
+	strlcpy (mcomment, info + sizeof(struct aprs_mic_e_s), sizeof(mcomment));
+	if (mcomment[strlen(mcomment)-1] == '\r') {
+	  mcomment[strlen(mcomment)-1] = '\0';
+	}
+
 /* Now try to pick out manufacturer and other optional items. */
 /* The telemetry field, in the original spec, is no longer used. */
-  
-	strlcpy (A->g_mfr, "Unknown manufacturer", sizeof(A->g_mfr));
 
-	pfirst = info + sizeof(struct aprs_mic_e_s);
-	plast = info + ilen - 1;
-
-/* Carriage return character at the end is not mentioned in spec. */
-/* Remove if found because it messes up extraction of manufacturer. */
-/* Don't drop trailing space because that is used for Yaesu VX-8. */
-/* As I recall, the IGate function trims trailing spaces.  */
-/* That would be bad for this particular model. Maybe I'm mistaken? */
+	char trimmed[256];	// Comment with vendor/model removed.
+	deviceid_decode_mice (mcomment, trimmed, sizeof(trimmed), A->g_mfr, sizeof(A->g_mfr));
 
 
-	if (*plast == '\r') plast--;
 
-#define isT(c) ((c) == ' ' || (c) == '>' || (c) == ']' || (c) == '`' || (c) == '\'')
+// Possible altitude at beginning of remaining comment.
+// Three base 91 characters followed by }
 
-// Last Updated Dec. 2021
 
-// This does not change very often but I'm wondering if we could parse
-// http://www.aprs.org/aprs12/mic-e-types.txt similar to how we use tocalls.txt.
+	if (strlen(trimmed) >=4 &&
+			isdigit91(trimmed[0]) &&
+			isdigit91(trimmed[1]) &&
+			isdigit91(trimmed[2]) &&
+			trimmed[3] == '}') {
 
-// TODO:  Use https://github.com/aprsorg/aprs-deviceid rather than hardcoding.
+	  A->g_altitude_ft = DW_METERS_TO_FEET((trimmed[0]-33)*91*91 + (trimmed[1]-33)*91 + (trimmed[2]-33) - 10000);
 
-	if (isT(*pfirst)) {
-
-// "legacy" formats.
-
-	  if      (*pfirst == ' '                                       )  { strlcpy (A->g_mfr, "Original MIC-E", sizeof(A->g_mfr)); pfirst++; }
-
-	  else if (*pfirst == '>'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TH-D72", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == '>'                       && *plast == '^')  { strlcpy (A->g_mfr, "Kenwood TH-D74", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == '>'                       && *plast == '&')  { strlcpy (A->g_mfr, "Kenwood TH-D75", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == '>'                                       )  { strlcpy (A->g_mfr, "Kenwood TH-D7A", sizeof(A->g_mfr)); pfirst++; }
-
-	  else if (*pfirst == ']'                       && *plast == '=')  { strlcpy (A->g_mfr, "Kenwood TM-D710", sizeof(A->g_mfr)); pfirst++; plast--; }
-	  else if (*pfirst == ']'                                       )  { strlcpy (A->g_mfr, "Kenwood TM-D700", sizeof(A->g_mfr)); pfirst++; }
-
-// ` should be used for message capable devices.
-
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ' ')  { strlcpy (A->g_mfr, "Yaesu VX-8", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '"')  { strlcpy (A->g_mfr, "Yaesu FTM-350", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '#')  { strlcpy (A->g_mfr, "Yaesu VX-8G", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '$')  { strlcpy (A->g_mfr, "Yaesu FT1D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '%')  { strlcpy (A->g_mfr, "Yaesu FTM-400DR", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == ')')  { strlcpy (A->g_mfr, "Yaesu FTM-100D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '(')  { strlcpy (A->g_mfr, "Yaesu FT2D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '0')  { strlcpy (A->g_mfr, "Yaesu FT3D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '3')  { strlcpy (A->g_mfr, "Yaesu FT5D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '1')  { strlcpy (A->g_mfr, "Yaesu FTM-300D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'  && *(plast-1) == '_' && *plast == '5')  { strlcpy (A->g_mfr, "Yaesu FTM-500D", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-
-	  else if (*pfirst == '`'  && *(plast-1) == ' ' && *plast == 'X')  { strlcpy (A->g_mfr, "AP510", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-
-	  else if (*pfirst == '`'  && *(plast-1) == '(' && *plast == '5')  { strlcpy (A->g_mfr, "Anytone D578UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '`'                                       )  { strlcpy (A->g_mfr, "Generic Mic-Emsg", sizeof(A->g_mfr)); pfirst++; }
-
-// ' should be used for trackers (not message capable).
-
-	  else if (*pfirst == '\'' && *(plast-1) == '(' && *plast == '5')  { strlcpy (A->g_mfr, "Anytone D578UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '(' && *plast == '8')  { strlcpy (A->g_mfr, "Anytone D878UV", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '3')  { strlcpy (A->g_mfr, "Byonics TinyTrack3", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == '|' && *plast == '4')  { strlcpy (A->g_mfr, "Byonics TinyTrack4", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-
-	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '4')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7400 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (*pfirst == '\'' && *(plast-1) == ':' && *plast == '8')  { strlcpy (A->g_mfr, "SCS GmbH & Co. P4dragon DR-7800 modems", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-
-	  else if (*pfirst == '\''                                      )  { strlcpy (A->g_mfr, "Generic McTrackr", sizeof(A->g_mfr)); pfirst++; }
-
-	  else if (                   *(plast-1) == '\\'                )  { strlcpy (A->g_mfr, "Hamhud ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (                   *(plast-1) == '/'                 )  { strlcpy (A->g_mfr, "Argent ?", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (                   *(plast-1) == '^'                 )  { strlcpy (A->g_mfr, "HinzTec anyfrog", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (                   *(plast-1) == '*'                 )  { strlcpy (A->g_mfr, "APOZxx www.KissOZ.dk Tracker. OZ1EKD and OZ7HVO", sizeof(A->g_mfr)); pfirst++; plast-=2; }
-	  else if (                   *(plast-1) == '~'                 )  { strlcpy (A->g_mfr, "Unknown OTHER", sizeof(A->g_mfr)); pfirst++; plast-=2; }
+	  process_comment (A, trimmed+4, strlen(trimmed) - 4);
+	  return;
 	}
 
-/*
- * An optional altitude is next.
- * It is three base-91 digits followed by "}".
- * The TM-D710A might have encoding bug.  This was observed:
- *
- * KJ4ETP-9>SUUP9Q,KE4OTZ-3,WIDE1*,WIDE2-1,qAR,KI4HDU-2:`oV$n6:>/]"7&}162.475MHz <Knox,TN> clintserman@gmail=
- * N 35 50.9100, W 083 58.0800, 25 MPH, course 230, alt 945 ft, 162.475MHz
- *
- * KJ4ETP-9>SUUP6Y,GRNTOP-3*,WIDE2-1,qAR,KI4HDU-2:`oU~nT >/]<0x9a>xt}162.475MHz <Knox,TN> clintserman@gmail=
- * Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.
- * N 35 50.6900, W 083 57.9800, 29 MPH, course 204, alt 3280843 ft, 162.475MHz
- *
- * KJ4ETP-9>SUUP6Y,N4NEQ-3,K4EGA-1,WIDE2*,qAS,N5CWH-1:`oU~nT >/]?xt}162.475MHz <Knox,TN> clintserman@gmail=
- * N 35 50.6900, W 083 57.9800, 29 MPH, course 204, alt 808497 ft, 162.475MHz
- *
- * KJ4ETP-9>SUUP2W,KE4OTZ-3,WIDE1*,WIDE2-1,qAR,KI4HDU-2:`oV2o"J>/]"7)}162.475MHz <Knox,TN> clintserman@gmail=
- * N 35 50.2700, W 083 58.2200, 35 MPH, course 246, alt 955 ft, 162.475MHz
- * 
- * Note the <0x9a> which is outside of the 7-bit ASCII range.  Clearly very wrong.
- */
+	process_comment (A, trimmed, strlen(trimmed));
 
-	if (plast > pfirst && pfirst[3] == '}') {
-
-	  A->g_altitude_ft = DW_METERS_TO_FEET((pfirst[0]-33)*91*91 + (pfirst[1]-33)*91 + (pfirst[2]-33) - 10000);
-
-	  if ( ! isdigit91(pfirst[0]) || ! isdigit91(pfirst[1]) || ! isdigit91(pfirst[2])) 
-	  {
-	    if ( ! A->g_quiet) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Invalid character in MIC-E altitude.  Must be in range of '!' to '{'.\n");
-	      dw_printf("Bogus altitude of %.0f changed to unknown.\n", A->g_altitude_ft);
-	    }
-	    A->g_altitude_ft = G_UNKNOWN;
-	  }
-	  
-	  pfirst += 4;
-	}
-
-	process_comment (A, (char*)pfirst, (int)(plast - pfirst) + 1);
-
-}
+}  // end aprs_mic_e
 
 
 /*------------------------------------------------------------------
@@ -4251,221 +4166,6 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 }
 
 
-/*------------------------------------------------------------------
- *
- * Function:	decode_tocall
- *
- * Purpose:	Extract application from the destination.
- *
- * Inputs:	dest	- Destination address.
- *			Don't care if SSID is present or not.
- *
- * Outputs:	A->g_mfr
- *
- * Description:	For maximum flexibility, we will read the
- *		data file at run time rather than compiling it in.
- *
- *		For the most recent version, download from:
- *
- *		http://www.aprs.org/aprs11/tocalls.txt
- *
- *		Windows version:  File must be in current working directory.
- *
- *		Linux version: Search order is current working directory then
- *			/usr/local/share/direwolf
- *			/usr/share/direwolf/tocalls.txt
- *
- *		Mac: Like Linux and then
- *			/opt/local/share/direwolf
- *
- *------------------------------------------------------------------*/
-
-// If I was more ambitious, this would dynamically allocate enough
-// storage based on the file contents.  Just stick in a constant for
-// now.  This takes an insignificant amount of space and
-// I don't anticipate tocalls.txt growing that quickly.
-// Version 1.4 - add message if too small instead of silently ignoring the rest.
-
-// Dec. 2016 tocalls.txt has 153 destination addresses.
-
-#define MAX_TOCALLS 250
-
-static struct tocalls_s {
-	unsigned char len;
-	char prefix[7];
-	char *description;
-} tocalls[MAX_TOCALLS];
-
-static int num_tocalls = 0;
-
-// Make sure the array is null terminated.
-// If search order is changed, do the same in symbols.c for consistency.
-
-static const char *search_locations[] = {
-	(const char *) "tocalls.txt",			// CWD
-	(const char *) "data/tocalls.txt",		// Windows with CMake
-	(const char *) "../data/tocalls.txt",		// ?
-#ifndef __WIN32__
-	(const char *) "/usr/local/share/direwolf/tocalls.txt",
-	(const char *) "/usr/share/direwolf/tocalls.txt",
-#endif
-#if __APPLE__
-	// https://groups.yahoo.com/neo/groups/direwolf_packet/conversations/messages/2458
-	// Adding the /opt/local tree since macports typically installs there.  Users might want their
-	// INSTALLDIR (see Makefile.macosx) to mirror that.  If so, then we need to search the /opt/local
-	// path as well.
-	(const char *) "/opt/local/share/direwolf/tocalls.txt",
-#endif
-	(const char *) NULL		// Important - Indicates end of list.
-};
-
-static int tocall_cmp (const void *px, const void *py)
-{
-	const struct tocalls_s *x = (struct tocalls_s *)px;
-	const struct tocalls_s *y = (struct tocalls_s *)py;
-
-	if (x->len != y->len) return (y->len - x->len);
-	return (strcmp(x->prefix, y->prefix));
-}
-
-static void decode_tocall (decode_aprs_t *A, char *dest)
-{
-	FILE *fp = 0;
-	int n = 0;
-	static int first_time = 1;
-	char stuff[100];
-	char *p = NULL;
-	char *r = NULL;
-
-	//dw_printf("debug: decode_tocall(\"%s\")\n", dest);
-
-/*
- * Extract the calls and descriptions from the file.
- *
- * Use only lines with exactly these formats:
- *
- *       APN          Network nodes, digis, etc
- *	      APWWxx  APRSISCE win32 version
- *	|     |       |
- *	00000000001111111111      	
- *	01234567890123456789...
- *
- * Matching will be with only leading upper case and digits.
- */
-
-// TODO:  Look for this in multiple locations.
-// For example, if application was installed in /usr/local/bin,
-// we might want to put this in /usr/local/share/aprs
-
-// If search strategy changes, be sure to keep symbols_init in sync.
-
-	if (first_time) {
-
-	  n = 0;
-	  fp = NULL;
-	  do {
-	    if(search_locations[n] == NULL) break;
-	    fp = fopen(search_locations[n++], "r");
-	  } while (fp == NULL);
-
-	  if (fp != NULL) {
-
-	    while (fgets(stuff, sizeof(stuff), fp) != NULL && num_tocalls < MAX_TOCALLS) {
-	      
-	      p = stuff + strlen(stuff) - 1;
-	      while (p >= stuff && (*p == '\r' || *p == '\n')) {
-	        *p-- = '\0';
-	      }
-
-	      // dw_printf("debug: %s\n", stuff);
-
-	      if (stuff[0] == ' ' && 
-		  stuff[4] == ' ' &&
-		  stuff[5] == ' ' &&
-		  stuff[6] == 'A' && 
-		  stuff[7] == 'P' && 
-		  stuff[12] == ' ' &&
-		  stuff[13] == ' ' ) {
-
-	        p = stuff + 6;
-	        r = tocalls[num_tocalls].prefix;
-	        while (isupper((int)(*p)) || isdigit((int)(*p))) {
-	          *r++ = *p++;
-	        }
-	        *r = '\0';
-	        if (strlen(tocalls[num_tocalls].prefix) > 2) {
-	          tocalls[num_tocalls].description = strdup(stuff+14);
-		  tocalls[num_tocalls].len = strlen(tocalls[num_tocalls].prefix);
-	          // dw_printf("debug %d: %d '%s' -> '%s'\n", num_tocalls, tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
-
-	          num_tocalls++;
-	        }
-	      }
-	      else if (stuff[0] == ' ' && 
-		  stuff[1] == 'A' && 
-		  stuff[2] == 'P' && 
-		  isupper((int)(stuff[3])) &&
-		  stuff[4] == ' ' &&
-		  stuff[5] == ' ' &&
-		  stuff[6] == ' ' &&
-		  stuff[12] == ' ' &&
-		  stuff[13] == ' ' ) {
-
-	        p = stuff + 1;
-	        r = tocalls[num_tocalls].prefix;
-	        while (isupper((int)(*p)) || isdigit((int)(*p))) {
-	          *r++ = *p++;
-	        }
-	        *r = '\0';
-	        if (strlen(tocalls[num_tocalls].prefix) > 2) {
-	          tocalls[num_tocalls].description = strdup(stuff+14);
-		  tocalls[num_tocalls].len = strlen(tocalls[num_tocalls].prefix);
-	          // dw_printf("debug %d: %d '%s' -> '%s'\n", num_tocalls, tocalls[num_tocalls].len, tocalls[num_tocalls].prefix, tocalls[num_tocalls].description);
-
-	          num_tocalls++;
-	        }
-	      }
-	      if (num_tocalls == MAX_TOCALLS) {		// oops. might have discarded some.
-	        text_color_set(DW_COLOR_ERROR);
-	        dw_printf("MAX_TOCALLS needs to be larger than %d to handle contents of 'tocalls.txt'.\n", MAX_TOCALLS);
-	      }
-	    }
-	    fclose(fp);
-
-/*
- * Sort by decreasing length so the search will go
- * from most specific to least specific.
- * Example:  APY350 or APY008 would match those specific
- * models before getting to the more generic APY.
- */
-
-	    qsort (tocalls, num_tocalls, sizeof(struct tocalls_s), tocall_cmp);
-
-	  }
-	  else {
-	    if ( ! A->g_quiet) {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf("Warning: Could not open 'tocalls.txt'.\n");
-	      dw_printf("System types in the destination field will not be decoded.\n");
-	    }
-	  }
-	
-	  first_time = 0;
-
-	  //for (n=0; n<num_tocalls; n++) {
-	  //  dw_printf("sorted %d: %d '%s' -> '%s'\n", n, tocalls[n].len, tocalls[n].prefix, tocalls[n].description);
-	  //}
-	}
-
-
-	for (n=0; n<num_tocalls; n++) {
-	  if (strncmp(dest, tocalls[n].prefix, tocalls[n].len) == 0) {
-	    strlcpy (A->g_mfr, tocalls[n].description, sizeof(A->g_mfr));
-	    return;
-	  }
-	}
-
-} /* end decode_tocall */ 
 
 
 
@@ -4513,7 +4213,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		clen		- Length of comment or -1 to take it all.
  *
  * Outputs:	A->g_telemetry	- Base 91 telemetry |ss1122|
- *		A->g_altitude_ft - from /A=123456
+ *		A->g_altitude_ft - from /A=123456 or /A=-12345
  *		A->g_lat	- Might be adjusted from !DAO!
  *		A->g_lon	- Might be adjusted from !DAO!
  *		A->g_aprstt_loc	- Private extension to !DAO!
@@ -4543,6 +4243,10 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		Protocol reference, end of chapter 6.
  *
  *			/A=123456		Altitude
+ *			/A=-12345		Enhancement - There are many places on the earth's
+ *						surface but the APRS spec has no provision for negative
+ *						numbers.  I propose having 5 digits for a consistent
+ *						field width.  6 would be excessive.
  *
  * What can appear in a comment?
  *
@@ -4708,7 +4412,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
 	  }
 
-	  e = regcomp (&alt_re, "/A=[0-9][0-9][0-9][0-9][0-9][0-9]", REG_EXTENDED);
+	  e = regcomp (&alt_re, "/A=[0-9-][0-9][0-9][0-9][0-9][0-9]", REG_EXTENDED);
 	  if (e) {
 	    regerror (e, &alt_re, emsg, sizeof(emsg));
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
@@ -5068,7 +4772,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	}
 
 /*
- * Altitude in feet.  /A=123456
+ * Altitude in feet.  /A=123456 or /A=-12345
  */
 
 	if (regexec (&alt_re, A->g_comment, MAXMATCH, match, 0) == 0) 
@@ -5186,7 +4890,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  *
  * Function:	main
  *
- * Purpose:	Main program for standalone test program.
+ * Purpose:	Main program for standalone application to parse and explain APRS packets.
  *
  * Inputs:	stdin for raw data to decode.
  *		This is in the usual display format either from
@@ -5332,6 +5036,7 @@ int main (int argc, char *argv[])
 	// If you don't like the text colors, use 0 instead of 1 here.
 	text_color_init(1);
 	text_color_set(DW_COLOR_INFO);
+	deviceid_init();
 
 	while (fgets(stuff, sizeof(stuff), stdin) != NULL) 
         {

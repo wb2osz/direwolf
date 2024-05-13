@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.5.0)
 
 project(direwolf)
 
 # configure version
 set(direwolf_VERSION_MAJOR "1")
-set(direwolf_VERSION_MINOR "7")
+set(direwolf_VERSION_MINOR "8")
 set(direwolf_VERSION_PATCH "0")
 set(direwolf_VERSION_SUFFIX "Development")
 
@@ -318,6 +318,14 @@ if(HAMLIB_FOUND)
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
+endif()
+
+find_package(gpiod)
+if(GPIOD_FOUND)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
+else()
+  set(GPIOD_INCLUDE_DIRS "")
+  set(GPIOD_LIBRARIES "")
 endif()
 
 if(LINUX)

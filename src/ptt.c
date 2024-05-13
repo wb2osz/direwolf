@@ -162,6 +162,10 @@
 #include <hamlib/rig.h>
 #endif
 
+#ifdef USE_GPIOD
+#include <gpiod.h>
+#endif 
+
 /* So we can have more common code for fd. */
 typedef int HANDLE;
 #define INVALID_HANDLE_VALUE (-1)
@@ -468,6 +472,20 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Error writing \"%s\" to %s, errno=%d\n", stemp, gpio_export_path, e);
 	    dw_printf ("%s\n", strerror(e));
+
+	    if (e == 22) {
+	      // It appears that error 22 occurs when sysfs gpio is not available.
+	      // (See https://github.com/wb2osz/direwolf/issues/503)
+	      //
+	      // The solution might be to use the new gpiod approach.
+
+	      dw_printf ("It looks like gpio with sysfs is not supported on this operating system.\n");
+	      dw_printf ("Rather than the following form, in the configuration file,\n");
+	      dw_printf ("    PTT GPIO  %s\n", stemp);
+	      dw_printf ("try using gpiod form instead.  e.g.\n");
+	      dw_printf ("    PTT GPIOD  gpiochip0  %s\n", stemp);
+	      dw_printf ("You can get a list of gpio chip names and corresponding I/O lines with \"gpioinfo\" command.\n");
+	    }
 	    exit (1);
 	  }
 	}
@@ -634,6 +652,31 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	get_access_to_gpio (gpio_value_path);
 }
 
+#if defined(USE_GPIOD)
+int gpiod_probe(const char *chip_name, int line_number)
+{
+	struct gpiod_chip *chip;
+	chip = gpiod_chip_open_by_name(chip_name);
+	if (chip == NULL) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Can't open GPIOD chip %s.\n", chip_name);
+		return -1;
+	}
+
+	struct gpiod_line *line;
+	line = gpiod_chip_get_line(chip, line_number);
+	if (line == NULL) {
+		text_color_set(DW_COLOR_ERROR);
+		dw_printf ("Can't get GPIOD line %d.\n", line_number);
+		return -1;
+	}
+	if (ptt_debug_level >= 2) {
+		text_color_set(DW_COLOR_DEBUG);
+		dw_printf("GPIOD probe OK. Chip: %s line: %d\n", chip_name, line_number);
+	}
+	return 0;
+}
+#endif   /* USE_GPIOD */
 #endif   /* not __WIN32__ */
 
 
@@ -650,7 +693,8 @@ void export_gpio(int ch, int ot, int invert, int direction)
  *			ptt_method	Method for PTT signal. 
  *					PTT_METHOD_NONE - not configured.  Could be using VOX. 
  *					PTT_METHOD_SERIAL - serial (com) port. 
- *					PTT_METHOD_GPIO - general purpose I/O. 
+ *					PTT_METHOD_GPIO - general purpose I/O (sysfs). 
+ *					PTT_METHOD_GPIOD - general purpose I/O (libgpiod). 
  *					PTT_METHOD_LPT - Parallel printer port. 
  *                  			PTT_METHOD_HAMLIB - HAMLib rig control.
  *					PTT_METHOD_CM108 - GPIO pins of CM108 etc. USB Audio.
@@ -729,12 +773,13 @@ void ptt_init (struct audio_s *audio_config_p)
 	    if (ptt_debug_level >= 2) {
 
 	      text_color_set(DW_COLOR_DEBUG);
-              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, gpio=%d, lpt_bit=%d, invert=%d\n",
+              dw_printf ("ch=%d, %s method=%d, device=%s, line=%d, name=%s, gpio=%d, lpt_bit=%d, invert=%d\n",
 		ch,
 		otnames[ot],
 		audio_config_p->achan[ch].octrl[ot].ptt_method, 
 		audio_config_p->achan[ch].octrl[ot].ptt_device,
 		audio_config_p->achan[ch].octrl[ot].ptt_line,
+		audio_config_p->achan[ch].octrl[ot].out_gpio_name,
 		audio_config_p->achan[ch].octrl[ot].out_gpio_num,
 		audio_config_p->achan[ch].octrl[ot].ptt_lpt_bit,
 		audio_config_p->achan[ch].octrl[ot].ptt_invert);
@@ -880,7 +925,28 @@ void ptt_init (struct audio_s *audio_config_p)
 	if (using_gpio) {
 	  get_access_to_gpio ("/sys/class/gpio/export");
 	}
-
+#if defined(USE_GPIOD)
+    // GPIOD
+	for (ch = 0; ch < MAX_CHANS; ch++) {
+	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
+	    for (int ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+	        const char *chip_name = audio_config_p->achan[ch].octrl[ot].out_gpio_name;
+	        int line_number = audio_config_p->achan[ch].octrl[ot].out_gpio_num;
+	        int rc = gpiod_probe(chip_name, line_number);
+	        if (rc < 0) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Disable PTT for channel %d\n", ch);
+	          audio_config_p->achan[ch].octrl[ot].ptt_method = PTT_METHOD_NONE;
+	        } else {
+	          // Set initial state off ptt_set will invert output signal if appropriate.
+	          ptt_set (ot, ch, 0);
+	        }
+	      }
+	    }
+	  }
+	}
+#endif /* USE_GPIOD */
 /*
  * We should now be able to create the device nodes for 
  * the pins we want to use.
@@ -1123,7 +1189,27 @@ void ptt_init (struct audio_s *audio_config_p)
 	  if (audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    if(audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_NONE) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("Note: PTT not configured for channel %d. (Ignore this if using VOX.)\n", ch);
+	      dw_printf ("\n");
+	      dw_printf ("Note: PTT not configured for channel %d. (OK if using VOX.)\n", ch);
+	      dw_printf ("When using VOX, ensure that it adds very little delay (e.g. 10-20) milliseconds\n");
+	      dw_printf ("between the time that transmit audio ends and PTT is deactivated.\n");
+	      dw_printf ("For example, if using a SignaLink USB, turn the DLY control all the\n");
+	      dw_printf ("way counter clockwise.\n");
+	      dw_printf ("\n");
+	      dw_printf ("Using VOX built in to the radio is a VERY BAD idea.  This is intended\n");
+	      dw_printf ("for voice operation, with gaps in the sound, and typically has a delay of about a\n");
+	      dw_printf ("half second between the time the audio stops and the transmitter is turned off.\n");
+	      dw_printf ("When using APRS your transmiter will be sending a quiet carrier for\n");
+	      dw_printf ("about a half second after your packet ends.  This may interfere with the\n");
+	      dw_printf ("the next station to transmit.  This is being inconsiderate.\n");
+	      dw_printf ("\n");
+	      dw_printf ("If you are trying to use VOX with connected mode packet, expect\n");
+	      dw_printf ("frustration and disappointment.  Connected mode involves rapid responses\n");
+	      dw_printf ("which you will probably miss because your transmitter is still on when\n");
+	      dw_printf ("the response is being transmitted.\n");
+	      dw_printf ("\n");
+	      dw_printf ("Read the User Guide 'Transmit Timing' section for more details.\n");
+	      dw_printf ("\n");
 	    }
 	  }
 	}
@@ -1298,6 +1384,18 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  close (fd);
 
 	}
+
+#if defined(USE_GPIOD)
+	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+		const char *chip = save_audio_config_p->achan[chan].octrl[ot].out_gpio_name;
+		int line = save_audio_config_p->achan[chan].octrl[ot].out_gpio_num;
+		int rc = gpiod_ctxless_set_value(chip, line, ptt, false, "direwolf", NULL, NULL);
+		if (ptt_debug_level >= 1) {
+			text_color_set(DW_COLOR_DEBUG);
+			dw_printf("PTT_METHOD_GPIOD chip: %s line: %d ptt: %d  rc: %d\n", chip, line, ptt, rc);
+		}
+	}
+#endif /* USE_GPIOD */
 #endif
 	
 /*

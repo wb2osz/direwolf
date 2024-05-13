@@ -10,6 +10,7 @@ include_directories(
   ${PORTAUDIO_INCLUDE_DIRS}
   ${SNDIO_INCLUDE_DIRS}
   ${CUSTOM_GEOTRANZ_DIR}
+  ${GPIOD_INCLUDE_DIRS}
   )
 
 if(WIN32 OR CYGWIN)
@@ -38,6 +39,7 @@ list(APPEND direwolf_SOURCES
   beacon.c
   config.c
   decode_aprs.c
+  deviceid.c
   dedupe.c
   demod_9600.c
   demod_afsk.c
@@ -162,6 +164,7 @@ target_link_libraries(direwolf
   ${ALSA_LIBRARIES}
   ${UDEV_LIBRARIES}
   ${PORTAUDIO_LIBRARIES}
+  ${GPIOD_LIBRARIES}
   ${SNDIO_LIBRARIES}
   ${AVAHI_LIBRARIES}
   )
@@ -176,6 +179,7 @@ endif()
 # decode_aprs
 list(APPEND decode_aprs_SOURCES
   decode_aprs.c
+  deviceid.c
   ais.c
   kiss_frame.c
   ax25_pad.c
@@ -360,6 +364,7 @@ list(APPEND atest_SOURCES
   ax25_pad.c
   ax25_pad2.c
   decode_aprs.c
+  deviceid.c
   dwgpsnmea.c
   dwgps.c
   dwgpsd.c
