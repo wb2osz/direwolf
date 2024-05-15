@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022, 2023, 2024  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -206,9 +206,36 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	A->g_footprint_lon = G_UNKNOWN;
 	A->g_footprint_radius = G_UNKNOWN;
 
-// TODO: Complain if obsolete WIDE or RELAY is found in via path.
 
-// TODO: complain if unused WIDEn is see in path.
+// Check for RFONLY or NOGATE in the destination field.
+// Actual cases observed.
+// W1KU-4>APDW15,W1IMD,WIDE1,KQ1L-8,N3LLO-3,WIDE2*:}EB1EBT-9>NOGATE,TCPIP,W1KU-4*::DF1AKR-9 :73{4
+// NE1CU-10>RFONLY,KB1AEV-15,N3LLO-3,WIDE2*:}W1HS-11>APMI06,TCPIP,NE1CU-10*:T#050,190,039,008,095,20403,00000000
+
+	char atemp[AX25_MAX_ADDR_LEN];
+	ax25_get_addr_no_ssid (pp, AX25_DESTINATION, atemp);
+	if ( ! quiet) {
+	  if (strcmp("RFONLY", atemp) == 0 || strcmp("NOGATE", atemp) == 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("RFONLY and NOGATE must not appear in the destination address field.\n");
+	    dw_printf("They should appear only at the end of the digi via path.\n");
+	  }
+	}
+
+// Complain if obsolete WIDE or RELAY is found in via path.
+
+	for (int i = 0; i < ax25_get_num_repeaters(pp); i++) {
+	  ax25_get_addr_no_ssid (pp, AX25_REPEATER_1 + i, atemp);
+	  if ( ! quiet) {
+	    if (strcmp("RELAY", atemp) == 0 || strcmp("WIDE", atemp) == 0 || strcmp("TRACE", atemp) == 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("RELAY, TRACE, and WIDE (not WIDEn) are obsolete.\n");
+	      dw_printf("Modern digipeaters will not recoginize these.\n");
+	    }
+	  }
+	}
+
+// TODO: complain if unused WIDEn-0 is see in path.
 // There is a report of UIDIGI decrementing ssid 1 to 0 and not marking it used.
 // http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2022-May/049397.html
 
