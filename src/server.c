@@ -992,10 +992,22 @@ static void mon_addrs (int chan, packet_t pp, char *result, int result_size)
 	  int j;
 
 	  ax25_get_addr_with_ssid (pp, AX25_REPEATER_1, via);
+
+// in case of only one digi with h bit set to give it a "*": next 4 lines added
+	  int heard = ax25_get_heard(pp);
+	  if (heard == 2) {
+	    strlcat (via, "*", sizeof(via));
+	  }
+		
 	  for (j = 1; j < num_digi; j++) {
 	    ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, stemp);
 	    strlcat (via, ",", sizeof(via));
 	    strlcat (via, stemp, sizeof(via));
+
+// in case of more than one digi to give a "*" if h bit is set: next 3 lines added
+	    if (j+2 == heard) {
+	      strlcat (via, "*", sizeof(via));
+	    }
 	  }
 	  snprintf (result, result_size, " %d:Fm %s To %s Via %s ",
 		chan+1, src, dst, via);
