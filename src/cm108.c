@@ -260,8 +260,9 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
 // Maximum length of name for PTT HID.
 // For Linux, this was originally 17 to handle names like /dev/hidraw3.
 // Windows has more complicated names.  The longest I saw was 95 but longer have been reported.
+// Then we have this  https://groups.io/g/direwolf/message/9622  where 127 is not enough.
 
-#define MAXX_HIDRAW_NAME_LEN 128
+#define MAXX_HIDRAW_NAME_LEN 150
 
 /*
  * Result of taking inventory of USB soundcards and USB HIDs.
