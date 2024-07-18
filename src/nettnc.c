@@ -476,7 +476,7 @@ void nettnc_send_packet (int chan, packet_t pp)
 	  s_tnc_sock[chan] = -1;
 	}
 #else
-	int err = SOCK_SEND (kps->client_sock[chan], kiss_buff, kiss_len);
+	int err = SOCK_SEND (s_tnc_sock[chan], kiss_buff, kiss_len);
 	if (err <= 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\nError %d sending packet to KISS Network TNC for channel %d.  Closing connection.\n\n", err, chan);
