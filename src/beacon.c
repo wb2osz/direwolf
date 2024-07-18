@@ -162,14 +162,14 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 	  int chan = g_misc_config_p->beacon[j].sendto_chan;
 
 	  if (chan < 0) chan = 0;	/* For IGate, use channel 0 call. */
-	  if (chan >= MAX_CHANS) chan = 0;	// For ICHANNEL, use channel 0 call.
+	  if (chan >= MAX_TOTAL_CHANS) chan = 0;	// For ICHANNEL, use channel 0 call.
 
 	  if (g_modem_config_p->chan_medium[chan] == MEDIUM_RADIO ||
 	      g_modem_config_p->chan_medium[chan] == MEDIUM_NETTNC) {
 
-	    if (strlen(g_modem_config_p->achan[chan].mycall) > 0 &&
-			 strcasecmp(g_modem_config_p->achan[chan].mycall, "N0CALL") != 0 &&
-			 strcasecmp(g_modem_config_p->achan[chan].mycall, "NOCALL") != 0) {
+	    if (strlen(g_modem_config_p->mycall[chan]) > 0 &&
+			 strcasecmp(g_modem_config_p->mycall[chan], "N0CALL") != 0 &&
+			 strcasecmp(g_modem_config_p->mycall[chan], "NOCALL") != 0) {
 
               switch (g_misc_config_p->beacon[j].btype) {
 
@@ -809,10 +809,10 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 	      if (g_modem_config_p->chan_medium[bp->sendto_chan] == MEDIUM_IGATE) {	// ICHANNEL uses chan 0 mycall.
 									// TODO: Maybe it should be allowed to have own.
-	        strlcpy (mycall, g_modem_config_p->achan[0].mycall, sizeof(mycall));
+	        strlcpy (mycall, g_modem_config_p->mycall[0], sizeof(mycall));
 	      }
 	      else {
-	        strlcpy (mycall, g_modem_config_p->achan[bp->sendto_chan].mycall, sizeof(mycall));
+	        strlcpy (mycall, g_modem_config_p->mycall[bp->sendto_chan], sizeof(mycall));
 	      }
 	      
 	      if (strlen(mycall) == 0 || strcmp(mycall, "NOCALL") == 0) {
@@ -900,7 +900,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 		case BEACON_OBJECT:
 
-		  encode_object (bp->objname, bp->compress, 0, bp->lat, bp->lon, bp->ambiguity,
+		  encode_object (bp->objname, bp->compress, 1, bp->lat, bp->lon, bp->ambiguity,
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */

@@ -72,7 +72,10 @@
  *		V.26 has two variations, A and B.  Initially I implemented the A alternative.
  *		It later turned out that the MFJ-2400 used the B alternative.  In version 1.6 you have a
  *		choice between compatibility with MFJ (and probably the others) or the original implementation.
- *		
+ *		The B alternative works a little more reliably, perhaps because there is never a
+ *		zero phase difference between adjacent symbols.
+ *		Eventually the A alternative might disappear to reduce confusion.
+ *	
  *---------------------------------------------------------------*/
 
 #include "direwolf.h"
@@ -94,7 +97,7 @@
 #include "fsk_demod_state.h"		// Values above override defaults.
 
 #include "audio.h"
-#include "tune.h"
+//#include "tune.h"	// obsolete. eventually remove all references.
 #include "fsk_gen_filter.h"
 #include "hdlc_rec.h"
 #include "textcolor.h"
@@ -102,7 +105,13 @@
 #include "dsp.h"
 
 
-
+#define TUNE(envvar,param,name,fmt) { 				\
+	char *e = getenv(envvar);				\
+	if (e != NULL) {					\
+	  param = atof(e);					\
+	  text_color_set (DW_COLOR_ERROR);			\
+	  dw_printf ("TUNE: " name " = " fmt "\n", param);	\
+	} }
 
 
 static const int phase_to_gray_v26[4] = {0, 1, 3, 2};	
@@ -202,9 +211,10 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	D->num_slicers = 1;		// Haven't thought about this yet.  Is it even applicable?
 
 
-#ifdef TUNE_PROFILE
-	profile = TUNE_PROFILE;
-#endif
+//#ifdef TUNE_PROFILE
+//	profile = TUNE_PROFILE;
+//#endif
+	TUNE("TUNE_PROFILE", profile, "profile", "%c")
 
 	if (modem_type == MODEM_QPSK) {
 
@@ -290,9 +300,16 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 
 	  D->u.psk.delay_line_width_sym = 1.25;		// Delay line > 13/12 * symbol period		
 
+// JWL experiment 11-7.  Should delay be based on audio freq rather than baud?
+#if 0   // experiment made things much worse.   55 went down to 21.
+	  D->u.psk.coffs = (int) round( (11.f / 12.f) * (float)samples_per_sec / (float)carrier_freq );
+	  D->u.psk.boffs = (int) round(                 (float)samples_per_sec / (float)carrier_freq );
+	  D->u.psk.soffs = (int) round( (13.f / 12.f) * (float)samples_per_sec / (float)carrier_freq );
+#else
 	  D->u.psk.coffs = (int) round( (11.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
 	  D->u.psk.boffs = (int) round(                 (float)samples_per_sec / (float)correct_baud );
 	  D->u.psk.soffs = (int) round( (13.f / 12.f) * (float)samples_per_sec / (float)correct_baud );
+#endif
 	}
 	else {
 
@@ -393,26 +410,40 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
 	  }
 	}
 
-#ifdef TUNE_PRE_BAUD
-	D->u.psk.prefilter_baud = TUNE_PRE_BAUD;
-#endif
-#ifdef TUNE_PRE_WINDOW
-	D->u.psk.pre_window = TUNE_PRE_WINDOW;
-#endif
+//#ifdef TUNE_PRE_BAUD
+//	D->u.psk.prefilter_baud = TUNE_PRE_BAUD;
+//#endif
+	TUNE("TUNE_PRE_BAUD", D->u.psk.prefilter_baud, "prefilter_baud", "%.3f")
 
-#ifdef TUNE_LPF_BAUD
-	D->u.psk.lpf_baud = TUNE_LPF_BAUD;
-#endif
-#ifdef TUNE_LP_WINDOW
-	D->u.psk.lp_window = TUNE_LP_WINDOW;
-#endif
+//#ifdef TUNE_PRE_WINDOW
+//	D->u.psk.pre_window = TUNE_PRE_WINDOW;
+//#endif
+	TUNE("TUNE_PRE_WINDOW", D->u.psk.pre_window, "pre_window", "%d")
 
-#if defined(TUNE_PLL_SEARCHING)
-	D->pll_searching_inertia = TUNE_PLL_SEARCHING;
-#endif
-#if defined(TUNE_PLL_LOCKED)
-	D->pll_locked_inertia = TUNE_PLL_LOCKED;
-#endif
+//#ifdef TUNE_LPF_BAUD
+//	D->u.psk.lpf_baud = TUNE_LPF_BAUD;
+//#endif
+//#ifdef TUNE_LP_WINDOW
+//	D->u.psk.lp_window = TUNE_LP_WINDOW;
+//#endif
+	TUNE("TUNE_LPF_BAUD", D->u.psk.lpf_baud, "lpf_baud", "%.3f")
+	TUNE("TUNE_LP_WINDOW", D->u.psk.lp_window, "lp_window", "%d")
+
+
+	TUNE("TUNE_LP_FILTER_WIDTH_SYM", D->u.psk.lp_filter_width_sym, "lp_filter_width_sym", "%.3f")
+
+
+
+
+
+//#if defined(TUNE_PLL_SEARCHING)
+//	D->pll_searching_inertia = TUNE_PLL_SEARCHING;
+//#endif
+//#if defined(TUNE_PLL_LOCKED)
+//	D->pll_locked_inertia = TUNE_PLL_LOCKED;
+//#endif
+	TUNE("TUNE_PLL_LOCKED", D->pll_locked_inertia, "pll_locked_inertia", "%.2f")
+	TUNE("TUNE_PLL_SEARCHING", D->pll_searching_inertia, "pll_searching_inertia", "%.2f")
 
 
 /*
@@ -427,17 +458,24 @@ void demod_psk_init (enum modem_t modem_type, enum v26_e v26_alt, int samples_pe
  */
 
 	D->u.psk.pre_filter_taps = (int) round( D->u.psk.pre_filter_width_sym * (float)samples_per_sec / (float)correct_baud );
+
+// JWL experiment 11/7 - Should delay line be based on audio frequency?
 	D->u.psk.delay_line_taps  = (int) round( D->u.psk.delay_line_width_sym * (float)samples_per_sec / (float)correct_baud );
+	D->u.psk.delay_line_taps  = (int) round( D->u.psk.delay_line_width_sym * (float)samples_per_sec / (float)correct_baud );
+
+
 	D->u.psk.lp_filter_taps =  (int) round( D->u.psk.lp_filter_width_sym * (float)samples_per_sec / (float)correct_baud );
 
 
-#ifdef TUNE_PRE_FILTER_TAPS
-	D->u.psk.pre_filter_taps = TUNE_PRE_FILTER_TAPS;
-#endif
+//#ifdef TUNE_PRE_FILTER_TAPS
+//	D->u.psk.pre_filter_taps = TUNE_PRE_FILTER_TAPS;
+//#endif
+	  TUNE("TUNE_PRE_FILTER_TAPS", D->u.psk.pre_filter_taps, "pre_filter_taps", "%d")
 
-#ifdef TUNE_lp_filter_taps
-	D->u.psk.lp_filter_taps = TUNE_lp_filter_taps;
-#endif
+//#ifdef TUNE_lp_filter_taps
+//	D->u.psk.lp_filter_taps = TUNE_lp_filter_taps;
+//#endif
+	  TUNE("TUNE_LP_FILTER_TAPS", D->u.psk.lp_filter_taps, "lp_filter_taps (FIR)", "%d")
 
 
 	if (D->u.psk.pre_filter_taps > MAX_FILTER_SIZE) {
@@ -665,7 +703,7 @@ void demod_psk_process_sample (int chan, int subchan, int sam, struct demodulato
 {
 	int slice = 0;		// Would it make sense to have more than one?
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
 	/* Scale to nice number for plotting during debug. */
@@ -800,16 +838,22 @@ static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct 
 
 	    int gray = demod_bits;
 
-	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1]);
-	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, bit_quality[0]);
+	    hdlc_rec_bit_new (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1],
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
+	    hdlc_rec_bit_new (chan, subchan, slice, gray & 1, 0, bit_quality[0],
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
 	  }
 	  else {
 	    int gray = demod_bits;
 
-	    hdlc_rec_bit (chan, subchan, slice, (gray >> 2) & 1, 0, bit_quality[2]);
-	    hdlc_rec_bit (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1]);
-	    hdlc_rec_bit (chan, subchan, slice, gray & 1, 0, bit_quality[0]);
+	    hdlc_rec_bit_new (chan, subchan, slice, (gray >> 2) & 1, 0, bit_quality[2],
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
+	    hdlc_rec_bit_new (chan, subchan, slice, (gray >> 1) & 1, 0, bit_quality[1],
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
+	    hdlc_rec_bit_new (chan, subchan, slice, gray & 1, 0, bit_quality[0],
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
 	  }
+	  D->slicer[slice].pll_symbol_count++;
 	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
 	}
 
@@ -826,12 +870,14 @@ static void nudge_pll (int chan, int subchan, int slice, int demod_bits, struct 
 
 	  pll_dcd_signal_transition2 (D, slice, D->slicer[slice].data_clock_pll);
 
+	  signed int before = (signed int)(D->slicer[slice].data_clock_pll);	// Treat as signed.
 	  if (D->slicer[slice].data_detect) {
 	    D->slicer[slice].data_clock_pll = (int)floorf((float)(D->slicer[slice].data_clock_pll) * D->pll_locked_inertia);
 	  }
 	  else {
 	    D->slicer[slice].data_clock_pll = (int)floorf((float)(D->slicer[slice].data_clock_pll) * D->pll_searching_inertia);
 	  }
+	  D->slicer[slice].pll_nudge_total += (int64_t)((signed int)(D->slicer[slice].data_clock_pll)) - (int64_t)before;
 	}
 
 /*

@@ -609,7 +609,7 @@ void demod_afsk_process_sample (int chan, int subchan, int sam, struct demodulat
 	static int seq = 0;			/* for log file name */
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
 /* 

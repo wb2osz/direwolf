@@ -76,7 +76,7 @@ static struct cdigi_config_s *save_cdigi_config_p;
  * Maintain count of packets digipeated for each combination of from/to channel.
  */
 
-static int cdigi_count[MAX_CHANS][MAX_CHANS];
+static int cdigi_count[MAX_RADIO_CHANS][MAX_RADIO_CHANS];
 
 int cdigipeater_get_count (int from_chan, int to_chan) {
 	return (cdigi_count[from_chan][to_chan]);
@@ -132,7 +132,9 @@ void cdigipeater (int from_chan, packet_t pp)
 	// Connected mode is allowed only for channels with internal modem.
 	// It probably wouldn't matter for digipeating but let's keep that rule simple and consistent.
 
-	if ( from_chan < 0 || from_chan >= MAX_CHANS || save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO) {
+	if ( from_chan < 0 || from_chan >= MAX_RADIO_CHANS ||
+		(save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO &&
+		save_audio_config_p->chan_medium[from_chan] != MEDIUM_NETTNC)  ) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("cdigipeater: Did not expect to receive on invalid channel %d.\n", from_chan);
 	  return;
@@ -145,13 +147,13 @@ void cdigipeater (int from_chan, packet_t pp)
  * Might not have a benefit here.
  */
 
-	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	for (to_chan=0; to_chan<MAX_RADIO_CHANS; to_chan++) {
 	  if (save_cdigi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan == from_chan) {
 	      packet_t result;
 
-	      result = cdigipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
-					   save_audio_config_p->achan[to_chan].mycall,
+	      result = cdigipeat_match (from_chan, pp, save_audio_config_p->mycall[from_chan],
+					   save_audio_config_p->mycall[to_chan],
 			save_cdigi_config_p->has_alias[from_chan][to_chan],
 			&(save_cdigi_config_p->alias[from_chan][to_chan]), to_chan,
 				save_cdigi_config_p->cfilter_str[from_chan][to_chan]);
@@ -168,13 +170,13 @@ void cdigipeater (int from_chan, packet_t pp)
  * Second pass:  Look at packets being digipeated to different channel.
  */
 
-	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	for (to_chan=0; to_chan<MAX_RADIO_CHANS; to_chan++) {
 	  if (save_cdigi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan != from_chan) {
 	      packet_t result;
 
-	      result = cdigipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
-					   save_audio_config_p->achan[to_chan].mycall,
+	      result = cdigipeat_match (from_chan, pp, save_audio_config_p->mycall[from_chan],
+					   save_audio_config_p->mycall[to_chan],
 	                save_cdigi_config_p->has_alias[from_chan][to_chan],
 			&(save_cdigi_config_p->alias[from_chan][to_chan]), to_chan,
 				save_cdigi_config_p->cfilter_str[from_chan][to_chan]);

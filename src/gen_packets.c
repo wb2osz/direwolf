@@ -242,7 +242,7 @@ int main(int argc, char **argv)
         modem.adev[0].samples_per_sec = DEFAULT_SAMPLES_PER_SEC;        /* -r option */
         modem.adev[0].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;        /* -8 for 8 instead of 16 bits */
         
-	for (chan = 0; chan < MAX_CHANS; chan++) {
+	for (chan = 0; chan < MAX_RADIO_CHANS; chan++) {
 	  modem.achan[chan].modem_type = MODEM_AFSK;			/* change with -g */
 	  modem.achan[chan].mark_freq = DEFAULT_MARK_FREQ;              /* -m option */
           modem.achan[chan].space_freq = DEFAULT_SPACE_FREQ;            /* -s option */

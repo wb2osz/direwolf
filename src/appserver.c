@@ -597,7 +597,7 @@ void agw_cb_G_port_information (int num_chan_avail, char *chan_descriptions[])
 	    if (strncasecmp(p, "Port", 4) == 0 && isdigit(p[4])) {
 	    
 	      int chan = atoi(p+4) - 1;	// "Port1" is our channel 0.
-	      if (chan >= 0 && chan < MAX_CHANS) {
+	      if (chan >= 0 && chan < MAX_TOTAL_CHANS) {
 
 	        char *desc = p + 4;
 	        while (*desc != '\0' && (*desc == ' ' || isdigit(*desc))) {

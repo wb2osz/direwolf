@@ -30,7 +30,7 @@ enum sendto_type_e { SENDTO_XMIT, SENDTO_IGATE, SENDTO_RECV };
 
 
 #define MAX_BEACONS 30
-#define MAX_KISS_TCP_PORTS (MAX_CHANS+1)
+#define MAX_KISS_TCP_PORTS (MAX_RADIO_CHANS+1)
 
 struct misc_config_s {
 

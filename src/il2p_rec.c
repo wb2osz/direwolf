@@ -69,7 +69,7 @@ struct il2p_context_s {
 	int corrected;		// Number of symbols corrected by RS FEC.
 };
 
-static struct il2p_context_s *il2p_context[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
+static struct il2p_context_s *il2p_context[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SLICERS];
 
 
 
@@ -101,7 +101,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 
 	struct il2p_context_s *F = il2p_context[chan][subchan][slice];
 	if (F == NULL) {
-          assert (chan >= 0 && chan < MAX_CHANS);
+          assert (chan >= 0 && chan < MAX_RADIO_CHANS);
           assert (subchan >= 0 && subchan < MAX_SUBCHANS);
           assert (slice >= 0 && slice < MAX_SLICERS);
 	  F = il2p_context[chan][subchan][slice] = (struct il2p_context_s *)malloc(sizeof (struct il2p_context_s));
@@ -251,12 +251,11 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	      if (pp != NULL) {
 	          alevel_t alevel = demod_get_audio_level (chan, subchan);
 	          retry_t retries = F->corrected;
-	          int is_fx25 = 1;		// FIXME: distinguish fx.25 and IL2P.
-						// Currently this just means that a FEC mode was used.
+	          fec_type_t fec_type = fec_type_il2p;
 
 	          // TODO: Could we put last 3 arguments in packet object rather than passing around separately?
 
-	          multi_modem_process_rec_packet (chan, subchan, slice, pp, alevel, retries, is_fx25);
+	          multi_modem_process_rec_packet (chan, subchan, slice, pp, alevel, retries, fec_type);
 	      }
 	    }   // end block for local variables.
 

@@ -730,12 +730,12 @@ int gpiod_probe(const char *chip_name, int line_number)
 
 
 
-static HANDLE ptt_fd[MAX_CHANS][NUM_OCTYPES];	
+static HANDLE ptt_fd[MAX_RADIO_CHANS][NUM_OCTYPES];
 					/* Serial port handle or fd.  */
 					/* Could be the same for two channels */	
 					/* if using both RTS and DTR. */
 #if USE_HAMLIB
-static RIG *rig[MAX_CHANS][NUM_OCTYPES];
+static RIG *rig[MAX_RADIO_CHANS][NUM_OCTYPES];
 #endif
 
 static char otnames[NUM_OCTYPES][8];
@@ -761,7 +761,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	strlcpy (otnames[OCTYPE_CON], "CON", sizeof(otnames[OCTYPE_CON]));
 
 
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 	  int ot;
 
 	  for (ot = 0; ot < NUM_OCTYPES; ot++) {
@@ -791,7 +791,7 @@ void ptt_init (struct audio_s *audio_config_p)
  * Set up serial ports.
  */
 
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 
 	  if (audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    int ot;
@@ -906,7 +906,7 @@ void ptt_init (struct audio_s *audio_config_p)
  */
 
 	using_gpio = 0;
-	for (ch=0; ch<MAX_CHANS; ch++) {
+	for (ch=0; ch<MAX_RADIO_CHANS; ch++) {
 	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
@@ -927,7 +927,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	}
 #if defined(USE_GPIOD)
     // GPIOD
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    for (int ot = 0; ot < NUM_OCTYPES; ot++) {
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
@@ -952,7 +952,7 @@ void ptt_init (struct audio_s *audio_config_p)
  * the pins we want to use.
  */
 	    
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 
 	    int ot;	// output control type, PTT, DCD, CON, ...
@@ -984,7 +984,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 #if  ( defined(__i386__) || defined(__x86_64__) ) && ( defined(__linux__) || defined(__unix__) )
 
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
@@ -1051,7 +1051,7 @@ void ptt_init (struct audio_s *audio_config_p)
 #endif /* x86 Linux */
 
 #ifdef USE_HAMLIB
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
@@ -1163,7 +1163,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 #if USE_CM108
 
-	for (ch = 0; ch < MAX_CHANS; ch++) {
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++) {
 
 	  if (audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    int ot;
@@ -1185,7 +1185,7 @@ void ptt_init (struct audio_s *audio_config_p)
 
 /* Why doesn't it transmit?  Probably forgot to specify PTT option. */
 
-	for (ch=0; ch<MAX_CHANS; ch++) {
+	for (ch=0; ch<MAX_RADIO_CHANS; ch++) {
 	  if (audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
 	    if(audio_config_p->achan[ch].octrl[OCTYPE_PTT].ptt_method == PTT_METHOD_NONE) {
 	      text_color_set(DW_COLOR_INFO);
@@ -1251,14 +1251,14 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	int ptt2 = ptt_signal;
 
 	assert (ot >= 0 && ot < NUM_OCTYPES);
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 	if (ptt_debug_level >= 1) {
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("%s %d = %d\n", otnames[ot], chan, ptt_signal);
 	}
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 	if (   save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1494,7 +1494,7 @@ void ptt_set (int ot, int chan, int ptt_signal)
 int get_input (int it, int chan)
 {
 	assert (it >= 0 && it < NUM_ICTYPES);
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 	if (   save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -1559,7 +1559,7 @@ void ptt_term (void)
 {
 	int n;
 
-	for (n = 0; n < MAX_CHANS; n++) {
+	for (n = 0; n < MAX_RADIO_CHANS; n++) {
 	  if (save_audio_config_p->chan_medium[n] == MEDIUM_RADIO) {
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
@@ -1568,7 +1568,7 @@ void ptt_term (void)
 	  }
 	}
 
-	for (n = 0; n < MAX_CHANS; n++) {
+	for (n = 0; n < MAX_RADIO_CHANS; n++) {
 	  if (save_audio_config_p->chan_medium[n] == MEDIUM_RADIO) {
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {
@@ -1586,7 +1586,7 @@ void ptt_term (void)
 
 #ifdef USE_HAMLIB
 
-	for (n = 0; n < MAX_CHANS; n++) {
+	for (n = 0; n < MAX_RADIO_CHANS; n++) {
 	  if (save_audio_config_p->chan_medium[n] == MEDIUM_RADIO) {
 	    int ot;
 	    for (ot = 0; ot < NUM_OCTYPES; ot++) {

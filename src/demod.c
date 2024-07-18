@@ -63,11 +63,11 @@ static struct audio_s          *save_audio_config_p;
 
 // Current state of all the decoders.
 
-static struct demodulator_state_s demodulator_state[MAX_CHANS][MAX_SUBCHANS];
+static struct demodulator_state_s demodulator_state[MAX_RADIO_CHANS][MAX_SUBCHANS];
 
 
-static int sample_sum[MAX_CHANS][MAX_SUBCHANS];
-static int sample_count[MAX_CHANS][MAX_SUBCHANS];
+static int sample_sum[MAX_RADIO_CHANS][MAX_SUBCHANS];
+static int sample_count[MAX_RADIO_CHANS][MAX_SUBCHANS];
 
 
 /*------------------------------------------------------------------
@@ -100,7 +100,7 @@ int demod_init (struct audio_s *pa)
 
 	save_audio_config_p = pa;
 
-	for (chan = 0; chan < MAX_CHANS; chan++) {
+	for (chan = 0; chan < MAX_RADIO_CHANS; chan++) {
 
 	 if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 
@@ -812,7 +812,7 @@ int demod_init (struct audio_s *pa)
 
 	// Now the virtual channels.  FIXME:  could be single loop.
 
-	for (chan = MAX_CHANS; chan < MAX_TOTAL_CHANS; chan++) {
+	for (chan = MAX_RADIO_CHANS; chan < MAX_TOTAL_CHANS; chan++) {
 
 // FIXME dw_printf ("-------- virtual channel loop %d \n", chan);
 
@@ -927,7 +927,7 @@ int demod_get_sample (int a)
  *
  *--------------------------------------------------------------------*/
 
-static volatile int mute_input[MAX_CHANS];
+static volatile int mute_input[MAX_RADIO_CHANS];
 
 // New in 1.7.
 // A few people have a really bad audio cross talk situation where they receive their own transmissions.
@@ -939,7 +939,7 @@ static volatile int mute_input[MAX_CHANS];
 
 void demod_mute_input (int chan, int mute_during_xmit)
 {
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	mute_input[chan] = mute_during_xmit;
 }
 
@@ -952,7 +952,7 @@ void demod_process_sample (int chan, int subchan, int sam)
 
 	struct demodulator_state_s *D;
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
 	if (mute_input[chan]) {
@@ -1066,7 +1066,7 @@ alevel_t demod_get_audio_level (int chan, int subchan)
 	struct demodulator_state_s *D;
 	alevel_t alevel;
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
 	/* We have to consider two different cases here. */

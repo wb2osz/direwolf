@@ -469,7 +469,7 @@ struct demodulator_state_s
  *
  * Inputs:	D		Pointer to demodulator state.
  *
- *		chan		Radio channel: 0 to MAX_CHANS - 1	
+ *		chan		Radio channel: 0 to MAX_RADIO_CHANS - 1
  *
  *		subchan		Which of multiple demodulators: 0 to MAX_SUBCHANS - 1
  *

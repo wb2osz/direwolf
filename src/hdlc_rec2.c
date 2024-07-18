@@ -216,6 +216,8 @@ void hdlc_rec2_init (struct audio_s *p_audio_config)
  * Purpose:	Extract HDLC frame from a stream of bits.
  *
  * Inputs:	block 		- Handle for bit array.
+ *				  This will be deallocated so the caller
+ *				  must not hold on to the address.
  *
  * Description:	The other (original) hdlc decoder took one bit at a time
  *		right out of the demodulator.
@@ -287,11 +289,9 @@ void hdlc_rec2_block (rrbb_t block)
 	  /* Let thru even with bad CRC.  Of course, it still */
 	  /* needs to be a minimum number of whole octets. */
 	  ok = try_decode (block, chan, subchan, slice, alevel, retry_cfg, 1);
-	  rrbb_delete (block);
 	}
-	else {  
-	  rrbb_delete (block); 
-	}
+
+	rrbb_delete (block);
 
 } /* end hdlc_rec2_block */
 
@@ -438,7 +438,7 @@ static int try_to_fix_quick_now (rrbb_t block, int chan, int subchan, int slice,
 	retry_cfg.u_bits.sep.bit_idx_c = -1;
 
 #ifdef DEBUG_LATER
-	tstart = dtime_now();
+	tstart = dtime_monotonic();
 	dw_printf ("*** Try flipping TWO SEPARATED BITS %d bits\n", len);
 #endif
 	len = rrbb_get_len(block);

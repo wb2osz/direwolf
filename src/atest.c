@@ -231,7 +231,7 @@ int main (int argc, char *argv[])
 	my_audio_config.adev[0].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;	
 
 
-	for (channel=0; channel<MAX_CHANS; channel++) {
+	for (channel=0; channel<MAX_RADIO_CHANS; channel++) {
 
 	  my_audio_config.achan[channel].modem_type = MODEM_AFSK;
 
@@ -628,9 +628,10 @@ int main (int argc, char *argv[])
 	dw_printf ("%d samples per second.  %d bits per sample.  %d audio channels.\n",
 		my_audio_config.adev[0].samples_per_sec,
 		my_audio_config.adev[0].bits_per_sample,
-		my_audio_config.adev[0].num_channels);
+		(int)(my_audio_config.adev[0].num_channels));
+	// nnum_channels is known to be 1 or 2.
 	one_filetime = (double) wav_data.datasize /
-		((my_audio_config.adev[0].bits_per_sample / 8) * my_audio_config.adev[0].num_channels * my_audio_config.adev[0].samples_per_sec);
+		((my_audio_config.adev[0].bits_per_sample / 8) * (int)(my_audio_config.adev[0].num_channels) * my_audio_config.adev[0].samples_per_sec);
 	total_filetime += one_filetime;
 
 	dw_printf ("%d audio bytes in file.  Duration = %.1f seconds.\n",
@@ -654,7 +655,7 @@ int main (int argc, char *argv[])
           int audio_sample;
           int c;
 
-          for (c=0; c<my_audio_config.adev[0].num_channels; c++)
+          for (c=0; c<(int)(my_audio_config.adev[0].num_channels); c++)
           {
 
             /* This reads either 1 or 2 bytes depending on */
@@ -921,7 +922,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 void ptt_set (int ot, int chan, int ptt_signal)
 {
 	// Should only get here for DCD output control.
-	static double dcd_start_time[MAX_CHANS];
+	static double dcd_start_time[MAX_RADIO_CHANS];
 
 	if (d_o_opt) {
 	  double t = (double)sample_number / my_audio_config.adev[0].samples_per_sec;

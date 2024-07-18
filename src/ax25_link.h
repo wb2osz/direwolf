@@ -43,7 +43,7 @@
 
 // Call once at startup time.
 
-void ax25_link_init (struct misc_config_s *pconfig);
+void ax25_link_init (struct misc_config_s *pconfig, int debug);
 
 
 

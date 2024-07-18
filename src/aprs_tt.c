@@ -95,8 +95,8 @@
 
 #define MAX_MSG_LEN 100
 
-static char msg_str[MAX_CHANS][MAX_MSG_LEN+1];
-static int msg_len[MAX_CHANS];
+static char msg_str[MAX_RADIO_CHANS][MAX_MSG_LEN+1];
+static int msg_len[MAX_RADIO_CHANS];
 
 static int parse_fields (char *msg);
 static int parse_callsign (char *e);
@@ -185,7 +185,7 @@ void aprs_tt_init (struct tt_config_s *p, int debug)
 	// TODO: Keep ptr instead of making a copy.
 	memcpy (&tt_config, p, sizeof(struct tt_config_s));
 #endif
-	for (c=0; c<MAX_CHANS; c++) {	
+	for (c=0; c<MAX_RADIO_CHANS; c++) {
 	  msg_len[c] = 0;
 	  msg_str[c][0] = '\0';
 	}
@@ -226,7 +226,7 @@ void aprs_tt_button (int chan, char button)
 {
 	static int poll_period = 0;
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 
 	//if (button != '.') {

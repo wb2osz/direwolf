@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011 , 2013, 2014, 2015, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011 , 2013, 2014, 2015, 2019, 2024  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -355,11 +355,25 @@ void ax25_delete (packet_t this_p)
  *			  The SSID can be 2 alphanumeric characters, not just 1 to 15.
  *
  *			  We can just truncate the name because we will only
- *			  end up discarding it.    TODO:  check on this.
+ *			  end up discarding it.    TODO:  check on this.  WRONG! FIXME
  *
  * Returns:	Pointer to new packet object in the current implementation.
  *
  * Outputs:	Use the "get" functions to retrieve information in different ways.
+ *
+ * Evolution:	Originally this was written to handle only valid RF packets.
+ *		There are other places where the rules are not as strict.
+ *		Using decode_aprs with raw data seen on aprs.fi.  e.g.
+ *			EL-CA2JOT>RXTLM-1,TCPIP,qAR,CA2JOT::EL-CA2JOT:UNIT....
+ *			EA4YR>APBM1S,TCPIP*,qAS,BM2142POS:@162124z...
+ *		* Source addr might not comply to RF format.
+ *		* The q-construct has lower case.
+ *		* Tier-2 server name might not comply to RF format.
+ *		We have the same issue with the encapsulated part of a third-party packet.
+ *			WB2OSZ-5>APDW17,WIDE1-1,WIDE2-1:}WHO-IS>APJIW4,TCPIP,WB2OSZ-5*::WB2OSZ-7 :ack0
+ *
+ *		We need a way to keep and retrieve the original name.
+ *		This gets a little messy because the packet object is in the on air frame format.
  *
  *------------------------------------------------------------------------------*/
 

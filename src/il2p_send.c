@@ -30,7 +30,7 @@
 #include "gen_tone.h"
 
 
-static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "il2p_send_frame"
+static int number_of_bits_sent[MAX_RADIO_CHANS];		// Count number of bits sent by "il2p_send_frame"
 
 static void send_bytes (int chan, unsigned char *b, int count, int polarity);
 static void send_bit (int chan, int b, int polarity);

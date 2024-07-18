@@ -114,11 +114,11 @@ struct hdlc_state_s {
 	int eas_fields_after_plus;	/* Number of "-" characters after the "+". */
 };
 
-static struct hdlc_state_s hdlc_state[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
+static struct hdlc_state_s hdlc_state[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SLICERS];
 
-static int num_subchan[MAX_CHANS];		//TODO1.2 use ptr rather than copy.
+static int num_subchan[MAX_RADIO_CHANS];		//TODO1.2 use ptr rather than copy.
 
-static int composite_dcd[MAX_CHANS][MAX_SUBCHANS+1];
+static int composite_dcd[MAX_RADIO_CHANS][MAX_SUBCHANS+1];
 
 
 /***********************************************************************************
@@ -149,7 +149,7 @@ void hdlc_rec_init (struct audio_s *pa)
 
 	memset (composite_dcd, 0, sizeof(composite_dcd));
 
-	for (ch = 0; ch < MAX_CHANS; ch++)
+	for (ch = 0; ch < MAX_RADIO_CHANS; ch++)
 	{
 
 	  if (pa->chan_medium[ch] == MEDIUM_RADIO) {
@@ -430,16 +430,23 @@ a good modem here and providing a result when it is received.
 
 void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, int not_used_remove)
 {
+	static int64_t dummyll = 0;
+	static int dummy = 0;
+	hdlc_rec_bit_new (chan, subchan, slice, raw, is_scrambled, not_used_remove,
+		&dummyll, &dummy);
+}
+
+void hdlc_rec_bit_new (int chan, int subchan, int slice, int raw, int is_scrambled, int not_used_remove,
+		int64_t *pll_nudge_total, int *pll_symbol_count)
+{
 
 	int dbit;			/* Data bit after undoing NRZI. */
 					/* Should be only 0 or 1. */
-	struct hdlc_state_s *H;
 
 	assert (was_init == 1);
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
-
 	assert (slice >= 0 && slice < MAX_SLICERS);
 
 // -e option can be used to artificially introduce the desired
@@ -467,7 +474,7 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 /*
  * Different state information for each channel / subchannel / slice.
  */
-	H = &hdlc_state[chan][subchan][slice];
+	struct hdlc_state_s *H = &hdlc_state[chan][subchan][slice];
 
 
 /*
@@ -589,16 +596,44 @@ void hdlc_rec_bit (int chan, int subchan, int slice, int raw, int is_scrambled, 
 	  dw_printf ("\nfound flag, channel %d.%d, %d bits in frame\n", chan, subchan, rrbb_get_len(H->rrbb) - 1);
 #endif
 	  if (rrbb_get_len(H->rrbb) >= MIN_FRAME_LEN * 8) {
-		
+
+//JWL - end of frame
+
+	    float speed_error;			// in percentage.
+	    if (*pll_symbol_count > 0) {	// avoid divde by 0.
+
+	      // TODO:
+	      // Fudged to get +-2.0 with gen_packets -b 1224 & 1176.
+	      // Also initialized the symbol counter to -1.
+
+	      speed_error = (float)((double)(*pll_nudge_total) * 100. / (256. * 256. * 256. * 256.) / (double)(*pll_symbol_count) + 0.02);
+
+	      text_color_set(DW_COLOR_DEBUG);
+
+// std	      dw_printf ("DEBUG: total %lld, count %d\n", *pll_nudge_total, *pll_symbol_count);
+// mingw
+//	      dw_printf ("DEBUG: total %I64d, count %d\n", *pll_nudge_total, *pll_symbol_count);
+//	      dw_printf ("DEBUG: speed error  %+0.2f%% -> %+0.1f%% \n", speed_error, speed_error);
+	    }
+	    else {
+	      speed_error = 0;
+	    }
+	    rrbb_set_speed_error (H->rrbb, speed_error);
+
 	    alevel_t alevel = demod_get_audio_level (chan, subchan);
 
 	    rrbb_set_audio_level (H->rrbb, alevel);
 	    hdlc_rec2_block (H->rrbb);
 	    	/* Now owned by someone else who will free it. */
+	    H->rrbb = NULL;
 
 	    H->rrbb = rrbb_new (chan, subchan, slice, is_scrambled, H->lfsr, H->prev_descram); /* Allocate a new one. */
 	  }
 	  else {
+
+//JWL - start of frame
+	    *pll_nudge_total = 0;
+	    *pll_symbol_count = -1;	// comes out better than using 0.
 	    rrbb_clear (H->rrbb, is_scrambled, H->lfsr, H->prev_descram); 
 	  }
 
@@ -730,7 +765,7 @@ void dcd_change (int chan, int subchan, int slice, int state)
 {
 	int old, new;
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan <= MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SLICERS);
 	assert (state == 0 || state == 1);
@@ -791,7 +826,7 @@ int hdlc_rec_data_detect_any (int chan)
 {
 
 	int sc;
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 	for (sc = 0; sc < num_subchan[chan]; sc++) {
 	  if (composite_dcd[chan][sc] != 0)

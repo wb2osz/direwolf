@@ -99,7 +99,7 @@ typedef enum token_type_e { TOKEN_AND, TOKEN_OR, TOKEN_NOT, TOKEN_LPAREN, TOKEN_
 
 typedef struct pfstate_s {
 
-	int from_chan;				/* From and to channels.   MAX_CHANS is used for IGate. */
+	int from_chan;				/* From and to channels.   MAX_TOTAL_CHANS is used for IGate. */
 	int to_chan;				/* Used only for debug and error messages. */
 
 /*
@@ -175,7 +175,7 @@ static char *bool2text (int val)
  *
  * Inputs:	from_chan - Channel packet is coming from.  
  *		to_chan	  - Channel packet is going to.
- *				Both are 0 .. MAX_CHANS-1 or MAX_CHANS for IGate.  
+ *				Both are 0 .. MAX_TOTAL_CHANS-1 or MAX_TOTAL_CHANS for IGate.
  *			 	For debug/error messages only.
  *
  *		filter	- String of filter specs and logical operators to combine them.
@@ -201,8 +201,8 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 	char *p;
 	int result;
 
-	assert (from_chan >= 0 && from_chan <= MAX_CHANS);
-	assert (to_chan >= 0 && to_chan <= MAX_CHANS);
+	assert (from_chan >= 0 && from_chan <= MAX_TOTAL_CHANS);
+	assert (to_chan >= 0 && to_chan <= MAX_TOTAL_CHANS);
 
 	memset (&pfstate, 0, sizeof(pfstate));
 
@@ -258,10 +258,10 @@ int pfilter (int from_chan, int to_chan, char *filter, packet_t pp, int is_aprs)
 
 	if (s_debug >= 1) {
 	  text_color_set(DW_COLOR_DEBUG);
-	  if (from_chan == MAX_CHANS) {
+	  if (from_chan == MAX_TOTAL_CHANS) {
 	    dw_printf (" Packet filter from IGate to radio channel %d returns %s\n", to_chan, bool2text(result));
 	  }
-	  else if (to_chan == MAX_CHANS) {
+	  else if (to_chan == MAX_TOTAL_CHANS) {
 	    dw_printf (" Packet filter from radio channel %d to IGate returns %s\n", from_chan, bool2text(result));
 	  }
 	  else if (is_aprs) {
@@ -1478,9 +1478,9 @@ static void print_error (pfstate_t *pf, char *msg)
 {
 	char intro[50];
 
-	if (pf->from_chan == MAX_CHANS) {
+	if (pf->from_chan == MAX_TOTAL_CHANS) {
 
-	  if (pf->to_chan == MAX_CHANS) {
+	  if (pf->to_chan == MAX_TOTAL_CHANS) {
 	    snprintf (intro, sizeof(intro), "filter[IG,IG]: ");
 	  }
 	  else {
@@ -1489,7 +1489,7 @@ static void print_error (pfstate_t *pf, char *msg)
 	}
 	else {
 
-	  if (pf->to_chan == MAX_CHANS) {
+	  if (pf->to_chan == MAX_TOTAL_CHANS) {
 	    snprintf (intro, sizeof(intro), "filter[%d,IG]: ", pf->from_chan);
 	  }
 	  else {

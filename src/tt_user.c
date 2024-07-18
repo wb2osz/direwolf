@@ -819,10 +819,10 @@ static void xmit_object_report (int i, int first_time)
  */
 
 	if (save_tt_config_p->obj_xmit_chan >= 0) {
-	  strlcpy (stemp, save_audio_config_p->achan[save_tt_config_p->obj_xmit_chan].mycall, sizeof(stemp));
+	  strlcpy (stemp, save_audio_config_p->mycall[save_tt_config_p->obj_xmit_chan], sizeof(stemp));
 	}
 	else {
-	  strlcpy (stemp, save_audio_config_p->achan[save_tt_config_p->obj_recv_chan].mycall, sizeof(stemp));
+	  strlcpy (stemp, save_audio_config_p->mycall[save_tt_config_p->obj_recv_chan], sizeof(stemp));
 	}
 	strlcat (stemp, ">", sizeof(stemp));
 	strlcat (stemp, APP_TOCALL, sizeof(stemp));
@@ -1134,7 +1134,7 @@ int main (int argc, char *argv[])
 
 	memset (&my_audio_config, 0, sizeof(my_audio_config));
 
-	strlcpy (my_audio_config.achan[0].mycall, "WB2OSZ-15", sizeof(my_audio_config.achan[0].mycall));
+	strlcpy (my_audio_config.mycall[0], "WB2OSZ-15", sizeof(my_audio_config.mycall[0]));
 
 /* Fake TT gateway config. */
 

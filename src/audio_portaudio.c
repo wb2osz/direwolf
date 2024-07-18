@@ -578,7 +578,7 @@ int audio_open (struct audio_s *pa)
 		if (pa->adev[a].bits_per_sample == 0)
 			pa->adev[a].bits_per_sample = DEFAULT_BITS_PER_SAMPLE;
 
-		for (chan = 0; chan < MAX_CHANS; chan++) {
+		for (chan = 0; chan < MAX_RADIO_CHANS; chan++) {
 			if (pa->achan[chan].mark_freq == 0)
 				pa->achan[chan].mark_freq = DEFAULT_MARK_FREQ;
 

@@ -596,14 +596,22 @@ int encode_position (int messaging, int compressed, double lat, double lon, int 
 	presult[result_len] = '\0';
 
 /* Altitude.  Can be anywhere in comment. */
+// Officially, altitude must be six digits.
+// What about all the places on the earth's surface that are below sea level?
+// https://en.wikipedia.org/wiki/List_of_places_on_land_with_elevations_below_sea_level
+
+// The MIC-E format allows negative altitudes; not allowing it for /A=123456 seems to be an oversight.
+// Most modern applications recognize the form /A=-12345 with minus and five digits.
+// This maintains the same total field width and the range is more than adequate.
 
 	if (alt_ft != G_UNKNOWN) {
 	  char salt[12];
 	  /* Not clear if altitude can be negative. */
 	  /* Be sure it will be converted to 6 digits. */
-	  if (alt_ft < 0) alt_ft = 0;
+	  // if (alt_ft < 0) alt_ft = 0;
+	  if (alt_ft < -99999) alt_ft = -99999;
 	  if (alt_ft > 999999) alt_ft = 999999;
-	  snprintf (salt, sizeof(salt), "/A=%06d", alt_ft);
+	  snprintf (salt, sizeof(salt), "/A=%06d", alt_ft);	// /A=123456 ot /A=-12345
 	  strlcat (presult, salt, result_size);
 	  result_len += strlen(salt);
 	}

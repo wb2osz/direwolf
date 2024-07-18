@@ -88,24 +88,24 @@
  */
 
 
-static int xmit_slottime[MAX_CHANS];	/* Slot time in 10 mS units for persistence algorithm. */
+static int xmit_slottime[MAX_RADIO_CHANS];	/* Slot time in 10 mS units for persistence algorithm. */
 
-static int xmit_persist[MAX_CHANS];	/* Sets probability for transmitting after each */
+static int xmit_persist[MAX_RADIO_CHANS];	/* Sets probability for transmitting after each */
 					/* slot time delay.  Transmit if a random number */
 					/* in range of 0 - 255 <= persist value.  */
 					/* Otherwise wait another slot time and try again. */
 
-static int xmit_txdelay[MAX_CHANS];	/* After turning on the transmitter, */
+static int xmit_txdelay[MAX_RADIO_CHANS];	/* After turning on the transmitter, */
 					/* send "flags" for txdelay * 10 mS. */
 
-static int xmit_txtail[MAX_CHANS];	/* Amount of time to keep transmitting after we */
+static int xmit_txtail[MAX_RADIO_CHANS];	/* Amount of time to keep transmitting after we */
 					/* are done sending the data.  This is to avoid */
 					/* dropping PTT too soon and chopping off the end */
 					/* of the frame.  Again 10 mS units. */
 
-static int xmit_fulldup[MAX_CHANS];	/* Full duplex if non-zero. */
+static int xmit_fulldup[MAX_RADIO_CHANS];	/* Full duplex if non-zero. */
 
-static int xmit_bits_per_sec[MAX_CHANS];	/* Data transmission rate. */
+static int xmit_bits_per_sec[MAX_RADIO_CHANS];	/* Data transmission rate. */
 					/* Often called baud rate which is equivalent for */
 					/* 1200 & 9600 cases but could be different with other */
 					/* modulation techniques. */
@@ -211,11 +211,11 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 	int ad;
 
 #if __WIN32__
-	HANDLE xmit_th[MAX_CHANS];
+	HANDLE xmit_th[MAX_RADIO_CHANS];
 #else
 	//pthread_attr_t attr;
 	//struct sched_param sp;
-	pthread_t xmit_tid[MAX_CHANS];
+	pthread_t xmit_tid[MAX_RADIO_CHANS];
 #endif
 	//int e;
 
@@ -247,7 +247,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
  * TODO1.2:  Any reason to use global config rather than making a copy?
  */
 
-	for (j=0; j<MAX_CHANS; j++) {
+	for (j=0; j<MAX_RADIO_CHANS; j++) {
 	  xmit_bits_per_sec[j] = p_modem->achan[j].baud;
 	  xmit_slottime[j] = p_modem->achan[j].slottime;
 	  xmit_persist[j] = p_modem->achan[j].persist;
@@ -276,7 +276,7 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 // underrun on the audio output device.
 
 
-	for (j=0; j<MAX_CHANS; j++) {
+	for (j=0; j<MAX_RADIO_CHANS; j++) {
 
 	  if (p_modem->chan_medium[j] == MEDIUM_RADIO) {
 #if __WIN32__
@@ -365,35 +365,35 @@ void xmit_init (struct audio_s *p_modem, int debug_xmit_packet)
 
 void xmit_set_txdelay (int channel, int value)
 {
-	if (channel >= 0 && channel < MAX_CHANS) {
+	if (channel >= 0 && channel < MAX_RADIO_CHANS) {
 	  xmit_txdelay[channel] = value;
 	}
 }
 
 void xmit_set_persist (int channel, int value)
 {
-	if (channel >= 0 && channel < MAX_CHANS) {
+	if (channel >= 0 && channel < MAX_RADIO_CHANS) {
 	  xmit_persist[channel] = value;
 	}
 }
 
 void xmit_set_slottime (int channel, int value)
 {
-	if (channel >= 0 && channel < MAX_CHANS) {
+	if (channel >= 0 && channel < MAX_RADIO_CHANS) {
 	  xmit_slottime[channel] = value;
 	}
 }
 
 void xmit_set_txtail (int channel, int value)
 {
-	if (channel >= 0 && channel < MAX_CHANS) {
+	if (channel >= 0 && channel < MAX_RADIO_CHANS) {
 	  xmit_txtail[channel] = value;
 	}
 }
 
 void xmit_set_fulldup (int channel, int value)
 {
-	if (channel >= 0 && channel < MAX_CHANS) {
+	if (channel >= 0 && channel < MAX_RADIO_CHANS) {
 	  xmit_fulldup[channel] = value;
 	}
 }

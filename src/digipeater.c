@@ -91,7 +91,7 @@ static struct digi_config_s *save_digi_config_p;
  * Maintain count of packets digipeated for each combination of from/to channel.
  */
 
-static int digi_count[MAX_CHANS][MAX_CHANS];
+static int digi_count[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS];
 
 int digipeater_get_count (int from_chan, int to_chan) {
 	return (digi_count[from_chan][to_chan]);
@@ -154,7 +154,7 @@ void digipeater (int from_chan, packet_t pp)
 
 	// Network TNC is OK for UI frames where we don't care about timing.
 
-	if ( from_chan < 0 || from_chan >= MAX_CHANS ||
+	if ( from_chan < 0 || from_chan >= MAX_TOTAL_CHANS ||
 	     (save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO &&
 	      save_audio_config_p->chan_medium[from_chan] != MEDIUM_NETTNC)) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -195,14 +195,14 @@ void digipeater (int from_chan, packet_t pp)
  *
  */
 
-	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	for (to_chan=0; to_chan<MAX_TOTAL_CHANS; to_chan++) {
 	  if (save_digi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan == from_chan) {
 	      packet_t result;
 
-	      result = digipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
-					   save_audio_config_p->achan[to_chan].mycall, 
-			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
+	      result = digipeat_match (from_chan, pp, save_audio_config_p->mycall[from_chan],
+					   save_audio_config_p->mycall[to_chan],
+			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan],
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
 				save_digi_config_p->atgp[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
@@ -222,14 +222,14 @@ void digipeater (int from_chan, packet_t pp)
  * These are lower priority
  */
 
-	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	for (to_chan=0; to_chan<MAX_TOTAL_CHANS; to_chan++) {
 	  if (save_digi_config_p->enabled[from_chan][to_chan]) {
 	    if (to_chan != from_chan) {
 	      packet_t result;
 
-	      result = digipeat_match (from_chan, pp, save_audio_config_p->achan[from_chan].mycall, 
-					   save_audio_config_p->achan[to_chan].mycall, 
-			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan], 
+	      result = digipeat_match (from_chan, pp, save_audio_config_p->mycall[from_chan],
+					   save_audio_config_p->mycall[to_chan],
+			&save_digi_config_p->alias[from_chan][to_chan], &save_digi_config_p->wide[from_chan][to_chan],
 			to_chan, save_digi_config_p->preempt[from_chan][to_chan],
 				save_digi_config_p->atgp[from_chan][to_chan],
 				save_digi_config_p->filter_str[from_chan][to_chan]);
@@ -641,9 +641,9 @@ void digi_regen (int from_chan, packet_t pp)
 
 	// dw_printf ("digi_regen()\n");
 	
-	assert (from_chan >= 0 && from_chan < MAX_CHANS);
+	assert (from_chan >= 0 && from_chan < MAX_TOTAL_CHANS);
 
-	for (to_chan=0; to_chan<MAX_CHANS; to_chan++) {
+	for (to_chan=0; to_chan<MAX_TOTAL_CHANS; to_chan++) {
 	  if (save_digi_config_p->regen[from_chan][to_chan]) {
 	    result = ax25_dup (pp); 
 	    if (result != NULL) {

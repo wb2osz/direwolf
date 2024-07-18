@@ -52,10 +52,10 @@
 #include "dedupe.h"
 #include "igate.h"
 #include "dtime_now.h"
+#include "nettnc.h"
 
 
-
-static packet_t queue_head[MAX_CHANS][TQ_NUM_PRIO];	/* Head of linked list for each queue. */
+static packet_t queue_head[MAX_RADIO_CHANS][TQ_NUM_PRIO];	/* Head of linked list for each queue. */
 
 
 static dw_mutex_t tq_mutex;				/* Critical section for updating queues. */
@@ -63,15 +63,15 @@ static dw_mutex_t tq_mutex;				/* Critical section for updating queues. */
 
 #if __WIN32__
 
-static HANDLE wake_up_event[MAX_CHANS];			/* Notify transmit thread when queue not empty. */
+static HANDLE wake_up_event[MAX_RADIO_CHANS];			/* Notify transmit thread when queue not empty. */
 
 #else
 
-static pthread_cond_t wake_up_cond[MAX_CHANS];		/* Notify transmit thread when queue not empty. */
+static pthread_cond_t wake_up_cond[MAX_RADIO_CHANS];		/* Notify transmit thread when queue not empty. */
 
-static pthread_mutex_t wake_up_mutex[MAX_CHANS];	/* Required by cond_wait. */
+static pthread_mutex_t wake_up_mutex[MAX_RADIO_CHANS];	/* Required by cond_wait. */
 
-static int xmit_thread_is_waiting[MAX_CHANS];
+static int xmit_thread_is_waiting[MAX_RADIO_CHANS];
 
 #endif
 
@@ -128,7 +128,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 	save_audio_config_p = audio_config_p;
 
-	for (c=0; c<MAX_CHANS; c++) {
+	for (c=0; c<MAX_RADIO_CHANS; c++) {
 	  for (p=0; p<TQ_NUM_PRIO; p++) {
 	    queue_head[c][p] = NULL;
 	  }
@@ -147,7 +147,7 @@ void tq_init (struct audio_s *audio_config_p)
 
 #if __WIN32__
 
-	for (c = 0; c < MAX_CHANS; c++) {
+	for (c = 0; c < MAX_RADIO_CHANS; c++) {
 
 	  if (audio_config_p->chan_medium[c] == MEDIUM_RADIO) {
 
@@ -164,7 +164,7 @@ void tq_init (struct audio_s *audio_config_p)
 #else
 	int err;
 
-	for (c = 0; c < MAX_CHANS; c++) {
+	for (c = 0; c < MAX_RADIO_CHANS; c++) {
 
 	  xmit_thread_is_waiting[c] = 0;
 
@@ -198,6 +198,9 @@ void tq_init (struct audio_s *audio_config_p)
  *
  *				New in 1.7:
  *				Channel can be assigned to IGate rather than a radio.
+ *
+ *				New in 1.8:
+ *				Channel can be assigned to a network TNC.
  *
  *		prio	- Priority, use TQ_PRIO_0_HI for digipeated or
  *				TQ_PRIO_1_LO for normal.
@@ -252,10 +255,13 @@ void tq_append (int chan, int prio, packet_t pp)
 #endif
 
 // New in 1.7 - A channel can be assigned to the IGate rather than a radio.
+// New in 1.8: Assign a channel to external network TNC.
+// Send somewhere else, rather than the transmit queue.
 
 #ifndef DIGITEST		// avoid dtest link error
 
-	if (save_audio_config_p->chan_medium[chan] == MEDIUM_IGATE) {
+	if (save_audio_config_p->chan_medium[chan] == MEDIUM_IGATE ||
+		save_audio_config_p->chan_medium[chan] == MEDIUM_NETTNC) {
 
 	  char ts[100];		// optional time stamp.
 
@@ -274,21 +280,39 @@ void tq_append (int chan, int prio, packet_t pp)
 	  unsigned char *pinfo;
 	  int info_len = ax25_get_info (pp, &pinfo);
 	  text_color_set(DW_COLOR_XMIT);
-	  dw_printf ("[%d>is%s] ", chan, ts);
-	  dw_printf ("%s", stemp);			/* stations followed by : */
-	  ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
-	  dw_printf ("\n");
 
-	  igate_send_rec_packet (chan, pp);
+	  if (save_audio_config_p->chan_medium[chan] == MEDIUM_IGATE) {
+
+	    dw_printf ("[%d>is%s] ", chan, ts);
+	    dw_printf ("%s", stemp);			/* stations followed by : */
+	    ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
+	    dw_printf ("\n");
+
+	    igate_send_rec_packet (chan, pp);
+	  }
+	  else {	// network TNC
+	    dw_printf ("[%d>nt%s] ", chan, ts);
+	    dw_printf ("%s", stemp);			/* stations followed by : */
+	    ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
+	    dw_printf ("\n");
+
+	    nettnc_send_packet (chan, pp);
+
+	  }
+
 	  ax25_delete(pp);
 	  return;
 	}
 #endif
 
+
+
+
+
 // Normal case - put in queue for radio transmission.
 // Error if trying to transmit to a radio channel which was not configured.
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) {
+	if (chan < 0 || chan >= MAX_RADIO_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
 	  dw_printf ("This is probably a client application error, not a problem with direwolf.\n");
@@ -490,7 +514,7 @@ void lm_data_request (int chan, int prio, packet_t pp)
 	}
 #endif
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
+	if (chan < 0 || chan >= MAX_RADIO_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
@@ -648,7 +672,7 @@ void lm_seize_request (int chan)
 #endif
 
 
-	if (chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
+	if (chan < 0 || chan >= MAX_RADIO_CHANS || save_audio_config_p->chan_medium[chan] != MEDIUM_RADIO) {
 	  // Connected mode is allowed only with internal modems.
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Request to transmit on invalid radio channel %d.\n", chan);
@@ -748,7 +772,7 @@ void tq_wait_while_empty (int chan)
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("tq_wait_while_empty (%d) : enter critical section\n", chan);
 #endif
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 	dw_mutex_lock (&tq_mutex);
 
@@ -944,7 +968,7 @@ static int tq_is_empty (int chan)
 {
 	int p;
 	
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 
 	for (p=0; p<TQ_NUM_PRIO; p++) {
@@ -1001,7 +1025,7 @@ int tq_count (int chan, int prio, char *source, char *dest, int bytes)
 
 	// Array bounds check.  FIXME: TODO:  should have internal error instead of dying.
 
-	if (chan < 0 || chan >= MAX_CHANS || prio < 0 || prio >= TQ_NUM_PRIO) {
+	if (chan < 0 || chan >= MAX_RADIO_CHANS || prio < 0 || prio >= TQ_NUM_PRIO) {
 	  text_color_set(DW_COLOR_DEBUG);
 	  dw_printf ("INTERNAL ERROR - tq_count(%d, %d, \"%s\", \"%s\", %d)\n", chan, prio, source, dest, bytes);
 	  return (0);

@@ -80,7 +80,7 @@ static struct dd_s {	 /* Separate for each audio channel. */
 	char prev_debounced;
 	int timeout;
 
-} dd[MAX_CHANS];		
+} dd[MAX_RADIO_CHANS];
 
 
 static int s_amplitude = 100;	// range of 0 .. 100
@@ -129,7 +129,7 @@ void dtmf_init (struct audio_s *p_audio_config, int amp)
  * Larger = narrower bandwidth, slower response.
  */
 
-	for (c=0; c<MAX_CHANS; c++) {
+	for (c=0; c<MAX_RADIO_CHANS; c++) {
 	  struct dd_s *D = &(dd[c]);
 	  int a = ACHAN2ADEV(c);
 
@@ -167,7 +167,7 @@ void dtmf_init (struct audio_s *p_audio_config, int amp)
 	  }
 	}
 
-	for (c=0; c<MAX_CHANS; c++) {
+	for (c=0; c<MAX_RADIO_CHANS; c++) {
 	  struct dd_s *D = &(dd[c]); 
 	  D->n = 0;
 	  for (j=0; j<NUM_TONES; j++) {
@@ -213,6 +213,11 @@ char dtmf_sample (int c, float input)
 						'4', '5', '6', 'B',
 						'7', '8', '9', 'C',
 						'*', '0', '#', 'D' };
+
+// Only applies to radio channels.  Should not be here.
+	if (c >= MAX_RADIO_CHANS) {
+	  return ('$');
+	}
 
 	D = &(dd[c]);
 

@@ -59,7 +59,7 @@ struct fx_context_s {
 	unsigned char block[FX25_BLOCK_SIZE+1];
 };
 
-static struct fx_context_s *fx_context[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
+static struct fx_context_s *fx_context[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SLICERS];
 
 static void process_rs_block (int chan, int subchan, int slice, struct fx_context_s *F);
 
@@ -157,7 +157,7 @@ void fx25_rec_bit (int chan, int subchan, int slice, int dbit)
 
 	struct fx_context_s *F = fx_context[chan][subchan][slice];
 	if (F == NULL) {
-          assert (chan >= 0 && chan < MAX_CHANS);
+          assert (chan >= 0 && chan < MAX_RADIO_CHANS);
           assert (subchan >= 0 && subchan < MAX_SUBCHANS);
           assert (slice >= 0 && slice < MAX_SLICERS);
 	  F = fx_context[chan][subchan][slice] = (struct fx_context_s *)malloc(sizeof (struct fx_context_s));
@@ -256,7 +256,7 @@ void fx25_rec_bit (int chan, int subchan, int slice, int dbit)
 
 int fx25_rec_busy (int chan)
 {
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 	// This could be a little faster if we knew number of
 	// subchannels and slicers but it is probably insignificant.

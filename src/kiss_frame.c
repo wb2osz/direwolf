@@ -612,7 +612,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	    /* Verify that the radio channel number is valid. */
 	    /* Any sort of medium should be OK here. */
 
-	    if ((chan < 0 || chan >= MAX_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE) 
+	    if ((chan < 0 || chan >= MAX_TOTAL_CHANS || save_audio_config_p->chan_medium[chan] == MEDIUM_NONE)
 		&& save_audio_config_p->chan_medium[chan]  != MEDIUM_IGATE) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid transmit channel %d from KISS client app.\n", chan);
@@ -663,10 +663,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set TXDELAY = %d (*10mS units = %d mS), chan %d\n", kiss_msg[1], kiss_msg[1] * 10, chan);
-	  if (kiss_msg[1] < 4 || kiss_msg[1] > 100) {
+	  if (kiss_msg[1] < 10 || kiss_msg[1] >= 100) {
             text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Are you sure you want such an extreme value for TXDELAY?\n");
-	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+            dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+            dw_printf ("section, to understand what this means.\n");
 	  }
 	  xmit_set_txdelay (chan, kiss_msg[1]);
 	  break;
@@ -683,7 +684,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	  if (kiss_msg[1] < 5 || kiss_msg[1] > 250) {
             text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Are you sure you want such an extreme value for PERSIST?\n");
-	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+            dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+            dw_printf ("section, to understand what this means.\n");
 	  }
 	  xmit_set_persist (chan, kiss_msg[1]);
 	  break;
@@ -700,7 +702,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	  if (kiss_msg[1] < 2 || kiss_msg[1] > 50) {
             text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Are you sure you want such an extreme value for SLOTTIME?\n");
-	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+            dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+            dw_printf ("section, to understand what this means.\n");
 	  }
 	  xmit_set_slottime (chan, kiss_msg[1]);
 	  break;
@@ -714,10 +717,11 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	  }
           text_color_set(DW_COLOR_INFO);
 	  dw_printf ("KISS protocol set TXtail = %d (*10mS units = %d mS), chan %d\n", kiss_msg[1], kiss_msg[1] * 10, chan);
-	  if (kiss_msg[1] < 2) {
+	  if (kiss_msg[1] < 5) {
             text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Setting TXTAIL so low is asking for trouble.  You probably don't want to do this.\n");
-	    dw_printf ("See \"Radio Channel - Transmit Timing\" section of User Guide for explanation.\n");
+            dw_printf ("Read the Dire Wolf User Guide, \"Radio Channel - Transmit Timing\"\n");
+            dw_printf ("section, to understand what this means.\n");
 	  }
 	  xmit_set_txtail (chan, kiss_msg[1]);
 	  break;

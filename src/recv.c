@@ -108,6 +108,7 @@
 #include "dtmf.h"
 #include "aprs_tt.h"
 #include "ax25_link.h"
+#include "ring.h"
 
 
 #if __WIN32__
@@ -278,7 +279,7 @@ static void * recv_adev_thread (void *arg)
 // Try to re-init the audio device a couple times before giving up?
 
 	text_color_set(DW_COLOR_ERROR);
-	dw_printf ("Terminating after audio input failure.\n");
+	dw_printf ("Terminating after audio device %d input failure.\n", a);
 	exit (1);
 }
 

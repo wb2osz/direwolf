@@ -285,7 +285,7 @@ int main (int argc, char *argv[])
  	setlinebuf (stdout);
 #endif
 
-	start_dtime = dtime_now();
+	start_dtime = dtime_monotonic();
 
 /*
  * Extract command line args.
@@ -615,7 +615,7 @@ void process_rec_data (int my_index, char *data)
  *				  and sent to a common function to check that they
  *				  all arrived in order.
  *
- * Global Out:	is_connected	- Updated when connected/disconnected notifications are received.
+ * Global Out:	is_connected	- Updated when connected/disconnected notfications are received.
  *
  * Description:	Perform any necessary configuration for the TNC then wait
  *		for responses and process them.
@@ -859,7 +859,7 @@ static void * tnc_thread_net (void *arg)
  * What did we get?
  */
 
-	  dnow = dtime_now();
+	  dnow = dtime_monotonic();
 
 	  switch (mon_cmd.datakind) {
 
@@ -943,7 +943,7 @@ static void * tnc_thread_net (void *arg)
  *				  and sent to a common function to check that they
  *				  all arrived in order.
  *
- * Global Out:	is_connected	- Updated when connected/disconnected notifications are received.
+ * Global Out:	is_connected	- Updated when connected/disconnected notfications are received.
  *
  * Description:	Perform any necessary configuration for the TNC then wait
  *		for responses and process them.
@@ -1038,12 +1038,12 @@ static void * tnc_thread_serial (void *arg)
 	      done = 1;
 	    }
 	    else if (ch == XOFF) {
-	      double dnow = dtime_now();
+	      double dnow = dtime_monotonic();
 	      printf("%*s[R %.3f] <XOFF>\n", my_index*column_width, "", dnow-start_dtime);
 	      busy[my_index] = 1;
 	    }
 	    else if (ch == XON) {
-	      double dnow = dtime_now();
+	      double dnow = dtime_monotonic();
 	      printf("%*s[R %.3f] <XON>\n", my_index*column_width, "", dnow-start_dtime);
 	      busy[my_index] = 0;
 	    }
@@ -1070,7 +1070,7 @@ static void * tnc_thread_serial (void *arg)
 
 	  if (len > 0) {
 
-	    double dnow = dtime_now();
+	    double dnow = dtime_monotonic();
 
 	    printf("%*s[R %.3f] %s\n", my_index*column_width, "", dnow-start_dtime, result);
 
@@ -1109,7 +1109,7 @@ static void * tnc_thread_serial (void *arg)
 static void tnc_connect (int from, int to)
 {
 
-	double dnow = dtime_now();
+	double dnow = dtime_monotonic();
 
  	printf("%*s[T %.3f] *** Send connect request ***\n", from*column_width, "", dnow-start_dtime);
 
@@ -1160,7 +1160,7 @@ static void tnc_connect (int from, int to)
 
 static void tnc_disconnect (int from, int to)
 {
-	double dnow = dtime_now();
+	double dnow = dtime_monotonic();
 
  	printf("%*s[T %.3f] *** Send disconnect request ***\n", from*column_width, "", dnow-start_dtime);
 
@@ -1201,7 +1201,7 @@ static void tnc_disconnect (int from, int to)
 
 static void tnc_reset (int from, int to)
 {
-	double dnow = dtime_now();
+	double dnow = dtime_monotonic();
 
  	printf("%*s[T %.3f] *** Send reset ***\n", from*column_width, "", dnow-start_dtime);
 
@@ -1232,7 +1232,7 @@ static void tnc_reset (int from, int to)
 
 static void tnc_send_data (int from, int to, char * data)
 {
-	double dnow = dtime_now();
+	double dnow = dtime_monotonic();
 
  	printf("%*s[T %.3f] %s\n", from*column_width, "", dnow-start_dtime, data);
 
@@ -1257,7 +1257,7 @@ static void tnc_send_data (int from, int to, char * data)
 	else {
 
 	  // The assumption is that we are in CONVERS mode.
-	  // The data should be terminated by carriage return.
+	  // The data sould be terminated by carriage return.
 
 	  int timeout = 600;	// 60 sec.  I've seen it take more than 20.
 	  while (timeout > 0 && busy[from]) {

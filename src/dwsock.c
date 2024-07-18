@@ -125,7 +125,7 @@ int dwsock_init(void)
 
 /*-------------------------------------------------------------------
  *
- * Name:        sock_connect
+ * Name:        dwsock_connect
  *
  * Purpose:     Connect to given host / port.  
  *

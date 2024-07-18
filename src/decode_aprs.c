@@ -1652,7 +1652,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 // It is essential to keep trailing spaces.  e.g. VX-8 suffix is "_ "
 
 	char mcomment[256];
-	strlcpy (mcomment, info + sizeof(struct aprs_mic_e_s), sizeof(mcomment));
+	strlcpy (mcomment, ((char*)info) + sizeof(struct aprs_mic_e_s), sizeof(mcomment));
 	if (mcomment[strlen(mcomment)-1] == '\r') {
 	  mcomment[strlen(mcomment)-1] = '\0';
 	}

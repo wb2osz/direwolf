@@ -83,7 +83,7 @@ rrbb_t rrbb_new (int chan, int subchan, int slice, int is_scrambled, int descram
 {
 	rrbb_t result;
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SLICERS);
 
@@ -333,7 +333,7 @@ int rrbb_get_chan (rrbb_t b)
 	assert (b->magic1 == MAGIC1);
 	assert (b->magic2 == MAGIC2);
 
-	assert (b->chan >= 0 && b->chan < MAX_CHANS);
+	assert (b->chan >= 0 && b->chan < MAX_RADIO_CHANS);
 
 	return (b->chan);
 }

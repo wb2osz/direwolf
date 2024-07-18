@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016, 2017, 2018, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2017, 2018, 2023, 2024  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -679,17 +679,44 @@ static struct misc_config_s  *g_misc_config_p;
  * Inputs:	pconfig		- misc. configuration from config file or command line.
  *				  Beacon stuff ended up here.
  *
+ *		debug 		- debug level.
+ *
  * Outputs:	Remember required information for future use.  That's all.
  *
  *--------------------------------------------------------------------*/
 
-void ax25_link_init (struct misc_config_s *pconfig)
+void ax25_link_init (struct misc_config_s *pconfig, int debug)
 {
 
 /* 
  * Save parameters for later use.
  */
 	g_misc_config_p = pconfig;
+
+	if (debug >= 1) {	// Only single level so far.
+
+	  s_debug_protocol_errors = 1;	// Less serious Protocol errors.
+
+	  s_debug_client_app = 1;	// Interaction with client application.
+					// dl_connect_request, dl_data_request, dl_data_indication, etc.
+
+	  s_debug_radio = 1;		// Received frames and channel busy status.
+					// lm_data_indication, lm_channel_busy
+
+	  s_debug_variables = 1;	// Variables, state changes.
+
+	  s_debug_retry = 1;		// Related to lost I frames, REJ, SREJ, timeout, resending.
+
+	  s_debug_link_handle = 1;	// Create data link state machine or pick existing one,
+					// based on my address, peer address, client app index, and radio channel.
+
+	  s_debug_stats = 1;		// Statistics when connection is closed.
+
+	  s_debug_misc = 1;		// Anything left over that might be interesting.
+
+	  s_debug_timers = 1;		// Timer details.
+	}
+
 
 } /* end ax25_link_init */
 
@@ -2013,14 +2040,14 @@ static void dl_data_indication (ax25_dlsm_t *S, int pid, char *data, int len)
  *
  *------------------------------------------------------------------------------*/
 
-static int dcd_status[MAX_CHANS];
-static int ptt_status[MAX_CHANS];
+static int dcd_status[MAX_RADIO_CHANS];
+static int ptt_status[MAX_RADIO_CHANS];
 
 void lm_channel_busy (dlq_item_t *E)
 {
 	int busy;
 
-	assert (E->chan >= 0 && E->chan < MAX_CHANS);
+	assert (E->chan >= 0 && E->chan < MAX_RADIO_CHANS);
 	assert (E->activity == OCTYPE_PTT || E->activity == OCTYPE_DCD);
 	assert (E->status == 1 || E->status == 0);
 
@@ -2104,7 +2131,7 @@ void lm_channel_busy (dlq_item_t *E)
 void lm_seize_confirm (dlq_item_t *E)
 {
 
-	assert (E->chan >= 0 && E->chan < MAX_CHANS);
+	assert (E->chan >= 0 && E->chan < MAX_RADIO_CHANS);
 
 	ax25_dlsm_t *S;
 

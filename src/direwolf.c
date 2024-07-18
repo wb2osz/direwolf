@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021, 2023, 2024  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -130,6 +130,7 @@
 #include "dns_sd_dw.h"
 #include "dlq.h"		// for fec_type_t definition.
 #include "deviceid.h"
+#include "nettnc.h"
 
 
 //static int idx_decoded = 0;
@@ -228,6 +229,7 @@ int main (int argc, char *argv[])
 #endif
 	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
 	int d_2_opt = 0;	/* "-d 2" option for IL2P.  Default minimal. Repeat for more detail. */
+	int d_c_opt = 0;	/* "-d c" option for connected mode data link state machine. */
 
 	int aprstt_debug = 0;	/* "-d d" option for APRStt (think Dtmf) debug. */
 
@@ -303,7 +305,7 @@ int main (int argc, char *argv[])
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 7\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "A", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
 	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
@@ -390,6 +392,7 @@ int main (int argc, char *argv[])
 	    text_color_set(DW_COLOR_ERROR);
 	    for (int n=0; n<15; n++) {
 	      dw_printf ("\n");
+	      dw_printf ("Why are you running this as root user?.\n");
 	      dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
 	      dw_printf ("Running this as root is an unnecessary security risk.\n");
 	      //SLEEP_SEC(1);
@@ -558,7 +561,7 @@ int main (int argc, char *argv[])
       	    	break;
       	     }
 	    }
-	    if (x_opt_chan < 0 || x_opt_chan >= MAX_CHANS) {
+	    if (x_opt_chan < 0 || x_opt_chan >= MAX_RADIO_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid channel %d for -x. \n", x_opt_chan);
 	      text_color_set(DW_COLOR_INFO);
@@ -637,6 +640,7 @@ int main (int argc, char *argv[])
 #if USE_HAMLIB
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
+	      case 'c':  d_c_opt++; break;			// Connected mode data link state machine
 	      case 'x':  d_x_opt++; break;			// FX.25
 	      case '2':  d_2_opt++; break;			// IL2P
 	      case 'd':	 aprstt_debug++; break;			// APRStt (mnemonic Dtmf)
@@ -1005,6 +1009,13 @@ int main (int argc, char *argv[])
 	il2p_init (d_2_opt);
 
 /*
+ * New in 1.8 - Allow a channel to be mapped to a network TNC rather than
+ * an internal modem and radio.
+ * I put it here so channel properties would come out in right order.
+ */
+	nettnc_init (&audio_config);
+
+/*
  * Initialize the touch tone decoder & APRStt gateway.
  */
 	dtmf_init (&audio_config, audio_amplitude);
@@ -1108,7 +1119,7 @@ int main (int argc, char *argv[])
 	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
 	cdigipeater_init (&audio_config, &cdigi_config);
 	pfilter_init (&igate_config, d_f_opt);
-	ax25_link_init (&misc_config);
+	ax25_link_init (&misc_config, d_c_opt);
 
 /*
  * Provide the AGW & KISS socket interfaces for use by a client application.
@@ -1167,7 +1178,10 @@ int main (int argc, char *argv[])
  *
  * Inputs:	chan	- Audio channel number, 0 or 1.
  *		subchan	- Which modem caught it.  
- *			  Special case -1 for DTMF decoder.
+ *			  Special cases:
+ *				-1 for DTMF decoder.
+ *				-2 for channel mapped to APRS-IS.
+ *				-3 for channel mapped to network TNC.
  *		slice	- Slicer which caught it.
  *		pp	- Packet handle.
  *		alevel	- Audio level, range of 0 - 100.
@@ -1198,7 +1212,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 								// Can indicate FX.25/IL2P or fix_bits.
 
 	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);		// TOTAL for virtual channels
-	assert (subchan >= -2 && subchan < MAX_SUBCHANS);
+	assert (subchan >= -3 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SLICERS);
 	assert (pp != NULL);	// 1.1J+
      
@@ -1279,7 +1293,13 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 
 	    ax25_get_addr_with_ssid(pp, h-1, probably_really);
 
-	    dw_printf ("%s (probably %s) audio level = %s  %s  %s\n", heard, probably_really, alevel_text, display_retries, spectrum);
+	    // audio level applies only for internal modem channels.
+	    if (subchan >=0) {
+	      dw_printf ("%s (probably %s) audio level = %s  %s  %s\n", heard, probably_really, alevel_text, display_retries, spectrum);
+	    }
+	    else {
+	      dw_printf ("%s (probably %s)\n", heard, probably_really);
+	    }
 
 	  }
 	  else if (strcmp(heard, "DTMF") == 0) {
@@ -1288,7 +1308,13 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  }
 	  else {
 
-	    dw_printf ("%s audio level = %s  %s  %s\n", heard, alevel_text, display_retries, spectrum);
+	    // audio level applies only for internal modem channels.
+	    if (subchan >= 0) {
+	      dw_printf ("%s audio level = %s  %s  %s\n", heard, alevel_text, display_retries, spectrum);
+	    }
+	    else {
+	      dw_printf ("%s\n", heard);
+	    }
 	  }
 	 }
 	}
@@ -1305,7 +1331,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("Audio input level is too high.  Reduce so most stations are around 50.\n");
 	}
 // FIXME: rather than checking for ichannel, how about checking medium==radio
-	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel) {
+	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != -3) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too low.  Increase so most stations are around 50.\n");
@@ -1330,13 +1356,17 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  strlcpy (ts, "", sizeof(ts));
 	}
 
-	if (subchan == -1) {
+	if (subchan == -1) {	// dtmf
 	  text_color_set(DW_COLOR_REC);
 	  dw_printf ("[%d.dtmf%s] ", chan, ts);
 	}
-	else if (subchan == -2) {
+	else if (subchan == -2) {	// APRS-IS
 	  text_color_set(DW_COLOR_REC);
 	  dw_printf ("[%d.is%s] ", chan, ts);
+	}
+	else if (subchan == -3) {	// nettnc
+	  text_color_set(DW_COLOR_REC);
+	  dw_printf ("[%d%s] ", chan, ts);
 	}
 	else {
 	  if (ax25_is_aprs(pp)) {
@@ -1498,7 +1528,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 		0, 0, 0, A.g_comment,	// freq, tone, offset
 		ais_obj_info, sizeof(ais_obj_info));
 
-	      snprintf (ais_obj_packet, sizeof(ais_obj_packet), "%s>%s%1d%1d:%s", A.g_src, APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, ais_obj_info);
+	      snprintf (ais_obj_packet, sizeof(ais_obj_packet), "%s>%s%1d%1d,NOGATE:%s", A.g_src, APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, ais_obj_info);
 
 	      dw_printf ("[%d.AIS] %s\n", chan, ais_obj_packet);
 
@@ -1614,9 +1644,10 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  * Use only those with correct CRC (or using FEC.)
  */
 
-	  if (retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) {
-
-	    cdigipeater (chan, pp);
+	  if (chan < MAX_RADIO_CHANS) {
+	    if (retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) {
+	      cdigipeater (chan, pp);
+	    }
 	  }
 	}
 
@@ -1708,6 +1739,7 @@ static void usage (char **argv)
 #if USE_HAMLIB
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif
+	dw_printf ("       c             c = Connected mode data link state machine.\n");
 	dw_printf ("       x             x = FX.25 increase verbose level.\n");
 	dw_printf ("       2             2 = IL2P.\n");
 	dw_printf ("       d             d = APRStt (DTMF to APRS object translation).\n");

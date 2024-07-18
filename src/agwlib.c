@@ -357,7 +357,7 @@ static void * tnc_listen_thread (void *arg)
 /*
  * Take some precautions to guard against bad data which could cause problems later.
  */
-	    if (cmd.hdr.portx < 0 || cmd.hdr.portx >= MAX_CHANS) {
+	    if (cmd.hdr.portx < 0 || cmd.hdr.portx >= MAX_TOTAL_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Invalid channel number, %d, in command '%c', from network TNC.\n",
 			cmd.hdr.portx, cmd.hdr.datakind);

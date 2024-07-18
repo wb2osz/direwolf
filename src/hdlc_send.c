@@ -39,7 +39,7 @@ static void send_bit_nrzi (int, int);
 
 
 
-static int number_of_bits_sent[MAX_CHANS];	// Count number of bits sent by "hdlc_send_frame" or "hdlc_send_flags"
+static int number_of_bits_sent[MAX_RADIO_CHANS];	// Count number of bits sent by "hdlc_send_frame" or "hdlc_send_flags"
 
 
 
@@ -240,7 +240,7 @@ static void send_byte_msb_first (int chan, int x, int polarity)
 // Data (non flags) use bit stuffing.
 
 
-static int stuff[MAX_CHANS];		// Count number of "1" bits to keep track of when we
+static int stuff[MAX_RADIO_CHANS];		// Count number of "1" bits to keep track of when we
 					// need to break up a long run by "bit stuffing."
 					// Needs to be array because we could be transmitting
 					// on multiple channels at the same time.
@@ -284,7 +284,7 @@ static void send_data_nrzi (int chan, int x)
 
 static void send_bit_nrzi (int chan, int b)
 {
-	static int output[MAX_CHANS];
+	static int output[MAX_RADIO_CHANS];
 
 	if (b == 0) {
 	  output[chan] = ! output[chan];

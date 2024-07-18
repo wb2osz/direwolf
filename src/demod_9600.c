@@ -395,7 +395,7 @@ void demod_9600_process_sample (int chan, int sam, int upsample, struct demodula
 
 	int subchan = 0;
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 
 	/* Scale to nice number for convenience. */
@@ -611,7 +611,10 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 
 	  /* Overflow.  Was large positive, wrapped around, now large negative. */
 
-	  hdlc_rec_bit (chan, subchan, slice, demod_out_f > 0, D->modem_type == MODEM_SCRAMBLE, D->slicer[slice].lfsr);
+	  hdlc_rec_bit_new (chan, subchan, slice, demod_out_f > 0, D->modem_type == MODEM_SCRAMBLE, D->slicer[slice].lfsr,
+			&(D->slicer[slice].pll_nudge_total), &(D->slicer[slice].pll_symbol_count));
+	  D->slicer[slice].pll_symbol_count++;
+
 	  pll_dcd_each_symbol2 (D, chan, subchan, slice);
 	}
 
@@ -627,12 +630,14 @@ inline static void nudge_pll (int chan, int subchan, int slice, float demod_out_
 
 	  float target = D->pll_step_per_sample * demod_out_f / (demod_out_f - D->slicer[slice].prev_demod_out_f);
 
+	  signed int before = (signed int)(D->slicer[slice].data_clock_pll);	// Treat as signed.
 	  if (D->slicer[slice].data_detect) {
 	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_locked_inertia + target * (1.0f - D->pll_locked_inertia) );
 	  }
 	  else {
 	    D->slicer[slice].data_clock_pll = (int)(D->slicer[slice].data_clock_pll * D->pll_searching_inertia + target * (1.0f - D->pll_searching_inertia) );
 	  }
+	  D->slicer[slice].pll_nudge_total += (int64_t)((signed int)(D->slicer[slice].data_clock_pll)) - (int64_t)before;
 	}
 
 

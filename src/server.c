@@ -1413,7 +1413,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 /*
  * Take some precautions to guard against bad data which could cause problems later.
  */
-	if (cmd.hdr.portx < 0 || cmd.hdr.portx >= MAX_CHANS) {
+	if (cmd.hdr.portx < 0 || cmd.hdr.portx >= MAX_TOTAL_CHANS) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("\nInvalid port number, %d, in command '%c', from AGW client application %d.\n",
 			cmd.hdr.portx, cmd.hdr.datakind, client);
@@ -1544,7 +1544,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		// No other place cares about total number.
 
 		count = 0;
-		for (j=0; j<MAX_CHANS; j++) {
+		for (j=0; j<MAX_TOTAL_CHANS; j++) {
 	          if (save_audio_config_p->chan_medium[j] == MEDIUM_RADIO ||
 	              save_audio_config_p->chan_medium[j] == MEDIUM_IGATE ||
 	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC) {
@@ -1553,7 +1553,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		}
 		snprintf (reply.info, sizeof(reply.info), "%d;", count);
 
-		for (j=0; j<MAX_CHANS; j++) {
+		for (j=0; j<MAX_TOTAL_CHANS; j++) {
 
 	          switch (save_audio_config_p->chan_medium[j]) {
 
@@ -1850,7 +1850,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        // Connected mode can only be used with internal modems.
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
+		if (chan >= 0 && chan < MAX_RADIO_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 		  ok = 1;
 	          dlq_register_callsign (cmd.hdr.call_from, chan, client);
 	        }
@@ -1879,7 +1879,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	        // Connected mode can only be used with internal modems.
 
-		if (chan >= 0 && chan < MAX_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
+		if (chan >= 0 && chan < MAX_RADIO_CHANS && save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	          dlq_unregister_callsign (cmd.hdr.call_from, chan, client);
 	        }
 		else {
@@ -2066,7 +2066,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	        reply.hdr.data_len_NETLE = host2netle(4);
 
 	        int n = 0;
-	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_CHANS) {
+	        if (cmd.hdr.portx >= 0 && cmd.hdr.portx < MAX_RADIO_CHANS) {
 	          // Count both normal and expedited in transmit queue for given channel.
 		  n = tq_count (cmd.hdr.portx, -1, "", "", 0);
 		}

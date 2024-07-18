@@ -63,14 +63,14 @@ static struct audio_s *save_audio_config_p = NULL;
 
 #define TICKS_PER_CYCLE ( 256.0 * 256.0 * 256.0 * 256.0 )
 
-static int ticks_per_sample[MAX_CHANS];	/* Same for both channels of same soundcard */
+static int ticks_per_sample[MAX_RADIO_CHANS];	/* Same for both channels of same soundcard */
 					/* because they have same sample rate */
 					/* but less confusing to have for each channel. */
 
-static int ticks_per_bit[MAX_CHANS];
-static int f1_change_per_sample[MAX_CHANS];
-static int f2_change_per_sample[MAX_CHANS];
-static float samples_per_symbol[MAX_CHANS];
+static int ticks_per_bit[MAX_RADIO_CHANS];
+static int f1_change_per_sample[MAX_RADIO_CHANS];
+static int f2_change_per_sample[MAX_RADIO_CHANS];
+static float samples_per_symbol[MAX_RADIO_CHANS];
 
 
 static short sine_table[256];
@@ -78,7 +78,7 @@ static short sine_table[256];
 
 /* Accumulators. */
 
-static unsigned int tone_phase[MAX_CHANS]; // Phase accumulator for tone generation.
+static unsigned int tone_phase[MAX_RADIO_CHANS]; // Phase accumulator for tone generation.
 					   // Upper bits are used as index into sine table.
 
 #define PHASE_SHIFT_180 ( 128u << 24 )
@@ -86,11 +86,11 @@ static unsigned int tone_phase[MAX_CHANS]; // Phase accumulator for tone generat
 #define PHASE_SHIFT_45  (  32u << 24 )
 
 
-static int bit_len_acc[MAX_CHANS];	// To accumulate fractional samples per bit.
+static int bit_len_acc[MAX_RADIO_CHANS];	// To accumulate fractional samples per bit.
 
-static int lfsr[MAX_CHANS];		// Shift register for scrambler.
+static int lfsr[MAX_RADIO_CHANS];		// Shift register for scrambler.
 
-static int bit_count[MAX_CHANS];	// Counter incremented for each bit transmitted
+static int bit_count[MAX_RADIO_CHANS];	// Counter incremented for each bit transmitted
 					// on the channel.   This is only used for QPSK.
 					// The LSB determines if we save the bit until
 					// next time, or send this one with the previously saved.
@@ -101,10 +101,10 @@ static int bit_count[MAX_CHANS];	// Counter incremented for each bit transmitted
 					// For 8PSK, it has a different meaning.  It is the
 					// number of bits in 'save_bit' so we can accumulate
 					// three for each symbol.
-static int save_bit[MAX_CHANS];
+static int save_bit[MAX_RADIO_CHANS];
 
 
-static int prev_dat[MAX_CHANS];		// Previous data bit.  Used for G3RUH style.
+static int prev_dat[MAX_RADIO_CHANS];		// Previous data bit.  Used for G3RUH style.
 
 
 
@@ -163,7 +163,7 @@ int gen_tone_init (struct audio_s *audio_config_p, int amp, int gen_packets)
 	
 	amp16bit = (int)((32767 * amp) / 100);
 
-	for (chan = 0; chan < MAX_CHANS; chan++) {
+	for (chan = 0; chan < MAX_RADIO_CHANS; chan++) {
 
 	  if (audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 
@@ -352,8 +352,8 @@ static const int gray2phase_v27[8] = {1, 0, 2, 3, 6, 7, 5, 4};
 
 // #define PSKIQ 1  // not ready for prime time yet.
 #if PSKIQ
-static int xmit_octant[MAX_CHANS];	// absolute phase in 45 degree units.
-static int xmit_prev_octant[MAX_CHANS];	// from previous symbol.
+static int xmit_octant[MAX_RADIO_CHANS];	// absolute phase in 45 degree units.
+static int xmit_prev_octant[MAX_RADIO_CHANS];	// from previous symbol.
 
 // For PSK, we generate the final signal by combining fixed frequency cosine and
 // sine by the following weights.

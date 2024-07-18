@@ -79,6 +79,7 @@ list(APPEND direwolf_SOURCES
   morse.c
   multi_modem.c
   waypoint.c
+  nettnc.c
   serial_port.c
   pfilter.c
   ptt.c

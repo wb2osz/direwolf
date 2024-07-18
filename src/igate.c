@@ -216,8 +216,8 @@ int main (int argc, char *argv[])
 
 	memset (&audio_config, 0, sizeof(audio_config));
 	audio_config.adev[0].num_channels = 2;
-	strlcpy (audio_config.achan[0].mycall, "WB2OSZ-1", sizeof(audio_config.achan[0].mycall));
-	strlcpy (audio_config.achan[1].mycall, "WB2OSZ-2", sizeof(audio_config.achan[0].mycall));
+	strlcpy (audio_config.mycall[0], "WB2OSZ-1", sizeof(audio_config.achan[0].mycall));
+	strlcpy (audio_config.mycall[1], "WB2OSZ-2", sizeof(audio_config.achan[0].mycall));
 
 	memset (&igate_config, 0, sizeof(igate_config));
 
@@ -909,10 +909,10 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 // Beacon will be channel -1.
 // Client app to ICHANNEL is outside of radio channel range.
 
-	if (chan >= 0 && chan < MAX_CHANS && 		// in radio channel range
-		save_digi_config_p->filter_str[chan][MAX_CHANS] != NULL) {
+	if (chan >= 0 && chan < MAX_TOTAL_CHANS && 		// in radio channel range
+		save_digi_config_p->filter_str[chan][MAX_TOTAL_CHANS] != NULL) {
 
-	  if (pfilter(chan, MAX_CHANS, save_digi_config_p->filter_str[chan][MAX_CHANS], recv_pp, 1) != 1) {
+	  if (pfilter(chan, MAX_TOTAL_CHANS, save_digi_config_p->filter_str[chan][MAX_TOTAL_CHANS], recv_pp, 1) != 1) {
 
 	    // Is this useful troubleshooting information or just distracting noise?
 	    // Originally this was always printed but there was a request to add a "quiet" option to suppress this.
@@ -920,7 +920,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 	    if (s_debug >= 1) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_CHANS]);
+	      dw_printf ("Packet from channel %d to IGate was rejected by filter: %s\n", chan, save_digi_config_p->filter_str[chan][MAX_TOTAL_CHANS]);
 	    }
 	    return;
 	  }
@@ -1141,7 +1141,7 @@ static void send_packet_to_server (packet_t pp, int chan)
 	  strlcat (msg, ",qAO,", sizeof(msg));		// new for version 1.4.
 	}
 
-	strlcat (msg, save_audio_config_p->achan[chan].mycall, sizeof(msg));
+	strlcat (msg, save_audio_config_p->mycall[chan], sizeof(msg));
 	strlcat (msg, ":", sizeof(msg));
 
 
@@ -1781,7 +1781,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 {
 	int n;
 
-	assert (to_chan >= 0 && to_chan < MAX_CHANS);
+	assert (to_chan >= 0 && to_chan < MAX_TOTAL_CHANS);
 
 /*
  * Try to parse it into a packet object; we need this for the packet filtering.
@@ -1856,7 +1856,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  * filtering by stations along the way or the q construct.
  */
 
-	assert (to_chan >= 0 && to_chan < MAX_CHANS);
+	assert (to_chan >= 0 && to_chan < MAX_TOTAL_CHANS);
 
 
 /*
@@ -1906,9 +1906,9 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 
 	if ( ! msp_special_case) {
 
-	  if (save_digi_config_p->filter_str[MAX_CHANS][to_chan] != NULL) {
+	  if (save_digi_config_p->filter_str[MAX_TOTAL_CHANS][to_chan] != NULL) {
 
-	    if (pfilter(MAX_CHANS, to_chan, save_digi_config_p->filter_str[MAX_CHANS][to_chan], pp3, 1) != 1) {
+	    if (pfilter(MAX_TOTAL_CHANS, to_chan, save_digi_config_p->filter_str[MAX_TOTAL_CHANS][to_chan], pp3, 1) != 1) {
 
 	      // Previously there was a debug message here about the packet being dropped by filtering.
 	      // This is now handled better by the "-df" command line option for filtering details.
@@ -1965,7 +1965,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	char dest[AX25_MAX_ADDR_LEN];		/* Destination field. */
 	ax25_get_addr_with_ssid (pp3, AX25_DESTINATION, dest);
 	snprintf (payload, sizeof(payload), "%s>%s,TCPIP,%s*:%s",
-				src, dest, save_audio_config_p->achan[to_chan].mycall, pinfo);
+				src, dest, save_audio_config_p->mycall[to_chan], pinfo);
 
 
 #if DEBUGx
@@ -1991,7 +1991,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	if (ig_to_tx_allow (pp3, to_chan)) {
 	  char radio [2400];
 	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
-				save_audio_config_p->achan[to_chan].mycall,
+				save_audio_config_p->mycall[to_chan],
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
 				save_igate_config_p->tx_via,
 				payload);

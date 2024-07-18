@@ -6,6 +6,9 @@
 
 ### New Features: ###
 
+
+- New NCHANNEL feature to map a channel number to an external network TCP KISS TNC.  See xxx for example of a bridge to LoRa APRS.  See [APRS-LoRa-VHF-APRS-Bridge.pdf](https://github.com/wb2osz/direwolf-doc/blob/main/APRS-LoRa-VHF-APRS-Bridge.pdf) for explanation.
+
 - [http://www.aprs.org/aprs11/tocalls.txt](http://www.aprs.org/aprs11/tocalls.txt) has been abandoned since the end of 2021.  [https://github.com/aprsorg/aprs-deviceid](https://github.com/aprsorg/aprs-deviceid) is now considered to be the authoritative source of truth for the vendor/model encoding.
 
 ## Version 1.7  --  October 2023 ##

@@ -498,7 +498,7 @@ void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num
 	dw_printf ("dlq_connect_request (...)\n");
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 /* Allocate a new queue item. */
 
@@ -556,7 +556,7 @@ void dlq_disconnect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int 
 	dw_printf ("dlq_disconnect_request (...)\n");
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 /* Allocate a new queue item. */
 
@@ -619,7 +619,7 @@ void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 	dw_printf ("dlq_outstanding_frames_request (...)\n");
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 /* Allocate a new queue item. */
 
@@ -691,7 +691,7 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
 	dw_printf ("dlq_xmit_data_request (...)\n");
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 /* Allocate a new queue item. */
 
@@ -758,7 +758,7 @@ void dlq_register_callsign (char *addr, int chan, int client)
 	dw_printf ("dlq_register_callsign (%s, chan=%d, client=%d)\n", addr, chan, client);
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 /* Allocate a new queue item. */
 
@@ -793,7 +793,7 @@ void dlq_unregister_callsign (char *addr, int chan, int client)
 	dw_printf ("dlq_unregister_callsign (%s, chan=%d, client=%d)\n", addr, chan, client);
 #endif
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 
 /* Allocate a new queue item. */
 

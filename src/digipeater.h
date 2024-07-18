@@ -4,7 +4,7 @@
 
 #include "regex.h"
 
-#include "direwolf.h"		/* for MAX_CHANS */
+#include "direwolf.h"		/* for MAX_TOTAL_CHANS */
 #include "ax25_pad.h"		/* for packet_t */
 #include "audio.h"		/* for radio channel properties */
 
@@ -29,25 +29,25 @@ struct digi_config_s {
  * Rules for each of the [from_chan][to_chan] combinations.
  */
 
-	regex_t	alias[MAX_CHANS][MAX_CHANS];
+	regex_t	alias[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS];
 
-	regex_t	wide[MAX_CHANS][MAX_CHANS];
+	regex_t	wide[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS];
 
-	int	enabled[MAX_CHANS][MAX_CHANS];
+	int	enabled[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS];
 
-	enum preempt_e { PREEMPT_OFF, PREEMPT_DROP, PREEMPT_MARK, PREEMPT_TRACE } preempt[MAX_CHANS][MAX_CHANS];
+	enum preempt_e { PREEMPT_OFF, PREEMPT_DROP, PREEMPT_MARK, PREEMPT_TRACE } preempt[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS];
 
 	// ATGP is an ugly hack for the specific need of ATGP which needs more that 8 digipeaters.
 	// DO NOT put this in the User Guide.  On a need to know basis.
 
-	char atgp[MAX_CHANS][MAX_CHANS][AX25_MAX_ADDR_LEN];
+	char atgp[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS][AX25_MAX_ADDR_LEN];
 
-	char *filter_str[MAX_CHANS+1][MAX_CHANS+1];
+	char *filter_str[MAX_TOTAL_CHANS+1][MAX_TOTAL_CHANS+1];
 						// NULL or optional Packet Filter strings such as "t/m".
 						// Notice the size of arrays is one larger than normal.
 						// That extra position is for the IGate.
 
-	int regen[MAX_CHANS][MAX_CHANS];	// Regenerate packet.  
+	int regen[MAX_TOTAL_CHANS][MAX_TOTAL_CHANS];	// Regenerate packet.
 						// Sort of like digipeating but passed along unchanged.
 };
 

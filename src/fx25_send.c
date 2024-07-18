@@ -41,7 +41,7 @@ static void send_bit (int chan, int b);
 static int stuff_it (unsigned char *in, int ilen, unsigned char *out, int osize);
 
 
-static int number_of_bits_sent[MAX_CHANS];		// Count number of bits sent by "fx25_send_frame" or "???"
+static int number_of_bits_sent[MAX_RADIO_CHANS];		// Count number of bits sent by "fx25_send_frame" or "???"
 
 
 #if FXTEST
@@ -249,7 +249,7 @@ static void send_bytes (int chan, unsigned char *b, int count)
  */
 static void send_bit (int chan, int b)
 {
-	static int output[MAX_CHANS];
+	static int output[MAX_RADIO_CHANS];
 
 	if (b == 0) {
 	  output[chan] = ! output[chan];

@@ -126,7 +126,7 @@ static struct {
 	int age;
 	unsigned int crc;
 	int score;
-} candidate[MAX_CHANS][MAX_SUBCHANS][MAX_SLICERS];
+} candidate[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SLICERS];
 
 
 
@@ -135,7 +135,7 @@ static struct {
 #define PROCESS_AFTER_BITS 3
 
 
-static int process_age[MAX_CHANS];
+static int process_age[MAX_RADIO_CHANS];
 
 static void pick_best_candidate (int chan);
 
@@ -172,7 +172,7 @@ void multi_modem_init (struct audio_s *pa)
 	demod_init (save_audio_config_p);
 	hdlc_rec_init (save_audio_config_p);
 
-	for (chan=0; chan<MAX_CHANS; chan++) {
+	for (chan=0; chan<MAX_RADIO_CHANS; chan++) {
 	  if (save_audio_config_p->chan_medium[chan] == MEDIUM_RADIO) {
 	    if (save_audio_config_p->achan[chan].baud <= 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -222,7 +222,7 @@ void multi_modem_init (struct audio_s *pa)
  *
  *------------------------------------------------------------------------------*/
 
-static float dc_average[MAX_CHANS];
+static float dc_average[MAX_RADIO_CHANS];
 
 int multi_modem_get_dc_average (int chan)
 {
@@ -319,7 +319,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	packet_t pp;
 
 
-	assert (chan >= 0 && chan < MAX_CHANS);
+	assert (chan >= 0 && chan < MAX_RADIO_CHANS);
 	assert (subchan >= 0 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SUBCHANS);
 
@@ -329,8 +329,15 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	  char nmea[256];
 	  ais_to_nmea (fbuf, flen, nmea, sizeof(nmea));
 
+	  // The intention is for the AIS sentences to go only to attached applications.
+	  // e.g. SARTrack knows how to parse the AIS sentences.
+
+	  // Put NOGATE in path so RF>IS IGates will block this.
+	  // TODO: Use station callsign, rather than "AIS," so we know where it is coming from,
+	  // if it happens to get onto RF somehow.
+
 	  char monfmt[276];
-	  snprintf (monfmt, sizeof(monfmt), "AIS>%s%1d%1d:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_AIS, nmea);
+	  snprintf (monfmt, sizeof(monfmt), "AIS>%s%1d%1d,NOGATE:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_AIS, nmea);
 	  pp = ax25_from_text (monfmt, 1);
 
 	  // alevel gets in there somehow making me question why it is passed thru here.
@@ -338,7 +345,7 @@ void multi_modem_process_rec_frame (int chan, int subchan, int slice, unsigned c
 	else if (save_audio_config_p->achan[chan].modem_type == MODEM_EAS) {
 	  char monfmt[300];	// EAS SAME message max length is 268
 
-	  snprintf (monfmt, sizeof(monfmt), "EAS>%s%1d%1d:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_EAS, fbuf);
+	  snprintf (monfmt, sizeof(monfmt), "EAS>%s%1d%1d,NOGATE:{%c%c%s", APP_TOCALL, MAJOR_VERSION, MINOR_VERSION, USER_DEF_USER_ID, USER_DEF_TYPE_EAS, fbuf);
 	  pp = ax25_from_text (monfmt, 1);
 
 	  // alevel gets in there somehow making me question why it is passed thru here.

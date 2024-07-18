@@ -71,7 +71,7 @@
 #define T_NUM_ANALOG 5				/* Number of analog channels. */
 #define T_NUM_DIGITAL 8				/* Number of digital channels. */
 
-#define T_STR_LEN 16				/* Max len for labels and units. */
+#define T_STR_LEN 32				/* Max len for labels and units. */
 
 
 #define MAGIC1  0x5a1111a5			/* For checking storage allocation problems. */

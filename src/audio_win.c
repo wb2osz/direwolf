@@ -270,7 +270,7 @@ int audio_open (struct audio_s *pa)
 
 	    A->g_audio_in_type = AUDIO_IN_TYPE_SOUNDCARD;
 
-	    for (chan=0; chan<MAX_CHANS; chan++) {
+	    for (chan=0; chan<MAX_RADIO_CHANS; chan++) {
 	      if (pa -> achan[chan].mark_freq == 0)
 	        pa -> achan[chan].mark_freq = DEFAULT_MARK_FREQ;
 
@@ -660,7 +660,13 @@ int audio_open (struct audio_s *pa)
  */
    	       case AUDIO_IN_TYPE_STDIN:
 
-  	         setmode (STDIN_FILENO, _O_BINARY);
+	         // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/setmode?view=msvc-170
+
+	         int err = _setmode (_fileno(stdin), _O_BINARY);
+	         if (err == -1) {
+	           text_color_set (DW_COLOR_ERROR);
+	           dw_printf ("Could not set stdin to binary mode.  Unlikely to get desired result.\n");
+	         }
 	         A->stream_next= 0;
 	         A->stream_len = 0;
 
@@ -888,7 +894,7 @@ int audio_get (int a)
 	    while (A->stream_next >= A->stream_len) {
 	      int res;
 
-	      res = read(STDIN_FILENO, A->stream_data, 1024);
+	      res = read(STDIN_FILENO, A->stream_data, sizeof(A->stream_data));
 	      if (res <= 0) {
 	        text_color_set(DW_COLOR_INFO);
 	        dw_printf ("\nEnd of file on stdin.  Exiting.\n");
@@ -903,9 +909,13 @@ int audio_get (int a)
 	      A->stream_len = res;
 	      A->stream_next = 0;
 	    }
-	    return (A->stream_data[A->stream_next++] & 0xff);
+	    sample = A->stream_data[A->stream_next] & 0xff;
+	    A->stream_next++;
+	    return (sample);
+
 	    break;
-  	}
+
+	}  // end switch audio in type
 
 	return (-1);
 
