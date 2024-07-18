@@ -51,6 +51,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <stddef.h>
 
 #include "textcolor.h"
 #include "audio.h"		// configuration.
