@@ -108,7 +108,7 @@
 #include "dtmf.h"
 #include "aprs_tt.h"
 #include "ax25_link.h"
-#include "ring.h"
+//#include "ring.h"
 
 
 #if __WIN32__
