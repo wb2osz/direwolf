@@ -2,20 +2,39 @@
 # Revision History #
 
 
-## Version 1.7  --  Under Development ('dev' branch) ##
+## Version 1.7  --  October 2023 ##
+
+
+### New Documentation: ###
+
+Additional documentation location to slow down growth of main repository.  [https://github.com/wb2osz/direwolf-doc](https://github.com/wb2osz/direwolf-doc) .   These are more oriented toward achieving a goal and understanding, as opposed to the User Guide which describes the functionality.
+
+- ***APRS Digipeaters***
+
+- ***Internal Packet Routing***
+
+- ***Radio Interface Guide***
+
+- ***Successful IGate Operation***
+
+- ***Understanding APRS Packets***
 
 
 ### New Features: ###
 
-- Additional documentation location to slow down growth of main repository.  [https://github.com/wb2osz/direwolf-doc](https://github.com/wb2osz/direwolf-doc)
+
 
 - New ICHANNEL configuration option to map a KISS client application channel to APRS-IS. Packets from APRS-IS will be presented to client applications as the specified channel. Packets sent, by client applications, to that channel will go to APRS-IS rather than a radio channel.  Details in ***Internal-Packet-Routing.pdf***.
 
 - New variable speed option for gen_packets. For example,  "-v 5,0.1" would generate packets from 5% too slow to 5% too fast with increments of 0.1.  Some implementations might have imprecise timing.  Use this to test how well TNCs tolerate sloppy timing.
 
-- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).  Use "-I 1" on command line to enable transmit for first channel.  Compatible with Nino TNC for 1200 and 9600 bps.
+- Improved Layer 2 Protocol [(IL2P)](https://en.wikipedia.org/wiki/FX.25_Forward_Error_Correction).    Compatible with Nino TNC for 1200 and 9600 bps.  Use "-I 1" on command line to enable transmit for first channel.  For more general case, add to config file (simplified version, see User Guide for more details):
 
-- Limited support for CM109/CM119 GPIO PTT on Windows.
+    > After:   "CHANNEL 1"   (or other channel)
+    >
+    > Add:     "IL2PTX 1"
+
+- Limited support for CM108/CM119 GPIO PTT on Windows.
 
 - Dire Wolf now advertises itself using DNS Service Discovery.  This allows suitable APRS / Packet Radio applications to find a network KISS TNC without knowing the IP address or TCP port.    Thanks to Hessu for providing this.  Currently available only for Linux and Mac OSX.  [Read all about it here.](https://github.com/hessu/aprs-specs/blob/master/TCP-KISS-DNS-SD.md)
 
@@ -29,6 +48,21 @@
     >
     > Add:     "FX25TX 1" (or 16 or 32 or 64)
 
+
+
+### Bugs Fixed: ###
+
+- The t/m packet filter incorrectly included bulletins.  It now allows only "messages" to specific stations.  Use of t/m is discouraged.  i/180 is the preferred filter for messages to users recently heard locally.
+
+- Packet filtering now skips over any third party header before classifying packet types.
+
+- Fixed build for Alpine Linux.
+
+### Notes: ###
+
+The Windows binary distribution now uses gcc (MinGW) version 11.3.0.
+The Windows version is built for both 32 and 64 bit operating systems.
+Use the 64 bit version if possible; it runs considerably faster.
 
 ## Version 1.6  --  October 2020 ##
 

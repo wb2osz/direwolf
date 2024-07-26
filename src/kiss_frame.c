@@ -40,7 +40,8 @@
  *
  *		The first byte of the frame contains:
  *	
- *			* port number (radio channel) in upper nybble.
+ *			* radio channel in upper nybble.
+ *				(KISS doc uses "port" but I don't like that because it has too many meanings.)
  *			* command in lower nybble.
  *
  *	
@@ -954,7 +955,7 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 	  p = pmsg;
 	  if (*p == FEND) p++;
 
-	  dw_printf ("%s %s %s KISS client application, port %d, total length = %d\n",
+	  dw_printf ("%s %s %s KISS client application, channel %d, total length = %d\n",
 			prefix[(int)fromto], function[p[0] & 0xf], direction[(int)fromto], 
 			(p[0] >> 4) & 0xf, msg_len);
 	}

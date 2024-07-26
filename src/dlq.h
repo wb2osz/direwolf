@@ -33,9 +33,12 @@ typedef struct cdata_s {
 
 
 
+
 /* Types of things that can be in queue. */
 
 typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_OUTSTANDING_FRAMES_REQUEST, DLQ_CHANNEL_BUSY, DLQ_SEIZE_CONFIRM, DLQ_CLIENT_CLEANUP} dlq_type_t;
+
+typedef enum fec_type_e {fec_type_none=0, fec_type_fx25=1, fec_type_il2p=2} fec_type_t;
 
 
 /* A queue item. */
@@ -68,7 +71,7 @@ typedef struct dlq_item_s {
 
 	alevel_t alevel;		/* Audio level. */
 
-	int is_fx25;			/* Was it from FX.25? */
+	fec_type_t fec_type;		// Type of FEC for received signal: none, FX.25, or IL2P.
 
 	retry_t retries;		/* Effort expended to get a valid CRC. */
 					/* Bits changed for regular AX.25. */
@@ -106,7 +109,7 @@ void dlq_init (void);
 
 
 
-void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum);
+void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum);
 
 void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid);
 
@@ -116,9 +119,9 @@ void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 
 void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, int chan, int client, int pid, char *xdata_ptr, int xdata_len);
 
-void dlq_register_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
+void dlq_register_callsign (char *addr, int chan, int client);
 
-void dlq_unregister_callsign (char addr[AX25_MAX_ADDR_LEN], int chan, int client);
+void dlq_unregister_callsign (char *addr, int chan, int client);
 
 void dlq_channel_busy (int chan, int activity, int status);
 

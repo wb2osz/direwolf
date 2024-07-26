@@ -80,15 +80,7 @@ jobs:
               build_type: 'Release',
               cmake_extra_flags: ''
             }
-          - {
-              name: 'Ubuntu 18.04',
-              os: ubuntu-18.04,
-              cc: 'gcc',
-              cxx: 'g++',
-              arch: 'x86_64',
-              build_type: 'Release',
-              cmake_extra_flags: ''
-            }
+
     steps:
       - name: checkout
         uses: actions/checkout@v2

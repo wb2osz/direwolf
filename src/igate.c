@@ -1564,9 +1564,9 @@ static void * igate_recv_thread (void *arg)
 					// See what happens with -2 and follow up on this.
 					// Do we need something else here?
 		int slice = 0;
-	        int is_fx25 = 0;
+	        fec_type_t fec_type = fec_type_none;
 	        char spectrum[] = "APRS-IS";
-	        dlq_rec_frame (ichan, subchan, slice, pp3, alevel, is_fx25, RETRY_NONE, spectrum);
+	        dlq_rec_frame (ichan, subchan, slice, pp3, alevel, fec_type, RETRY_NONE, spectrum);
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
@@ -1749,9 +1749,33 @@ static void * satgate_delay_thread (void *arg)
  *
  *--------------------------------------------------------------------*/
 
-// TODO: Use of "message" here is confusing because that term already
-// has a special meaning for APRS.  This could be an APRS message or
-// some other APRS data type.  Payload is already used.
+
+// It is unforunate that the : data type indicator (DTI) was overloaded with
+// so many different meanings.  Simply looking at the DTI is not adequate for
+// determining whether a packet is a message.
+// We need to exclude the other special cases of telemetry metadata,
+// bulletins, and weather bulletins.
+
+static int is_message_message (char *infop)
+{
+	if (*infop != ':') return (0);
+	if (strlen(infop) < 11) return (0);	// too short for : addressee :
+	if (strlen(infop) >= 16) {
+	  if (strncmp(infop+10, ":PARM.", 6) == 0) return (0);
+	  if (strncmp(infop+10, ":UNIT.", 6) == 0) return (0);
+	  if (strncmp(infop+10, ":EQNS.", 6) == 0) return (0);
+	  if (strncmp(infop+10, ":BITS.", 6) == 0) return (0);
+	}
+	if (strlen(infop) >= 4) {
+	  if (strncmp(infop+1, "BLN", 3) == 0) return (0);
+	  if (strncmp(infop+1, "NWS", 3) == 0) return (0);
+	  if (strncmp(infop+1, "SKY", 3) == 0) return (0);
+	  if (strncmp(infop+1, "CWA", 3) == 0) return (0);
+	  if (strncmp(infop+1, "BOM", 3) == 0) return (0);
+	}
+	return (1);		// message, including ack, rej
+}
+
 
 static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 {
@@ -1800,9 +1824,6 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	    *gt = '\0';
 	}
 
-// FIXME NO!
-	///////ax25_get_addr_with_ssid (pp3, AX25_SOURCE, src);
-
 /*
  * Drop if path contains:
  *	NOGATE or RFONLY - means IGate should not pass them.
@@ -1843,7 +1864,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
  * If we recently transmitted a 'message' from some station,
  * send the position of the message sender when it comes along later.
  *
- * Some refer to this as a courtesy posit report but I don't
+ * Some refer to this as a "courtesy posit report" but I don't
  * think that is an official term.
  *
  * If we have a position report, look up the sender and see if we should
@@ -1988,10 +2009,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 #endif
 	    stats_rf_xmit_packets++;		// Any type of packet.
 
-	    // TEMP TEST: metadata temporarily allowed during testing.
-
-	    if (*pinfo == ':' && ! is_telem_metadata(pinfo)) {
-	    // temp test // if (*pinfo == ':') {
+	    if (is_message_message(pinfo)) {
 
 // We transmitted a "message."  Telemetry metadata is excluded.
 // Remember to pass along address of the sender later.
@@ -2449,6 +2467,8 @@ void ig_to_tx_remember (packet_t pp, int chan, int bydigi)
         }
 }
 
+
+
 static int ig_to_tx_allow (packet_t pp, int chan)
 {
 	unsigned short crc = ax25_dedupe_crc(pp);
@@ -2481,7 +2501,7 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 
 	    /* We have a duplicate within some time period. */
 
-	    if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+	    if (is_message_message((char*)pinfo)) {
 
 	      /* I think I want to avoid the duplicate suppression for "messages." */
 	      /* Suppose we transmit a message from station X and it doesn't get an ack back. */
@@ -2530,7 +2550,7 @@ static int ig_to_tx_allow (packet_t pp, int chan)
 	/* the normal limit for them. */
 
 	increase_limit = 1;
-	if (*pinfo == ':' && ! is_telem_metadata((char*)pinfo)) {
+	if (is_message_message((char*)pinfo)) {
 	  increase_limit = 3;
 	}
 

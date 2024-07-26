@@ -1,4 +1,4 @@
-﻿# Documentation for Dire Wolf #
+# Documentation for Dire Wolf #
 
 Click on the document name to view in your web browser or the link following to download the PDF file.
 
@@ -153,6 +153,14 @@ and a couple things that can be done about it.
 
     Here, we take a closer look at some of the frames on the TNC Test CD in hopes of gaining some insights into why some are easily decoded and others are more difficult.
     There are a lot of ugly signals out there.   Many can be improved by decreasing the transmit volume.   Others are just plain weird and you have to wonder how they are being generated.
+
+
+## Additional Documentation for Dire Wolf Software TNC #
+
+
+When there was little documentation, it was all added to the source code repository [https://github.com/wb2osz/direwolf/tree/master/doc](https://github.com/wb2osz/direwolf/tree/master/doc) 
+
+The growing number of documentation files and revisions are making the source code repository very large which means long download times.  Additional documentation, not tied to a specific release, is now being added to  [https://github.com/wb2osz/direwolf-doc](https://github.com/wb2osz/direwolf-doc) 
 
 ## Questions?  Experiences to share?  ##
  

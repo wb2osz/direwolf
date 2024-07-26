@@ -24,7 +24,8 @@ typedef struct decode_aprs_s {
 
 	int g_quiet;			/* Suppress error messages when decoding. */
 
-        char g_src[AX25_MAX_ADDR_LEN];
+        char g_src[AX25_MAX_ADDR_LEN];	// In the case of a packet encapsulated by a 3rd party
+					// header, this is the encapsulated source.
 
         char g_dest[AX25_MAX_ADDR_LEN];
 
@@ -66,10 +67,30 @@ typedef struct decode_aprs_s {
 					/* Also for Directed Station Query which is a */
 					/* special case of message. */
 
+	// This is so pfilter.c:filt_t does not need to duplicate the same work.
+
+	int g_has_thirdparty_header;
+	enum packet_type_e {
+			packet_type_none=0,
+			packet_type_position,
+			packet_type_weather,
+			packet_type_object,
+			packet_type_item,
+			packet_type_message,
+			packet_type_query,
+			packet_type_capabilities,
+			packet_type_status,
+			packet_type_telemetry,
+			packet_type_userdefined,
+			packet_type_nws
+		} g_packet_type;
+
 	enum message_subtype_e { message_subtype_invalid = 0,
 				message_subtype_message,
 				message_subtype_ack,
 				message_subtype_rej,
+				message_subtype_bulletin,
+				message_subtype_nws,
 				message_subtype_telem_parm,
 				message_subtype_telem_unit,
 				message_subtype_telem_eqns,
@@ -90,8 +111,9 @@ typedef struct decode_aprs_s {
         int g_power;			/* Transmitter power in watts. */
 
         int g_height;			/* Antenna height above average terrain, feet. */
+					// TODO:  rename to g_height_ft
 
-        int g_gain;			/* Antenna gain in dB. */
+        int g_gain;			/* Antenna gain in dBi. */
 
         char g_directivity[12];		/* Direction of max signal strength */
 
@@ -99,7 +121,7 @@ typedef struct decode_aprs_s {
 
         float g_altitude_ft;		/* Feet above median sea level.  */
 					/* I used feet here because the APRS specification */
-					/* has units of feet for alititude.  Meters would be */
+					/* has units of feet for altitude.  Meters would be */
 					/* more natural to the other 96% of the world. */
 
         char g_mfr[80];			/* Manufacturer or application. */

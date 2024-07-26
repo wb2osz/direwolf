@@ -1,6 +1,7 @@
 [Unit]
 Description=Direwolf Sound Card-based AX.25 TNC
 After=sound.target
+After=network.target
 
 [Service]
 EnvironmentFile=/etc/sysconfig/direwolf
@@ -22,3 +23,5 @@ ReadWritePaths=/var/log/direwolf
 [Install]
 WantedBy=multi-user.target
 DefaultInstance=1
+
+# alternate version:  https://www.f4fxl.org/start-direwolf-at-boot-the-systemd-way/

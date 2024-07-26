@@ -709,6 +709,14 @@ static char *split (char *string, int rest_of_line)
  *
  *--------------------------------------------------------------------*/
 
+static void rtfm()
+{
+	text_color_set(DW_COLOR_ERROR);
+	dw_printf ("See online documentation:\n");
+	dw_printf ("    stable release:    https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("    development version:    https://github.com/wb2osz/direwolf/tree/dev/doc\n");
+	dw_printf ("    additional topics:    https://github.com/wb2osz/direwolf-doc\n");
+}
 
 void config_init (char *fname, struct audio_s *p_audio_config, 
 			struct digi_config_s *p_digi_config,
@@ -970,7 +978,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("ERROR - Could not open config file %s\n", filepath);
 	  dw_printf ("Try using -c command line option for alternate location.\n");
-	  return;
+	  rtfm();
+	  exit(EXIT_FAILURE);
 	}
 	
 	dw_printf ("\nReading config file %s\n", filepath);
@@ -1027,7 +1036,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Missing name of audio device for ADEVICE command on line %d.\n", line);
-	      continue;
+	      rtfm();
+	      exit(EXIT_FAILURE);
 	    }
 
 	    p_audio_config->adev[adevice].defined = 1;
@@ -1986,7 +1996,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file line %d: %s with CM108 is only available when USB Audio GPIO support is enabled.\n", line, otname);
 	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
 	      dw_printf ("See Interface Guide for details.\n");
-
+	      rtfm();
 	      exit (EXIT_FAILURE);
 #endif
 	    }
@@ -2370,7 +2380,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->achan[channel].il2p_invert_polarity = 0;
 
 	    while ((t = split(NULL,0)) != NULL) {
-	      for (char *c = t; *t != '\0'; c++) {
+	      for (char *c = t; *c != '\0'; c++) {
 	        switch (*c) {
 	          case '+':
 	            p_audio_config->achan[channel].il2p_invert_polarity = 0;
@@ -2513,7 +2523,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Preemptive digipeating DROP option is discouraged.\n", line);
 	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
-	        dw_printf ("TRACE is the best choice for this feature.\n");
+	        dw_printf ("PREEMPT is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_DROP;
 	        t = split(NULL,0);
 	      }
@@ -2521,11 +2531,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: Preemptive digipeating MARK option is discouraged.\n", line);
 	        dw_printf ("It can create a via path which is misleading about the actual path taken.\n");
-	        dw_printf ("TRACE is the best choice for this feature.\n");
+	        dw_printf ("PREEMPT is the best choice for this feature.\n");
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_MARK;
 	        t = split(NULL,0);
 	      }
-	      else if (strcasecmp(t, "TRACE") == 0) {
+	      else if ((strcasecmp(t, "TRACE") == 0) || (strncasecmp(t, "PREEMPT", 7) == 0)){
 	        p_digi_config->preempt[from_chan][to_chan] = PREEMPT_TRACE;
 	        t = split(NULL,0);
 	      }
@@ -5765,8 +5775,9 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	  else if (strcasecmp(keyword, "POWER") == 0) {
 	    b->power = atoi(value);
 	  }
-	  else if (strcasecmp(keyword, "HEIGHT") == 0) {
+	  else if (strcasecmp(keyword, "HEIGHT") == 0) {	// This is in feet.
 	    b->height = atoi(value);
+	    // TODO: ability to add units suffix, e.g.  10m
 	  }
 	  else if (strcasecmp(keyword, "GAIN") == 0) {
 	    b->gain = atoi(value);

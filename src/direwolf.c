@@ -128,6 +128,7 @@
 #include "il2p.h"
 #include "dwsock.h"
 #include "dns_sd_dw.h"
+#include "dlq.h"		// for fec_type_t definition.
 
 
 //static int idx_decoded = 0;
@@ -138,7 +139,7 @@ static BOOL cleanup_win (int);
 static void cleanup_linux (int);
 #endif
 
-static void usage (char **argv);
+static void usage ();
 
 #if defined(__SSE__) && !defined(__APPLE__)
 
@@ -300,9 +301,9 @@ int main (int argc, char *argv[])
 
 	text_color_init(t_opt);
 	text_color_set(DW_COLOR_INFO);
-	//dw_printf ("Dire Wolf version %d.%d (%s) Beta Test 4\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "F", __DATE__);
-	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 7\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
+	dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
 
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD
@@ -387,7 +388,7 @@ int main (int argc, char *argv[])
 	      dw_printf ("\n");
 	      dw_printf ("Dire Wolf requires only privileges available to ordinary users.\n");
 	      dw_printf ("Running this as root is an unnecessary security risk.\n");
-	      SLEEP_SEC(1);
+	      //SLEEP_SEC(1);
 	    }
 	}
 #endif
@@ -598,7 +599,7 @@ int main (int argc, char *argv[])
           case '?':
 
             /* For '?' unknown option message was already printed. */
-            usage (argv);
+            usage ();
             break;
 
 	  case 'd':				/* Set debug option. */
@@ -742,7 +743,7 @@ int main (int argc, char *argv[])
             /* Should not be here. */
 	    text_color_set(DW_COLOR_DEBUG);
             dw_printf("?? getopt returned character code 0%o ??\n", c);
-            usage (argv);
+            usage ();
           }
 	}  /* end while(1) for options */
 
@@ -987,6 +988,7 @@ int main (int argc, char *argv[])
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Pointless to continue without audio device.\n");
 	  SLEEP_SEC(5);
+	  usage ();
 	  exit (1);
 	}
 
@@ -1178,7 +1180,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, int is_fx25, retry_t retries, char *spectrum)
+void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -1187,7 +1189,8 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	char heard[AX25_MAX_ADDR_LEN];
 	//int j;
 	int h;
-	char display_retries[32];
+	char display_retries[32];				// Extra stuff before slice indicators.
+								// Can indicate FX.25/IL2P or fix_bits.
 
 	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);		// TOTAL for virtual channels
 	assert (subchan >= -2 && subchan < MAX_SUBCHANS);
@@ -1196,12 +1199,21 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
      
 	strlcpy (display_retries, "", sizeof(display_retries));
 
-	if (is_fx25) {
-	  ;
-	}
-	else if (audio_config.achan[chan].fix_bits != RETRY_NONE || audio_config.achan[chan].passall) {
-	  assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
-	  snprintf (display_retries, sizeof(display_retries), " [%s] ", retry_text[(int)retries]);
+	switch (fec_type) {
+	  case fec_type_fx25:
+	    strlcpy (display_retries, " FX.25 ", sizeof(display_retries));
+	    break;
+	  case fec_type_il2p:
+	    strlcpy (display_retries, " IL2P ", sizeof(display_retries));
+	    break;
+	  case fec_type_none:
+	  default:
+	    // Possible fix_bits indication.
+	    if (audio_config.achan[chan].fix_bits != RETRY_NONE || audio_config.achan[chan].passall) {
+	      assert (retries >= RETRY_NONE && retries <= RETRY_MAX);
+	      snprintf (display_retries, sizeof(display_retries), " [%s] ", retry_text[(int)retries]);
+	    }
+	    break;
 	}
 
 	ax25_format_addrs (pp, stemp);
@@ -1576,7 +1588,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  * However, if it used FEC mode (FX.25. IL2P), we have much higher level of
  * confidence that it is correct.
  */
-	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || is_fx25) ) {
+	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) ) {
 
 	    igate_send_rec_packet (chan, pp);
 	  }
@@ -1597,7 +1609,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  * However, if it used FEC mode (FX.25. IL2P), we have much higher level of
  * confidence that it is correct.
  */
-	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || is_fx25) ) {
+	  if (ax25_is_aprs(pp) && ( retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) ) {
 
 	    digipeater (chan, pp);
 	  }
@@ -1607,7 +1619,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  * Use only those with correct CRC (or using FEC.)
  */
 
-	  if (retries == RETRY_NONE || is_fx25) {
+	  if (retries == RETRY_NONE || fec_type == fec_type_fx25 || fec_type == fec_type_il2p) {
 
 	    cdigipeater (chan, pp);
 	  }
@@ -1732,16 +1744,16 @@ static void usage (char **argv)
 	dw_printf ("\n");
   
 #if __WIN32__
-	dw_printf ("Complete documentation can be found in the 'doc' folder\n");
+	dw_printf ("Documentation can be found in the 'doc' folder\n");
 #else
 	// TODO: Could vary by platform and build options.
-	dw_printf ("Complete documentation can be found in /usr/local/share/doc/direwolf\n");
+	dw_printf ("Documentation can be found in /usr/local/share/doc/direwolf\n");
 #endif
 	dw_printf ("or online at https://github.com/wb2osz/direwolf/tree/master/doc\n");
+	dw_printf ("additional topics: https://github.com/wb2osz/direwolf-doc\n");
 	text_color_set(DW_COLOR_INFO);
 	exit (EXIT_FAILURE);
 }
-
 
 
 /* end direwolf.c */
