@@ -524,7 +524,7 @@ if(OPTIONAL_TEST)
     ${CUSTOM_SRC_DIR}/pfilter.c
     ${CUSTOM_SRC_DIR}/telemetry.c
     ${CUSTOM_SRC_DIR}/decode_aprs.c
-    ${CUSTOM_SRC_DIR}/deviceid.c.c
+    ${CUSTOM_SRC_DIR}/deviceid.c
     ${CUSTOM_SRC_DIR}/dwgpsnmea.c
     ${CUSTOM_SRC_DIR}/dwgps.c
     ${CUSTOM_SRC_DIR}/dwgpsd.c
