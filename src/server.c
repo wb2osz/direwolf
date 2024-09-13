@@ -976,8 +976,13 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 // Format addresses in AGWPR monitoring format such as:
 //	 1:Fm ZL4FOX-8 To Q7P2U2 Via WIDE3-3
 
-// Issue 530 pointed out that in this situation it is customary to put * after each used address,
-// not just the last used as in the TNC-2 monitoring format.
+// There is some disagreement, in the user community, about whether to:
+// * follow the lead of UZ7HO SoundModem and mark all of the used addresses, or
+// * follow the TNC-2 Monitoring format and mark only the last used, i.e. the station heard.
+
+// I think my opinion (which could change) is that we should try to be consistent with TNC-2 format
+// rather than continuing to propagate historical inconsistencies.
+
 
 static void mon_addrs (int chan, packet_t pp, char *result, int result_size)
 {
@@ -1000,9 +1005,14 @@ static void mon_addrs (int chan, packet_t pp, char *result, int result_size)
 	    }
 	    ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, digiaddr);
 	    strlcat (via, digiaddr, sizeof(via));
+#if 0  // Mark each used with * as seen in UZ7HO SoundModem.
 	    if (ax25_get_h(pp, AX25_REPEATER_1 + j)) {
+#else  // Mark only last used (i.e. the heard station) with * as in TNC-2 Monitoring format.
+	    if (AX25_REPEATER_1 + j == ax25_get_heard(pp)) {
+#endif
 	      strlcat (via, "*", sizeof(via));
 	    }
+
 	  }
 	  snprintf (result, result_size, " %d:Fm %s To %s Via %s ",
 		chan+1, src, dst, via);
