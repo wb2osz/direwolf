@@ -976,6 +976,9 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 // Format addresses in AGWPR monitoring format such as:
 //	 1:Fm ZL4FOX-8 To Q7P2U2 Via WIDE3-3
 
+// Issue 530 pointed out that in this situation it is customary to put * after each used address,
+// not just the last used as in the TNC-2 monitoring format.
+
 static void mon_addrs (int chan, packet_t pp, char *result, int result_size)
 {
 	char src[AX25_MAX_ADDR_LEN];
@@ -986,16 +989,20 @@ static void mon_addrs (int chan, packet_t pp, char *result, int result_size)
 	int num_digi = ax25_get_num_repeaters(pp);
 
 	if (num_digi > 0) {
+	  char via[AX25_MAX_REPEATERS*(AX25_MAX_ADDR_LEN+1)];	// complete via path
+	  strlcpy (via, "", sizeof(via));
 
-	  char via[AX25_MAX_REPEATERS*(AX25_MAX_ADDR_LEN+1)];
-	  char stemp[AX25_MAX_ADDR_LEN+1];
-	  int j;
+	  for (int j = 0; j < num_digi; j++) {
+	    char digiaddr[AX25_MAX_ADDR_LEN];
 
-	  ax25_get_addr_with_ssid (pp, AX25_REPEATER_1, via);
-	  for (j = 1; j < num_digi; j++) {
-	    ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, stemp);
-	    strlcat (via, ",", sizeof(via));
-	    strlcat (via, stemp, sizeof(via));
+	    if (j != 0) {
+	      strlcat (via, ",", sizeof(via));	// comma if not first address
+	    }
+	    ax25_get_addr_with_ssid (pp, AX25_REPEATER_1 + j, digiaddr);
+	    strlcat (via, digiaddr, sizeof(via));
+	    if (ax25_get_h(pp, AX25_REPEATER_1 + j)) {
+	      strlcat (via, "*", sizeof(via));
+	    }
 	  }
 	  snprintf (result, result_size, " %d:Fm %s To %s Via %s ",
 		chan+1, src, dst, via);
