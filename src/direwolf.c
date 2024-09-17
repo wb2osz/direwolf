@@ -1284,6 +1284,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  else {
 
 	    dw_printf ("%s audio level = %s  %s  %s\n", heard, alevel_text, display_retries, spectrum);
+	    log_heard(heard, alevel_text, display_retries, spectrum);
 	  }
 	 }
 	}
