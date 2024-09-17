@@ -892,7 +892,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */
-			bp->freq, bp->tone, bp->offset,
+			bp->freq, bp->tone_type, bp->tone, bp->offset,
 			super_comment,
 			info, sizeof(info));
 		  strlcat (beacon_text, info, sizeof(beacon_text));
@@ -904,7 +904,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
 			G_UNKNOWN, G_UNKNOWN, /* course, speed */
-			bp->freq, bp->tone, bp->offset, super_comment,
+			bp->freq, bp-> tone_type, bp->tone, bp->offset, super_comment,
 			info, sizeof(info));
 		  strlcat (beacon_text, info, sizeof(beacon_text));
 		  break;
@@ -935,7 +935,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 			bp->symtab, bp->symbol,
 			bp->power, bp->height, bp->gain, bp->dir,
 			coarse, (int)roundf(gpsinfo->speed_knots),
-			bp->freq, bp->tone, bp->offset,
+			bp->freq, bp->tone_type, bp->tone, bp->offset,
 			super_comment,
 			info, sizeof(info));
 		    strlcat (beacon_text, info, sizeof(beacon_text));
