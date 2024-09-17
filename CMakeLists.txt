@@ -260,6 +260,7 @@ else()
     set(INSTALL_MAN_DIR "share/man/man1")
   endif()
   set(INSTALL_DATA_DIR "share/${PROJECT_NAME}")
+  set(INSTALL_UDEV_DIR "etc/udev/rules.d/")
 endif(WIN32 OR CYGWIN)
 
 # requirements
