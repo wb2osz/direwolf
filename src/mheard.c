@@ -406,6 +406,7 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	  mptr->chan = chan;
 	  mptr->num_digi_hops = hops;
 	  mptr->last_heard_rf = now;
+	  // Why did I do this instead of saving the location for a position report?
 	  mptr->dlat = G_UNKNOWN;
 	  mptr->dlon = G_UNKNOWN;
 	  
@@ -446,9 +447,16 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	  }
 	}
 
-	if (A->g_lat != G_UNKNOWN && A->g_lon != G_UNKNOWN) {
-	  mptr->dlat = A->g_lat;
-	  mptr->dlon = A->g_lon;
+	// Issue 545.  This was not thought out well.
+	// There was a case where a station sent a position report and the location was stored.
+	// Later, the same station sent an object report and the stations's location was overwritten
+	// by the object location.  Solution: Save location only if position report.
+
+	if (A->g_packet_type == packet_type_position) {
+	  if (A->g_lat != G_UNKNOWN && A->g_lon != G_UNKNOWN) {
+	    mptr->dlat = A->g_lat;
+	    mptr->dlon = A->g_lon;
+	  }
 	}
 
 	if (mheard_debug >= 2) {
