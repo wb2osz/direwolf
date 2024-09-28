@@ -528,7 +528,7 @@ static int mice_cmp (const void *px, const void *py)
 
 void deviceid_decode_dest (char *dest, char *device, size_t device_size)
 {
-	*device = '\0';
+	strlcpy (device, "UNKNOWN vendor/model", device_size);
 
 	if (ptocalls == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
@@ -554,6 +554,7 @@ void deviceid_decode_dest (char *dest, char *device, size_t device_size)
 	  }
 	}
 
+// Not found in table.
 	strlcpy (device, "UNKNOWN vendor/model", device_size);
 
 } // end deviceid_decode_dest
@@ -610,7 +611,7 @@ static inline int strncmp_z (char *a, char *b, size_t len)
 
 void deviceid_decode_mice (char *comment, char *trimmed, size_t trimmed_size, char *device, size_t device_size)
 {
-	*device = '\0';
+	strlcpy (device, "UNKNOWN vendor/model", device_size);
 
 	if (ptocalls == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
