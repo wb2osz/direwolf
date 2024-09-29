@@ -138,6 +138,8 @@ int main (void)
 #if __WIN32__
 #include <wchar.h>
 #include "hidapi.h"
+#elif __APPLE__
+#include "hidapi.h"
 #else
 #include <libudev.h>
 #include <sys/types.h>
@@ -240,7 +242,7 @@ static int cm108_write (char *name, int iomask, int iodata);
 
 // Used to process regular expression matching results.
 
-#ifndef __WIN32__
+#if !defined(__WIN32__) && !defined(__APPLE__)
 
 static void substr_se (char *dest, const char *src, int start, int endp1)
 {
@@ -318,7 +320,7 @@ static void usage(void)
 	dw_printf ("Usage:    cm108  [ device-path [ gpio-num ] ]\n");
 	dw_printf ("\n");
 	dw_printf ("With no command line arguments, this will produce a list of\n");
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 	dw_printf ("Human Interface Devices (HID) and indicate which ones can be\n");
 	dw_printf ("used for GPIO PTT.\n");
 #else
@@ -376,11 +378,11 @@ int main (int argc, char **argv)
 
 	num_things = cm108_inventory (things, MAXX_THINGS);
 
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 
-/////////////////////////////////////////////////////
-// Windows - Remove the sound related columns for now.
-/////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+// Windows & Mac - Remove the sound related columns for now.
+////////////////////////////////////////////////////////////
 
 	dw_printf ("    VID  PID   %-*s %-*s"
 						"\n", 	(int)sizeof(things[0].product),	"Product",
@@ -540,7 +542,7 @@ int cm108_inventory (struct thing_s *things, int max_things)
 	int num_things = 0;
 	memset (things, 0, sizeof(struct thing_s) * max_things);
 
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 
 	struct hid_device_info *devs, *cur_dev;
 
@@ -780,7 +782,7 @@ void cm108_find_ptt (char *output_audio_device, char *ptt_device,  int ptt_devic
 	// Possible improvement: Skip if inventory already taken.
 	num_things = cm108_inventory (things, MAXX_THINGS);
 
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 		//  FIXME - This is just a half baked implementation.
 		//  I have not been able to figure out how to find the connection
 		//  between the audio device and HID in the same package.
@@ -935,7 +937,7 @@ int cm108_set_gpio_pin (char *name, int num, int state)
 static int cm108_write (char *name, int iomask, int iodata)
 {
 
-#if __WIN32__
+#if __WIN32__ || __APPLE__
 
 	//text_color_set(DW_COLOR_DEBUG);
 	//dw_printf ("TEMP DEBUG cm108_write:  %s %d %d\n", name, iomask, iodata);

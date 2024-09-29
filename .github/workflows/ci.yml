@@ -96,7 +96,7 @@ jobs:
           elif [ "$RUNNER_OS" == "macOS" ]; then
             # just to simplify I use homebrew but
             # we can use macports (latest direwolf is already available as port)
-            brew install portaudio hamlib gpsd
+            brew install portaudio hamlib gpsd hidapi
           elif [ "$RUNNER_OS" == "Windows" ]; then
             # add the folder to PATH
             echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH

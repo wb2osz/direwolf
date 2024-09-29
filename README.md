@@ -208,13 +208,43 @@ Results will vary depending on your hardware platform and operating system versi
 	sudo yum install direwolf
 
 
-### Macintosh OS X ###
+### Macintosh macOS - Using Homebrew ###
 
-Read the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).   It is more complicated than Linux.
+The following instructions have been verified on macOS Ventura 13.6 (M2) and macOS High Sierra 10.13.6 (Intel).
+
+First make sure that you have the following tools installed on your Mac:
+
+- [Xcode or Xcode Command Line Tools](https://developer.apple.com/xcode/resources/)
+- [Homebrew](https://brew.sh/)
+
+You will need to install the following packages using Homebrew:
+
+	brew install cmake
+	brew install portaudio
+	brew install hidapi
+
+Then follow the same instructions as above for the Linux `git clone` build:
+
+	cd ~
+	git clone https://www.github.com/wb2osz/direwolf
+	cd direwolf
+	git checkout dev
+	mkdir build && cd build
+	cmake ..
+	make -j4
+	sudo make install
+	make install-conf
+
+This gives you the latest development version.  Leave out the "git checkout dev" to get the most recent stable release.
+
+For more information, see the ***User Guide*** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).
 
 If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.io/g/direwolf) discussion group.
 
-You can also install a pre-built version from Mac Ports.  Keeping this up to date depends on volunteers who perform the packaging. This version could lag behind development.
+
+### Macintosh macOS - Prebuilt version ###
+
+You can also install a pre-built version from MacPorts.  Keeping this up to date depends on volunteers who perform the packaging. This version could lag behind development.
 
 	sudo port install direwolf
 
