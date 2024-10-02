@@ -5791,7 +5791,7 @@ static void transmit_enquiry (ax25_dlsm_t *S)
  *		The next response frame returned to a supervisory command frame with the P bit set to "1", received during
  *		the information transfer state, is an RR, RNR or REJ response frame with the F bit set to "1".
  *
- * Erattum!	The flow chart says RR/RNR *command* but I'm confident it should be response.
+ * Erratum!	The flow chart says RR/RNR *command* but I'm confident it should be response.
  *
  * Erratum:	Ax.25 spec has nothing here for SREJ.  See X.25 2.4.6.11 for explanation.
  * 
