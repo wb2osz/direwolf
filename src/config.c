@@ -19,8 +19,8 @@
 
 #define CONFIG_C 1		// influences behavior of aprs_tt.h
 
-
-// #define DEBUG 1
+// FIXME:
+#define DEBUG 1
 
 /*------------------------------------------------------------------
  *
@@ -716,6 +716,7 @@ static void rtfm()
 	dw_printf ("    stable release:    https://github.com/wb2osz/direwolf/tree/master/doc\n");
 	dw_printf ("    development version:    https://github.com/wb2osz/direwolf/tree/dev/doc\n");
 	dw_printf ("    additional topics:    https://github.com/wb2osz/direwolf-doc\n");
+	dw_printf ("    general APRS info:    https://how.aprs.works\n");
 }
 
 void config_init (char *fname, struct audio_s *p_audio_config, 
@@ -763,12 +764,17 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	p_audio_config->adev[0].defined = 2;		// 2 means it was done by default and not the user's config file.
 
+// MAX_TOTAL_CHANS
 	for (channel=0; channel<MAX_TOTAL_CHANS; channel++) {
-	  int ot, it;
-
 	  p_audio_config->chan_medium[channel] = MEDIUM_NONE;	/* One or both channels will be */
 								/* set to radio when corresponding */
 								/* audio device is defined. */
+	}
+
+// MAX_RADIO_CHANS for achan[]
+	for (channel=0; channel<MAX_RADIO_CHANS; channel++) {
+	  int ot, it;
+
 	  p_audio_config->achan[channel].modem_type = MODEM_AFSK;			
 	  p_audio_config->achan[channel].v26_alternative = V26_UNSPECIFIED;
 	  p_audio_config->achan[channel].mark_freq = DEFAULT_MARK_FREQ;		/* -m option */
@@ -980,8 +986,13 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	if (fp == NULL)	{
 	  // TODO: not exactly right for all situations.
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("ERROR - Could not open config file %s\n", filepath);
+	  dw_printf ("ERROR - Could not open configuration file %s\n", filepath);
 	  dw_printf ("Try using -c command line option for alternate location.\n");
+#ifndef __WIN32__
+	  dw_printf ("A sample direwolf.conf file should be found in one of:\n");
+	  dw_printf ("    /usr/local/share/doc/direwolf/conf/\n");
+	  dw_printf ("    /usr/share/doc/direwolf/conf/\n");
+#endif
 	  rtfm();
 	  exit(EXIT_FAILURE);
 	}
@@ -1423,6 +1434,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "MODEM") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: MODEM can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
+	      
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -1758,6 +1775,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 	  else if (strcasecmp(t, "DTMF") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: DTMF can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 
 	    p_audio_config->achan[channel].dtmf_decode = DTMF_DECODE_ON;
 
@@ -1773,6 +1795,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "FIX_BITS") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: FIX_BITS can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -1851,6 +1878,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "PTT") == 0 || strcasecmp(t, "DCD") == 0 || strcasecmp(t, "CON") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: PTT can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int ot;
 	    char otname[8];
 
@@ -2222,6 +2254,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "TXINH") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TXINH can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    char itname[8];
 
 	    strlcpy (itname, "TXINH", sizeof(itname));
@@ -2268,6 +2305,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "DWAIT") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: DWAIT can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2292,6 +2334,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "SLOTTIME") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: SLOTTIME can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2322,6 +2369,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "PERSIST") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: PERSIST can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2349,6 +2401,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "TXDELAY") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TXDELAY can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2390,6 +2447,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "TXTAIL") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: TXTAIL can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2430,6 +2492,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 	  else if (strcasecmp(t, "FULLDUP") == 0) {
 
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: FULLDUP can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2457,6 +2524,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "SPEECH") == 0) {
 
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: SPEECH can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -2488,6 +2560,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "FX25TX") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: FX25TX can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2510,7 +2587,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * FX25AUTO n		- Enable Automatic use of FX.25 for connected mode.
+ * FX25AUTO n		- Enable Automatic use of FX.25 for connected mode.  *** Not Implemented ***
  *				Automatically enable, for that session only, when an identical
  *				frame is sent more than this number of times.
  *				Default 5 based on half of default RETRY.
@@ -2519,6 +2596,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "FX25AUTO") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: FX25AUTO can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -2550,6 +2632,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  else if (strcasecmp(t, "IL2PTX") == 0) {
 
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: IL2PTX can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
 	    p_audio_config->achan[channel].layer2_xmit = LAYER2_IL2P;
 	    p_audio_config->achan[channel].il2p_max_fec = 1;
 	    p_audio_config->achan[channel].il2p_invert_polarity = 0;
