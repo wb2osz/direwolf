@@ -19,8 +19,8 @@
 
 #define CONFIG_C 1		// influences behavior of aprs_tt.h
 
-// FIXME:
-#define DEBUG 1
+
+//#define DEBUG 1
 
 /*------------------------------------------------------------------
  *
@@ -772,6 +772,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	}
 
 // MAX_RADIO_CHANS for achan[]
+// Maybe achan should be renamed to radiochan to make it clearer.
 	for (channel=0; channel<MAX_RADIO_CHANS; channel++) {
 	  int ot, it;
 
@@ -1235,6 +1236,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * CHANNEL n		- Set channel for channel-specific commands.  Only for modem/radio channels.
  */
 
+// TODO: allow full range so mycall can be set for network channels.
+// Watch out for achan[] out of bounds.
+
 	  else if (strcasecmp(t, "CHANNEL") == 0) {
 	    int n;
 	    t = split(NULL,0);
@@ -1434,12 +1438,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "MODEM") == 0) {
+
 	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: MODEM can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
 	      continue;
 	    }
-	      
 	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
