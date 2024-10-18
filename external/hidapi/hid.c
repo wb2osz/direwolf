@@ -20,6 +20,8 @@
         https://github.com/libusb/hidapi .
 ********************************************************/
 
+#include "../../src/direwolf.h"	// for strlcpy
+
 #include <windows.h>
 
 #ifndef _NTDEF_
@@ -465,7 +467,8 @@ struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned shor
 			if (str) {
 				len = strlen(str);
 				cur_dev->path = (char*) calloc(len+1, sizeof(char));
-				strncpy(cur_dev->path, str, len+1);
+				//strncpy(cur_dev->path, str, len+1);  // produces warning
+				strlcpy(cur_dev->path, str, len+1);
 				cur_dev->path[len] = '\0';
 			}
 			else
