@@ -174,6 +174,7 @@
 #include "regex.h"
 
 #if __WIN32__
+// TODO:  Why is this here, rather than in direwolf.h?
 char *strtok_r(char *str, const char *delim, char **saveptr);
 #endif
 
@@ -194,6 +195,7 @@ static volatile int last_seq_num = 0;
 
 #if AX25MEMDEBUG
 
+// TODO:  Make static and use function for any extern references.
 int ax25memdebug = 0;
 
 
