@@ -31,6 +31,8 @@
  *
  *---------------------------------------------------------------*/
 
+#define DEMOD_C 1
+
 #include "direwolf.h"
 
 #include <stdlib.h>
@@ -306,6 +308,7 @@ int demod_init (struct audio_s *pa)
 		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec);
 	      if (save_audio_config_p->achan[chan].decimate != 1) 
 	        dw_printf (" / %d", save_audio_config_p->achan[chan].decimate);
+	      dw_printf (", Tx %s", layer2_tx[(int)(save_audio_config_p->achan[chan].layer2_xmit)]);
 	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF) 
 	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");
@@ -540,7 +543,7 @@ int demod_init (struct audio_s *pa)
 		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec);
 	      if (save_audio_config_p->achan[chan].decimate != 1)
 	        dw_printf (" / %d", save_audio_config_p->achan[chan].decimate);
-
+	      dw_printf (", Tx %s", layer2_tx[(int)(save_audio_config_p->achan[chan].layer2_xmit)]);
 	      if (save_audio_config_p->achan[chan].v26_alternative == V26_B)
 	        dw_printf (", compatible with MFJ-2400");
 	      else
@@ -601,6 +604,7 @@ int demod_init (struct audio_s *pa)
 		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec);
 	      if (save_audio_config_p->achan[chan].decimate != 1)
 	        dw_printf (" / %d", save_audio_config_p->achan[chan].decimate);
+	      dw_printf (", Tx %s", layer2_tx[(int)(save_audio_config_p->achan[chan].layer2_xmit)]);
 	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF)
 	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");
@@ -736,6 +740,7 @@ int demod_init (struct audio_s *pa)
 		    save_audio_config_p->achan[chan].profiles,
 		    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
 	            save_audio_config_p->achan[chan].upsample);
+	      dw_printf (", Tx %s", layer2_tx[(int)(save_audio_config_p->achan[chan].layer2_xmit)]);
 	      if (save_audio_config_p->achan[chan].dtmf_decode != DTMF_DECODE_OFF) 
 	        dw_printf (", DTMF decoder enabled");
 	      dw_printf (".\n");

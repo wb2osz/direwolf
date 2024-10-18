@@ -115,12 +115,6 @@ struct audio_s {
 	float recv_ber;			/* Receive Bit Error Rate (BER). */
 					/* Probability of inverting a bit coming out of the modem. */
 
-	//int fx25_xmit_enable;		/* Enable transmission of FX.25.  */
-					/* See fx25_init.c for explanation of values. */
-					/* Initially this applies to all channels. */
-					/* This should probably be per channel. One step at a time. */
-					/* v1.7 - replaced by layer2_xmit==LAYER2_FX25 */
-
 	int fx25_auto_enable;		/* Turn on FX.25 for current connected mode session */
 					/* under poor conditions. */
 					/* Set to 0 to disable feature. */
@@ -198,7 +192,7 @@ struct audio_s {
 					/* Might try MFJ-2400 / CCITT v.26 / Bell 201 someday. */
 					/* No modem.  Might want this for DTMF only channel. */
 
-	    enum layer2_t { LAYER2_AX25 = 0, LAYER2_FX25, LAYER2_IL2P } layer2_xmit;
+	    enum layer2_t { LAYER2_AX25 = 0, LAYER2_FX25, LAYER2_IL2P } layer2_xmit;	// Must keep in sync with layer2_tx, below.
 
 					// IL2P - New for version 1.7.
 					// New layer 2 with FEC.  Much less overhead than FX.25 but no longer backward compatible.
@@ -405,6 +399,9 @@ struct audio_s {
 
 };
 
+#if DEMOD_C
+	const static char *layer2_tx[3] = {"AX.25", "FX.25", "IL2P"};	// Must keep in sync with enum layer2_t above.
+#endif
 
 #if __WIN32__
 #define DEFAULT_ADEVICE	""		/* Windows: Empty string = default audio device. */
