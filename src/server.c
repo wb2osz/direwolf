@@ -1769,7 +1769,11 @@ static THREAD_F cmd_listen_thread (void *arg)
 	          break;
 		}
 
-	        ax25_set_info (pp, (unsigned char*)p, data_len - ndigi * 10);
+		// Issue 550: Info part was one byte too long resulting in an extra nul character.
+		// Original calculation was data_len-ndigi*10 but we need to subtract one
+		// for first byte which is number of digipeaters.
+	        ax25_set_info (pp, (unsigned char*)p, data_len - ndigi * 10 - 1);
+
 	        // Issue 527: NET/ROM routing broadcasts use PID 0xCF which was not preserved here.
 	        ax25_set_pid (pp, pid);
 
