@@ -6,5 +6,5 @@ Icon=@CMAKE_PROJECT_NAME@_icon.png
 StartupNotify=true
 Terminal=false
 Type=Application
-Categories=HamRadio
+Categories=Network;HamRadio
 Keywords=Ham Radio;APRS;Soundcard TNC;KISS;AGWPE;AX.25
