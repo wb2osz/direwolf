@@ -135,6 +135,10 @@ int main (int argc, char *argv[])
 	assert (strcmp(comment_out, "Comment") == 0);
 	assert (strcmp(device, "UNKNOWN vendor/model") == 0);
 
+	deviceid_decode_mice ("", comment_out, sizeof(comment_out), device, sizeof(device));
+	dw_printf ("%s %s\n", comment_out, device);
+	assert (strcmp(comment_out, "") == 0);
+	assert (strcmp(device, "UNKNOWN vendor/model") == 0);
 
 // Tocall
 
