@@ -1421,6 +1421,15 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 	strlcpy (A->g_data_type_desc, "MIC-E", sizeof(A->g_data_type_desc));
 
+	if (ilen < sizeof(struct aprs_mic_e_s)) {
+	  if ( ! A->g_quiet) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("MIC-E format must have at least %d characters in the information part.\n", sizeof(struct aprs_mic_e_s));
+	  }
+	  return;
+	}
+	info[ilen] = '\0';\
+
 	p = (struct aprs_mic_e_s *)info;
 
 /* Destination is really latitude of form ddmmhh. */
@@ -3875,7 +3884,7 @@ double get_longitude_9 (char *p, int quiet)
  *
  * Inputs:	p 	- Pointer to first byte.
  *
- * Returns:	time_t data type. (UTC)
+ * Returns:	time_t data type. (UTC)  Zero if error.
  *
  * Description:	
  *
@@ -3944,6 +3953,13 @@ time_t get_timestamp (decode_aprs_t *A, char *p)
 	  char tic;		/* Time indicator character. */
 				/* h = UTC. */
 	} *phms;
+
+	if ( ! (isdigit(p[0]) && isdigit(p[1]) && isdigit(p[2]) && isdigit(p[3]) && isdigit(p[4]) && isdigit(p[5]) &&
+		(p[6] == 'z' || p[6] == '/' || p[6] == 'h'))) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Timestamp must be 6 digits followed by z, h, or /.\n");
+	    return ((time_t)0);
+	}
 
 	struct tm *ptm;
 
