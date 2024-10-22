@@ -1428,7 +1428,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	  }
 	  return;
 	}
-	info[ilen] = '\0';\
+	info[ilen] = '\0';
 
 	p = (struct aprs_mic_e_s *)info;
 
@@ -1658,12 +1658,26 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 
 // The rest is a comment which can have other information cryptically embedded.
 // Remove any trailing CR, which I would argue, violates the protocol spec.
-// It is essential to keep trailing spaces.  e.g. VX-8 suffix is "_ "
+// It is essential to keep trailing spaces.  e.g. VX-8 device id suffix is "_ "
+
+	if (ilen <= sizeof(struct aprs_mic_e_s)) {
+	  // Too short for a comment.  We are finished.
+	  strlcpy (A->g_mfr, "UNKNOWN vendor/model", sizeof(A->g_mfr));
+	  return;
+	}
 
 	char mcomment[256];
 	strlcpy (mcomment, ((char*)info) + sizeof(struct aprs_mic_e_s), sizeof(mcomment));
+
+	assert (strlen(mcomment) > 0);
+
 	if (mcomment[strlen(mcomment)-1] == '\r') {
 	  mcomment[strlen(mcomment)-1] = '\0';
+	  if (strlen(mcomment) == 0) {
+	    // Nothing left after removing trailing CR.
+	    strlcpy (A->g_mfr, "UNKNOWN vendor/model", sizeof(A->g_mfr));
+	    return;
+	  }
 	}
 
 /* Now try to pick out manufacturer and other optional items. */
@@ -1678,7 +1692,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 // Three base 91 characters followed by }
 
 
-	if (strlen(trimmed) >=4 &&
+	if (strlen(trimmed) >= 4 &&
 			isdigit91(trimmed[0]) &&
 			isdigit91(trimmed[1]) &&
 			isdigit91(trimmed[2]) &&
