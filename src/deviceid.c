@@ -620,7 +620,7 @@ static inline int strncmp_z (char *a, char *b, size_t len)
 void deviceid_decode_mice (char *comment, char *trimmed, size_t trimmed_size, char *device, size_t device_size)
 {
 	strlcpy (device, "UNKNOWN vendor/model", device_size);
-	strlcpy (trimmed, comment, sizeof(trimmed));
+	strlcpy (trimmed, comment, trimmed_size);
 	if (strlen(comment) < 1) {
 	  return;
 	}
@@ -675,7 +675,7 @@ void deviceid_decode_mice (char *comment, char *trimmed, size_t trimmed_size, ch
 // Not found.
 
 	strlcpy (device, "UNKNOWN vendor/model", device_size);
-	strlcpy (trimmed, comment, sizeof(trimmed));
+	strlcpy (trimmed, comment, trimmed_size);
 
 } // end deviceid_decode_mice
 

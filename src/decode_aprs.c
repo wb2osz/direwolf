@@ -1424,7 +1424,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	if (ilen < sizeof(struct aprs_mic_e_s)) {
 	  if ( ! A->g_quiet) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf("MIC-E format must have at least %d characters in the information part.\n", sizeof(struct aprs_mic_e_s));
+	    dw_printf("MIC-E format must have at least %d characters in the information part.\n", (int)(sizeof(struct aprs_mic_e_s)));
 	  }
 	  return;
 	}
