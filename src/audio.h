@@ -16,6 +16,10 @@
 #include <hamlib/rig.h>
 #endif
 
+#ifdef USE_GPIOD
+#include <gpiod.h>
+#endif 
+
 #include "direwolf.h"		/* for MAX_RADIO_CHANS and MAX_TOTAL_CHANS used throughout the application. */
 #include "ax25_pad.h"		/* for AX25_MAX_ADDR_LEN */
 #include "version.h"
@@ -336,6 +340,10 @@ struct audio_s {
 	        int ptt_model;		/* HAMLIB model.  -1 for AUTO.  2 for rigctld.  Others are radio model. */
 	        int ptt_rate;		/* Serial port speed when using hamlib CAT control for PTT. */
 					/* If zero, hamlib will come up with a default for pariticular rig. */
+#endif
+
+#if defined(USE_GPIOD)
+			struct gpiod_line *gpiod_line_handle;
 #endif
 
 	    } octrl[NUM_OCTYPES];
