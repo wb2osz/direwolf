@@ -59,7 +59,7 @@ struct il2p_context_s {
 
 	unsigned char uhdr[IL2P_HEADER_SIZE];  // Header after FEC and unscrambling.
 
-	int eplen;		// Encoded payload length.  This is not the nuumber from
+	int eplen;		// Encoded payload length.  This is not the number from
 				// from the header but rather the number of encoded bytes to gather.
 
 	unsigned char spayload[IL2P_MAX_ENCODED_PAYLOAD_SIZE];
@@ -94,7 +94,7 @@ static struct il2p_context_s *il2p_context[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SL
  *
  ***********************************************************************************/
 
-void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
+void il2p_rec_bit (int chan, int subchan, int slice, int dbit, int use_crc)
 {
 
 // Allocate context blocks only as needed.
@@ -167,7 +167,11 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 		   int hdr_type, max_fec;
 		   int len = il2p_get_header_attributes (F->uhdr, &hdr_type, &max_fec);
 
-		   F->eplen = il2p_payload_compute (&plprop, len, max_fec);
+			 if (use_crc == IL2P_USECRC) {
+				F->eplen = IL2P_CODED_CRC_LENGTH + il2p_payload_compute (&plprop, len, max_fec);
+			 } else {
+				F->eplen = il2p_payload_compute (&plprop, len, max_fec);
+			 }
 
 	           if (il2p_get_debug() >= 1) {
 		     text_color_set(DW_COLOR_DEBUG);
@@ -200,8 +204,8 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	        }  // good header after FEC.
 	        else {
 	           F->state = IL2P_SEARCHING;	// Header failed FEC check.
-	        }   
-	      }  // entire header has been collected.    
+	        }
+	      }  // entire header has been collected.
 	    }  // full byte collected.
 	    break;
 
@@ -235,7 +239,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	    // TODO?:  for symmetry, we might decode the payload here and later build the frame.
 
 	    {
-	      packet_t pp = il2p_decode_header_payload (F->uhdr, F->spayload, &(F->corrected));
+	      packet_t pp = il2p_decode_header_payload (F->uhdr, F->spayload, &(F->corrected), use_crc);
 
 	      if (il2p_get_debug() >= 1) {
 	          if (pp != NULL) {

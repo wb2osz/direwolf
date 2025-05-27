@@ -208,6 +208,7 @@ struct audio_s {
 	    int il2p_max_fec;		// 1 for max FEC length, 0 for automatic based on size.
 
 	    int il2p_invert_polarity;	// 1 means invert on transmit.  Receive handles either automatically.
+        enum il2p_use_crc_t { IL2P_NOCRC = 0, IL2P_USECRC } il2p_use_crc;
 
 	    enum v26_e { V26_UNSPECIFIED=0, V26_A, V26_B } v26_alternative;
 

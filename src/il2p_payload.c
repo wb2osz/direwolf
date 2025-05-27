@@ -215,13 +215,14 @@ int il2p_encode_payload (unsigned char *payload, int payload_size, int max_fec, 
  *
  *--------------------------------------------------------------------------------*/
 
-int il2p_decode_payload (unsigned char *received, int payload_size, int max_fec, unsigned char *payload_out, int *symbols_corrected)
+int il2p_decode_payload (unsigned char *received, int payload_size, int max_fec, unsigned char *payload_out, int *symbols_corrected, unsigned char **next_hdr)
 {
 // Determine number of blocks and sizes.
 
 	il2p_payload_properties_t ipp;
 	int e;
 	e = il2p_payload_compute (&ipp, payload_size, max_fec);
+	*next_hdr = NULL;
 	if (e <= 0) {
 	    return (e);
 	}
@@ -289,6 +290,8 @@ int il2p_decode_payload (unsigned char *received, int payload_size, int max_fec,
 	    dw_printf ("IL2P Internal error: decoded_length = %d, payload_size = %d\n", decoded_length, payload_size);
 	    return (-3);
 	}
+
+	*next_hdr = pin; // Point to the next header, if any.
 
 	return (decoded_length);
 

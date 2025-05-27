@@ -19,6 +19,7 @@
 
 #define IL2P_MAX_PACKET_SIZE (IL2P_SYNC_WORD_SIZE + IL2P_HEADER_SIZE + IL2P_HEADER_PARITY + IL2P_MAX_ENCODED_PAYLOAD_SIZE)
 
+#define IL2P_CODED_CRC_LENGTH 4
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -52,7 +53,7 @@ extern void il2p_set_debug(int debug);
 
 // Receives a bit stream from demodulator.
 
-extern void il2p_rec_bit (int chan, int subchan, int slice, int dbit);
+extern void il2p_rec_bit (int chan, int subchan, int slice, int dbit, int use_crc);
 
 
 
@@ -81,9 +82,9 @@ int il2p_send_frame (int chan, packet_t pp, int max_fec, int polarity);
 
 extern int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout);
 
-packet_t il2p_decode_frame (unsigned char *irec);
+packet_t il2p_decode_frame (unsigned char *irec, int use_crc);
 
-packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, int *symbols_corrected);
+packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, int *symbols_corrected, int use_crc);
 
 
 
@@ -138,7 +139,7 @@ extern int il2p_payload_compute (il2p_payload_properties_t *p, int payload_size,
 
 extern int il2p_encode_payload (unsigned char *payload, int payload_size, int max_fec, unsigned char *enc);
 
-extern int il2p_decode_payload (unsigned char *received, int payload_size, int max_fec, unsigned char *payload_out, int *symbols_corrected);
+extern int il2p_decode_payload (unsigned char *received, int payload_size, int max_fec, unsigned char *payload_out, int *symbols_corrected, unsigned char **next_hdr);
 
 extern int il2p_get_header_attributes (unsigned char *hdr, int *hdr_type, int *max_fec);
 

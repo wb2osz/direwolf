@@ -50,6 +50,8 @@ static void send_bit (int chan, int b, int polarity);
  *		max_fec	- 1 to force 16 parity symbols for each payload block.
  *			  0 for automatic depending on block size.
  *
+ * 		use_crc - 1 to use CRC for the payload.
+ *
  *		polarity - 0 for normal.  1 to invert signal.
  *			   2 special case for testing - introduce some errors to test FEC.
  *

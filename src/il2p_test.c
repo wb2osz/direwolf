@@ -288,6 +288,7 @@ static void test_payload(void)
 	for (int max_fec = 0; max_fec <= 1; max_fec++) {
 	    for (int payload_length = 1; payload_length <= IL2P_MAX_PAYLOAD_SIZE; payload_length++) {
 	        //dw_printf ("\n--------- max_fec = %d, payload_length = %d\n", max_fec, payload_length);
+					unsigned char *next = NULL;
 	        unsigned char encoded[IL2P_MAX_ENCODED_PAYLOAD_SIZE];
 	        int k = il2p_encode_payload (original_payload, payload_length, max_fec, encoded);
 
@@ -620,7 +621,7 @@ static void enc_dec_compare (packet_t pp1)
 	assert (enc_len >= 0);
 
 	packet_t pp2;
-	pp2 = il2p_decode_frame (encoded);
+	pp2 = il2p_decode_frame (encoded, 1);
 	assert (pp2 != NULL);
 
 // Is it the same after encoding to IL2P and then decoding?
@@ -851,7 +852,7 @@ static void decode_bitstream(void)
 	while ( (ch = fgetc(fp)) != EOF) {
 
 	  if (ch == '0' || ch == '1') {
-	    il2p_rec_bit (0, 0, 0, ch - '0');
+	    il2p_rec_bit (0, 0, 0, ch - '0', 1);
 	  }
 	}
 	fclose(fp);
@@ -922,7 +923,7 @@ static void test_serdes (void)
 	            dw_printf ("%d bits sent.\n", num_bits_sent);
 
 	            // Need extra bit at end to flush out state machine.
-	            il2p_rec_bit (0, 0, 0, 0);
+	            il2p_rec_bit (0, 0, 0, 0, 1);
 	        }
 	    }
 	    ax25_delete(pp);
@@ -938,7 +939,7 @@ static void test_serdes (void)
 
 void tone_gen_put_bit (int chan, int data)
 {
-	il2p_rec_bit (chan, 0, 0, data);
+	il2p_rec_bit (chan, 0, 0, data, 1);
 }
 
 // This is called when a complete frame has been deserialized.

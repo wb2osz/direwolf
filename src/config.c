@@ -791,6 +791,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_audio_config->achan[channel].layer2_xmit = LAYER2_AX25;
 	  p_audio_config->achan[channel].il2p_max_fec = 1;
 	  p_audio_config->achan[channel].il2p_invert_polarity = 0;
+	  p_audio_config->achan[channel].il2p_use_crc = IL2P_USECRC;
 
 	  p_audio_config->achan[channel].fix_bits = DEFAULT_FIX_BITS;
 	  p_audio_config->achan[channel].sanity_test = SANITY_APRS;
@@ -2625,13 +2626,15 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
- * IL2PTX  [ + - ] [ 0 1 ]	- Enable IL2P transmission.  Default off.
+ * IL2PTX  [ + - ] [ 0 1 ] [ C ]	- Enable IL2P transmission.  Default off.
  *				"+" means normal polarity. Redundant since it is the default.
  *					(command line -I for first channel)
  *				"-" means inverted polarity. Do not use for 1200 bps.
  *					(command line -i for first channel)
  *				"0" means weak FEC.  Not recommended.
  *				"1" means stronger FEC.  "Max FEC."  Default if not specified.
+ *				"C" means check CRC.  Default is not to check CRC.
+ *                  Note, that it'll always generate CRC for the frame.
  */
 
 	  else if (strcasecmp(t, "IL2PTX") == 0) {
@@ -2644,6 +2647,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    p_audio_config->achan[channel].layer2_xmit = LAYER2_IL2P;
 	    p_audio_config->achan[channel].il2p_max_fec = 1;
 	    p_audio_config->achan[channel].il2p_invert_polarity = 0;
+		p_audio_config->achan[channel].il2p_use_crc = IL2P_NOCRC; // Default is no CRC.
 
 	    while ((t = split(NULL,0)) != NULL) {
 	      for (char *c = t; *c != '\0'; c++) {
@@ -2659,6 +2663,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	            break;
 	          case '1':
 	            p_audio_config->achan[channel].il2p_max_fec = 1;
+	            break;
+			  case 'C':
+			  case 'c':
+	            p_audio_config->achan[channel].il2p_use_crc = IL2P_USECRC;
+				dw_printf ("Line %d: IL2P transmission will use CRC.\n", line);
 	            break;
 	          default:
 	            text_color_set(DW_COLOR_ERROR);
