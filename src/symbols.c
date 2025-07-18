@@ -1041,25 +1041,25 @@ int main (int argc, char *argv[])
 
 
 
-	symbols_get_description ('J', 's', description);
+	symbols_get_description ('J', 's', description, strlen(description));
 	if (strcmp(description, "Jet Ski") != 0) dw_printf ("ERROR 3-1\n");
 
-	symbols_get_description ('/', 'O', description);
+	symbols_get_description ('/', 'O', description, strlen(description));
 	if (strcmp(description, "BALLOON") != 0) dw_printf ("ERROR 3-2\n");
 
-	symbols_get_description ('\\', 'T', description);
+	symbols_get_description ('\\', 'T', description, strlen(description));
 	if (strcmp(description, "Thunderstorm") != 0) dw_printf ("ERROR 3-3\n");
 
-	symbols_get_description ('5', 'T', description);
+	symbols_get_description ('5', 'T', description, strlen(description));
 	if (strcmp(description, "Thunderstorm w/overlay 5") != 0) dw_printf ("ERROR 3-4\n");
 
 // Expect to see this:
 //   Symbol table identifier is not '/' (primary), '\' (alternate), or valid overlay character.
 
-	symbols_get_description (' ', 'T', description);
+	symbols_get_description (' ', 'T', description, strlen(description));
 	if (strcmp(description, "--no-symbol--") != 0) dw_printf ("ERROR 3-5\n");
 
-	symbols_get_description ('/', ' ', description);
+	symbols_get_description ('/', ' ', description, strlen(description));
 	if (strcmp(description, "--no-symbol--") != 0) dw_printf ("ERROR 3-6\n");
 
 
