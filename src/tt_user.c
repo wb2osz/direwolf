@@ -429,13 +429,13 @@ static int corral_slot (void)
  *
  *----------------------------------------------------------------*/
 
-static void digit_suffix (char *callsign, char *suffix)
+static void digit_suffix (char *callsign, char *suffix, size_t suffix_len)
 {
 	char two_key[50];
 	char *t;
 
 
-	strlcpy (suffix, "000", 5);			// TODO: should have proper size
+	strlcpy (suffix, "000", suffix_len);
 	tt_text_to_two_key (callsign, 0, two_key);
 	for (t = two_key; *t != '\0'; t++) {
 	  if (isdigit(*t)) {
@@ -515,7 +515,7 @@ int tt_user_heard (char *callsign, int ssid, char overlay, char symbol, char *lo
 	  tt_user[i].ssid = ssid;
 	  tt_user[i].overlay = overlay;
 	  tt_user[i].symbol = symbol;
-	  digit_suffix(tt_user[i].callsign, tt_user[i].digit_suffix);
+	  digit_suffix(tt_user[i].callsign, tt_user[i].digit_suffix, sizeof(tt_user[i].digit_suffix));
 	  strlcpy (tt_user[i].loc_text, loc_text, sizeof(tt_user[i].loc_text));
 
 	  if (latitude != G_UNKNOWN && longitude != G_UNKNOWN) {
