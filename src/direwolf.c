@@ -1337,7 +1337,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too high. This may cause distortion and reduced decode performance.\n");
 	  dw_printf ("Solution is to decrease the audio input level.\n");
-	  dw_printf ("Setting audio input level so most stations are around 50 will provide good dyanmic range.\n");
+	  dw_printf ("Setting audio input level so most stations are around 50 will provide good dynamic range.\n");
 	}
 // FIXME: rather than checking for ichannel, how about checking medium==radio
 	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != -3) {
