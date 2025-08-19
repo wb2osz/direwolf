@@ -653,28 +653,27 @@ void export_gpio(int ch, int ot, int invert, int direction)
 }
 
 #if defined(USE_GPIOD)
-int gpiod_probe(const char *chip_name, int line_number)
-{
-	struct gpiod_chip *chip;
-	chip = gpiod_chip_open_by_name(chip_name);
-	if (chip == NULL) {
-		text_color_set(DW_COLOR_ERROR);
-		dw_printf ("Can't open GPIOD chip %s.\n", chip_name);
-		return -1;
-	}
 
-	struct gpiod_line *line;
-	line = gpiod_chip_get_line(chip, line_number);
-	if (line == NULL) {
+int gpiod_set(struct gpiod_line* line, int ptt){
+	int rc=0;
+	bool owner = gpiod_line_is_requested(line);
+	if(owner){
+		int rc2 = gpiod_line_set_value(line, ptt);
+		if (rc2 !=0) {
+			text_color_set(DW_COLOR_ERROR);
+			dw_printf ("Error: gpiod_line_set_value %s %d, errno=%d\n", gpiod_chip_name(gpiod_line_get_chip(line)), gpiod_line_offset(line),errno);
+			rc=rc-2;
+		}
+	}else{
 		text_color_set(DW_COLOR_ERROR);
-		dw_printf ("Can't get GPIOD line %d.\n", line_number);
-		return -1;
+		dw_printf ("Error: didnot request %s %d,\n", gpiod_chip_name(gpiod_line_get_chip(line)), gpiod_line_offset(line));
+		rc=rc-1;
 	}
-	if (ptt_debug_level >= 2) {
-		text_color_set(DW_COLOR_DEBUG);
-		dw_printf("GPIOD probe OK. Chip: %s line: %d\n", chip_name, line_number);
-	}
-	return 0;
+	if (ptt_debug_level >= 1) {
+			text_color_set(DW_COLOR_DEBUG);
+			dw_printf("PTT_METHOD_GPIOD chip: %s line: %d ptt: %d  rc: %d\n", gpiod_chip_name(gpiod_line_get_chip(line)), gpiod_line_offset(line), ptt, rc);
+		}
+	return rc;
 }
 #endif   /* USE_GPIOD */
 #endif   /* not __WIN32__ */
@@ -933,7 +932,34 @@ void ptt_init (struct audio_s *audio_config_p)
 	      if (audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
 	        const char *chip_name = audio_config_p->achan[ch].octrl[ot].out_gpio_name;
 	        int line_number = audio_config_p->achan[ch].octrl[ot].out_gpio_num;
-	        int rc = gpiod_probe(chip_name, line_number);
+	        int rc=0;
+			struct gpiod_chip *chip;
+			chip = gpiod_chip_open_by_name(chip_name);
+			if (chip == NULL) {
+				text_color_set(DW_COLOR_ERROR);
+				dw_printf ("Can't open GPIOD chip %s.\n", chip_name);
+				rc=rc-1;
+			}
+			struct gpiod_line *line;
+			line = gpiod_chip_get_line(chip, line_number);
+			if (line == NULL) {
+				text_color_set(DW_COLOR_ERROR);
+				dw_printf ("Can't get GPIOD line %d.\n", line_number);
+				rc=rc-2;
+			}else{
+				audio_config_p->achan[ch].octrl[ot].gpiod_line_handle=line;
+			}
+			if ( gpiod_line_request_output(line, "direwolf", 0) != 0 ) {
+				text_color_set(DW_COLOR_ERROR);
+				dw_printf ("Can't request GPIOD line %d.\n", line_number);
+				rc=rc-4;
+			}else{
+				dw_printf ("Request GPIOD line %d.\n", line_number);
+			}
+			if (ptt_debug_level >= 2) {
+				text_color_set(DW_COLOR_DEBUG);
+				dw_printf("GPIOD probe OK. Chip: %s line: %d\n", chip_name, line_number);
+			}
 	        if (rc < 0) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Disable PTT for channel %d\n", ch);
@@ -1387,13 +1413,9 @@ void ptt_set (int ot, int chan, int ptt_signal)
 
 #if defined(USE_GPIOD)
 	if (save_audio_config_p->achan[chan].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
-		const char *chip = save_audio_config_p->achan[chan].octrl[ot].out_gpio_name;
-		int line = save_audio_config_p->achan[chan].octrl[ot].out_gpio_num;
-		int rc = gpiod_ctxless_set_value(chip, line, ptt, false, "direwolf", NULL, NULL);
-		if (ptt_debug_level >= 1) {
-			text_color_set(DW_COLOR_DEBUG);
-			dw_printf("PTT_METHOD_GPIOD chip: %s line: %d ptt: %d  rc: %d\n", chip, line, ptt, rc);
-		}
+		struct gpiod_line *line = save_audio_config_p->achan[chan].octrl[ot].gpiod_line_handle;
+		gpiod_set(line, ptt);
+		
 	}
 #endif /* USE_GPIOD */
 #endif
@@ -1600,6 +1622,20 @@ void ptt_term (void)
 	  }
 	}
 #endif
+#if defined(USE_GPIOD)
+    // GPIOD
+	for (int ch = 0; ch < MAX_RADIO_CHANS; ch++) {
+	  if (save_audio_config_p->chan_medium[ch] == MEDIUM_RADIO) {
+	    for (int ot = 0; ot < NUM_OCTYPES; ot++) {
+	      if (save_audio_config_p->achan[ch].octrl[ot].ptt_method == PTT_METHOD_GPIOD) {
+	        struct gpiod_line *line = save_audio_config_p->achan[ch].octrl[ot].gpiod_line_handle;
+	        gpiod_line_release(line);
+			save_audio_config_p->achan[ch].octrl[ot].gpiod_line_handle=NULL;
+	      }
+	    }
+	  }
+	}
+#endif /* USE_GPIOD */
 }
 
 
