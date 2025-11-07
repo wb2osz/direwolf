@@ -1669,7 +1669,16 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	char mcomment[256];
 	strlcpy (mcomment, ((char*)info) + sizeof(struct aprs_mic_e_s), sizeof(mcomment));
 
-	assert (strlen(mcomment) > 0);
+	// This would seem redundant after the previous test of ilen.
+	// The contrived test case, in issue 618, contained a nul character
+	// near the end of the packet which should not happen with APRS.
+	// So strlen() turns out to be shorter than number of bytes.
+
+	if (strlen(mcomment) < 1) {
+	  // No comment.  We are finished.
+	  strlcpy (A->g_mfr, "UNKNOWN vendor/model", sizeof(A->g_mfr));
+	  return;
+	}
 
 	if (mcomment[strlen(mcomment)-1] == '\r') {
 	  mcomment[strlen(mcomment)-1] = '\0';
@@ -4853,6 +4862,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * standardized format.
  * Don't complain if we have already found a valid value.
  */
+
 	if (A->g_freq == G_UNKNOWN && regexec (&bad_freq_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 	  char bad[30];
@@ -4878,6 +4888,8 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    }
 	  }
 	}
+
+// TODO: Don't complain if followed by %.  e.g. Battery voltage 100%.
 
 	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
