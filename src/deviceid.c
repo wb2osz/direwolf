@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2023  John Langner, WB2OSZ
+//    Copyright (C) 2023, 2025  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -52,6 +52,8 @@
 static void unquote (int line, char *pin, char *pout);
 static int tocall_cmp (const void *px, const void *py);
 static int mice_cmp (const void *px, const void *py);
+
+static void deviceid_term(void);
 
 /*------------------------------------------------------------------
  *
@@ -300,6 +302,7 @@ void deviceid_init(void)
 	  //dw_printf ("%d: %s\n", line, stuff);
 #endif
 	  // This is not very robust; everything better be in exactly the right format.
+	  // TODO: Be more forgiving.
 
 	  if (strncmp(stuff, "mice:", strlen("mice:")) == 0) {
 	    section = mice_section;
@@ -361,12 +364,18 @@ void deviceid_init(void)
 	        }
 	        if (strncmp(stuff+3, "tocall: ", strlen("tocall: ")) == 0) {
 	          // Remove trailing wildcard characters ? * n
+	          // "APZ*" has quotes around it, inconsistent with everything else.
 	          char *r = stuff + strlen(stuff) - 1;
-	          while (r >= (char*)stuff && (*r == '?' || *r == '*' || *r == 'n')) {
+	          while (r >= (char*)stuff && (*r == '?' || *r == '*' || *r == 'n' || *r == '"')) {
 	            *r-- = '\0';
 	          }
 
-	          strlcpy (ptocalls[tocalls_index].tocall, stuff+3+8, sizeof(ptocalls[tocalls_index].tocall));
+	          if (stuff[3+8] == '"') {
+	            strlcpy (ptocalls[tocalls_index].tocall, stuff+3+8 +1, sizeof(ptocalls[tocalls_index].tocall));
+	          }
+	          else {
+	            strlcpy (ptocalls[tocalls_index].tocall, stuff+3+8, sizeof(ptocalls[tocalls_index].tocall));
+	          }
 
 	          // Remove trailing CR/LF or spaces.
 	          char *p = stuff + strlen(stuff) - 1;
@@ -375,10 +384,10 @@ void deviceid_init(void)
 	          }
 	        }
 	        else if (strncmp(stuff+3, "vendor: ", strlen("vendor: ")) == 0) {
-	          ptocalls[tocalls_index].vendor = strdup(stuff+3+8);  
+	          ptocalls[tocalls_index].vendor = strdup(stuff+3+8);
 	        }
 	        else if (strncmp(stuff+3, "model: ", strlen("model: ")) == 0) {
-	          ptocalls[tocalls_index].model = strdup(stuff+3+7);  
+	          ptocalls[tocalls_index].model = strdup(stuff+3+7);
 	        }
 	        break;
 	    }
@@ -413,11 +422,10 @@ void deviceid_init(void)
 
 	qsort (ptocalls, tocalls_count, sizeof(struct tocalls), tocall_cmp);
 
-
 #if TEST
 	dw_printf ("MIC-E:\n");
 	for (int i = 0; i < mice_count; i++) {
-	  dw_printf ("%s %s %s\n", pmice[i].suffix, pmice[i].vendor, pmice[i].model);
+	  dw_printf ("%s %s %s %s\n", pmice[i].prefix, pmice[i].suffix, pmice[i].vendor, pmice[i].model);
 	}
 	dw_printf ("TOCALLS:\n");
 	for (int i = 0; i < tocalls_count; i++) {
@@ -425,9 +433,48 @@ void deviceid_init(void)
 	}
 #endif
 
+	atexit (deviceid_term);
 	return;
 
 } // end deviceid_init
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	deviceid_term
+ *
+ * Purpose:	Called when exiting to cleanup.
+ *
+ * In/Out:	pmice
+ *		mice_count
+ *		ptocalls
+ *		tocalls_count
+ *
+ * Description:	Free all the allocated memory.
+ *
+ * Mystery:	Why does Address Sanitizer complain about a data leak
+ *		for 62 strdups?
+ *
+ *------------------------------------------------------------------*/
+
+static void deviceid_term(void)
+{
+	for (int n = 0; n < tocalls_count; n++) {
+	  if (ptocalls[n].model != NULL) free (ptocalls[n].model);
+	  if (ptocalls[n].vendor != NULL) free (ptocalls[n].vendor);
+	}
+	tocalls_count = 0;
+	free (ptocalls);
+	ptocalls = NULL;
+
+	for (int n = 0; n < mice_count; n++) {
+	  if (pmice[n].model != NULL) free (pmice[n].model);
+	  if (pmice[n].vendor != NULL) free (pmice[n].vendor);
+	}
+	mice_count = 0;
+	free (pmice);
+	pmice = NULL;
+}
 
 
 /*------------------------------------------------------------------
@@ -612,6 +659,7 @@ void deviceid_decode_dest (char *dest, char *device, size_t device_size)
  *		https://github.com/wb2osz/aprsspec containing:
  *			APRS Protocol Specification 1.2
  *			Understanding APRS Packets
+ *
  *------------------------------------------------------------------*/
 
 // The strncmp documentation doesn't mention behavior if length is zero.

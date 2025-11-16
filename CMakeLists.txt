@@ -229,16 +229,16 @@ if (C_CLANG OR C_GCC)
   # It might go back in someday when I have more patience to clean up all the warnings.
   #
 
-  # TODO:
-  # Try error checking -fsanitize=bounds-strict -fsanitize=leak
-  # Requires libubsan and liblsan, respectively.
-  # Maybe -fstack-protector-all, -fstack-check
 
-  ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
+  # Address Sanitizer.  See https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html
+  # gcc links with libasan automatically when compiled with -fsanitize=address
+
+  # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -g -Og -fno-optimize-sibling-calls -fno-omit-frame-pointer")
+
+
   if(FREEBSD)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   else()
-    #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE -fsanitize=bounds-strict ${EXTRA_FLAGS}")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
   endif()
   #
