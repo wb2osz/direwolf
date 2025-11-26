@@ -337,6 +337,9 @@ endif()
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
+  if(WIN32 OR CYGWIN)
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
+  endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
@@ -468,6 +471,11 @@ add_subdirectory(man)
 if (LINUX OR FREEBSD)
   install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop DESTINATION share/applications)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}_icon.png DESTINATION share/pixmaps)
+endif()
+
+# install hamlib DLLs on Windows
+if ((WIN32 OR CYGWIN) AND HAMLIB_FOUND)
+  install(FILES ${HAMLIB_DLLS} DESTINATION ${INSTALL_BIN_DIR})
 endif()
 
 ############ uninstall target ################
