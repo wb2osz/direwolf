@@ -473,9 +473,11 @@ if (LINUX OR FREEBSD)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}_icon.png DESTINATION share/pixmaps)
 endif()
 
-# install hamlib DLLs on Windows
+# install hamlib DLLs and license files on Windows
 if ((WIN32 OR CYGWIN) AND HAMLIB_FOUND)
   install(FILES ${HAMLIB_DLLS} DESTINATION ${INSTALL_BIN_DIR})
+  install(FILES ${HAMLIB_ROOT_DIR}/COPYING.LIB.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-COPYING.LIB.txt)
+  install(FILES ${HAMLIB_ROOT_DIR}/LICENSE.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-LICENSE.txt)
 endif()
 
 ############ uninstall target ################
