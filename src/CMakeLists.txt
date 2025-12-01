@@ -45,6 +45,7 @@ list(APPEND direwolf_SOURCES
   demod_afsk.c
   demod_psk.c
   demod.c
+  fm_demod.c
   digipeater.c
   cdigipeater.c
   dlq.c
