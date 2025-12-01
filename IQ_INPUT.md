@@ -2,49 +2,51 @@
 
 This feature allows Direwolf to accept IQ (In-phase/Quadrature) samples from Software Defined Radios (SDR) and perform FM demodulation internally before AFSK demodulation.
 
+## Quick Start
+
+```bash
+# Example: Receive APRS from SDR at 144.800 MHz
+rx_sdr -d "driver=sdrplay" -f 144.800M -s 192000 -F CS16 - | \
+csdr convert_s16_f | \
+csdr fir_decimate_cc 4 | \
+direwolf -t 0 -r 48000 -n 1 iq:48000
+```
+
+Or pipe from a file:
+```bash
+cat iq48k_cfloat.raw | direwolf -t 0 -r 48000 -n 1 iq:48000
+```
+
 ## Configuration
 
-To use IQ input, set your audio device to `iq:<sample_rate>` in your configuration file:
+### Command Line Usage (Simplest)
+
+For quick testing without a configuration file:
+
+```bash
+direwolf -t 0 -r 48000 -n 1 iq:48000
+```
+
+Parameters:
+- `-t 0`: No PTT (receive only)
+- `-r 48000`: Sample rate (must match IQ input rate)
+- `-n 1`: Channel colors off (cleaner output)
+- `iq:48000`: IQ input device at 48000 Hz
+
+### Configuration File Usage
+
+To use IQ input with a configuration file, set your audio device to `iq:<sample_rate>`:
 
 ```
 ADEVICE iq:48000 null
 ```
 
 Where `48000` is the IQ sample rate in Hz. Common values are:
-- 48000 (default if not specified)
-- 96000
-- 192000
+- 48000 (48 kHz - typical after decimation)
+- 96000 (96 kHz)
+- 192000 (192 kHz - common raw SDR rate)
 
-## Input Format
-
-Direwolf expects IQ samples from stdin in the following format:
-- **Data type**: 32-bit floating point (float32)
-- **Layout**: Interleaved I/Q pairs (I₀, Q₀, I₁, Q₁, I₂, Q₂, ...)
-- **Byte order**: Little-endian
-- **Value range**: Typically -1.0 to +1.0 (but can be auto-scaled)
-
-## Usage with rx_sdr
-
-The original use case with `rx_sdr` and `csdr`:
-
-```bash
-rx_sdr -d "driver=sdrplay,serial=0000000001" \
-       -f 144.800M -s 192000 \
-       -t AGC=off,IFGR=50,RFGR=0,BW=120000 \
-       -g 30 -F CS16 - | \
-csdr convert_s16_f | \
-csdr fir_decimate_cc 4 | \
-direwolf -c direwolf.conf
-```
-
-This pipeline:
-1. `rx_sdr`: Captures IQ at 192 kHz as 16-bit signed integers
-2. `csdr convert_s16_f`: Converts to float32
-3. `csdr fir_decimate_cc 4`: Decimates by 4 → 48 kHz output
-4. `direwolf`: Receives 48 kHz IQ, demodulates FM, then decodes APRS
-
-## Configuration File Example
-
+Full configuration example:
 ```
 # IQ input at 48 kHz
 ADEVICE iq:48000 null
@@ -58,46 +60,173 @@ MODEM 1200
 PTT NONE
 ```
 
-## How It Works
+## Technical Details
 
-1. **IQ Input**: Direwolf reads complex float samples from stdin
-2. **FM Demodulation**: Uses quadrature demodulation (phase difference method)
-   - Calculates phase difference between consecutive IQ samples
-   - Phase difference is proportional to instantaneous frequency
-   - Applies DC blocking and de-emphasis filters
-3. **Audio Output**: Produces real audio samples (mono, 16-bit)
-4. **AFSK Demodulation**: Standard Direwolf AFSK/packet demodulation
+### IQ Sample Format
+- **Data type**: 32-bit IEEE 754 floating point (float32)
+- **Byte order**: Little-endian
+- **Layout**: Interleaved I/Q pairs [I₀, Q₀, I₁, Q₁, I₂, Q₂, ...]
+- **Value range**: Typically -1.0 to +1.0 (auto-scaled internally)
+- **Sample rate**: Must match configured rate (e.g., 48000 Hz)
 
-## FM Demodulator Parameters
+### FM Demodulation Algorithm
 
-The FM demodulator uses these internal parameters:
-- **Maximum deviation**: 5000 Hz (suitable for narrow FM APRS)
-- **DC blocking**: High-pass filter to remove DC offset
-- **De-emphasis**: Low-pass filter (standard FM de-emphasis)
+Quadrature discriminator implementation:
+```
+ΔI = I[n] - I[n-1]
+ΔQ = Q[n] - Q[n-1]
+mag² = I[n]² + Q[n]²
 
-## Testing
+if (mag² > threshold):
+    output = K × (I[n] × ΔQ - Q[n] × ΔI) / mag²
+```
 
-A test script is provided to generate a simple IQ test signal:
+Where:
+- **K**: 0.340447... (scaling constant derived from π and sample rate)
+- **threshold**: 1e-5 (prevents division by near-zero values)
+- **Output clamping**: ±100 range before int16 conversion
+
+### Compatibility
+
+This implementation produces identical output to csdr's `fmdemod` tool, ensuring compatibility with existing SDR workflows.
+
+### Performance
+
+- Processes 48 kHz IQ input in real-time on Raspberry Pi and higher
+- Successfully decodes APRS packets at same performance as csdr pipeline
+- Validated with test files containing multiple APRS packets
+
+## References
+
+- [csdr - DSP for Software Defined Radio](https://github.com/ha7ilm/csdr)
+- [APRS Specification](http://www.aprs.org/doc/APRS101.PDF)
+- [Bell 202 Modem Standard](https://en.wikipedia.org/wiki/Bell_202_modem)
+
+## Implementation Files
+
+- `src/fm_demod.c` - FM demodulator implementation
+- `src/fm_demod.h` - Public API header
+- `src/audio.c` - IQ input integration (AUDIO_IN_TYPE_SDR_IQ case)
+- `test/iq/` - Test IQ samples and validation scripts
+
+## Usage Examples
+
+### Example 1: Direct SDR Reception with rx_sdr
+
+Receive APRS on 144.800 MHz using an SDRplay device:
 
 ```bash
-./test-iq-signal.sh | direwolf -c test-iq.conf
+rx_sdr -d "driver=sdrplay,serial=0000000001" \
+       -f 144.800M -s 192000 \
+       -t AGC=off,IFGR=50,RFGR=0,BW=120000 \
+       -g 30 -F CS16 - | \
+csdr convert_s16_f | \
+csdr fir_decimate_cc 4 | \
+direwolf -t 0 -r 48000 -n 1 iq:48000
 ```
+
+This pipeline:
+1. `rx_sdr`: Captures IQ at 192 kHz as 16-bit signed integers (CS16)
+2. `csdr convert_s16_f`: Converts to float32
+3. `csdr fir_decimate_cc 4`: Decimates by 4 → 48 kHz output
+4. `direwolf`: Receives 48 kHz IQ, demodulates FM, decodes APRS packets
+
+### Example 2: RTL-SDR with rtl_fm Replacement
+
+```bash
+rtl_sdr -f 144800000 -s 192000 - | \
+csdr convert_u8_f | \
+csdr fir_decimate_cc 4 | \
+direwolf -t 0 -r 48000 -n 1 iq:48000
+```
+
+### Example 3: File Playback
+
+Test with pre-recorded IQ samples:
+
+```bash
+cat recording.cfile | direwolf -t 0 -r 48000 -n 1 iq:48000
+```
+
+Where `recording.cfile` contains complex float32 IQ samples at 48 kHz.
+
+### Example 4: With Configuration File
+
+Create `aprs_sdr.conf`:
+```
+ADEVICE iq:48000 null
+CHANNEL 0
+MYCALL N0CALL
+MODEM 1200
+PTT NONE
+```
+
+Then run:
+```bash
+rx_sdr ... | csdr ... | direwolf -c aprs_sdr.conf
+```
+
+## How It Works
+
+1. **IQ Input**: Direwolf reads complex float32 samples from stdin
+2. **FM Demodulation**: Uses csdr-compatible quadrature discriminator algorithm
+   - Formula: `output = K × (I[n] × ΔQ - Q[n] × ΔI) / (I² + Q²)`
+   - Where ΔI and ΔQ are differences from previous sample
+   - K = 0.340447... (scaling constant for proper deviation)
+3. **Numerical Stability**: 
+   - Magnitude threshold to prevent division by near-zero
+   - Infinite/NaN detection and clamping
+4. **Audio Output**: Produces mono 16-bit audio samples
+5. **AFSK Demodulation**: Standard Direwolf 1200 baud Bell 202 demodulation
+
+## FM Demodulator Details
+
+The FM demodulator is designed to match csdr's fmdemod behavior:
+- **Algorithm**: Quadrature discriminator (phase difference method)
+- **Output range**: Approximately ±30 (before scaling to int16)
+- **Numerical protections**: 
+  - Magnitude² threshold: 1e-5
+  - Output clamping: ±100
+  - isfinite() checks to prevent inf/nan propagation
 
 ## Troubleshooting
 
-**No packets decoded:**
-- Verify IQ sample rate matches configuration
-- Check FM deviation (5 kHz works for standard narrow FM)
-- Ensure proper frequency tuning (should be centered on APRS frequency)
-- Verify gain settings on SDR aren't clipping or too low
+### No packets decoded
+- **Verify sample rate**: IQ rate must match `-r` parameter or ADEVICE rate
+- **Check frequency**: SDR must be tuned to APRS frequency (e.g., 144.800 MHz)
+- **Adjust gain**: Too low = weak signal, too high = clipping/distortion
+- **Test with known good file**: Use provided test files to verify direwolf is working
 
-**"End of IQ stream on stdin" message:**
-- Input pipeline terminated
-- Check rx_sdr or csdr commands for errors
+### "End of IQ stream on stdin" message
+- Normal when input pipeline terminates
+- Check `rx_sdr` or `csdr` commands for errors
+- Verify SDR device is connected and accessible
 
-**Build errors:**
-- Ensure `fm_demod.c` is in CMakeLists.txt
-- Math library should be automatically linked
+### Build errors
+- Ensure `fm_demod.c` is added to `src/CMakeLists.txt`
+- Math library (`-lm`) should be automatically linked
+- Rebuild with: `cd build && cmake .. && make`
+
+### Saturated or distorted audio
+- Check IQ input levels (should be in ±1.0 range typically)
+- Reduce SDR gain if clipping occurs
+- Verify decimation is correct (output rate should match direwolf input rate)
+
+### Performance issues
+- IQ processing is CPU-intensive
+- Consider decimating to lower sample rates (48 kHz is usually sufficient for APRS)
+- Use proper decimation filters (csdr's `fir_decimate_cc` recommended)
+
+## Testing
+
+Test the implementation with the included sample file:
+
+```bash
+cd test/iq
+cat iq48k_cfloat.raw | ../../build/src/direwolf -t 0 -r 48000 -n 1 iq:48000
+```
+
+Expected output: 3 decoded APRS packets from Italian stations (I0KTE-1, IU5ICR).
 
 ## Technical Details
 

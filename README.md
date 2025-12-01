@@ -92,6 +92,10 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 - **Compatible with Software Defined Radios such as gqrx, rtl_fm, and SDR#.**
 
+- **IQ Input with FM Demodulation.**
+  
+    Direct IQ input from SDR sources (rx_sdr, csdr, etc.) with built-in FM demodulation. Eliminates need for external FM demodulation tools. See [IQ_INPUT.md](IQ_INPUT.md) for details.
+
 - **Concurrent operation with up to 3 soundcards and 6 radios.**
 
 ### Portable & Open Source:
