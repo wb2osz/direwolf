@@ -518,6 +518,7 @@ void audio_wait (int a);
 
 int audio_close (void);
 
+void audio_get_iq_metrics(int a, float *rssi_db, float *snr_db);
 
 #endif  /* ifdef AUDIO_H */
 

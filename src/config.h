@@ -112,6 +112,8 @@ struct misc_config_s {
 	int dns_sd_enabled;	/* DNS Service Discovery announcement enabled. */
 	char dns_sd_name[64];	/* Name announced on dns-sd; defaults to "Dire Wolf on <hostname>" */
 
+	int iq_metrics_enabled;	/* Display IQ RSSI/SNR metrics with decoded packets (for IQ input only). */
+
 	int sb_configured;	/* TRUE if SmartBeaconing is configured. */
 	int sb_fast_speed;	/* MPH */
 	int sb_fast_rate;	/* seconds */

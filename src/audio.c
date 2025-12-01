@@ -1,6 +1,7 @@
 
 
 // 
+#include "iq_metrics.h"
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
 //    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
@@ -86,6 +87,22 @@
 #else
 #include <sys/soundcard.h>
 #endif
+
+/* IQ metrics (RSSI/SNR) per audio device */
+static iq_metrics_t g_iq_metrics[MAX_ADEVS];
+static int g_iq_metrics_inited[MAX_ADEVS];
+
+/* Getter for current IQ metrics */
+void audio_get_iq_metrics(int a, float *rssi_db, float *snr_db) {
+	if (a >= 0 && a < MAX_ADEVS && g_iq_metrics_inited[a]) {
+		if (rssi_db) *rssi_db = g_iq_metrics[a].rssi_db;
+		if (snr_db) *snr_db = g_iq_metrics[a].snr_db;
+	}
+	else {
+		if (rssi_db) *rssi_db = -999.0f;
+		if (snr_db) *snr_db = -999.0f;
+	}
+}
 
 
 #include "audio.h"
@@ -1327,10 +1344,20 @@ int audio_get (int a)
 	      /* Calculate how many IQ pairs we got */
 	      iq_pairs_read = res / (2 * sizeof(float));
 
-      if (iq_pairs_read > 0) {
-        /* Demodulate FM: IQ samples -> audio samples */
-        fm_demod_process(adev[a].fm_state, adev[a].iq_buf, 
-                        iq_pairs_read, adev[a].audio_buf);        /* Convert float audio to 16-bit samples for the demodulator */
+			if (iq_pairs_read > 0) {
+				/* Update IQ metrics (RSSI/SNR) before FM demodulation */
+				{
+					float rssi_db = 0.0f, snr_db = 0.0f;
+					if (g_iq_metrics_inited[a] == 0) {
+						iq_metrics_init(&g_iq_metrics[a], (float)save_audio_config_p->adev[a].samples_per_sec);
+						g_iq_metrics_inited[a] = 1;
+					}
+					iq_metrics_process(&g_iq_metrics[a], adev[a].iq_buf, iq_pairs_read * 2, &rssi_db, &snr_db);
+				}
+				/* Demodulate FM: IQ samples -> audio samples */
+				fm_demod_process(adev[a].fm_state, adev[a].iq_buf, 
+												iq_pairs_read, adev[a].audio_buf);
+				/* Convert float audio to 16-bit samples for the demodulator */
         /* FM demod output range is similar to csdr: typically ±30 */
         for (i = 0; i < iq_pairs_read; i++) {
           float sample = adev[a].audio_buf[i];

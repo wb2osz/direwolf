@@ -438,7 +438,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:M",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -751,6 +751,11 @@ int main (int argc, char *argv[])
 	    i_opt = atoi(optarg);
             break;
 
+	  case 'M':			// -M 	enable IQ metrics (RSSI/SNR) display
+
+	    misc_config.iq_metrics_enabled = 1;
+	    break;
+
 	  case 'A':			// -A 	convert AIS to APRS object
 
 	    A_opt_ais_to_obj = 1;
@@ -792,7 +797,15 @@ int main (int argc, char *argv[])
 
 	(void)dwsock_init();
 
+	// Save command line -M option before config_init overwrites it
+	int save_iq_metrics_enabled = misc_config.iq_metrics_enabled;
+
 	config_init (config_file, &audio_config, &digi_config, &cdigi_config, &tt_config, &igate_config, &misc_config);
+
+	// Restore command line -M option if it was set (command line overrides config file)
+	if (save_iq_metrics_enabled) {
+	  misc_config.iq_metrics_enabled = 1;
+	}
 
 	if (r_opt != 0) {
 	  audio_config.adev[0].samples_per_sec = r_opt;
@@ -1220,6 +1233,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	int h;
 	char display_retries[32];				// Extra stuff before slice indicators.
 								// Can indicate FX.25/IL2P or fix_bits.
+	char iq_metrics_text[64];				// Optional IQ metrics suffix
 
 	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);		// TOTAL for virtual channels
 	assert (subchan >= -3 && subchan < MAX_SUBCHANS);
@@ -1248,6 +1262,36 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	ax25_format_addrs (pp, stemp);
 
 	info_len = ax25_get_info (pp, &pinfo);
+
+	/* Get IQ metrics if available and enabled (for IQ input mode) */
+	strlcpy(iq_metrics_text, "", sizeof(iq_metrics_text));
+	if (misc_config.iq_metrics_enabled) {
+		float rssi_db = -999.0f, snr_db = -999.0f;
+		int a = ACHAN2ADEV(chan);
+		audio_get_iq_metrics(a, &rssi_db, &snr_db);
+		if (rssi_db > -900.0f && snr_db > -900.0f) {
+			/* Convert RSSI to S-meter units
+			 * Reference: S9 = -73 dBm, each S-unit = 6 dB
+			 * For dBFS, we use a nominal reference assuming typical SDR levels
+			 * Rough mapping: -53 dBFS ≈ S9, -93 dBFS ≈ S1
+			 */
+			float s_ref = -53.0f;  // Nominal S9 reference in dBFS
+			float s_units = (rssi_db - s_ref + 48.0f) / 6.0f;  // S1 to S9 range
+			
+			if (s_units < 1.0f) {
+				snprintf(iq_metrics_text, sizeof(iq_metrics_text), " [RSSI=%.1f dBFS (S1), SNR=%.1f dB]", rssi_db, snr_db);
+			}
+			else if (s_units < 9.0f) {
+				snprintf(iq_metrics_text, sizeof(iq_metrics_text), " [RSSI=%.1f dBFS (S%d), SNR=%.1f dB]", 
+				         rssi_db, (int)(s_units + 0.5f), snr_db);
+			}
+			else {
+				int over = (int)((s_units - 9.0f) * 6.0f + 0.5f);
+				snprintf(iq_metrics_text, sizeof(iq_metrics_text), " [RSSI=%.1f dBFS (S9+%d), SNR=%.1f dB]", 
+				         rssi_db, over, snr_db);
+			}
+		}
+	}
 
 	/* Print so we can see what is going on. */
 
@@ -1429,7 +1473,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  }
 	  else {
 	    ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
-	    dw_printf ("\n");
+	    dw_printf ("%s\n", iq_metrics_text);
 	  }
 	}
 	else {
@@ -1441,7 +1485,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // TODO: Might want to use d_u_opt for transmitted frames too.
 
 	  ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
-	  dw_printf ("\n");
+	  dw_printf ("%s\n", iq_metrics_text);
 	}
 
 
@@ -1731,6 +1775,7 @@ static void usage (void)
 	dw_printf ("    -J             2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("    -P xxx         Modem Profiles.\n");
 	dw_printf ("    -A             Convert AIS positions to APRS Object Reports.\n");
+	dw_printf ("    -M             Enable IQ RSSI/SNR metrics display (for IQ input mode).\n");
 	dw_printf ("    -D n           Divide audio sample rate by n for channel 0.\n");
 	dw_printf ("    -X n           1 to enable FX.25 transmit.  16, 32, 64 for specific number of check bytes.\n");
 	dw_printf ("    -I n           Enable IL2P transmit.  n=1 is recommended.  0 uses weaker FEC.\n");
