@@ -114,11 +114,13 @@ Receive APRS on 144.800 MHz using an SDRplay device:
 
 ```bash
 python3 scripts/sdrplay_to_direwolf.py --agc  2>/dev/null |  csdr fir_decimate_cc 4 2>/dev/null | ./build/src/direwolf -M -t 0 -r 48000 -n 1 iq:48000 2>&1 -
+python3 scripts/sdrplay_to_direwolf.py --agc  2>/dev/null |  csdr fir_decimate_cc 4 2>/dev/null | ./build/src/direwolf -M -t 0 -r 48000 -n 1 iq:48000 2>&1 -
 ```
 
 This pipeline:
-1. `sdrplay_to_direwolf.py --agc`: Captures IQ at 192 kHz as 16-bit signed integers (CS16)
-2. `csdr fir_decimate_cc 4`: Decimates by 4 → 48 kHz output
+1. `rx_sdr`: Captures IQ at 192 kHz as 16-bit signed integers (CS16)
+2. `csdr convert_s16_f`: Converts to float32
+3. `csdr fir_decimate_cc 4`: Decimates by 4 → 48 kHz output
 4. `direwolf`: Receives 48 kHz IQ, demodulates FM, decodes APRS packets
 
 ### Example 2: File Playback
@@ -131,7 +133,7 @@ cat iq48k_cfloat.raw | direwolf -t 0 -r 48000 -n 1 iq:48000
 
 Where `iq48k_cfloat.raw` contains complex float32 IQ samples at 48 kHz.
 
-### Example 4: With Configuration File
+### Example 3: With Configuration File
 
 Create `aprs_sdr.conf`:
 ```
@@ -144,7 +146,7 @@ PTT NONE
 
 Then run:
 ```bash
-rx_sdr ... | csdr ... | direwolf -c aprs_sdr.conf
+sdrplay_to_direwolf.py ... | csdr ... | direwolf -c aprs_sdr.conf
 ```
 
 ## How It Works
