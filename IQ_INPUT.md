@@ -6,10 +6,7 @@ This feature allows Direwolf to accept IQ (In-phase/Quadrature) samples from Sof
 
 ```bash
 # Example: Receive APRS from SDR at 144.800 MHz
-rx_sdr -d "driver=sdrplay" -f 144.800M -s 192000 -F CS16 - | \
-csdr convert_s16_f | \
-csdr fir_decimate_cc 4 | \
-direwolf -t 0 -r 48000 -n 1 iq:48000
+python3 scripts/sdrplay_to_direwolf.py --agc  2>/dev/null |  csdr fir_decimate_cc 4 2>/dev/null | ./build/src/direwolf -M -t 0 -r 48000 -n 1 iq:48000 2>&1 -
 ```
 
 Or pipe from a file:
