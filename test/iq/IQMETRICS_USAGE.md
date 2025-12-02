@@ -47,7 +47,8 @@ IQMETRICS
 ## Output Format
 When enabled, decoded packets will include RSSI and SNR information:
 ```
-[0.2] I0KTE-1>APDW16,IR6AQZ,WIDE1,IR0EF-10,IR5AE,WIDE2*: [RSSI=-28.1 dBFS (S9+19), SNR=32.0 dB]!4201.01ND01317.14E#...
+[0.2] I0KTE-1>APDW16,IR6AQZ,WIDE1,IR0EF-10,IR5AE,WIDE2*:!4201.01ND01317.14E#...
+[RSSI=-28.1 dBFS (S9+19), SNR=32.0 dB]
 ```
 
 The metrics show:

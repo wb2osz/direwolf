@@ -5,11 +5,8 @@ This feature allows Direwolf to accept IQ (In-phase/Quadrature) samples from Sof
 ## Quick Start
 
 ```bash
-# Example: Receive APRS from SDR at 144.800 MHz
-rx_sdr -d "driver=sdrplay" -f 144.800M -s 192000 -F CS16 - | \
-csdr convert_s16_f | \
-csdr fir_decimate_cc 4 | \
-direwolf -t 0 -r 48000 -n 1 iq:48000
+# Example: Receive APRS from SDR (RSP1) at 144.800 MHz
+python3 scripts/sdrplay_to_direwolf.py --agc  2>/dev/null |  csdr fir_decimate_cc 4 2>/dev/null | ./build/src/direwolf -M -t 0 -r 48000 -n 1 iq:48000 2>&1 -
 ```
 
 Or pipe from a file:
@@ -116,39 +113,23 @@ This implementation produces identical output to csdr's `fmdemod` tool, ensuring
 Receive APRS on 144.800 MHz using an SDRplay device:
 
 ```bash
-rx_sdr -d "driver=sdrplay,serial=0000000001" \
-       -f 144.800M -s 192000 \
-       -t AGC=off,IFGR=50,RFGR=0,BW=120000 \
-       -g 30 -F CS16 - | \
-csdr convert_s16_f | \
-csdr fir_decimate_cc 4 | \
-direwolf -t 0 -r 48000 -n 1 iq:48000
+python3 scripts/sdrplay_to_direwolf.py --agc  2>/dev/null |  csdr fir_decimate_cc 4 2>/dev/null | ./build/src/direwolf -M -t 0 -r 48000 -n 1 iq:48000 2>&1 -
 ```
 
 This pipeline:
-1. `rx_sdr`: Captures IQ at 192 kHz as 16-bit signed integers (CS16)
-2. `csdr convert_s16_f`: Converts to float32
-3. `csdr fir_decimate_cc 4`: Decimates by 4 → 48 kHz output
+1. `sdrplay_to_direwolf.py --agc`: Captures IQ at 192 kHz as 16-bit signed integers (CS16)
+2. `csdr fir_decimate_cc 4`: Decimates by 4 → 48 kHz output
 4. `direwolf`: Receives 48 kHz IQ, demodulates FM, decodes APRS packets
 
-### Example 2: RTL-SDR with rtl_fm Replacement
-
-```bash
-rtl_sdr -f 144800000 -s 192000 - | \
-csdr convert_u8_f | \
-csdr fir_decimate_cc 4 | \
-direwolf -t 0 -r 48000 -n 1 iq:48000
-```
-
-### Example 3: File Playback
+### Example 2: File Playback
 
 Test with pre-recorded IQ samples:
 
-```bash
-cat recording.cfile | direwolf -t 0 -r 48000 -n 1 iq:48000
+```bash 
+cat iq48k_cfloat.raw | direwolf -t 0 -r 48000 -n 1 iq:48000
 ```
 
-Where `recording.cfile` contains complex float32 IQ samples at 48 kHz.
+Where `iq48k_cfloat.raw` contains complex float32 IQ samples at 48 kHz.
 
 ### Example 4: With Configuration File
 
@@ -199,7 +180,7 @@ The FM demodulator is designed to match csdr's fmdemod behavior:
 
 ### "End of IQ stream on stdin" message
 - Normal when input pipeline terminates
-- Check `rx_sdr` or `csdr` commands for errors
+- Check `csdr` commands for errors
 - Verify SDR device is connected and accessible
 
 ### Build errors
