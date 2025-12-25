@@ -597,7 +597,7 @@ void symbols_from_dest_or_src (char dti, char *src, char *dest, char *symtab, ch
 	  }
 
 /* 
- * For GPSEnn, nn is the index into the primary symbol table.
+ * For GPSEnn, nn is the index into the alternate symbol table.
  */
 
 	  if (strncmp(dest, "GPSE", 4) == 0)
