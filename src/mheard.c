@@ -578,7 +578,7 @@ void mheard_save_is (char *ptext)
 
 	  if (mheard_debug) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("mheard_save_is: %s - update time, was %d seconds ago.\n", source, (int)(now - mptr->last_heard_rf));
+	    dw_printf ("mheard_save_is: %s - update time, was %d seconds ago.\n", source, (int)(now - mptr->last_heard_is));
 	  }
 	  mptr->count++;
 	  mptr->last_heard_is = now;
