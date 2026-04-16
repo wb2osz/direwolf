@@ -36,6 +36,8 @@ struct misc_config_s {
 
 	int agwpe_port;		/* TCP Port number for the "AGW TCPIP Socket Interface" */
 
+	int agwpe_own_monitor;	/* True to monitor own transmitted frames of all types, not just UNPROTO. */
+
 	// Previously we allowed only a single TCP port for KISS.
 	// An increasing number of people want to run multiple radios.
 	// Unfortunately, most applications don't know how to deal with multi-radio TNCs.

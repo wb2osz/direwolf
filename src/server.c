@@ -485,6 +485,7 @@ static void format_heard_time(time_t heard, char *time_str, char *time_bin)
  *--------------------------------------------------------------------*/
 
 static struct audio_s *save_audio_config_p;
+static struct misc_config_s *save_misc_config_p;
 
 
 void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
@@ -509,6 +510,7 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 #endif
 
 	save_audio_config_p = audio_config_p;
+	save_misc_config_p = mc;
 
 	for (client=0; client<MAX_NET_CLIENTS; client++) {
 	  client_sock[client] = -1;
@@ -963,7 +965,7 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 	    if (own_xmit) {
 	      // Should we include all own transmitted frames or only UNPROTO?
 	      // Discussion:  https://github.com/wb2osz/direwolf/issues/585
-	      if (agwpe_msg.hdr.datakind != 'U') {
+	      if (agwpe_msg.hdr.datakind != 'U' && !(save_misc_config_p != NULL && save_misc_config_p->agwpe_own_monitor)) {
 	        break;
 	      }
 	      agwpe_msg.hdr.datakind = 'T';

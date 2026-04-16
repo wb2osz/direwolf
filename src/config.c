@@ -5008,6 +5008,14 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
+ * AGWPE_OWN_MONITOR		- Monitor own transmitted frames of all types, not just UNPROTO.
+ */
+
+	  else if (strcasecmp(t, "AGWPE_OWN_MONITOR") == 0) {
+	    p_misc_config->agwpe_own_monitor = 1;
+	  }
+
+/*
  * KISSPORT port [ chan ]		- Port number for KISS over IP.
  */
 
