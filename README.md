@@ -28,14 +28,14 @@ Version 1.7 adds [IL2P](https://en.wikipedia.org/wiki/Improved_Layer_2_Protocol)
     * [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html)
     * [Ham Radio of Things](https://github.com/wb2osz/hrot)
     * [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page)
-    * formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress)
+    * [Winlink Express (formerly known as RMS Express
+    formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress)
     * [Outpost PM](http://www.outpostpm.org/)
     * [Packet Commander](https://packetcommander.com/), and many others.
     * [Packet Compressed Sensing Imaging (PCSI)](https://maqifrnswa.github.io/PCSI/)
     * [PinPoint APRS](http://www.pinpointaprs.com/)
     * [SARTrack](http://www.sartrack.co.nz/index.html)
     * [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm)
-    * [Winlink Express (formerly known as RMS Express
     * [Xastir](http://xastir.org/index.php/Main_Page)
     * [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html)
 
