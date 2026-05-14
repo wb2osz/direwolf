@@ -16,13 +16,13 @@ Version 1.7 adds [IL2P](https://en.wikipedia.org/wiki/Improved_Layer_2_Protocol)
 
 ### Dire Wolf is a modern software replacement for the old 1980's style TNC built with special hardware.
 
-    Without any additional software, it can perform as:
+- **Without any additional software, it can perform as**
     * APRS GPS Tracker
     * Digipeater
     * Internet Gateway (IGate)
         * [APRStt](http://www.aprs.org/aprstt.html) gateway
 
-    It can also be used as a virtual TNC for other applications such as:
+- **It can also be used as a virtual TNC for other applications such as:**
     * [APRSIS32](http://aprsisce.wikidot.com/)
     * [APRS-TW](http://aprstw.blandranch.net/)
     * [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html)
