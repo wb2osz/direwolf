@@ -20,9 +20,9 @@ Without any additional software, it can perform as:
     * APRS GPS Tracker
     * Digipeater
     * Internet Gateway (IGate)
-    ** [APRStt](http://www.aprs.org/aprstt.html) gateway
+        * [APRStt](http://www.aprs.org/aprstt.html) gateway
 
-It can also be used as a virtual TNC for other applications such as
+It can also be used as a virtual TNC for other applications such as:
     * [APRSIS32](http://aprsisce.wikidot.com/)
     * [APRS-TW](http://aprstw.blandranch.net/)
     * [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html)
