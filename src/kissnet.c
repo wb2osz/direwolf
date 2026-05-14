@@ -199,6 +199,7 @@ same direwolf instance.
 #include "kissnet.h"
 #include "kiss_frame.h"
 #include "xmit.h"
+#include "sock_utils.h"
 
 void hex_dump (unsigned char *p, int len);	// This should be in a .h file.
 
@@ -528,6 +529,8 @@ static THREAD_F connect_listen_thread (void *arg)
               return (0);
             }
 
+	    SOCK_SET_KEEPALIVE(kps->client_sock[client]);
+
 	    text_color_set(DW_COLOR_INFO);
 	    if (kps->chan == -1) {
 	      dw_printf("\nAttached to KISS TCP client application %d on port %s ...\n\n", client, tcp_port_str);
@@ -636,6 +639,8 @@ static THREAD_F connect_listen_thread (void *arg)
 	    }
 
             kps->client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
+
+	    SOCK_SET_KEEPALIVE(kps->client_sock[client]);
 
 	    text_color_set(DW_COLOR_INFO);
 	    if (kps->chan == -1) {
@@ -785,24 +790,18 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 	            }
 	          }
 
-#if __WIN32__	
-                  err = SOCK_SEND(kps->client_sock[client], (char*)kiss_buff, kiss_len);
-	          if (err == SOCKET_ERROR) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("\nError %d sending message to KISS client application %d on port %d.  Closing connection.\n\n", WSAGetLastError(), client, kps->tcp_port);
-	            closesocket (kps->client_sock[client]);
-	            kps->client_sock[client] = -1;
-	            WSACleanup();
-	          }
-#else
-                  err = SOCK_SEND (kps->client_sock[client], kiss_buff, kiss_len);
+                  err = SOCK_SEND_NOWAIT (kps->client_sock[client], (char*)kiss_buff, kiss_len);
 	          if (err <= 0) {
 	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("\nError %d sending message to KISS client application %d on port %d.  Closing connection.\n\n", err, client, kps->tcp_port);
+	            dw_printf ("\nError sending message to KISS client application %d on port %d.  Closing connection.\n\n", client, kps->tcp_port);
+#if __WIN32__
+	            closesocket (kps->client_sock[client]);
+	            WSACleanup();
+#else
 	            close (kps->client_sock[client]);
+#endif
 	            kps->client_sock[client] = -1;
 	          }
-#endif
 	        } // frame length >= 0
 	      } // if all clients or the one specifie
 	    } // for each client on the tcp port
@@ -882,24 +881,18 @@ void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, struct 
 	              kiss_debug_print (TO_CLIENT, NULL, kiss_buff, kiss_len);
 	            }
 
-#if __WIN32__
-                    err = SOCK_SEND(kps->client_sock[client], (char*)kiss_buff, kiss_len);
-	            if (err == SOCKET_ERROR) {
-	              text_color_set(DW_COLOR_ERROR);
-	              dw_printf ("\nError %d copying message to KISS TCP port %d client %d application.  Closing connection.\n\n", WSAGetLastError(), kps->tcp_port, client);
-	              closesocket (kps->client_sock[client]);
-	              kps->client_sock[client] = -1;
-	              WSACleanup();
-	            }
-#else
-                    err = SOCK_SEND (kps->client_sock[client], kiss_buff, kiss_len);
+                    err = SOCK_SEND_NOWAIT (kps->client_sock[client], (char*)kiss_buff, kiss_len);
 	            if (err <= 0) {
 	              text_color_set(DW_COLOR_ERROR);
 	              dw_printf ("\nError copying message to KISS TCP port %d client %d application.  Closing connection.\n\n", kps->tcp_port, client);
+#if __WIN32__
+	              closesocket (kps->client_sock[client]);
+	              WSACleanup();
+#else
 	              close (kps->client_sock[client]);
+#endif
 	              kps->client_sock[client] = -1;
 	            }
-#endif
 	          } // Channel is allowed on this port.
 	        } // socket is open
 	      } // if origin and destination different.

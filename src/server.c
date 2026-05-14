@@ -167,6 +167,7 @@
 #include "audio.h"
 #include "server.h"
 #include "dlq.h"
+#include "sock_utils.h"
 #include "mheard.h"
 
 
@@ -706,6 +707,8 @@ static THREAD_F connect_listen_thread (void *arg)
               return (0);
             }
 
+	    SOCK_SET_KEEPALIVE(client_sock[client]);
+
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf("\nAttached to AGW client application %d ...\n\n", client);
 
@@ -797,6 +800,8 @@ static THREAD_F connect_listen_thread (void *arg)
          
             client_sock[client] = accept(listen_sock, (struct sockaddr*)(&sockaddr),&sockaddr_size);
 
+	    SOCK_SET_KEEPALIVE(client_sock[client]);
+
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf("\nAttached to AGW client application %d...\n\n", client);
 
@@ -880,28 +885,20 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
-#if __WIN32__	
-            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
-	    if (err == SOCKET_ERROR)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to AGW client application.  Closing connection.\n\n", WSAGetLastError());
-	      closesocket (client_sock[client]);
-	      client_sock[client] = -1;
-	      WSACleanup();
-	      dlq_client_cleanup (client);
-	    }
-#else
-            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
+            err = SOCK_SEND_NOWAIT (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
+#if __WIN32__
+	      closesocket (client_sock[client]);
+	      WSACleanup();
+#else
 	      close (client_sock[client]);
-	      client_sock[client] = -1;    
+#endif
+	      client_sock[client] = -1;
 	      dlq_client_cleanup (client);
 	    }
-#endif
 	  }
 	}
 
@@ -1001,28 +998,20 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
-#if __WIN32__
-            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
-	    if (err == SOCKET_ERROR)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to AGW client application %d.  Closing connection.\n\n", WSAGetLastError(), client);
-	      closesocket (client_sock[client]);
-	      client_sock[client] = -1;
-	      WSACleanup();
-	      dlq_client_cleanup (client);
-	    }
-#else
-            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
+            err = SOCK_SEND_NOWAIT (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("\nError sending message to AGW client application %d.  Closing connection.\n\n", client);
+#if __WIN32__
+	      closesocket (client_sock[client]);
+	      WSACleanup();
+#else
 	      close (client_sock[client]);
+#endif
 	      client_sock[client] = -1;
 	      dlq_client_cleanup (client);
 	    }
-#endif
 	  }
 	}
 
@@ -1442,8 +1431,19 @@ static void send_to_client (int client, void *reply_p)
 	  debug_print (TO_CLIENT, client, ph, len);
 	}
 
-	err = SOCK_SEND (client_sock[client], (char*)(ph), len);
-	(void)err;
+	err = SOCK_SEND_NOWAIT (client_sock[client], (char*)(ph), len);
+	if (err <= 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
+#if __WIN32__
+	  closesocket (client_sock[client]);
+	  WSACleanup();
+#else
+	  close (client_sock[client]);
+#endif
+	  client_sock[client] = -1;
+	  dlq_client_cleanup (client);
+	}
 }
 
 

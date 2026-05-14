@@ -278,6 +278,10 @@ typedef pthread_mutex_t dw_mutex_t;
 #endif
 #define SOCK_RECV(s,data,size) recv(s,data,size,0)
 
+/* Non-blocking send and TCP keepalive helpers are in sock_utils.h.
+ * Include that header after the platform socket headers in files that need them.
+ */
+
 
 /* Platform differences for string functions. */
 
