@@ -60,7 +60,23 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
 
 - **KISS Interface (TCP/IP, serial port, Bluetooth) & AGW network Interface (TCP/IP).**
   
-    Dire Wolf can be used as a virtual TNC for applications such as [APRSIS32](http://aprsisce.wikidot.com/), [Xastir](http://xastir.org/index.php/Main_Page), [APRS-TW](http://aprstw.blandranch.net/), [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html), [PinPoint APRS](http://www.pinpointaprs.com/), [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm), [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page), [SARTrack](http://www.sartrack.co.nz/index.html), [Winlink Express (formerly known as RMS Express, formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress), [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html), [Outpost PM](http://www.outpostpm.org/), [Ham Radio of Things](https://github.com/wb2osz/hrot), [Packet Compressed Sensing Imaging (PCSI)](https://maqifrnswa.github.io/PCSI/), and many others.
+    Dire Wolf can be used as a virtual TNC for applications such as:
+    * [APRSIS32](http://aprsisce.wikidot.com/)
+    * [APRS-TW](http://aprstw.blandranch.net/)
+    * [BPQ32](http://www.cantab.net/users/john.wiseman/Documents/BPQ32.html)
+    * [Ham Radio of Things](https://github.com/wb2osz/hrot)
+    * [Linux AX25](http://www.linux-ax25.org/wiki/Main_Page)
+    * [Outpost PM](http://www.outpostpm.org/)
+    * [Packet Compressed Sensing Imaging (PCSI)](https://maqifrnswa.github.io/PCSI/)
+    * [pat, a winlink-like open source program](https://github.com/la5nta/pat)
+    * [PinPoint APRS](http://www.pinpointaprs.com/)
+    * [SARTrack](http://www.sartrack.co.nz/index.html)
+    * [UI-View32](http://www.ui-view.net/),[UISS](http://users.belgacom.net/hamradio/uiss.htm)
+    * [Winlink Express (formerly known as RMS Express
+    formerly known as Winlink 2000 or WL2K)](http://www.winlink.org/RMSExpress)
+    * [Xastir](http://xastir.org/index.php/Main_Page)
+    * [YAAC](http://www.ka2ddo.org/ka2ddo/YAAC.html)
+    and many others.
 
 ### Radio Interfaces:
 
@@ -68,21 +84,26 @@ It can also be used as a virtual TNC for other applications such as [APRSIS32](h
   
     Lower cost and better performance than specialized hardware. 
   
-    Compatible interfaces include [DRAWS](http://nwdigitalradio.com/draws/), [UDRC](https://nw-digital-radio.groups.io/g/udrc/wiki/UDRC%E2%84%A2-and-Direwolf-Packet-Modem), [SignaLink USB](http://www.tigertronics.com/slusbmain.htm), [DMK URI](http://www.dmkeng.com/URI_Order_Page.htm), [RB-USB RIM](http://www.repeater-builder.com/products/usb-rim-lite.html), [RA-35](http://www.masterscommunications.com/products/radio-adapter/ra35.html), [DINAH](https://hamprojects.info/dinah/), [SHARI](https://hamprojects.info/shari/), and many others.
+    Compatible interfaces include
+    * [AIOC](https://github.com/skuep/AIOC)
+    * [DINAH](https://hamprojects.info/dinah/)
+    * [DRAWS](http://nwdigitalradio.com/draws/)
+    * [DMK URI](http://www.dmkeng.com/URI_Order_Page.htm)
+    * [RA-35](http://www.masterscommunications.com/products/radio-adapter/ra35.html)
+    * [RB-USB RIM](http://www.repeater-builder.com/products/usb-rim-lite.html)
+    * [SHARI](https://hamprojects.info/shari/)
+    * [SignaLink USB](http://www.tigertronics.com/slusbmain.htm)
+    * [UDRC](https://nw-digital-radio.groups.io/g/udrc/wiki/UDRC%E2%84%A2-and-Direwolf-Packet-Modem)
+    * and many others.
 
 - **Modems:**
   
-    300 bps AFSK for HF
-  
-    1200 bps AFSK most common for VHF/UHF
-  
-    2400 & 4800 bps PSK
-  
-    9600 bps GMSK/G3RUH
-  
-    AIS reception
-  
-    EAS SAME reception
+    * 300 bps AFSK for HF
+    * 1200 bps AFSK most common for VHF/UHF
+    * 2400 & 4800 bps PSK
+    * 9600 bps GMSK/G3RUH
+    * AIS reception
+    * EAS SAME reception
 
 - **DTMF ("Touch Tone") Decoding and Encoding.**
 
@@ -116,11 +137,24 @@ Youtube has many interesting and helpful videos.  Searching for [direwolf tnc](h
 
 ### Windows
 
-Go to the [**releases** page](https://github.com/wb2osz/direwolf/releases).   Download a zip file with "win" in its name, unzip it, and run direwolf.exe from a command window.
+Go to the [**releases** page](https://github.com/wb2osz/direwolf/releases).
+Download a zip file with "win" in its name, unzip it, and run direwolf.exe
+from a command window.
 
-You can also build it yourself from source.  For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).
+You can also build it yourself from source.
+For more details see the **User Guide** in the
+[**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).
 
-### Linux - Using git clone (recommended)
+### Linux - prepackaged
+
+**Fedora** has direwolf in the standard repository, so all that is needed is
+to install the package, and copy over the example configuration and tweak it.
+```
+sudo dnf install direwolf
+cp /usr/share/doc/direwolf/conf/direwolf.conf $HOME
+```
+
+### Linux - build and install using git clone (recommended)
 
 ***Note that this has changed for version 1.6.  There are now a couple extra steps.***
 
@@ -129,46 +163,54 @@ In most cases, the first few  will already be there and the package installer wi
 
 On Debian / Ubuntu / Raspbian / Raspberry Pi OS:
 
-    sudo apt-get install git
-    sudo apt-get install gcc
-    sudo apt-get install g++
-    sudo apt-get install make
-    sudo apt-get install cmake
-    sudo apt-get install libasound2-dev
-    sudo apt-get install libudev-dev
-    sudo apt-get install libavahi-client-dev
-    # This is only needed to use the GPIO pins for PTT:
-    sudo apt-get install libgpiod-dev
+```
+sudo apt-get install git
+sudo apt-get install gcc
+sudo apt-get install g++
+sudo apt-get install make
+sudo apt-get install cmake
+sudo apt-get install libasound2-dev
+sudo apt-get install libudev-dev
+sudo apt-get install libavahi-client-dev
+# This is only needed to use the GPIO pins for PTT:
+sudo apt-get install libgpiod-dev
+```
 
 Or on Red Hat / Fedora / CentOS:
 
-    sudo yum install git
-    sudo yum install gcc
-    sudo yum install gcc-c++
-    sudo yum install make
-    sudo yum install alsa-lib-devel
-    sudo yum install libudev-devel
-    sudo yum install avahi-devel
+```
+sudo yum install git
+sudo yum install gcc
+sudo yum install gcc-c++
+sudo yum install make
+sudo yum install alsa-lib-devel
+sudo yum install libudev-devel
+sudo yum install avahi-devel
+```
 
 CentOS 6 & 7 currently have cmake 2.8 but we need 3.1 or later.
 First you need to enable the EPEL repository.  Add a symlink if you don't already have the older version and want to type cmake rather than cmake3.
 
-    sudo yum install epel-release
-    sudo rpm -e cmake
-    sudo yum install cmake3
-    sudo ln -s /usr/bin/cmake3 /usr/bin/cmake
+```
+sudo yum install epel-release
+sudo rpm -e cmake
+sudo yum install cmake3
+sudo ln -s /usr/bin/cmake3 /usr/bin/cmake
+```
 
 Then on any flavor of Linux:
 
-    cd ~
-    git clone https://www.github.com/wb2osz/direwolf
-    cd direwolf
-    git checkout dev
-    mkdir build && cd build
-    cmake ..
-    make -j4
-    sudo make install
-    make install-conf
+```
+cd ~
+git clone https://www.github.com/wb2osz/direwolf
+cd direwolf
+git checkout dev
+mkdir build && cd build
+cmake ..
+make -j4
+sudo make install
+make install-conf
+```
 
 This gives you the latest development version.  Leave out the "git checkout dev" to get the most recent stable release.
 
@@ -177,18 +219,20 @@ For more details see the **User Guide** in the [**doc** directory](https://githu
 ### Linux - Using apt-get (Debian flavor operating systems)
 
 Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging. Expect the version to lag significantly behind development.
-
-    sudo apt-get update
-    apt-cache showpkg direwolf
-    sudo apt-get install direwolf
+```
+sudo apt-get update
+apt-cache showpkg direwolf
+sudo apt-get install direwolf
+```
 
 ### Linux - Using yum (Red Hat flavor operating systems)
 
 Results will vary depending on your hardware platform and operating system version because it depends on various volunteers who perform the packaging.  Expect the version to lag significantly behind development.
-
-    sudo yum check-update
-    sudo yum list direwolf
-    sudo yum install direwolf
+```
+sudo yum check-update
+sudo yum list direwolf
+sudo yum install direwolf
+```
 
 ### Macintosh macOS - Using Homebrew
 
@@ -200,22 +244,24 @@ First make sure that you have the following tools installed on your Mac:
 - [Homebrew](https://brew.sh/)
 
 You will need to install the following packages using Homebrew:
-
-    brew install cmake
-    brew install portaudio
-    brew install hidapi
+```
+brew install cmake
+brew install portaudio
+brew install hidapi
+```
 
 Then follow the same instructions as above for the Linux `git clone` build:
-
-    cd ~
-    git clone https://www.github.com/wb2osz/direwolf
-    cd direwolf
-    git checkout dev
-    mkdir build && cd build
-    cmake ..
-    make -j4
-    sudo make install
-    make install-conf
+```
+cd ~
+git clone https://www.github.com/wb2osz/direwolf
+cd direwolf
+git checkout dev
+mkdir build && cd build
+cmake ..
+make -j4
+sudo make install
+make install-conf
+```
 
 This gives you the latest development version.  Leave out the "git checkout dev" to get the most recent stable release.
 
@@ -226,8 +272,9 @@ If you have problems,  post them to the [Dire Wolf packet TNC](https://groups.io
 ### Macintosh macOS - Prebuilt version
 
 You can also install a pre-built version from MacPorts.  Keeping this up to date depends on volunteers who perform the packaging. This version could lag behind development.
-
-    sudo port install direwolf
+```
+sudo port install direwolf
+```
 
 ## Join the conversation
 
