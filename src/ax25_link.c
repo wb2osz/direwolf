@@ -1928,6 +1928,20 @@ void dl_client_cleanup (dlq_item_t *E)
 	  dw_printf ("dl_client_cleanup (%d)\n", E->client);
 	}
 
+/*
+ * Stale cleanup guard: if the server slot generation has been bumped since
+ * this cleanup item was queued (meaning a new client connected to the same
+ * slot before we got here), do NOT tear down the AX.25 streams or remove
+ * the callsign registrations — those belong to the new client session.
+ */
+	if (E->client_generation != server_client_generation (E->client)) {
+	  if (s_debug_client_app) {
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("dl_client_cleanup (%d): stale (generation mismatch), skipping.\n", E->client);
+	  }
+	  return;
+	}
+
 
 	dlprev = NULL;
 	S = list_head;

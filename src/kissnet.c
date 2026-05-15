@@ -792,15 +792,20 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 
                   err = SOCK_SEND_NOWAIT (kps->client_sock[client], (char*)kiss_buff, kiss_len);
 	          if (err <= 0) {
-	            text_color_set(DW_COLOR_ERROR);
-	            dw_printf ("\nError sending message to KISS client application %d on port %d.  Closing connection.\n\n", client, kps->tcp_port);
+	            if (SOCK_SEND_IS_TRANSIENT()) {
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("\nKISS TCP port %d client %d buffer full; dropping frame.\n\n", kps->tcp_port, client);
+	            } else {
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("\nError sending message to KISS client application %d on port %d.  Closing connection.\n\n", client, kps->tcp_port);
 #if __WIN32__
-	            closesocket (kps->client_sock[client]);
-	            WSACleanup();
+	              closesocket (kps->client_sock[client]);
+	              WSACleanup();
 #else
-	            close (kps->client_sock[client]);
+	              close (kps->client_sock[client]);
 #endif
-	            kps->client_sock[client] = -1;
+	              kps->client_sock[client] = -1;
+	            }
 	          }
 	        } // frame length >= 0
 	      } // if all clients or the one specifie
@@ -883,15 +888,20 @@ void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, struct 
 
                     err = SOCK_SEND_NOWAIT (kps->client_sock[client], (char*)kiss_buff, kiss_len);
 	            if (err <= 0) {
-	              text_color_set(DW_COLOR_ERROR);
-	              dw_printf ("\nError copying message to KISS TCP port %d client %d application.  Closing connection.\n\n", kps->tcp_port, client);
+	              if (SOCK_SEND_IS_TRANSIENT()) {
+	                text_color_set(DW_COLOR_ERROR);
+	                dw_printf ("\nKISS TCP port %d client %d buffer full; dropping frame.\n\n", kps->tcp_port, client);
+	              } else {
+	                text_color_set(DW_COLOR_ERROR);
+	                dw_printf ("\nError copying message to KISS TCP port %d client %d application.  Closing connection.\n\n", kps->tcp_port, client);
 #if __WIN32__
-	              closesocket (kps->client_sock[client]);
-	              WSACleanup();
+	                closesocket (kps->client_sock[client]);
+	                WSACleanup();
 #else
-	              close (kps->client_sock[client]);
+	                close (kps->client_sock[client]);
 #endif
-	              kps->client_sock[client] = -1;
+	                kps->client_sock[client] = -1;
+	              }
 	            }
 	          } // Channel is allowed on this port.
 	        } // socket is open

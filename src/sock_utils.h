@@ -43,6 +43,28 @@ static inline int sock_send_nowait (SOCKET s, const char *data, int size) {
 
 
 /*------------------------------------------------------------------
+ * SOCK_SEND_IS_TRANSIENT  --  true when the last SOCK_SEND_NOWAIT
+ * failed only because the kernel TCP send buffer was momentarily
+ * full (EAGAIN / EWOULDBLOCK / WSAEWOULDBLOCK).
+ *
+ * Use this to distinguish "buffer momentarily full, drop this frame
+ * and keep the connection open" from a hard error that means the
+ * remote end has gone away and the socket should be closed.
+ *
+ * Truly frozen clients are handled by the SO_KEEPALIVE probes set
+ * with SOCK_SET_KEEPALIVE: when the OS declares the connection dead
+ * the next send will return a hard error and the socket will be
+ * closed normally.
+ *------------------------------------------------------------------*/
+
+#if __WIN32__
+#define SOCK_SEND_IS_TRANSIENT() (WSAGetLastError() == WSAEWOULDBLOCK)
+#else
+#define SOCK_SEND_IS_TRANSIENT() (errno == EAGAIN || errno == EWOULDBLOCK)
+#endif
+
+
+/*------------------------------------------------------------------
  * SOCK_SET_KEEPALIVE  --  enable TCP keepalives on an accepted socket
  *
  * Detects stale connections (e.g. client laptop suspended without

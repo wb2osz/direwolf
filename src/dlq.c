@@ -982,7 +982,7 @@ void dlq_seize_confirm (int chan)
  *
  *--------------------------------------------------------------------*/
 
-void dlq_client_cleanup (int client)
+void dlq_client_cleanup (int client, int generation)
 {
 	struct dlq_item_s *pnew;
 #if DEBUG
@@ -1007,6 +1007,7 @@ void dlq_client_cleanup (int client)
 	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_CLIENT_CLEANUP;
 	pnew->client = client;
+	pnew->client_generation = generation;
 
 /* Put it into queue. */
 

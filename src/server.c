@@ -189,6 +189,14 @@ static int client_sock[MAX_NET_CLIENTS];
 					/* Set to -1 if not connected. */
 					/* (Don't use SOCKET type because it is unsigned.) */
 
+static int client_generation[MAX_NET_CLIENTS];
+					/* Incremented each time a new client connects to this slot.
+					 * Each DLQ_CLIENT_CLEANUP item carries the generation at the
+					 * time it was queued.  If the generation has advanced before
+					 * the item is processed (a new client reconnected before the
+					 * stale cleanup ran), dl_client_cleanup skips the cleanup so
+					 * the freshly registered callsigns are not wiped. */
+
 static int enable_send_raw_to_client[MAX_NET_CLIENTS];
 					/* Should we send received packets to client app in raw form? */
 					/* Note that it starts as false for a new connection. */
@@ -303,6 +311,27 @@ static int debug_client = 0;		/* Debug option: Print information flowing from an
 void server_set_debug (int n) 
 {	
 	debug_client = n;
+}
+
+
+/*-------------------------------------------------------------------
+ * Name:        server_client_generation
+ *
+ * Purpose:     Return the current generation counter for a client slot.
+ *              Used by dl_client_cleanup (ax25_link.c) to detect whether
+ *              a DLQ_CLIENT_CLEANUP item is stale (i.e. a new client
+ *              reconnected to this slot before the deferred cleanup ran).
+ *
+ * Inputs:      client  - slot index [0, MAX_NET_CLIENTS)
+ *
+ * Returns:     Generation counter value.  Starts at 0, incremented by 1
+ *              each time a new client connects to this slot.
+ *--------------------------------------------------------------------*/
+
+int server_client_generation (int client)
+{
+	assert (client >= 0 && client < MAX_NET_CLIENTS);
+	return client_generation[client];
 }
 
 void hex_dump (unsigned char *p, int len) 
@@ -515,6 +544,7 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 
 	for (client=0; client<MAX_NET_CLIENTS; client++) {
 	  client_sock[client] = -1;
+	  client_generation[client] = 0;
 	  enable_send_raw_to_client[client] = 0;
 	  enable_send_monitor_to_client[client] = 0;
 	}
@@ -709,6 +739,8 @@ static THREAD_F connect_listen_thread (void *arg)
 
 	    SOCK_SET_KEEPALIVE(client_sock[client]);
 
+	    client_generation[client]++;
+
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf("\nAttached to AGW client application %d ...\n\n", client);
 
@@ -802,6 +834,8 @@ static THREAD_F connect_listen_thread (void *arg)
 
 	    SOCK_SET_KEEPALIVE(client_sock[client]);
 
+	    client_generation[client]++;
+
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf("\nAttached to AGW client application %d...\n\n", client);
 
@@ -888,16 +922,21 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
             err = SOCK_SEND_NOWAIT (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
+	      if (SOCK_SEND_IS_TRANSIENT()) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\nAGW client %d TCP buffer full; dropping packet frame.\n\n", client);
+	      } else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
 #if __WIN32__
-	      closesocket (client_sock[client]);
-	      WSACleanup();
+	        closesocket (client_sock[client]);
+	        WSACleanup();
 #else
-	      close (client_sock[client]);
+	        close (client_sock[client]);
 #endif
-	      client_sock[client] = -1;
-	      dlq_client_cleanup (client);
+	        client_sock[client] = -1;
+	        dlq_client_cleanup (client, client_generation[client]);
+	      }
 	    }
 	  }
 	}
@@ -1001,16 +1040,21 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
             err = SOCK_SEND_NOWAIT (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    if (err <= 0)
 	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to AGW client application %d.  Closing connection.\n\n", client);
+	      if (SOCK_SEND_IS_TRANSIENT()) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\nAGW client %d TCP buffer full; dropping monitor frame.\n\n", client);
+	      } else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("\nError sending message to AGW client application %d.  Closing connection.\n\n", client);
 #if __WIN32__
-	      closesocket (client_sock[client]);
-	      WSACleanup();
+	        closesocket (client_sock[client]);
+	        WSACleanup();
 #else
-	      close (client_sock[client]);
+	        close (client_sock[client]);
 #endif
-	      client_sock[client] = -1;
-	      dlq_client_cleanup (client);
+	        client_sock[client] = -1;
+	        dlq_client_cleanup (client, client_generation[client]);
+	      }
 	    }
 	  }
 	}
@@ -1415,6 +1459,9 @@ static void send_to_client (int client, void *reply_p)
 	int len;
 	int err;
 
+	/* Socket may have been closed already by a previous failed send or disconnect. */
+	if (client_sock[client] <= 0) return;
+
 	ph = (struct agwpe_s *) reply_p;	// Replies are often hdr + other stuff.
 
 	len = sizeof(struct agwpe_s) + netle2host(ph->data_len_NETLE);
@@ -1442,7 +1489,7 @@ static void send_to_client (int client, void *reply_p)
 	  close (client_sock[client]);
 #endif
 	  client_sock[client] = -1;
-	  dlq_client_cleanup (client);
+	  dlq_client_cleanup (client, client_generation[client]);
 	}
 }
 
@@ -1481,7 +1528,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    close (client_sock[client]);
 #endif
 	    client_sock[client] = -1;
-	    dlq_client_cleanup (client);
+	    dlq_client_cleanup (client, client_generation[client]);
 	    continue;
 	  }
 
@@ -1527,7 +1574,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    close (client_sock[client]);
 #endif
 	    client_sock[client] = -1;
-	    dlq_client_cleanup (client);
+	    dlq_client_cleanup (client, client_generation[client]);
 	    return (0);
 	  }
 
@@ -1546,7 +1593,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      close (client_sock[client]);
 #endif
 	      client_sock[client] = -1;
-	      dlq_client_cleanup (client);
+	      dlq_client_cleanup (client, client_generation[client]);
 	      return (0);
 	    }
 	    if (n >= 0) {

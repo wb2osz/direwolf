@@ -99,6 +99,12 @@ typedef struct dlq_item_s {
 
 	int client;
 
+	int client_generation;		/* For DLQ_CLIENT_CLEANUP: the server slot generation
+					 * at the time this item was queued.  If the generation
+					 * has been bumped (a new client connected to this slot)
+					 * before this item is processed, the cleanup is stale
+					 * and must be discarded. */
+
 
 // Used only by client request to transmit connected data.
 
@@ -139,7 +145,7 @@ void dlq_channel_busy (int chan, int activity, int status);
 
 void dlq_seize_confirm (int chan);
 
-void dlq_client_cleanup (int client);
+void dlq_client_cleanup (int client, int generation);
 
 
 
