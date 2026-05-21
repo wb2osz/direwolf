@@ -62,6 +62,11 @@ Force G3RUH modem regardless of data rate.
 Divide audio sample rate by n.
 
 .TP
+.BI  "-U " "n"
+Override automatic upsampling rate for G3RUH,
+improving performance when sample rate to baud ratio is low.
+
+.TP
 .BI  "-h " 
 Print frame contents as hexadecimal bytes.
 
@@ -71,6 +76,10 @@ Amount of effort to try fixing frames with an invalid CRC.
 0 (default) = consider only correct frames.
 1 = Try to fix only a single bit.
 more = Try modifying more bits to get a good CRC.
+
+.TP
+.BI  "-e " "n"
+Artificially introduce a desired Bit Error Rate (BER) for testing.
 
 .TP
 .BI  "-L " 

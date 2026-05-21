@@ -983,11 +983,13 @@ static void usage (void) {
 	dw_printf ("               AIS for ship Automatic Identification System.\n");
 	dw_printf ("               EAS for Emergency Alert System (EAS) Specific Area Message Encoding (SAME).\n");
 	dw_printf ("\n");
-	dw_printf ("        -g     Use G3RUH modem rather rather than default for data rate.\n");
+	dw_printf ("        -g     Use G3RUH modem rather than default for data rate.\n");
 	dw_printf ("        -j     2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("        -J     2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("\n");
 	dw_printf ("        -D n   Divide audio sample rate by n.\n");
+	dw_printf ("        -U n   Override automatic upsampling rate for G3RUH,\n");
+	dw_printf ("               improving performance when sample rate to baud ratio is low.\n");
 	dw_printf ("\n");
 	dw_printf ("        -h     Print frame contents as hexadecimal bytes.\n");
 	dw_printf ("\n");
@@ -995,6 +997,7 @@ static void usage (void) {
 	dw_printf ("               0 (default) = consider only correct frames.  \n");
 	dw_printf ("               1 = Try to fix only a single bit.  \n");
 	dw_printf ("               more = Try modifying more bits to get a good CRC.\n");
+	dw_printf ("        -e n   Artificially introduce a desired Bit Error Rate (BER) for testing.\n");
 	dw_printf ("\n");
 	dw_printf ("        -d x   Debug information for FX.25.  Repeat for more detail.\n");
 	dw_printf ("\n");
