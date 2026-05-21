@@ -43,6 +43,7 @@ typedef enum ptt_line_e ptt_line_t;
 enum audio_in_type_e {
 	AUDIO_IN_TYPE_SOUNDCARD,
 	AUDIO_IN_TYPE_SDR_UDP,
+	AUDIO_IN_TYPE_SDR_IQ,
 	AUDIO_IN_TYPE_STDIN };
 
 /* For option to try fixing frames with bad CRC. */
@@ -517,6 +518,7 @@ void audio_wait (int a);
 
 int audio_close (void);
 
+void audio_get_iq_metrics(int a, float *rssi_db, float *snr_db);
 
 #endif  /* ifdef AUDIO_H */
 

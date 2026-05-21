@@ -5316,6 +5316,29 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
+ * IQMETRICS	- Enable display of RSSI/SNR metrics for IQ input mode.
+ */
+	  else if (strcasecmp(t, "iqmetrics") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      p_misc_config->iq_metrics_enabled = 1;
+	    }
+	    else {
+	      if (strcasecmp(t, "on") == 0 || strcasecmp(t, "yes") == 0 || strcmp(t, "1") == 0) {
+	        p_misc_config->iq_metrics_enabled = 1;
+	      }
+	      else if (strcasecmp(t, "off") == 0 || strcasecmp(t, "no") == 0 || strcmp(t, "0") == 0) {
+	        p_misc_config->iq_metrics_enabled = 0;
+	      }
+	      else {
+	        p_misc_config->iq_metrics_enabled = 1;
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: Unexpected parameter '%s' for IQMETRICS on line %d. Assuming ON.\n", t, line);
+	      }
+	    }
+	  }
+
+/*
  * BEACON channel delay every message
  *
  * Original handcrafted style.  Removed in version 1.0.

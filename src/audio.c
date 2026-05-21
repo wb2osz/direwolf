@@ -1,6 +1,7 @@
 
 
 // 
+#include "iq_metrics.h"
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
 //    Copyright (C) 2011, 2012, 2013, 2014, 2015  John Langner, WB2OSZ
@@ -87,12 +88,29 @@
 #include <sys/soundcard.h>
 #endif
 
+/* IQ metrics (RSSI/SNR) per audio device */
+static iq_metrics_t g_iq_metrics[MAX_ADEVS];
+static int g_iq_metrics_inited[MAX_ADEVS];
+
+/* Getter for current IQ metrics */
+void audio_get_iq_metrics(int a, float *rssi_db, float *snr_db) {
+	if (a >= 0 && a < MAX_ADEVS && g_iq_metrics_inited[a]) {
+		if (rssi_db) *rssi_db = g_iq_metrics[a].rssi_db;
+		if (snr_db) *snr_db = g_iq_metrics[a].snr_db;
+	}
+	else {
+		if (rssi_db) *rssi_db = -999.0f;
+		if (snr_db) *snr_db = -999.0f;
+	}
+}
+
 
 #include "audio.h"
 #include "audio_stats.h"
 #include "textcolor.h"
 #include "dtime_now.h"
 #include "demod.h"		/* for alevel_t & demod_get_audio_level() */
+#include "fm_demod.h"		/* for IQ FM demodulation */
 
 
 /* Audio configuration. */
@@ -131,6 +149,13 @@ static struct adev_s {
 	enum audio_in_type_e g_audio_in_type;
 
 	int udp_sock;			/* UDP socket for receiving data */
+
+	/* For IQ input with FM demodulation */
+	struct fm_demod_state_s *fm_state;	/* FM demodulator state */
+	float *iq_buf;				/* Buffer for IQ samples (interleaved floats) */
+	int iq_buf_size;			/* Size of IQ buffer in float pairs */
+	float *audio_buf;			/* Buffer for demodulated audio */
+	int audio_buf_size;			/* Size of audio buffer in samples */
 
 } adev[MAX_ADEVS];
 
@@ -239,6 +264,9 @@ int audio_open (struct audio_s *pa)
 	  adev[a].oss_audio_device_fd = -1;
 #endif
 	  adev[a].udp_sock = -1;
+	  adev[a].fm_state = NULL;
+	  adev[a].iq_buf = NULL;
+	  adev[a].audio_buf = NULL;
 	}
 
 
@@ -305,6 +333,16 @@ int audio_open (struct audio_s *pa)
 	      if (strcasecmp(pa->adev[a].adevice_in,"udp") == 0 ||
 	        strcasecmp(pa->adev[a].adevice_in,"udp:") == 0) {
 	        snprintf (pa->adev[a].adevice_in, sizeof(pa->adev[a].adevice_in), "udp:%d", DEFAULT_UDP_AUDIO_PORT);
+	      }
+	    }
+	    if (strncasecmp(pa->adev[a].adevice_in, "iq:", 3) == 0) {
+	      adev[a].g_audio_in_type = AUDIO_IN_TYPE_SDR_IQ;
+	      /* For IQ, we use stdin by default (from pipe) */
+	      /* Format: iq:48000  where 48000 is the IQ sample rate */
+	      /* Supply default sample rate if none specified. */
+	      if (strcasecmp(pa->adev[a].adevice_in,"iq") == 0 ||
+	        strcasecmp(pa->adev[a].adevice_in,"iq:") == 0) {
+	        snprintf (pa->adev[a].adevice_in, sizeof(pa->adev[a].adevice_in), "iq:48000");
 	      }
 	    } 
 
@@ -433,6 +471,52 @@ int audio_open (struct audio_s *pa)
 	        adev[a].inbuf_size_in_bytes = SDR_UDP_BUF_MAXLEN; 
 	
 	        break;
+
+/*
+ * IQ input with FM demodulation.
+ */
+	      case AUDIO_IN_TYPE_SDR_IQ:
+	      {
+	        int iq_sample_rate;
+	        float max_deviation = 5000.0f;  /* 5 kHz for narrow FM */
+	        
+	        /* Parse sample rate from device name (iq:48000) */
+	        iq_sample_rate = atoi(audio_in_name+3);
+	        if (iq_sample_rate <= 0) {
+	          iq_sample_rate = 48000;  /* Default */
+	        }
+	        
+	        /* Set the audio sample rate to match IQ sample rate */
+	        /* The FM demodulator output will be at the same rate as the IQ input */
+	        pa->adev[a].samples_per_sec = iq_sample_rate;
+	        
+	        /* Initialize FM demodulator */
+	        adev[a].fm_state = fm_demod_init(iq_sample_rate, max_deviation);
+	        if (adev[a].fm_state == NULL) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Failed to initialize FM demodulator\n");
+	          return -1;
+	        }
+	        
+	        /* Allocate buffers for IQ and audio data */
+	        /* IQ buffer: hold enough for reasonable chunk processing */
+	        adev[a].iq_buf_size = 2048;  /* IQ pairs */
+	        adev[a].iq_buf = (float *)malloc(adev[a].iq_buf_size * 2 * sizeof(float));
+	        adev[a].audio_buf = (float *)malloc(adev[a].iq_buf_size * sizeof(float));
+	        
+	        if (adev[a].iq_buf == NULL || adev[a].audio_buf == NULL) {
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf ("Failed to allocate IQ/audio buffers\n");
+	          return -1;
+	        }
+	        
+	        /* Input comes from stdin */
+	        adev[a].inbuf_size_in_bytes = adev[a].iq_buf_size * 2 * sizeof(float);
+	        
+	        text_color_set(DW_COLOR_INFO);
+	        dw_printf ("IQ input mode: %d Hz sample rate, reading from stdin\n", iq_sample_rate);
+	      }
+	      break;
 
 /* 
  * stdin.
@@ -1234,6 +1318,66 @@ int audio_get (int a)
 			res / (save_audio_config_p->adev[a].num_channels * save_audio_config_p->adev[a].bits_per_sample / 8), 
 			save_audio_config_p->statistics_interval);
 
+	    }
+	    break;
+
+/*
+ * IQ input with FM demodulation.
+ */
+	  case AUDIO_IN_TYPE_SDR_IQ:
+
+	    while (adev[a].inbuf_next >= adev[a].inbuf_len) {
+	      int res;
+	      int iq_pairs_read;
+	      int i;
+
+	      /* Read IQ samples from stdin (complex float, interleaved I/Q) */
+	      res = read(STDIN_FILENO, (unsigned char *)adev[a].iq_buf, 
+	                 adev[a].iq_buf_size * 2 * sizeof(float));
+	      
+	      if (res <= 0) {
+	        text_color_set(DW_COLOR_INFO);
+	        dw_printf ("\nEnd of IQ stream on stdin.  Exiting.\n");
+	        exit (0);
+	      }
+
+	      /* Calculate how many IQ pairs we got */
+	      iq_pairs_read = res / (2 * sizeof(float));
+
+			if (iq_pairs_read > 0) {
+				/* Update IQ metrics (RSSI/SNR) before FM demodulation */
+				{
+					float rssi_db = 0.0f, snr_db = 0.0f;
+					if (g_iq_metrics_inited[a] == 0) {
+						iq_metrics_init(&g_iq_metrics[a], (float)save_audio_config_p->adev[a].samples_per_sec);
+						g_iq_metrics_inited[a] = 1;
+					}
+					iq_metrics_process(&g_iq_metrics[a], adev[a].iq_buf, iq_pairs_read * 2, &rssi_db, &snr_db);
+				}
+				/* Demodulate FM: IQ samples -> audio samples */
+				fm_demod_process(adev[a].fm_state, adev[a].iq_buf, 
+												iq_pairs_read, adev[a].audio_buf);
+				/* Convert float audio to 16-bit samples for the demodulator */
+        /* FM demod output range is similar to csdr: typically ±30 */
+        for (i = 0; i < iq_pairs_read; i++) {
+          float sample = adev[a].audio_buf[i];
+          /* Scale and saturate to int16 range */
+          float scaled = sample * 32767.0f;
+          if (scaled > 32767.0f) scaled = 32767.0f;
+          if (scaled < -32768.0f) scaled = -32768.0f;
+          short sample_16 = (short)scaled;
+          
+          /* Store as bytes in input buffer (little-endian) */
+          adev[a].inbuf_ptr[i * 2] = sample_16 & 0xFF;
+          adev[a].inbuf_ptr[i * 2 + 1] = (sample_16 >> 8) & 0xFF;
+        }	        adev[a].inbuf_len = iq_pairs_read * 2;  /* 2 bytes per sample */
+	        adev[a].inbuf_next = 0;
+
+	        audio_stats (a, 
+	                    save_audio_config_p->adev[a].num_channels, 
+	                    iq_pairs_read, 
+	                    save_audio_config_p->statistics_interval);
+	      }
 	    }
 	    break;
 
