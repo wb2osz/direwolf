@@ -4034,13 +4034,12 @@ time_t get_timestamp (decode_aprs_t *A, char *p)
 	}
 
 	struct tm *ptm;
-
+	struct tm tm_buf;
 	time_t ts;
 
 	ts = time(NULL);
-	// FIXME: use gmtime_r instead.
-	// Besides not being thread safe, gmtime could possibly return null.
-	ptm = gmtime(&ts);
+	ptm = gmtime_r(&ts, &tm_buf);
+	if (ptm == NULL) return ((time_t)0);
 
 	pdhm = (void *)p;
 	phms = (void *)p;
