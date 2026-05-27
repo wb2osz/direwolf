@@ -2646,11 +2646,6 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
 	*q2 = '\0';
 	strlcpy (A->g_query_type, stemp+1, sizeof(A->g_query_type));
 
-// TODO: remove debug
-
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf("DEBUG: General Query type = \"%s\"\n", A->g_query_type);
-
 	p = q2 + 1;
 	if (strlen(p) == 0) {
 	  return;
@@ -2723,11 +2718,6 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
 	  return;
 	}
 	
-// TODO: remove debug
-
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf("DEBUG: General Query footprint = %.6f %.6f %.2f\n", lat, lon, radius);
-
 
 } /* end aprs_general_query */
 
