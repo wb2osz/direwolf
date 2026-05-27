@@ -4539,7 +4539,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
 	  }
 
-	  e = regcomp (&bad_tone_re, "(^|[^0-9.])([6789][0-9]\\.[0-9]|[12][0-9][0-9]\\.[0-9]|67|77|100|123)($|[^0-9.])", REG_EXTENDED);
+	  e = regcomp (&bad_tone_re, "(^|[^0-9.])([6789][0-9]\\.[0-9]|[12][0-9][0-9]\\.[0-9]|67|77|100|123)($|[^0-9.%])", REG_EXTENDED);
 	  if (e) {
 	    regerror (e, &bad_tone_re, emsg, sizeof(emsg));
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
@@ -4938,9 +4938,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  }
 	}
 
-// TODO: Don't complain if followed by %.  e.g. Battery voltage 100%.
-
-	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0)
 	{
 	  char bad1[30];	/* original 99.9 or 999.9 format or one of 67 77 100 123 */
 	  char bad2[30];	/* 99.9 or 999.9 format.  ".0" appended for special cases. */
