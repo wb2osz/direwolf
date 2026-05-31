@@ -2312,32 +2312,70 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    if (strcasecmp(t, "GPIO") == 0) {
+if (strcasecmp(t, "GPIO") == 0) {
 
 #if __WIN32__
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file line %d: %s with GPIO is only available on Linux.\n", line, itname);
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Config file line %d: %s with GPIO is only available on Linux.\n", line, itname);
 #else
-	      t = split(NULL,0);
-	      if (t == NULL) {
-	        text_color_set(DW_COLOR_ERROR);
-		dw_printf ("Config file line %d: Missing GPIO number for %s.\n", line, itname);
-		continue;
-	      }
+        t = split(NULL,0);
+        if (t == NULL) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Config file line %d: Missing GPIO number for %s.\n", line, itname);
+          continue;
+        }
 
-	      if (*t == '-') {
-	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t+1);
-		p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 1;
-	      }
-	      else {
-	        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t);
-		p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 0;
-	      }
-	      p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].method = PTT_METHOD_GPIO;
+        if (*t == '-') {
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t+1);
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 1;
+        }
+        else {
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t);
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 0;
+        }
+        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].method = PTT_METHOD_GPIO;
 #endif
-	    }
-	  }
+      }
+      else if (strcasecmp(t, "GPIOD") == 0) {
 
+#if __WIN32__
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Config file line %d: %s with GPIOD is only available on Linux.\n", line, itname);
+#elif !defined(USE_GPIOD)
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Config file line %d: %s with GPIOD requires libgpiod support.\n", line, itname);
+#else
+        // Chip path e.g. /dev/gpiochip0
+        t = split(NULL,0);
+        if (t == NULL) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Config file line %d: Missing chip path for %s GPIOD.\n", line, itname);
+          continue;
+        }
+        strlcpy (p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_chip,
+                 t,
+                 sizeof(p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_chip));
+
+        // GPIO line number, optionally prefixed with - for invert
+        t = split(NULL,0);
+        if (t == NULL) {
+          text_color_set(DW_COLOR_ERROR);
+          dw_printf ("Config file line %d: Missing GPIO line number for %s GPIOD.\n", line, itname);
+          continue;
+        }
+
+        if (*t == '-') {
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t+1);
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 1;
+        }
+        else {
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].in_gpio_num = atoi(t);
+          p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].invert = 0;
+        }
+        p_audio_config->achan[channel].ictrl[ICTYPE_TXINH].method = PTT_METHOD_GPIOD;
+#endif
+      }
+    }
 
 /*
  * DWAIT n		- Extra delay for receiver squelch. n = 10 mS units.

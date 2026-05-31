@@ -495,7 +495,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	}
 	/* Wait for udev to adjust permissions after enabling GPIO. */
 	/* https://github.com/wb2osz/direwolf/issues/176 */
-	SLEEP_MS(250);
+	SLEEP_MS(500);		/* Increased from 250ms - udev can take longer on newer kernels. */
 	close (fd);
 
 /*
@@ -1573,12 +1573,61 @@ int get_input (int it, int chan)
 	  else {
 	    return 0;
 	  }
-	}
-#endif
-
-	return -1;	/* Method was none, or something went wrong */
 }
 
+#if defined(USE_GPIOD)
+  if (save_audio_config_p->achan[chan].ictrl[it].method == PTT_METHOD_GPIOD) {
+#if LIBGPIOD_VERSION_MAJOR >= 2
+    struct gpiod_chip *chip;
+    struct gpiod_line_request *request;
+    struct gpiod_request_config *req_cfg;
+    struct gpiod_line_settings *settings;
+    struct gpiod_line_config *line_cfg;
+    int line_number = save_audio_config_p->achan[chan].ictrl[it].in_gpio_num;
+    const char *chip_path = save_audio_config_p->achan[chan].ictrl[it].in_gpio_chip;
+    int value;
+
+    chip = gpiod_chip_open(chip_path);
+    if (!chip) {
+      dw_printf ("get_input: can't open GPIOD chip %s\n", chip_path);
+      return -1;
+    }
+
+    settings = gpiod_line_settings_new();
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
+    line_cfg = gpiod_line_config_new();
+    unsigned int offset = (unsigned int)line_number;
+    gpiod_line_config_add_line_settings(line_cfg, &offset, 1, settings);
+    req_cfg = gpiod_request_config_new();
+    gpiod_request_config_set_consumer(req_cfg, "direwolf-txinh");
+    request = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+
+    gpiod_request_config_free(req_cfg);
+    gpiod_line_config_free(line_cfg);
+    gpiod_line_settings_free(settings);
+
+    if (!request) {
+      dw_printf ("get_input: can't request GPIOD line %d\n", line_number);
+      gpiod_chip_close(chip);
+      return -1;
+    }
+
+    value = gpiod_line_request_get_value(request, (unsigned int)line_number);
+    gpiod_line_request_release(request);
+    gpiod_chip_close(chip);
+
+    if (value == GPIOD_LINE_VALUE_ERROR) return -1;
+
+    int active = (value == GPIOD_LINE_VALUE_ACTIVE) ? 1 : 0;
+    if (save_audio_config_p->achan[chan].ictrl[it].invert) active = !active;
+    return active;
+#endif  /* LIBGPIOD_VERSION_MAJOR >= 2 */
+  }
+#endif  /* USE_GPIOD */
+#endif  /* !__WIN32__ */
+
+  return -1;      /* Method was none, or something went wrong */
+}
 /*-------------------------------------------------------------------
  *
  * Name:        ptt_term
