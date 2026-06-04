@@ -359,8 +359,8 @@ struct audio_s {
 
 		int in_gpio_num;	/* GPIO number */
 
-                char in_gpio_chip[MAX_GPIO_NAME_LEN];
-                                        /* GPIOD chip device path e.g. /dev/gpiochip0 */
+		char in_gpio_chip[MAX_GPIO_NAME_LEN];
+					/* GPIOD chip device path e.g. /dev/gpiochip0 */
 
 		char in_gpio_name[MAX_GPIO_NAME_LEN];
 					/* originally, gpio number NN was assumed to simply */
@@ -369,14 +369,8 @@ struct audio_s {
 					/* This is filled in by ptt_init so we don't have to */
 					/* recalculate it each time we access it. */
 
-int invert;             /* 1 = active low */
-
-#if USE_GPIOD
-#if LIBGPIOD_VERSION_MAJOR >= 2
-            gpio_num_t in_gpio_num_gpiod;  /* Handle from libgpiod. Valid only when method is PTT_METHOD_GPIOD. */
-#endif
-#endif
-        } ictrl[NUM_ICTYPES];
+		int invert;		/* 1 = active low */
+	    } ictrl[NUM_ICTYPES];
 	/* Transmit timing. */
 
 	    int dwait;			/* First wait extra time for receiver squelch. */

@@ -495,7 +495,7 @@ void export_gpio(int ch, int ot, int invert, int direction)
 	}
 	/* Wait for udev to adjust permissions after enabling GPIO. */
 	/* https://github.com/wb2osz/direwolf/issues/176 */
-	SLEEP_MS(500);		/* Increased from 250ms - udev can take longer on newer kernels. */
+	SLEEP_MS(250);
 	close (fd);
 
 /*
