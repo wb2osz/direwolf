@@ -1470,8 +1470,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 	  n = read_from_socket (client_sock[client], (char *)(&cmd.hdr), sizeof(cmd.hdr));
 	  if (n != sizeof(cmd.hdr)) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\nError getting message header from AGW client application %d.\n", client);
-	    dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
+	    dw_printf ("\nAGW client application %d has disappeared.\n", client);
+	    //dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
 	    dw_printf ("Closing connection.\n\n");
 #if __WIN32__
 	    closesocket (client_sock[client]);
