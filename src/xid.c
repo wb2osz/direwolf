@@ -132,7 +132,7 @@
  *		info_len	- Number of bytes in information part of frame.
  *				  Could be 0.
  *
- *		desc_size	- Size of desc.  100 is good.
+ *		desc_size	- Size of desc.  Seeing 150 result length so make it bigger
  *
  * Outputs:	result		- Structure with extracted values.
  *
@@ -739,7 +739,7 @@ int main (int argc, char *argv[]) {
 	struct xid_param_s param2;
 	int n;
 	unsigned char info[80];	// Currently max of 27 but things can change.
-	char desc[200];		// I've seen 109.
+	char desc[256];		// I've seen 150.
 
 
 /* parse example. */
