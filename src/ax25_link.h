@@ -48,6 +48,13 @@
 						//  - Or the new frame N after wrap-around?
 						// This ambiguity makes SREJ unsafe with a window anywhere near the modulus.
 
+#define AX25_K_MAXFRAME_EXTENDED_START_SAFE 8	// We ran into a situation where we sent 32 I frames
+						// immediately after connecting.  Then we got an XID frame
+						// saying, "I can only handle 16 due to memory constraints."
+						// Let's try starting with a small value, which should be safe,
+						// until the negotiation is complete.  This is different than
+						// default which is what we suggest using in the negotiation.
+						// Should probably be configurable but let's try it first.
 
 // Call once at startup time.
 
