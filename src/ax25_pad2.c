@@ -100,18 +100,53 @@
  *					with XID.  But if we start monitoring two other
  *					stations that are already conversing, we don't know.
  *
- *			RR note:	It seems that some implementations put a hint
- *					in the "RR" reserved bits.
+ *			RR note:	It seems that some implementations put a hint in the "RR" reserved bits.
  *					http://www.tapr.org/pipermail/ax25-layer2/2005-October/000297.html (now broken)
- *					https://elixir.bootlin.com/linux/latest/source/net/ax25/ax25_addr.c#L237
+ *					https://elixir.bootlin.com/linux/latest/source/net/ax25/ax25_addr.c#L237 (now broken)
  *
  *					The RR bits can also be used for "DAMA" which is
  *					some sort of channel access coordination scheme.
- *					http://internet.freepage.de/cgi-bin/feets/freepage_ext/41030x030A/rewrite/hennig/afu/afudoc/afudama.html
+ *					http://internet.freepage.de/cgi-bin/feets/freepage_ext/41030x030A/rewrite/hennig/afu/afudoc/afudama.html (now broken)
  *					Neither is part of the official protocol spec.
+ *
+ *					AI Summary:
+ *
+ *					Standard AX.25 Protocol Specification: Dictates that both Reserved bits 
+ *					(Bit 5 and Bit 6) must be set to 1. This means the upper nibble naturally
+ *					masks to include 0x60 for these bits.
+ *
+ *					The Linux Precedent: When the Linux kernel formats a frame for a connection
+ *					negotiated in Modulo 128 (AX25_MODULUS_128), it clears Bit 6 (0x40) to
+ *					0 specifically on the Source SSID byte (which is the 14th byte in a standard
+ *					AX.25 header). Bit 5 (0x20) remains set to 1.
+ *
+ *					Because a stateless monitor or packet sniffer (like tcpdump or Wireshark)
+ *					can read the fixed address header before parsing the variable-length control
+ *					field, it checks this bit. If the bit is 0, it safely assumes a 2-byte
+ *					Modulo 128 control field follows.
+ *
+ *					Where to Find This in the Code:  In the Linux Kernel Source
+ *
+ *					The address masking happens when the kernel constructs the outbound packet
+ *					header. You can find this in the official Linux kernel tree under the network
+ *					path:  net/ax25/ax25_addr.c
+ *
+ *					Inside the function ax25_addr_build(), the stack copies the callsigns into the
+ *					buffer and sets up the packet layout. You will find conditional logic resembling this:
+ *
+ *					--- Standard address building sets bits 5 and 6 to 1 (0x60)
+ *					buf[6]  &= 0x1F; buf[6]  |= 0x60;	--- Dest SSID
+ *					buf[13] &= 0x1F; buf[13] |= 0x60;	--- Source SSID
+ *
+ *					--- If Modulo 128 is active, clear bit 6 (0x40) on the Source SSID
+ *					if (modulus == AX25_MODULUS_128)
+ *					    buf[13] &= ~0x40;
+ *
  *
  *	* One byte Protocol ID 		- Only for I and UI frames.
  *					Normally we would use 0xf0 for no layer 3.
+ *					IMHO, it is unfortunate that a new code was not allocated for APRS.
+ *					That woulld allow us to distinguish APRS from other AX.25 UI beacons.
  *
  *	Finally the Information Field. The initial max size is 256 but it 
  *	can be negotiated higher if both ends agree.
@@ -155,7 +190,7 @@
 
 extern int ax25memdebug;
 
-static int set_addrs (packet_t pp, char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr);
+static int set_addrs (packet_t pp, char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr, int modulo);
 
 //#if AX25MEMDEBUG
 //#undef AX25MEMDEBUG
@@ -225,7 +260,7 @@ packet_t ax25_u_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 
 	this_p->modulo = 0;
 
-	if ( ! set_addrs (this_p, addrs, num_addr, cr)) {
+	if ( ! set_addrs (this_p, addrs, num_addr, cr, 0)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Internal error in %s: Could not set addresses for U frame.\n", __func__);
 	  ax25_delete (this_p);
@@ -387,7 +422,7 @@ packet_t ax25_s_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	
 	if (this_p == NULL) return (NULL);
 
-	if ( ! set_addrs (this_p, addrs, num_addr, cr)) {
+	if ( ! set_addrs (this_p, addrs, num_addr, cr, modulo)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Internal error in %s: Could not set addresses for S frame.\n", __func__);
 	  ax25_delete (this_p);
@@ -556,7 +591,7 @@ packet_t ax25_i_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
 	
 	if (this_p == NULL) return (NULL);
 
-	if ( ! set_addrs (this_p, addrs, num_addr, cr)) {
+	if ( ! set_addrs (this_p, addrs, num_addr, cr, modulo)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Internal error in %s: Could not set addresses for I frame.\n", __func__);
 	  ax25_delete (this_p);
@@ -679,6 +714,9 @@ packet_t ax25_i_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
  *
  *		cr		- cr_cmd command frame, cr_res for a response frame.
  *
+ *		modulo		- 8, 128, or 0 for not applicable.
+ *				  Used to set a hint for stateless monitoring.
+ *
  * Output:	pp->frame_data 	- 7 bytes for each address.
  *
  *		pp->frame_len	- num_addr * 7
@@ -690,12 +728,13 @@ packet_t ax25_i_frame (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_ad
  *------------------------------------------------------------------------------*/
 
 
-static int set_addrs (packet_t pp, char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr)
+static int set_addrs (packet_t pp, char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num_addr, cmdres_t cr, int modulo)
 {
 	int n;
 
 	assert (pp->frame_len == 0);
 	assert (cr == cr_cmd || cr == cr_res);
+	assert (modulo == 8 || modulo == 128 || modulo == 0);
 
 	if (num_addr < AX25_MIN_ADDRS || num_addr > AX25_MAX_ADDRS) {
 	  text_color_set(DW_COLOR_DEBUG);
@@ -737,6 +776,8 @@ static int set_addrs (packet_t pp, char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN]
 	      break;
 	   case AX25_SOURCE:
 	      if (cr == cr_res) *pa |= 0x80;
+	      // See comments about RR bits near beginning.
+	      if (modulo == 128) *pa &= ~0x40;
 	      break;
 	   default:
 	    break;
