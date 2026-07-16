@@ -1978,6 +1978,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	}
 
 /* ack or rej?  Message number is required for these. */
+// A lot of duplicate code in two cases.
 
 	else if (strncasecmp(p->message,"ack",3) == 0) {
 	  if (strncmp(p->message,"ack",3) != 0) {
@@ -2001,6 +2002,13 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      *p = '\0';
 	  }
  
+	  // Look for invalid case:  ABC>APRS::XYZ      :ack1348{4205
+	  char *r = strchr(A->g_message_number, '{');
+	  if (r != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Additional message identifier %s, at end, is not valid for ack.\n", r);
+	      *r = '\0';
+	  }
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -2027,6 +2035,13 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      *p = '\0';
 	  }
 
+	  // Look for invalid case:  ABC>APRS::XYZ      :rej1348{4205
+	  char *r = strchr(A->g_message_number, '{');
+	  if (r != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Additional message identifier %s, at end, is not valid for rej.\n", r);
+	      *r = '\0';
+	  }
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -2045,6 +2060,9 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{12}
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{12}34
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{toolong
+//
+// Error: Extra message id at end of ack.
+// MPAD>APRS,qAR,X32DVA::KD4DRA-10:ack1348{4205
 
 	else {
 	  // Normal messaage case.  Look for message number.
