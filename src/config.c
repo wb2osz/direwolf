@@ -5541,6 +5541,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Maximum number of beacons exceeded on line %d.\n", line);
+	      dw_printf ("Increase MAX_BEACONS value in config.h and rebuild.\n");
 	      continue;
 	    }
 	  }
