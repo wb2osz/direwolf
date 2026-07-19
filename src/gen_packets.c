@@ -76,6 +76,7 @@
 #include "morse.h"
 #include "dtmf.h"
 #include "fx25.h"
+#include "rg_encoder.h"
 
 
 /* Own random number generator so we can get */
@@ -97,10 +98,45 @@ static int audio_file_close (void);
 static int g_add_noise = 0;
 static float g_noise_level = 0;
 static int g_morse_wpm = 0;		/* Send morse code at this speed. */
+static int g_rattlegram = 0;	/* -B RATTLEGRAM flag */
 
 
 static struct audio_s modem;
 
+
+static void send_rattlegram (const char *msg, int amplitude)
+{
+    int msg_len = strlen(msg);
+    if (msg_len <= 0 || msg_len > 85) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("Rattlegram message must be 1-85 bytes (mode 16).\n");
+        return;
+    }
+
+    rg_encoder_t *enc = rg_encoder_create(48000);
+    rg_encoder_configure(enc, (const uint8_t *)msg, msg_len, "ABC", 1500, 2, 0);
+
+    int ext = rg_encoder_extended_length(enc);
+    int16_t *buf = (int16_t *)malloc(ext * sizeof(int16_t));
+    int amp_scale = amplitude; /* amplitude is 0-200, encoder produces full range */
+
+    int sym_count = 0;
+    while (1) {
+        int produced = rg_encoder_produce(enc, buf);
+        if (produced <= 0) break;
+        sym_count++;
+        for (int i = 0; i < ext; i++) {
+            int sample = (buf[i] * amp_scale) / 100;
+            if (sample < -32767) sample = -32767;
+            if (sample > 32767) sample = 32767;
+            audio_put(0, sample & 0xff);
+            audio_put(0, (sample >> 8) & 0xff);
+        }
+    }
+
+    rg_encoder_free(enc);
+    free(buf);
+}
 
 static void send_packet (char *str)
 {
@@ -227,7 +263,7 @@ int main(int argc, char **argv)
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:",
+          c = getopt_long(argc, argv, "gjJm:s:a:b:B:r:n:N:o:z:82M:X:R",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -456,6 +492,16 @@ int main(int argc, char **argv)
 	      modem.fx25_xmit_enable = atoi(optarg);
               break;
 
+            case 'R':
+              /* -R for Rattlegram OFDM modem */
+              g_rattlegram = 1;
+              modem.achan[0].modem_type = MODEM_RATTLEGRAM;
+              modem.adev[0].samples_per_sec = 48000;
+              modem.adev[0].bits_per_sample = 16;
+              text_color_set(DW_COLOR_INFO);
+              dw_printf ("Using Rattlegram OFDM modem at 48000 Hz.\n");
+              break;
+
             case '?':
 
               /* Unknown option message was already printed. */
@@ -578,9 +624,20 @@ int main(int argc, char **argv)
           }
 
           while (fgets (str, sizeof(str), input_fp) != NULL) {
-            text_color_set(DW_COLOR_REC); 
-            dw_printf ("%s", str);
-	    send_packet (str);
+            /* Remove trailing newline */
+            int slen = strlen(str);
+            while (slen > 0 && (str[slen-1] == '\n' || str[slen-1] == '\r'))
+                str[--slen] = '\0';
+            if (g_rattlegram) {
+                text_color_set(DW_COLOR_REC);
+                dw_printf ("%s\n", str);
+                send_rattlegram(str, amplitude);
+            }
+            else {
+                text_color_set(DW_COLOR_REC); 
+                dw_printf ("%s", str);
+                send_packet (str);
+            }
 	  }
 
           if (input_fp != stdin) {
@@ -634,7 +691,13 @@ int main(int argc, char **argv)
 
 	    snprintf (stemp, sizeof(stemp), "WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  %04d of %04d", i, packet_count);
 
-	    send_packet (stemp);
+	    if (g_rattlegram) {
+	      char rg_msg[86];
+	      snprintf(rg_msg, sizeof(rg_msg), "Rattlegram packet %04d of %04d", i, packet_count);
+	      send_rattlegram(rg_msg, amplitude);
+	    } else {
+	      send_packet (stemp);
+	    }
 
 	  }
 	}
@@ -644,10 +707,15 @@ int main(int argc, char **argv)
  * Builtin default 4 packets.
  */
 
+	if (g_rattlegram) {
+	  send_rattlegram("The quick brown fox jumps over the lazy dog!  RATTLEGRAM TEST", amplitude);
+	}
+	else {
 	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  1 of 4");
 	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  2 of 4");
 	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  3 of 4");
 	  send_packet ("WB2OSZ-15>TEST:,The quick brown fox jumps over the lazy dog!  4 of 4");
+	}
 	}
 
 	audio_file_close();
@@ -670,6 +738,7 @@ static void usage (char **argv)
 	dw_printf ("  -j            2400 bps QPSK compatible with direwolf <= 1.5.\n");
 	dw_printf ("  -J            2400 bps QPSK compatible with MFJ-2400.\n");
 	dw_printf ("  -X n          Generate FX.25 frames. Specify number of check bytes: 16, 32, or 64.\n");
+	dw_printf ("  -R            Rattlegram OFDM modem (48000 Hz, 1500 Hz carrier).\n");
 	dw_printf ("  -m <number>   Mark frequency.  Default is %d.\n", DEFAULT_MARK_FREQ);
 	dw_printf ("  -s <number>   Space frequency.  Default is %d.\n", DEFAULT_SPACE_FREQ);
 	dw_printf ("  -r <number>   Audio sample Rate.  Default is %d.\n", DEFAULT_SAMPLES_PER_SEC);

@@ -280,6 +280,9 @@ int main (int argc, char *argv[])
 	      else if (strcasecmp(optarg, "EAS") == 0) {
 	        B_opt = 23456;	// See special case below.
 	      }
+	      else if (strcasecmp(optarg, "RATTLEGRAM") == 0) {
+	        B_opt = 34567;	// See special case below.
+	      }
 	      else {
 	        B_opt = atoi(optarg);
 	      }
@@ -466,6 +469,12 @@ int main (int argc, char *argv[])
 	  my_audio_config.achan[0].mark_freq = 0;
 	  my_audio_config.achan[0].space_freq = 0;
 	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));	// avoid getting default later.
+	}
+	else if (my_audio_config.achan[0].baud == 34567) {
+	  my_audio_config.achan[0].modem_type = MODEM_RATTLEGRAM;
+	  my_audio_config.achan[0].mark_freq = 0;
+	  my_audio_config.achan[0].space_freq = 0;
+	  strlcpy (my_audio_config.achan[0].profiles, " ", sizeof(my_audio_config.achan[0].profiles));
 	}
 	else if (my_audio_config.achan[0].baud == 23456) {
 	  my_audio_config.achan[0].modem_type = MODEM_EAS;

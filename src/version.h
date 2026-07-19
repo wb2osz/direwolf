@@ -7,8 +7,8 @@
 
 // This now comes from compile command line options.
 
-//#define MAJOR_VERSION 1
-//#define MINOR_VERSION 6
+#define MAJOR_VERSION 1
+#define MINOR_VERSION 6
 //#define EXTRA_VERSION "Beta Test"
 
 
@@ -17,5 +17,6 @@
 
 #define USER_DEF_USER_ID 'D'		// user id D for direwolf
 
-#define USER_DEF_TYPE_AIS 'A'		// data type A for AIS NMEA sentence
-#define USER_DEF_TYPE_EAS 'E'		// data type E for EAS broadcasts
+#define USER_DEF_TYPE_AIS 'A'	// data type A for AIS NMEA sentence
+#define USER_DEF_TYPE_EAS 'E'	// data type E for EAS broadcasts
+#define USER_DEF_TYPE_RATTL 'R'	// data type R for Rattlegram OFDM

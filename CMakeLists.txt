@@ -197,9 +197,9 @@ if (C_CLANG OR C_GCC)
   #
   ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   if(FREEBSD)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   else()
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
   endif()
   #
   #
@@ -219,9 +219,9 @@ elseif (C_MSVC)
 endif()
 
 if (C_CLANG)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ferror-limit=1")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ")
 elseif (C_GCC)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fmax-errors=1")
+  # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fmax-errors=1")
 endif()
 
 # set installation directories
@@ -247,7 +247,7 @@ endif(WIN32 OR CYGWIN)
 
 # requirements
 set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
+#find_package(Threads REQUIRED)
 
 find_package(GPSD)
 if(GPSD_FOUND)
