@@ -168,12 +168,14 @@ static float rg_energy(struct rg_chan_state *s, int start, int len)
 static int rg_decode_preamble(struct rg_chan_state *s, int pos)
 {
     int sl = s->symbol_length;
+    int gl = s->guard_length;
     float cfo_rad = RG_CARRIER_FREQ * 2.0f * (float)M_PI / s->rate;
-    if (pos + sl > s->ring_len) return -1;
+    /* pos points to symbol START (includes guard). Skip guard to get symbol body. */
+    if (pos + gl + sl > s->ring_len) return -1;
 
-    /* CFO correction + FFT (read from symbol START, not pos+gl) */
+    /* CFO correction + FFT (read from symbol BODY, skipping guard interval) */
     for (int i = 0; i < sl; i++)
-        s->temp[i] = rg_cmul(s->ring_buf[pos + i], (rg_cplx_t){cosf(-cfo_rad * i), sinf(-cfo_rad * i)});
+        s->temp[i] = rg_cmul(s->ring_buf[pos + gl + i], (rg_cplx_t){cosf(-cfo_rad * i), sinf(-cfo_rad * i)});
     rg_fft_forward(s->fwd_fft, s->freq, s->temp);
 
     /* Extract preamble carriers at bins -127..+127 (after CFO, no carrier_offset) */
@@ -184,27 +186,58 @@ static int rg_decode_preamble(struct rg_chan_state *s, int pos)
         pre_car[i] = s->freq[b];
     }
 
-    /* Undo differential encoding */
-    rg_cplx_t pre_dem[RG_PRE_SEQ_LEN];
-    pre_dem[0] = pre_car[0];
-    for (int i = 1; i < RG_PRE_SEQ_LEN; i++)
-        pre_dem[i] = rg_cdiv(pre_car[i], pre_car[i-1]);
-
-    /* Undo MLS spreading */
+    /* Undo MLS spreading first, then differential encoding (matching C++ decoder order) */
     rg_mls_t seq;
     rg_mls_init(&seq, RG_PRE_SEQ_POLY, 1);
     for (int i = 0; i < RG_PRE_SEQ_LEN; i++) {
         int nrz = 1 - 2 * rg_mls_next(&seq);
-        rg_cplx_t raw = rg_cmul(pre_dem[i], rg_cf((float)nrz));
-        int llr = (int)(raw.re * 127.0f);
+        pre_car[i] = rg_cmul(pre_car[i], rg_cf((float)nrz));
+    }
+
+    /* Undo differential encoding (matching C++: demod_or_erase for ALL carriers including i=0) */
+    /* Carrier 0 uses pilot at bin(-128) as reference */
+    int pilot_bin = (-128 + sl) % sl;
+    rg_cplx_t pilot = s->freq[pilot_bin];
+    rg_cplx_t pre_dem[RG_PRE_SEQ_LEN];
+    pre_dem[0] = rg_cdiv(pre_car[0], pilot);
+    for (int i = 1; i < RG_PRE_SEQ_LEN; i++)
+        pre_dem[i] = rg_cdiv(pre_car[i], pre_car[i-1]);
+
+    /* Extract soft values */
+    for (int i = 0; i < RG_PRE_SEQ_LEN; i++) {
+        int llr = (int)(pre_dem[i].re * 127.0f);
         if (llr > 127) llr = 127;
         if (llr < -127) llr = -127;
         s->soft_pre[i] = (int8_t)llr;
     }
 
-    /* BCH OSD decode */
-    if (!rg_bch_decode(s->data_bch, s->soft_pre))
+    /* BCH majority-vote decode */
+#ifdef RG_DEBUG
+    {
+        int pos_cnt = 0, neg_cnt = 0;
+        for (int i = 0; i < 255; i++) {
+            if (s->soft_pre[i] > 0) pos_cnt++;
+            else neg_cnt++;
+        }
+        fprintf(stderr, "RG: pre_pos=%d soft: pos=%d neg=%d first10=", pos, pos_cnt, neg_cnt);
+        for (int i = 0; i < 10; i++) fprintf(stderr, "%d ", s->soft_pre[i]);
+        fprintf(stderr, "\n");
+    }
+#endif
+    if (!rg_bch_decode(s->data_bch, s->soft_pre)) {
+#ifdef RG_DEBUG
+        fprintf(stderr, "RG: BCH CRC fail at pre_pos=%d\n", pos);
+#endif
         return -1;
+    }
+#ifdef RG_DEBUG
+    {
+        uint64_t md = 0;
+        for (int i = 0; i < 55; i++)
+            md |= ((uint64_t)((s->data_bch[i/8] >> (7-(i%8))) & 1)) << i;
+        fprintf(stderr, "RG: BCH OK mode=%d call=%ld at pre_pos=%d\n", (int)(md&255), (long)(md>>8), pos);
+    }
+#endif
 
     /* Extract metadata (big-endian bit order) */
     uint64_t md = 0;
@@ -244,12 +277,14 @@ static int rg_decode_preamble(struct rg_chan_state *s, int pos)
 static void rg_decode_payload_symbol(struct rg_chan_state *s, int pos)
 {
     int sl = s->symbol_length;
+    int gl = s->guard_length;
     float cfo_rad = RG_CARRIER_FREQ * 2.0f * (float)M_PI / s->rate;
-    if (pos + sl > s->ring_len) return;
+    /* pos points to symbol START (includes guard). Skip guard to get symbol body. */
+    if (pos + gl + sl > s->ring_len) return;
 
-    /* CFO correction + FFT (read from symbol START, not pos+gl) */
+    /* CFO correction + FFT (read from symbol BODY, skipping guard interval) */
     for (int i = 0; i < sl; i++)
-        s->temp[i] = rg_cmul(s->ring_buf[pos + i], (rg_cplx_t){cosf(-cfo_rad * i), sinf(-cfo_rad * i)});
+        s->temp[i] = rg_cmul(s->ring_buf[pos + gl + i], (rg_cplx_t){cosf(-cfo_rad * i), sinf(-cfo_rad * i)});
     rg_fft_forward(s->fwd_fft, s->freq, s->temp);
 
     if (s->symbol_number < 0) {
@@ -344,7 +379,11 @@ static int rg_process_frame(struct rg_chan_state *s)
     for (int i = 0; i < data_bits / 8; i++)
         s->payload[i] ^= (uint8_t)rg_xorshift32_next(&scrambler);
 
-    return data_bits / 8;
+    /* Strip trailing zero padding */
+    int plen = data_bits / 8;
+    while (plen > 0 && s->payload[plen - 1] == 0) plen--;
+    if (plen <= 0) return 0;
+    return plen;
 }
 
 /* ---- Frame detection ---- */
@@ -376,17 +415,16 @@ static int rg_find_frame(struct rg_chan_state *s, int *preamble_pos_out)
         sym_energy[i] = rg_energy(s, i * ext, ext);
     }
 
-    /* Estimate noise floor (median of all symbol energies) */
-    float *sorted = (float *)malloc(max_syms * sizeof(float));
-    memcpy(sorted, sym_energy, max_syms * sizeof(float));
-    for (int a = 1; a < max_syms; a++) {
-        float t = sorted[a];
-        int b = a - 1;
-        while (b >= 0 && sorted[b] > t) { sorted[b+1] = sorted[b]; b--; }
-        sorted[b+1] = t;
-    }
-    float noise_floor = sorted[max_syms / 4]; /* 25th percentile */
-    float threshold = noise_floor + 5.0f; /* Slightly above noise floor */
+    /* Find the frame by looking for a block of high-energy symbols followed by silence.
+     * The frame structure is: [noise 0-3] [SC] [preamble] [payload x4] [silence+]
+     * We need at least 7 symbols (noise+SC+preamble+4payloads) before silence.
+     * Use a simple threshold: any symbol with energy > 1% of max energy is "signal". */
+
+    float max_energy = 0;
+    for (int i = 0; i < max_syms; i++)
+        if (sym_energy[i] > max_energy)
+            max_energy = sym_energy[i];
+    float threshold = max_energy * 0.01f;
 
     /* Find sequences of high-energy symbols */
     int best_start = -1;
@@ -398,7 +436,7 @@ static int rg_find_frame(struct rg_chan_state *s, int *preamble_pos_out)
             while (run_end + 1 < max_syms && sym_energy[run_end + 1] > threshold)
                 run_end++;
             int run_len = run_end - i + 1;
-            if (run_len >= 4 && run_len > best_len) {
+            if (run_len >= 7 && run_len > best_len) {
                 best_len = run_len;
                 best_start = i;
             }
@@ -406,7 +444,15 @@ static int rg_find_frame(struct rg_chan_state *s, int *preamble_pos_out)
         }
     }
 
-    if (best_start >= 0 && best_len >= 4) {
+    #ifdef RG_DEBUG
+    fprintf(stderr, "RG: energies: ");
+    for (int i = 0; i < max_syms && i < 12; i++)
+        fprintf(stderr, "%d:%.0f ", i, sym_energy[i]);
+    fprintf(stderr, "thresh=%.0f best_start=%d best_len=%d\n",
+            threshold, best_start, best_len);
+#endif
+
+    if (best_start >= 0 && best_len >= 7) {
         /* The frame starts at best_start * ext.
          * Frame structure within the high-energy run:
          * [noise 0-3] [SC sync] [preamble] [payload x4]
@@ -422,32 +468,26 @@ static int rg_find_frame(struct rg_chan_state *s, int *preamble_pos_out)
             int mode = rg_decode_preamble(s, pre_pos);
 
             if (mode > 0) {
-                /* Found valid preamble! Return positions of symbol STARTS. */
                 int pay0_idx = pre_idx + 1;
-                *preamble_pos_out = pre_pos;  /* Symbol start of preamble */
+                *preamble_pos_out = pre_pos;
                 free(sym_energy);
-                free(sorted);
-                return pay0_idx * ext;  /* Symbol start of first payload */
+                return pay0_idx * ext;
             }
         }
 
-        /* Fallback: if BCH preamble decode failed, use best_start as noise_count.
-         * The first high-energy symbol is the SC sync, so preamble is at best_start+1,
-         * and first payload is at best_start+2. */
+        /* Fallback: assume first high-energy symbol is SC sync */
         {
             int pre_idx = best_start + 1;
             int pay0_idx = best_start + 2;
             if (pay0_idx + 3 < best_start + best_len) {
                 *preamble_pos_out = pre_idx * ext;
                 free(sym_energy);
-                free(sorted);
                 return pay0_idx * ext;
             }
         }
     }
 
     free(sym_energy);
-    free(sorted);
     return 0;
 }
 
@@ -555,6 +595,10 @@ void demod_rattlegram_process_sample(int chan, int subchan, int sam,
         /* Try to find a frame in the buffer */
         int preamble_pos = 0;
         int pay0_pos = rg_find_frame(s, &preamble_pos);
+#ifdef RG_DEBUG
+        fprintf(stderr, "RG: find_frame pay0_pos=%d preamble_pos=%d ring_len=%d\n",
+                pay0_pos, preamble_pos, s->ring_len);
+#endif
 
         if (pay0_pos > 0) {
             /* Frame found! Start decoding. */

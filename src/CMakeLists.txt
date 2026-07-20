@@ -1,3 +1,10 @@
+# Rattlegram debug option
+option(RG_DEBUG "Enable Rattlegram debug output" OFF)
+if(RG_DEBUG)
+  add_definitions(-DRG_DEBUG=1)
+  message("RG_DEBUG enabled")
+endif()
+
 # global includes
 # not ideal but not so slow
 # otherwise use target_include_directories

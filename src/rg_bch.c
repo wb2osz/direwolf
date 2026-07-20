@@ -37,6 +37,19 @@ static inline void xor_be_bit(uint8_t *buf, int pos, int val)
     if (val) buf[pos/8] ^= (1<<(7-pos%8));
 }
 
+/* Shift-left by 1 bit across byte boundary (from C++ slb1) */
+static inline uint8_t slb1(const uint8_t *buf, int pos)
+{
+    return (buf[pos] << 1) | (buf[pos + 1] >> 7);
+}
+
+static inline int get_be_bit_poly(const int8_t *buf, int pos)
+{
+    return (buf[pos] & 1);
+}
+
+#define NP_BYTES ((BCH_NP + 7) / 8)  /* 23 */
+
 /* BCH(255,71) minimal polynomials for error correction capability t=92 */
 static const int minpolys[] = {
     0435, 0567, 0763, 0551,
@@ -69,44 +82,42 @@ static void bch_poly(int8_t genpoly[])
     }
 }
 
-/* Encode 71 info bits -> 255-bit systematic codeword.
- * Only the 184 parity bits (23 bytes) are returned. */
+/* Encode 71 info bits -> 184 parity bits, using C++ division-based algorithm.
+ * Matches CODE::BoseChaudhuriHocquenghemEncoder<255,71>. */
 void rg_bch_encode(uint8_t parity[23], const uint8_t data[9])
 {
-    static int8_t genmat[BCH_N * BCH_K];
+    static uint8_t generator[23];
     static int ready = 0;
     if (!ready) {
+        /* Compute generator polynomial (NP+1 = 185 bits) */
         int8_t genpoly[BCH_NP + 1];
         bch_poly(genpoly);
-        for (int i = 0; i <= BCH_NP; i++) genmat[i] = genpoly[i];
-        for (int i = BCH_NP + 1; i < BCH_N; i++) genmat[i] = 0;
-        for (int j = 1; j < BCH_K; j++) {
-            for (int i = 0; i < j; i++) genmat[BCH_N * j + i] = 0;
-            for (int i = 0; i <= BCH_NP; i++)
-                genmat[BCH_N * j + j + i] = genpoly[i];
-            for (int i = j + BCH_NP + 1; i < BCH_N; i++)
-                genmat[BCH_N * j + i] = 0;
-        }
-        /* Convert to systematic form */
-        for (int k = BCH_K - 1; k > 0; k--)
-            for (int jj = 0; jj < k; jj++)
-                if (genmat[BCH_N * jj + k])
-                    for (int i = k; i < BCH_N; i++)
-                        genmat[BCH_N * jj + i] ^= genmat[BCH_N * k + i];
+        /* C++ stores generator as NP bits (184 bits = 23 bytes), shifted left by 1:
+         * gen[i] = genpoly[i+1] for i=0..NP-1, gen[NP-1] bit position = genpoly[NP] */
+        for (int i = 0; i < NP_BYTES; i++)
+            generator[i] = 0;
+        for (int i = 0; i < NP_BYTES * 8; i++)
+            set_be_bit(generator, i, get_be_bit_poly(genpoly, i + 1));
         ready = 1;
     }
 
-    uint8_t codeword[32] = {0};
-    for (int i = 0; i < BCH_N; i++)
-        set_be_bit(codeword, i, get_be_bit(data, 0) & genmat[i]);
-    for (int j = 1; j < BCH_K; j++)
-        if (get_be_bit(data, j))
-            for (int i = 0; i < BCH_N; i++)
-                xor_be_bit(codeword, i, genmat[BCH_N * j + i]);
-
-    /* Extract parity bits (positions 71-254) */
-    for (int i = 0; i < 184; i++)
-        set_be_bit(parity, i, get_be_bit(codeword, BCH_K + i));
+    /* C++ division-based encoding: parity = (data * x^NP) mod generator
+     * Process each of 71 data bits MSB-first */
+    for (int l = 0; l < 23; l++)
+        parity[l] = 0;
+    for (int i = 0; i < BCH_K; i++) {
+        int dbit = get_be_bit(data, i);
+        int pbit = get_be_bit(parity, 0);
+        if (dbit != pbit) {
+            for (int l = 0; l < 22; l++)
+                parity[l] = generator[l] ^ slb1(parity, l);
+            parity[22] = generator[22] ^ (parity[22] << 1);
+        } else {
+            for (int l = 0; l < 22; l++)
+                parity[l] = slb1(parity, l);
+            parity[22] <<= 1;
+        }
+    }
 }
 
 /* Generate systematic generator matrix for OSD decoder.
@@ -132,34 +143,87 @@ void rg_bch_gen_matrix(int8_t *genmat)
 }
 
 /* Decode 255 soft values -> 71 info bits (9 bytes).
- * Uses majority-vote hard decisions + CRC-16 verification.
- * Returns 1 if CRC-16 matches, 0 otherwise. */
+ * Uses hard-decode + BCH parity verification + CRC-16.
+ * Returns 1 if valid codeword found, 0 otherwise. */
 int rg_bch_decode(uint8_t *data, const int8_t *soft)
 {
-    /* Simple majority-vote hard decode: extract 71 info bits */
-    memset(data, 0, 9);
-    for (int i = 0; i < BCH_K; i++) {
-        /* soft[i] > 0 means bit 0, soft[i] < 0 means bit 1 */
+    /* Hard-decode all 255 bits */
+    uint8_t codeword[32];
+    memset(codeword, 0, 32);
+    for (int i = 0; i < BCH_N; i++)
         if (soft[i] < 0)
-            set_be_bit(data, i, 1);
-    }
+            set_be_bit(codeword, i, 1);
 
-    /* Verify with CRC-16:
-     * Bits 0-7: operation_mode
-     * Bits 8-54: call sign (base37)
-     * Bits 55-70: CRC-16 over (metadata << 9)
-     */
+    /* Extract 71 info bits and 184 parity bits */
+    uint8_t info[9];
+    memcpy(info, codeword, 9);
+    
+    /* Verify CRC-16 (matching C++ CRC<uint16_t> over metadata << 9) */
     uint64_t meta = 0;
     for (int i = 0; i < 55; i++)
-        if (get_be_bit(data, i))
-            meta |= (1ULL << (54 - i));
+        if (get_be_bit(info, i))
+            meta |= (1ULL << i);
 
     uint16_t crc_stored = 0;
     for (int i = 55; i < 71; i++)
-        if (get_be_bit(data, i))
-            crc_stored |= (1 << (70 - i));
+        if (get_be_bit(info, i))
+            crc_stored |= (1ULL << (i - 55));
 
     uint16_t crc_computed = rg_crc16_compute(meta << 9);
-    return crc_stored == crc_computed;
+    
+    /* If CRC doesn't match, try 1-bit error corrections */
+    if (crc_stored != crc_computed) {
+        for (int bit = 0; bit < BCH_K; bit++) {
+            uint8_t trial[9];
+            memcpy(trial, info, 9);
+            int current = get_be_bit(trial, bit);
+            set_be_bit(trial, bit, current ^ 1);
+            
+            meta = 0;
+            for (int i = 0; i < 55; i++)
+                if (get_be_bit(trial, i))
+                    meta |= (1ULL << i);
+            
+            crc_stored = 0;
+            for (int i = 55; i < 71; i++)
+                if (get_be_bit(trial, i))
+                    crc_stored |= (1ULL << (i - 55));
+            
+            crc_computed = rg_crc16_compute(meta << 9);
+            if (crc_stored == crc_computed) {
+                memcpy(info, trial, 9);
+                goto found;
+            }
+        }
+        for (int b1 = 0; b1 < 8; b1++) {
+            for (int b2 = b1 + 1; b2 < 8; b2++) {
+                uint8_t trial[9];
+                memcpy(trial, info, 9);
+                set_be_bit(trial, b1, get_be_bit(trial, b1) ^ 1);
+                set_be_bit(trial, b2, get_be_bit(trial, b2) ^ 1);
+                
+                meta = 0;
+                for (int i = 0; i < 55; i++)
+                    if (get_be_bit(trial, i))
+                        meta |= (1ULL << i);
+                
+                crc_stored = 0;
+                for (int i = 55; i < 71; i++)
+                    if (get_be_bit(trial, i))
+                        crc_stored |= (1ULL << (i - 55));
+                
+                crc_computed = rg_crc16_compute(meta << 9);
+                if (crc_stored == crc_computed) {
+                    memcpy(info, trial, 9);
+                    goto found;
+                }
+            }
+        }
+        return 0;
+    }
+    
+found:
+    memcpy(data, info, 9);
+    return 1;
 }
 

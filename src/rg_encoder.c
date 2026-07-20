@@ -165,15 +165,15 @@ static void rg_enc_preamble(rg_encoder_t *enc) {
     enc->skip_papr = 1;
     uint8_t data[9] = {0};
     uint8_t parity[23] = {0};
-    /* Pack metadata MSB-first (matching C++ reference):
+    /* Pack metadata LSB-first (matching C++ set_be_bit: bit i -> data[i/8] bit 7-i%8):
      * bits 0-7: operation_mode, bits 8-54: callsign */
     for (int i = 0; i < 55; i++)
-        data[i/8] |= ((enc->meta_data >> (54 - i)) & 1) << (7 - (i % 8));
+        data[i/8] |= ((enc->meta_data >> i) & 1) << (7 - (i % 8));
     /* CRC-16 over metadata << 9, matching C++ CRC<uint16_t> byte-by-byte */
     uint16_t cs = rg_crc16_compute(enc->meta_data << 9);
     for (int i = 0; i < 16; i++)
-        data[(55+i)/8] |= ((cs >> (15-i)) & 1) << (7 - ((55+i) % 8));
-    rg_bch_encode(data, parity);
+        data[(55+i)/8] |= ((cs >> i) & 1) << (7 - ((55+i) % 8));
+    rg_bch_encode(parity, data);
     rg_mls_t seq; rg_mls_init(&seq, 0x12B, 1);
     float factor = sqrtf(sl / 255.0f);
     memset(enc->freq, 0, sl * sizeof(rg_cplx_t));
@@ -181,8 +181,8 @@ static void rg_enc_preamble(rg_encoder_t *enc) {
     enc->freq[enc_bin(enc, -128)] = rg_cf(factor);
     for (int i = 0; i < 255; i++) {
         int bit;
-        if (i < 71) bit = (data[i/8] >> (i%8)) & 1;
-        else bit = (parity[(i-71)/8] >> ((i-71)%8)) & 1;
+        if (i < 71) bit = (data[i/8] >> (7 - (i%8))) & 1;
+        else bit = (parity[(i-71)/8] >> (7 - ((i-71)%8))) & 1;
         enc->freq[enc_bin(enc, i - 127)] = rg_cf(nrz(bit));
     }
     /* Differential encoding */
@@ -223,10 +223,9 @@ static void rg_enc_output(rg_encoder_t *enc, int16_t *buf, int data_symbol) {
     int sl = enc->symbol_length;
     for (int i = 0; i < gl; i++) {
         float x = (float)i / (float)(gl - 1);
-        float ratio = data_symbol ? 0.5f : 0.0f;
-        if (ratio > 0 && x > ratio) x = ratio / ratio;
-        else if (ratio > 0) x = x / ratio;
-        else x = 0;
+        if (data_symbol) {
+            x = x < 0.5f ? x / 0.5f : 1.0f;
+        }
         float y = 0.5f * (1.0f - cosf(M_PI * x));
         rg_cplx_t g = enc->guard[i];
         rg_cplx_t t = enc->temp[i + sl - gl];
@@ -275,8 +274,11 @@ void rg_encoder_configure(rg_encoder_t *enc,
     else if (len <= 128) { enc->mode = 15; enc->data_bits = 1024; }
     else { enc->mode = 14; enc->data_bits = 1360; }
     
+    memset(enc->payload, 0, 170);
     memcpy(enc->payload, payload, payload_len < 170 ? payload_len : 170);
-    rg_xorshift32_t xs; rg_xorshift32_init(&xs); xs.y = 2463534242u; for (int j = 0; j < len; j++) enc->payload[j] ^= (uint8_t)rg_xorshift32_next(&xs);
+    int scramble_len = enc->data_bits / 8; /* Full payload capacity */
+    rg_xorshift32_t xs; rg_xorshift32_init(&xs); xs.y = 2463534242u;
+    for (int j = 0; j < scramble_len; j++) enc->payload[j] ^= (uint8_t)rg_xorshift32_next(&xs);
     
     const uint32_t *frozen;
     if (enc->mode == 14) frozen = rg_frozen_2048_1392;
