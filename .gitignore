@@ -11,3 +11,8 @@ src/rgtest
 src/rgtest.c
 src/stub.c
 src/0.
+direwolf/
+src/atest
+src/gen_packets
+*.wav
+src/*.wav
