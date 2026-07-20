@@ -1,3 +1,10 @@
+# Rattlegram debug option
+option(RG_DEBUG "Enable Rattlegram debug output" OFF)
+if(RG_DEBUG)
+  add_definitions(-DRG_DEBUG=1)
+  message("RG_DEBUG enabled")
+endif()
+
 # global includes
 # not ideal but not so slow
 # otherwise use target_include_directories
@@ -33,6 +40,18 @@ list(APPEND direwolf_SOURCES
   demod_9600.c
   demod_afsk.c
   demod_psk.c
+  demod_rattlegram.c
+  rg_dsp.c
+  rg_fft.c
+  rg_mls.c
+  rg_crc.c
+  rg_xorshift.c
+  rg_bch.c
+  rg_polar.c
+  rg_sc.c
+  rg_theil_sen.c
+  rg_quick_select.c
+  rg_papr.c
   demod.c
   digipeater.c
   cdigipeater.c
@@ -111,6 +130,7 @@ if(LINUX)
     list(APPEND direwolf_SOURCES
       audio_portaudio.c
       )
+    add_definitions(-DUSE_PORTAUDIO)
 endif()
 
 add_executable(direwolf
@@ -121,12 +141,13 @@ target_link_libraries(direwolf
   ${GEOTRANZ_LIBRARIES}
   ${MISC_LIBRARIES}
   ${REGEX_LIBRARIES}
-  Threads::Threads
+  pthread
   ${GPSD_LIBRARIES}
   ${HAMLIB_LIBRARIES}
   ${ALSA_LIBRARIES}
   ${UDEV_LIBRARIES}
   ${PORTAUDIO_LIBRARIES}
+  /usr/local/lib/libfftw3.so
   )
 
 if(WIN32 OR CYGWIN)
@@ -172,7 +193,7 @@ set_target_properties(decode_aprs
 target_link_libraries(decode_aprs
   ${MISC_LIBRARIES}
   ${REGEX_LIBRARIES}
-  Threads::Threads
+  pthread
   ${GPSD_LIBRARIES}
   )
 
@@ -276,6 +297,17 @@ list(APPEND gen_packets_SOURCES
   dtmf.c
   textcolor.c
   dsp.c
+  rg_encoder.c
+  rg_dsp.c
+  rg_fft.c
+  rg_bch.c
+  rg_polar.c
+  rg_crc.c
+  rg_mls.c
+  rg_xorshift.c
+  rg_theil_sen.c
+  rg_quick_select.c
+  rg_papr.c
   )
 
 add_executable(gen_packets
@@ -284,6 +316,7 @@ add_executable(gen_packets
 
 target_link_libraries(gen_packets
   ${MISC_LIBRARIES}
+  -L/usr/local/lib -lfftw3
   )
 
 
@@ -295,6 +328,18 @@ list(APPEND atest_SOURCES
   demod.c
   demod_afsk.c
   demod_psk.c
+  demod_rattlegram.c
+  rg_dsp.c
+  rg_fft.c
+  rg_mls.c
+  rg_crc.c
+  rg_xorshift.c
+  rg_bch.c
+  rg_polar.c
+  rg_sc.c
+  rg_theil_sen.c
+  rg_quick_select.c
+  rg_papr.c
   demod_9600.c
   dsp.c
   fx25_extract.c
@@ -333,7 +378,8 @@ target_link_libraries(atest
   ${MISC_LIBRARIES}
   ${GPSD_LIBRARIES}
   ${REGEX_LIBRARIES}
-  Threads::Threads
+  pthread
+  /usr/local/lib/libfftw3.so
   )
 
 if(WIN32 OR CYGWIN)
@@ -358,7 +404,7 @@ add_executable(aclients
 
 target_link_libraries(aclients
   ${MISC_LIBRARIES}
-  Threads::Threads
+  pthread
   )
 
 if(WIN32 OR CYGWIN)
@@ -390,7 +436,7 @@ set_target_properties(kissutil
 
 target_link_libraries(kissutil
   ${MISC_LIBRARIES}
-  Threads::Threads
+  pthread
   )
 
 if(WIN32 OR CYGWIN)
@@ -461,7 +507,7 @@ add_executable(appserver
 
 target_link_libraries(appserver
   ${MISC_LIBRARIES}
-  Threads::Threads
+  pthread
   )
 
 if(WIN32 OR CYGWIN)

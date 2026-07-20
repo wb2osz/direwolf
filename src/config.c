@@ -1282,6 +1282,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else if (strcasecmp(t,"EAS") == 0) {
 	      n = MAX_BAUD-2;	// Hack - See special case later.
 	    }
+	    else if (strcasecmp(t,"RATTLEGRAM") == 0) {
+	      n = MAX_BAUD-3;	// Hack - Rattlegram modem.
+	    }
 	    else {
 	      n = atoi(t);
 	    }
@@ -1331,6 +1334,12 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               p_audio_config->achan[channel].mark_freq = 0;
               p_audio_config->achan[channel].space_freq = 0;
 	    }
+		  else if (p_audio_config->achan[channel].baud == MAX_BAUD-3) {
+		    p_audio_config->achan[channel].modem_type = MODEM_RATTLEGRAM;
+		    p_audio_config->achan[channel].mark_freq = 0;
+		    p_audio_config->achan[channel].space_freq = 0;
+		  }
+
 	    else if (p_audio_config->achan[channel].baud == MAX_BAUD-2) {
 	      p_audio_config->achan[channel].modem_type = MODEM_EAS;
 	      p_audio_config->achan[channel].baud = 521;	// Actually 520.83 but we have an integer field here.

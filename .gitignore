@@ -1,113 +1,18 @@
-# Custom
-*.docx
-z*
-*.log
-*bak*
-*~
-*.xlsx
-*.stackdump
-*.wav
-
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Binaries, other build results
-
-aclients
-atest
-decode_aprs
-direwolf
-gen_fff
-gen_packets
-ll2utm
-log2gpx
-text2tt
-tt2text
-ttcalc
-utm2ll
-
-direwolf.conf
-fsk_fast_filter.h
-direwolf.desktop
-
-
-# =========================
-# Operating System Files
-# =========================
-
-# OSX
-# =========================
-
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# Thumbnails
-._*
-
-# Files that might appear on external disk
-.Spotlight-V100
-.Trashes
-
-# Directories potentially created on remote AFP share
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
-
-# Windows
-# =========================
-
-# Windows image file caches
-Thumbs.db
-ehthumbs.db
-
-# Folder config file
-Desktop.ini
-
-# Recycle Bin used on file shares
-$RECYCLE.BIN/
-
-# Windows Installer files
-*.cab
-*.msi
-*.msm
-*.msp
-
-# Windows shortcuts
-*.lnk
-/use_this_sdk
-*.dSYM
-
-# cmake
+CVS/
 build/
-tmp/
+*.o
+*~
+*.bak
+Makefile.freebsd
+src/Makefile.freebsd
+src/Makefile.tiger
+src/rg_tests/
+src/rgtest
+src/rgtest.c
+src/stub.c
+src/0.
+direwolf/
+src/atest
+src/gen_packets
+*.wav
+src/*.wav

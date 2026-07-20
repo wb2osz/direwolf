@@ -52,6 +52,7 @@
 #include "demod_9600.h"
 #include "demod_afsk.h"
 #include "demod_psk.h"
+#include "demod_rattlegram.h"
 
 
 
@@ -630,6 +631,24 @@ int demod_init (struct audio_s *pa)
 
 //TODO: how about MODEM_OFF case?
 
+	    case MODEM_RATTLEGRAM:
+	      {
+	      struct demodulator_state_s *D;
+	      D = &demodulator_state[chan][0];
+	      save_audio_config_p->achan[chan].num_subchan = 1;
+	      save_audio_config_p->achan[chan].num_slicers = 1;
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Channel %d: RATTLEGRAM, %d sample rate.\n",
+	                    chan,
+	                    save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec);
+	      demod_rattlegram_init(chan, 0,
+	                       save_audio_config_p->adev[ACHAN2ADEV(chan)].samples_per_sec,
+	                       0, D);
+	      D->quick_attack = 0.080f * 0.2f;
+	      D->sluggish_decay = 0.00012f * 0.2f;
+	      }
+	      break;
+
 	    case MODEM_BASEBAND:
 	    case MODEM_SCRAMBLE:
 	    case MODEM_AIS:
@@ -1046,6 +1065,10 @@ void demod_process_sample (int chan, int subchan, int sam)
 	      }
 	      prev_sam = sam;
 	    }
+	    break;
+
+	  case MODEM_RATTLEGRAM:
+	    demod_rattlegram_process_sample(chan, subchan, sam, D);
 	    break;
 
 	}  /* switch modem_type */
