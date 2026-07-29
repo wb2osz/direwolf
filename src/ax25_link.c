@@ -2951,7 +2951,7 @@ static void i_frame (ax25_dlsm_t *S, cmdres_t cr, int p, int nr, int ns, int pid
  *
  *		4.3.2.4. Selective Reject (SREJ) Command and Response
  *
- * 	(Erratum: SREJ is only response with F bit.)
+ * 	(Erratum: X.25 clearly states that SREJ is can only be response.  So it must be F bit.)
  *
  *		The selective reject, SREJ, frame is used by the receiving TNC to request retransmission of the single I frame
  *		numbered N(R). If the P/F bit in the SREJ frame is set to "1", then I frames numbered up to N(R)-1 inclusive are
@@ -3311,7 +3311,7 @@ static void send_srej_frames (ax25_dlsm_t *S, int *askfor, int count)
 {
 	int f;			// Set if we are ack-ing one before.
 	int nr;
-	cmdres_t cr = cr_res;	// SREJ is always response.
+	cmdres_t cr = cr_res;	// X.25 clearly states that SREJ is always response.
 	int i;
 
 	packet_t pp;
@@ -3382,8 +3382,8 @@ static void send_srej_frames (ax25_dlsm_t *S, int *askfor, int count)
 	      dw_printf ("INTERNAL ERROR, additional nr=%d, modulo=%d, %s line %d\n", askfor[i], S->modulo, __func__, __LINE__);
 	    }
 
-	    // There is also a form to specify a range but I don't
-	    // think it is worth the effort to generate it.  Maybe later.
+	    // There is also a form to specify a span but this is not
+	    // generated yet.  Maybe later.  TODO?
 
 		// We can have a single sequence number like this:
 		//	xxxxxxx0
@@ -4202,52 +4202,63 @@ static void srej_frame (ax25_dlsm_t *S, cmdres_t cr, int f, int nr, unsigned cha
  *
  * Name:	resend_for_srej
  *
- * Purpose:	Resend the I frame(s) specified in SREJ response.
+ * Purpose:	Resend the I frame(s) specified in received SREJ response.
  *
  * Inputs:	S	- Data Link State Machine.
- *		nr	- N(R) from the frame.  Peer has asked for a resend of I frame with this N(S).
+ *		nr	- N(R) from the SREJ frame.  Peer has asked for a resend of I frame with this N(S).
  *		info	- Information field, might contain additional sequence numbers for Multi-SREJ.
  *		info_len - Information field length, bytes.
  *
  * Returns:	Number of frames sent.  Should be at least one.
  *
  * Description:	Simply resend requested frame(s).
- *		The calling context will worry about the F bit and other state stuff.
+ *		SREJ is allowed only for modulo 128.
  *
  *------------------------------------------------------------------------------*/
 
-static int resend_for_srej (ax25_dlsm_t *S, int nr, unsigned char *info, int info_len)
+// Was repeated code in a few places.
+// Should be called only from resend_for_srej.
+// i_frame_ns is seq number to send.
+// Returns 1 if I frame sent.  0 for error.
+
+static int inline resend_one_i_for_srej (ax25_dlsm_t *S, int i_frame_ns)
 {
 	cmdres_t cr = cr_cmd;
 	int i_frame_nr = S->vr;
-	int i_frame_ns = nr;
 	int p = 0;
-	int num_resent = 0;
-
-	// Resend I frame with N(S) equal to the N(R) in the SREJ.
-	// Additional sequence numbers can be in optional information part.
+	int ok = 0;
 
 	cdata_t *txdata = S->txdata_by_ns[i_frame_ns];
 
 	if (txdata != NULL) {
-	  packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p, txdata->pid, (unsigned char *)(txdata->data), txdata->len);
+	  packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p,
+				txdata->pid, (unsigned char *)(txdata->data), txdata->len);
 	  // dw_printf ("calling lm_data_request for I frame, %s line %d\n", __func__, __LINE__);
 	  lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
-	  num_resent++;
+	  ok = 1;
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Stream %d: INTERNAL ERROR for SREJ.  I frame for N(S)=%d is not available.\n", S->stream_id, i_frame_ns);
 	}
+	return (ok);
+}
+
+
+static int resend_for_srej (ax25_dlsm_t *S, int nr, unsigned char *info, int info_len)
+{
+	int num_resent = 0;
+
+	// Resend I frame with N(S) equal to the N(R) in the SREJ.
+
+	num_resent += resend_one_i_for_srej (S, nr);
 
 // Multi-SREJ if there is an information part.
 
-	int j;
-	for (j = 0; j < info_len; j++) {
+	for (int j = 0; j < info_len; j++) {
 
 		// We can have a single sequence number like this:
-		//    	xxx00000	(mod 8)
-		//	xxxxxxx0	(mod 128)
+		//	xxxxxxx0	(mod 128 only)
 		// or we can have span (mod 128 only) like this, with the first and last:
 		//	xxxxxxx1
 		//	xxxxxxx1
@@ -4256,28 +4267,31 @@ static int resend_for_srej (ax25_dlsm_t *S, int nr, unsigned char *info, int inf
 		// and if the LSB is set, there should be two adjacent bytes
 		// with it set.
 		// Reference:  http://www.itu.int/rec/T-REC-X.25-199610-I/en/  Table 2-10/X.25
+		// It's a little confusing at first glance.  The illustration has wire bit
+		// order left to right, i.e. LSB first.  The LSB=1 indicates a span.
 		// See also:  send_srej_frames()
-		// TODO: Span is not implemented yet.
 
-	  if (S->modulo == 8) {
-	    // Actually. the X.25 spec clearly state that SREJ recovery is
-	    // prohibited for Basic (modulo 8).  Someone might still try it.
-	    // Maybe issue a warning and try to make it work?
-	    i_frame_ns = (info[j] >> 5) & 0x07;	// no provision for span.
+	  if (j < info_len-1 && (info[j] & 1) && (info[j+1] & 1)) {
+
+	    // We have a span.
+
+	    int first = (info[j] >> 1) & 0x7f;
+	    int last = (info[j+1] >> 1) & 0x7f;
+	    j++;
+	    int i = first;
+	    num_resent += resend_one_i_for_srej (S, i);
+	    if (first != last) do {
+	      i = (i + 1) & 0x7f;
+	      num_resent += resend_one_i_for_srej (S, i);
+	    } while (i != last);
 	  }
 	  else {
-	    i_frame_ns = (info[j] >> 1) & 0x7f;	// TODO: test LSB and possible loop here.
-	  }
 
-	  txdata = S->txdata_by_ns[i_frame_ns];
-	  if (txdata != NULL) {
-	    packet_t pp = ax25_i_frame (S->addrs, S->num_addr, cr, S->modulo, i_frame_nr, i_frame_ns, p, txdata->pid, (unsigned char *)(txdata->data), txdata->len);
-	    lm_data_request (S->chan, TQ_PRIO_1_LO, pp);
-	    num_resent++;
-	  }
-	  else {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Stream %d: INTERNAL ERROR for Multi-SREJ.  I frame for N(S)=%d is not available.\n", S->stream_id, i_frame_ns);
+	    // Not a span.
+	    // Should issue protocol error if LSB is 1.
+
+	    int i = (info[j] >> 1) & 0x7f;
+	    num_resent += resend_one_i_for_srej (S, i);
 	  }
 	}
 	return (num_resent);
@@ -4340,6 +4354,31 @@ static int resend_for_srej (ax25_dlsm_t *S, int nr, unsigned char *info, int inf
 static void sabm_e_frame (ax25_dlsm_t *S, int extended, int p)
 {
 
+// Erratum: Protocol error was not detected.
+//
+// Why the P Bit Must Be 1:
+// The AX.25 protocol state machine relies on the Poll/Final (P/F) bit guarantee that
+// connection states between two stations stay perfectly synchronized.
+//
+// 1. Soliciting a Mandatory Response: When a station transmits an SABM or SABME frame,
+//    it is requesting to build a data link connection. Setting P=1 acts as an immediate,
+//    protocol-enforced demand to the receiving station, saying: "You must reply immediately
+//    to acknowledge this request."
+//
+// 2. Clearing the Response Ambiguity: The receiving station is required by the protocol
+//    rules to reply with either a UA (Unnumbered Acknowledgment) frame if it accepts the
+//    connection, or a DM (Disconnected Mode) frame if it rejects it. Crucially, that
+//    response must have the Final bit set to 1 (F=1).
+//
+// If a station were to erroneously send an SABM with P=0, the receiving station would
+// not be legally forced by the protocol state machine to return an F=1 response, breaking
+// the handshake mechanism and leaving the link initiation protocol hanging in limbo.
+
+	if (p != 1) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Stream %d: AX.25 Protocol Error: Received SABMe has P=0.\n", S->stream_id);
+	}
+
 	switch (S->state) {
 
 	  case 	state_0_disconnected:
@@ -4357,10 +4396,7 @@ static void sabm_e_frame (ax25_dlsm_t *S, int extended, int p)
 	    }
 
 	    cmdres_t res = cr_res;
-	    int f = p;			// I don't understand the purpose of "P" in SABM/SABME
-					// but we dutifully copy it into "F" for the UA response.
-					// SABMe is always sent with P=1 so maybe it would be an
-					// error to see it as 0 here.
+	    int f = p;			// See explanation at beginning of this function.
 
 	    int nopid = 0;		// PID is only for I and UI.
 
@@ -5092,7 +5128,7 @@ static void frmr_frame (ax25_dlsm_t *S)
 // To get here:
 //	We sent SABME.  (not SABM)
 //	Other side responded with UA so it understands v2.2.
-//	We sent XID command which puts us int the negotiating state.
+//	We sent XID command which puts us into the negotiating state.
 // Presumably this is in response to the XID and not something else.
 
 // Anyhow, we will fall back to v2.0 parameters.
@@ -5503,7 +5539,7 @@ static void t1_expiry (ax25_dlsm_t *S)
 	    }
 	    else {
 	      cmdres_t cmd = cr_cmd;
-	      int p = 1;
+	      int p = 1;	// Always 1.
 	      int nopid = 0;
 
 	      packet_t pp;

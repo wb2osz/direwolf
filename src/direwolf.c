@@ -1468,16 +1468,22 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("(%s)", desc);
 	  if (ftype == frame_type_U_XID) {
 	    struct xid_param_s param;
-	    char info2text[150];
+	    char info2text[256];
 
 	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
 	    dw_printf (" %s\n", info2text);
 	  }
 	  else if (ftype == frame_type_S_SREJ) {
 	    // Additional sequence numbers can be in the info part.
-	    // This does not handle the range case, which we don't generate.
 	    for (int j = 0; j < info_len; j++) {
-	      dw_printf (" +%d", (unsigned int)(pinfo[j]) >> 1);
+	      if (j < info_len-1 && (pinfo[j] & 1) && (pinfo[j+1] & 1)) {
+	        // Span with first thru last.
+	        dw_printf (" +%d-%d", (unsigned int)(pinfo[j]) >> 1, (unsigned int)(pinfo[j+1]) >> 1);
+	        j++;
+	      }
+	      else {
+	        dw_printf (" +%d", (unsigned int)(pinfo[j]) >> 1);
+	      }
 	    }
 	    dw_printf ("\n");
 	  }
@@ -1774,6 +1780,8 @@ static void usage (void)
 	dw_printf ("    -c fname       Configuration file name.\n");
 	dw_printf ("    -l logdir      Directory name for daily log files.  Use . for current.\n");
 	dw_printf ("    -L logname     Generate single log file with fixed name.\n");
+	dw_printf ("    -o fname       Capture raw received packets to file.\n");
+	dw_printf ("    -O fname       Capture all console output to file.\n");
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
 	dw_printf ("    -b n           Bits per audio sample, 8 or 16.\n");
