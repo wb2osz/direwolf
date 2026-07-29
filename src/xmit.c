@@ -1038,9 +1038,15 @@ static int send_one_frame (int c, int p, packet_t pp)
 	  }
 	  else if (ftype == frame_type_S_SREJ) {
 	    // Additional sequence numbers can be in the info part.
-	    // This does not handle the range case, which we don't generate.
 	    for (int j = 0; j < info_len; j++) {
-	      dw_printf (" +%d", (unsigned int)(pinfo[j]) >> 1);
+	      if (j < info_len-1 && (pinfo[j] & 1) && (pinfo[j+1] & 1)) {
+	        // Span with first thru last.
+	        dw_printf (" +%d-%d", (unsigned int)(pinfo[j]) >> 1, (unsigned int)(pinfo[j+1]) >> 1);
+	        j++;
+	      }
+	      else {
+	        dw_printf (" +%d", (unsigned int)(pinfo[j]) >> 1);
+	      }
 	    }
 	    dw_printf ("\n");
 	  }

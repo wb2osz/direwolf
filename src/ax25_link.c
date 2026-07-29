@@ -3398,10 +3398,40 @@ static void send_srej_frames (ax25_dlsm_t *S, int *askfor, int count)
 		// Reference:  http://www.itu.int/rec/T-REC-X.25-199610-I/en/  Table 2-10/X.25
 		// See also:  resend_for_srej()
 
-	    info[info_len++] = askfor[i] << 1;
+	    // Do we have adjacent consequtive numbers?
+	    int first = askfor[i];
+	    int last = -1;	// -1 for none.
+	    while (i < count-1 && askfor[i+1] == ((askfor[i] + 1) & 0x7f)) {
+	      last = askfor[i+1];
+	      i++;
+	    }
+	    if (last >= 0) {
+	      info[info_len++] = (first << 1) | 1;
+	      info[info_len++] = (last << 1) | 1;
+	    }
+	    else{
+	      info[info_len++] = first << 1;
+	    }
 	  }
 
-	  f = 0;
+#if 0
+	  if (count > 1) {
+	    text_color_set(DW_COLOR_DEBUG);
+	    dw_printf ("----------- SREJ-Multi Span Debug ----------\n");
+	    dw_printf ("\n");
+	    for (i = 1; i < count; i++) {
+	      dw_printf (" %d", askfor[i]);
+	    }
+	    dw_printf ("\n");
+	    for (i = 0; i < info_len; i++) {
+	      dw_printf (" %d", (unsigned)info[i]);
+	    }
+	    dw_printf ("\n");
+	    dw_printf ("\n");
+	    dw_printf ("----------- SREJ-Multi Span Debug ----------\n");
+	  }
+#endif
+
 	  nr = askfor[0];
 	  f = (nr == S->vr);		// Set if we are asking for the next after
 					// the last one received in contiguous order.
