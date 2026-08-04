@@ -3346,7 +3346,16 @@ static void send_srej_frames (ax25_dlsm_t *S, int *askfor, int count)
 
 // Something is wrong!  We ask for more than the window size.
 
-	if (count > S->k_maxframe) {
+// This test was not exactly right because window sizes are not symmetrical.
+// k_maxframe is the number of I frames that can be sent to other
+// station without an ack.
+// However, the "count" should be compared to my receiving window
+// size which we don't have a variable for.  We are not running on
+// a memory constrained system so we can handle the maximum.
+// Perhaps we could keep track of what was agreed upon, during the
+// XID negotiation, and this could be a check on logic of other station.
+
+	if (count > AX25_K_MAXFRAME_EXTENDED_MAX) {	// previously S->k_maxframe
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("INTERNAL ERROR - Extreme number of SREJ, %s line %d\n", __func__, __LINE__);
@@ -7134,17 +7143,32 @@ static void complete_negotiation (ax25_dlsm_t *S, struct xid_param_s *param)
 	//  ...
 	//}
 
-// window_size_RX from view point of other station.
-// We might need to reduce our maxframe value if other station has lower limit.
+// window_size_RX from view point of other station.  What it can handle.
+// We might need to reduce our desired maxframe value if other station has lower limit.
+// Use minimum of what we offered (config emaxframe) and the reply.
+// Note that the initial working k_maxframe is a very small safe value until XID negotiation.
 
 	if (param->window_size_rx != G_UNKNOWN) {
-	  S->k_maxframe = param->window_size_rx;
+
+	  //text_color_set (DW_COLOR_DEBUG);
+	  //dw_printf ("DEBUG: Working S->k_maxframe = %d\n", S->k_maxframe);
+	  //dw_printf ("DEBUG: Config file emaxframe = %d\n", g_misc_config_p->maxframe_extended);
+	  //dw_printf ("DEBUG: Peer max window_size_rx = %d\n", param->window_size_rx);
+	  S->k_maxframe = MIN(g_misc_config_p->maxframe_extended, param->window_size_rx);
+	  //dw_printf ("DEBUG: Final S->k_maxframe = %d\n", S->k_maxframe);
 	  if (S->k_maxframe != g_misc_config_p->maxframe_extended) {
 	    text_color_set (DW_COLOR_INFO);
-	    dw_printf ("Using tx window %d rather than our suggested emaxframe %d.\n",
+	    dw_printf ("Using tx window %d rather than our config file emaxframe %d.\n",
 		S->k_maxframe, g_misc_config_p->maxframe_extended);
 	  }
 	}
+	else {
+	  // There was an XID response but it did not contain max rx window size.
+	  // Up to this point, we were using a very small safe initial value.
+	  // Switch to our config file value.
+	  S->k_maxframe = g_misc_config_p->maxframe_extended;
+	}
+
 
 // FIXME: revisit this.
 
