@@ -1,13 +1,7 @@
-// clear && src/direwolf -c dw0.conf -q h -T %M:%S
-// clear && src/direwolf -c dw1.conf -q h -E R20 -T %M:%S
-// ~/src/direwolf-dev/build64
-// $ src/tnctest -f ../../../src/dplatt/doi25.txt 9000=dw0 9001=dw1
-
-
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016, 2025  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2025, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -249,16 +243,22 @@ static int column_width;			/* Line width divided by number of TNCs. */
  * Current state for each TNC.
  */
 
-static int is_connected[MAX_TNC];		/* -1 = not yet available. */
-						/* 0 = not connected. */
-						/* 1 = not connected. */
+volatile static int is_connected[MAX_TNC];		/* -1 = not yet available. */
+							/* 0 = not connected. */
+							/* 1 = connected. */
 
-static int have_cmd_prompt[MAX_TNC];		/* Set if "cmd:" was the last thing seen. */
+volatile static int have_cmd_prompt[MAX_TNC];		/* Set if "cmd:" was the last thing seen. */
 
-static int last_rec_seq[MAX_TNC];		/* Each data packet will contain a sequence number. */
+volatile static int last_rec_seq[MAX_TNC];		/* Each data packet will contain a sequence number. */
 						/* This is used to verify that all have been */
 						/* received in the correct order. */
 
+volatile static int stop_counting = 0;		/* A problem with a traditional TNC is that  */
+						/* it's not always obvious what is data */
+						/* and what is from the command interface. */
+						/* For the file transfer test, special markers */
+						/* are placed at start and end of text.  */
+						/* This is set when the end of text marker is seen. */
 
 
 /*
@@ -308,6 +308,8 @@ int main (int argc, char *argv[])
 	
            case 'n':				/* -n number of packets  */
 	    max_count = atoi(optarg);
+	    if (max_count < 1) max_count = 1;
+	    if (max_count > 9999) max_count = 9999;  // Four digit limit!
             break;
 	
 	   default:
@@ -510,17 +512,21 @@ static void send_file (void)
 	  exit (EXIT_FAILURE);
 	}
 
-	
-	while (fgets(stuff, sizeof(stuff), fp) != NULL) {
-	  char *q = strrchr (stuff, '\n');
-	  if (q != NULL) *q = '\0';
-	  if (strlen(stuff) == 0) strlcpy (stuff, "+", sizeof(stuff));
+	tnc_send_data (0, 1, "ZCZC\r");
 
-	  int throttle_timeout = 120;
+	while (fgets(stuff, sizeof(stuff), fp) != NULL) {
+	  // Change Linux new line to carriage return.
+	  char *q = strrchr (stuff, '\n');
+	  if (q != NULL) *q = '\r';
+	  //if (strlen(stuff) == 0) strlcpy (stuff, "+", sizeof(stuff));
+
+	  int throttle_timeout = 4 * 60;	// seconds
+
 	  while (send_count > last_rec_seq[1] + 20 && throttle_timeout > 0) {
-	    printf ("Throttle send.\n");
-	    SLEEP_MS (1000);
-	    throttle_timeout--;
+	    printf ("Throttle sending.  Send count %d.  Last recd %d.  Timeout %d.\n",
+				send_count, last_rec_seq[1], throttle_timeout);
+	    SLEEP_MS (2000);
+	    throttle_timeout -= 2;
 	  }
 	  if (throttle_timeout > 0) {
 	    send_count++;
@@ -531,6 +537,8 @@ static void send_file (void)
 	    break;
 	  }
 	}
+
+	tnc_send_data (0, 1, "NNNN\r");
 	fclose (fp);
 
 /*
@@ -539,7 +547,8 @@ static void send_file (void)
 
 	int no_activity = 0;
 
-#define INACTIVE_TIMEOUT_F 60 
+// Might be able to go back to 60 seconds after resolving excessive delays.
+#define INACTIVE_TIMEOUT_F 120
 
 	while (last_rec_seq[1] < send_count && no_activity < INACTIVE_TIMEOUT_F) {
 
@@ -548,7 +557,7 @@ static void send_file (void)
 	}
 
 	if (last_rec_seq[1] == send_count) {
-	  printf ("Got last expected reply.\n");
+	  printf ("--------\nSUCCESS!  Got last expected reply.\n--------\n");
 	}
 	else {
 	  printf ("ERROR: Timeout - No incoming activity for %d seconds.\n", no_activity);
@@ -623,6 +632,22 @@ static void bidirectional_data (void)
 	  for (n = 1; n <= burst_size && send_count < max_count; n++) {
 
 	    send_count++;
+
+	    // Don't let it get too far ahead.
+
+	    int throttle_timeout = 4 * 60;	// seconds
+
+	    while (send_count > last_rec_seq[1] + 20 && throttle_timeout > 0) {
+	      printf ("Throttle sending.  Send count %d.  Last recd %d.  Timeout %d.\n",
+				send_count, last_rec_seq[1], throttle_timeout);
+	      SLEEP_MS (2000);
+	      throttle_timeout -= 2;
+	    }
+	    if (throttle_timeout <= 0) {
+	      printf ("Throttle timeout error.\n");
+	      exit (1);
+	    }
+
 	    snprintf (data, sizeof(data), "%04d send data\r", send_count);
 	    tnc_send_data (0, 1, data);
 	  }
@@ -739,16 +764,34 @@ void process_rec_data (int my_index, char *data)
 
 	assert (my_index >= 0 && my_index <= 1);
 
-	if (strlen(file_name) > 0) {
-	  last_rec_seq[my_index]++;
+	// Status from OpenTNC, don't count as data.
+	if (strncmp(data, "Inbound call, entering converse mode", 30) == 0) {
 	  return;
 	}
 
+	if (strlen(file_name) > 0) {
+	  if (strncmp(data, "ZCZC", 4) == 0) {
+	    last_rec_seq[my_index] = 0;
+	  }
+	  else if (strncmp(data, "NNNN", 4) == 0) {
+	    stop_counting = 1;
+	  }
+	  else {
+	    // Just count lines.  We don't care about content.
+	    if ( ! stop_counting) {
+	      last_rec_seq[my_index]++;
+	      //printf ("num recd %d\n", last_rec_seq[my_index]);
+	    }
+	  }
+	  return;
+	}
 	if (isdigit(*data) && strncmp(data+4, " send", 5) == 0) {
 	  if (my_index > 0) {
 	    last_rec_seq[my_index]++;
 
 	    n = atoi(data);
+	    //printf ("debug: got %d from send\n", n);
+
 	    if (n != last_rec_seq[my_index]) {
 	      printf ("%*s%s: Received %d when %d was expected.\n", my_index*column_width, "", tnc_address[my_index], n, last_rec_seq[my_index]);
 	      SLEEP_MS(10000);
@@ -760,16 +803,27 @@ void process_rec_data (int my_index, char *data)
 
 	else if (isdigit(*data) && strncmp(data+4, " reply", 6) == 0) {
 	  if (my_index == 0) {
-	    last_rec_seq[my_index]++;
-	    n = atoi(data);
-	    if (n != last_rec_seq[my_index]) {
-	      printf ("%*s%s: Received %d when %d was expected.\n", my_index*column_width, "", tnc_address[my_index], n, last_rec_seq[my_index]);
-	      SLEEP_MS(10000);
-	      printf ("TEST FAILED!\n");
-	      exit (EXIT_FAILURE);
+
+	    // Here is something I was not expecting.
+	    // A serial port TNC might combine multiple lines into a single frame.  e.g.
+	    //	TNC1>DW0:(I cmd, ...)0003 reply<0x0d>0004 reply<0x0d>0005 reply<0x0d>0006 reply<0x0d>
+
+	    for (char *d = data; strlen(d) >= 11 && isdigit(*d); d += 11) {
+	      last_rec_seq[my_index]++;
+	      n = atoi(d);
+	      //printf ("\t\t\t\t\tdebug: got %d from reply\n", n);
+	      if (n != last_rec_seq[my_index]) {
+	        printf ("%*s%s: Received %d when %d was expected.\n", my_index*column_width, "",
+			tnc_address[my_index], n, last_rec_seq[my_index]);
+	        SLEEP_MS(10000);
+	        printf ("TEST FAILED!\n");
+	        exit (EXIT_FAILURE);
+	      }
 	    }
 	  }
 	}
+
+#if 0	// This is for testing segmentation.
 
 	else if (data[0] == 'A') {
 
@@ -780,6 +834,7 @@ void process_rec_data (int my_index, char *data)
 	      exit (EXIT_FAILURE);
 	  }
 	}
+#endif
 }
 
 
@@ -811,7 +866,8 @@ static unsigned __stdcall tnc_thread_net (void *arg)
 static void * tnc_thread_net (void *arg)	
 #endif	
 {
-	int my_index;
+	int my_index = (int)(ptrdiff_t)arg;
+
 	struct addrinfo hints;
 	struct addrinfo *ai_head = NULL;
 	struct addrinfo *ai;
@@ -827,8 +883,6 @@ static void * tnc_thread_net (void *arg)
 	char data[4096];
 	double dnow;
 
-
-	my_index = (int)(ptrdiff_t)arg;
 
 #if DEBUGx
         printf ("DEBUG: tnc_thread_net %d start, port = '%s'\n", my_index, port[my_index]);
@@ -1018,7 +1072,6 @@ static void * tnc_thread_net (void *arg)
 	    exit (1);
 	  }
 
-
 #if DEBUGx
 	  printf ("TNC %d received '%c' data, data_len = %d\n", 
 			my_index, mon_cmd.datakind, mon_cmd.data_len);
@@ -1053,35 +1106,58 @@ static void * tnc_thread_net (void *arg)
 
  	    case 'D':					// Connected AX.25 Data
 
- 	      printf("%*s[R %.3f] %s\n", my_index*column_width, "", dnow-start_dtime, data);
+		// I ran into the situation where a tradional style serial port TNC
+		// was combining multiple lines (i.e. separated by CR) into a single
+		// AX.25 frame.  Even worse, a line could be split across two frames.
+		// We need treat the frames like a byte stream and extract lines.
 
-	      process_rec_data (my_index, data);
+	      {
+	      static char linebuf[4096];
+	      static int linelen = 0;
+
+	      for (char *p = data; *p != '\0'; p++) {
+	        linebuf[linelen++] = *p;
+	        linebuf[linelen] = '\0';
+
+	        if (*p == 0x0d) {
+
+	          //printf ("N>>>my_index=%d\n", my_index);
+	          printf("%*s[R %.3f] %s\n", my_index*column_width, "", dnow-start_dtime, linebuf);
+
+	          process_rec_data (my_index, linebuf);
 
 
-	      if (isdigit(data[0]) && isdigit(data[1]) && isdigit(data[2]) && isdigit(data[3]) &&
-	           strncmp(data+4, " send", 5) == 0) {
-	        // Expected message.   Make sure it is expected sequence and send reply.
-	        int n = atoi(data);
-	        char reply[80];
-	        snprintf (reply, sizeof(reply), "%04d reply\r", n);
-	        tnc_send_data (my_index, 1 - my_index, reply);
-
-		// HACK!
-		// It gets very confusing because N(S) and N(R) are very close.
-		// Send a couple dozen I frames so they will be easier to distinguish visually.
-		// Currently don't have the same in serial port version.
-
-		// We change the length each time to test segmentation.
-		// Set PACLEN to some very small number like 5.
-
-		if (n == 1 && max_count > 1) {
-	          int j;
-	          for (j = 1; j <= 26; j++) {
-	            snprintf (reply, sizeof(reply), "%.*s\r", j, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+	          if (isdigit(linebuf[0]) && isdigit(linebuf[1]) && isdigit(linebuf[2]) && isdigit(linebuf[3]) &&
+			strncmp(linebuf+4, " send", 5) == 0) {
+	            // Expected message.   Make sure it is expected sequence and send reply.
+	            int n = atoi(linebuf);
+	            char reply[80];
+	            snprintf (reply, sizeof(reply), "%04d reply\r", n);
 	            tnc_send_data (my_index, 1 - my_index, reply);
-	          }   
-	        }
-	      }
+
+		    // HACK!
+		    // It gets very confusing because N(S) and N(R) are very close.
+		    // Send a couple dozen I frames so they will be easier to distinguish visually.
+		    // Currently don't have the same in serial port version.
+
+		    // We change the length each time to test segmentation.
+		    // Set PACLEN to some very small number like 5.
+
+		    if (n == 1 && max_count > 1) {
+	              int j;
+	              for (j = 1; j <= 26; j++) {
+	                snprintf (reply, sizeof(reply), "%.*s\r", j, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+	                tnc_send_data (my_index, 1 - my_index, reply);
+	              }
+	            }
+	          }  // if 9999 send
+
+	          linelen = 0;
+	          linebuf[linelen] = '\0';
+
+	        }  // Have full line
+	      }  // For each data byte in received frame.
+	      }  // case D
 
 	      break;
 
@@ -1166,25 +1242,54 @@ static void * tnc_thread_serial (void *arg)
 
 	strcpy (cmd, "\003\rreset\r");
 	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
-	SLEEP_MS (3000);
+	SLEEP_MS (1000);
 
 	strcpy (cmd, "echo on\r");
 	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
-	SLEEP_MS (200);
+	SLEEP_MS (300);
 
 // do any necessary set up here. such as setting mycall
 
 	snprintf (cmd, sizeof(cmd), "mycall %s\r", tnc_address[my_index]);
 	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
-	SLEEP_MS (200);
+	SLEEP_MS (300);
+
+// AX.25 version.
+
+	strcpy (cmd, "ax25v 2.2\r");
+	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
+	SLEEP_MS (300);
+
+// TX window size.
+// There doesn't seem to be a separate option for mod 128.
+// Seems the max we can set it to is 4.
+
+	strcpy (cmd, "maxframe 7\r");
+	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
+	SLEEP_MS (300);
+
+// Allow incoming connection request.
+
+	strcpy (cmd, "conok on\r");
+	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
+	SLEEP_MS (300);
+
+// Hack to prevent multiple lines in one frame.
+
+	//strcpy (cmd, "paclen 11\r");
+	//serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
+	//SLEEP_MS (300);
+
 
 // Don't want to stop tty output when typing begins.
 
 	strcpy (cmd, "flow off\r");
 	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
+	SLEEP_MS (300);
 
 	strcpy (cmd, "echo off\r");
 	serial_port_write (serial_fd[my_index], cmd, strlen(cmd));
+	SLEEP_MS (500);
 
 /* Success. */
 
@@ -1216,7 +1321,16 @@ static void * tnc_thread_serial (void *arg)
 	      exit (1);
 	    }
 
-	    if (ch == '\r' || ch == '\n') {
+	    if (ch == '\r') {
+	      result[len++] = '\\';
+	      result[len++] = 'r';
+	      result[len] = '\0';
+	      done = 1;
+	    }
+	    else if (ch == '\n') {
+	      //result[len++] = '\\';
+	      //result[len++] = 'n';
+	      //result[len] = '\0';
 	      done = 1;
 	    }
 	    else if (ch == XOFF) {
@@ -1230,8 +1344,7 @@ static void * tnc_thread_serial (void *arg)
 	      busy[my_index] = 0;
 	    }
 	    else if (isprint(ch)) {
-	      result[len] = ch;
-	      len++;
+	      result[len++] = ch;
 	      result[len] = '\0';
 	    }
 	    else {
@@ -1254,20 +1367,27 @@ static void * tnc_thread_serial (void *arg)
 
 	    double dnow = dtime_monotonic();
 
+	    //printf ("S>> my_index=%d\n", my_index);
 	    printf("%*s[R %.3f] %s\n", my_index*column_width, "", dnow-start_dtime, result);
 
 	    if (strncmp(result, "*** CONNECTED", 13) == 0) {
 	      is_connected[my_index] = 1;
+	      //printf ("DEBUG: is_connected[%d] = 1\n", my_index);
 	    }
 
 	    if (strncmp(result, "*** DISCONNECTED", 16) == 0) {
 	      is_connected[my_index] = 0;
+	      //printf ("DEBUG: is_connected[%d] = 0\n", my_index);
 	    }
 
 	    if (strncmp(result, "Not while connected", 19) == 0) {
 	      // Not expecting this.
 	      // What to do?
 	    }
+
+	    // if (strncmp(result, "Inbound call, entering converse mode", 30) == 0) {
+	    //   last_rec_seq[my_index] = -1;
+	    // }
 
 	    process_rec_data (my_index, result);
 
@@ -1290,6 +1410,7 @@ static void * tnc_thread_serial (void *arg)
 
 static void tnc_connect (int from, int to)
 {
+	SLEEP_MS (3000);
 
 	double dnow = dtime_monotonic();
 
