@@ -1243,6 +1243,8 @@ int main (int argc, char *argv[])
  *		retries	- Level of bit correction used.
  *		spectrum - Display of how well multiple decoders did.
  *
+ * Returns:	1 if it should be given to Data Link State Machine for consideration.
+ *		0 if not.
  *
  * Description:	Print decoded packet.
  *		Optionally send to another application.
@@ -1251,7 +1253,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
+int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -1504,7 +1506,6 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("\n");
 	}
 
-
 // Also display in pure ASCII if non-ASCII characters and "-d u" option specified.
 
 	if (d_u_opt) {
@@ -1533,9 +1534,37 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("------\n");
 	}
 
+// We have a command line option to randomly drop some percentage
+// of incoming frames received over the radio.  This is mostly
+// for testing connected mode REJ/SREJ recovery when frames get lost.
+// Previously, this was done in multimodem.c.  It mentioned that a frame
+// was intentionally dropped but we did now what it was.
+// In version 1.9, try putting the test here instead, just after the
+// frame was printed in human readable form but before any processing
+// is done with it.  This should provide better visibility for debugging.
+// This should only apply to channels corresponding to internal modems,
+// i.e. not for Internet or other virtual channel.
+
+	if (audio_config.recv_error_rate != 0 &&
+		audio_config.chan_medium[chan] == MEDIUM_RADIO) {
+
+	  float r = (float)(rand()) / (float)RAND_MAX;		// Random, 0.0 to 1.0
+
+	  //text_color_set(DW_COLOR_INFO);
+	  //dw_printf ("TEMP DEBUG.  recv error rate = %d\n", .audio_config.recv_error_rate);
+
+	  if (audio_config.recv_error_rate / 100.0 > r) {
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("Intentionally dropping incoming frame above.  Recv Error rate = %d per cent.\n", audio_config.recv_error_rate);
+	    // Don't delete pp; it is done by caller.
+	    return 0;
+	  }
+	}
+
+#warning
 
 /*
- * Decode the contents of UI frames and display in human-readable form.
+ * Decode the Information part of UI frames and display in human-readable form.
  * Could be APRS or anything random for old fashioned packet beacons.
  *
  * Suppress printed decoding if "-q d" option used.
@@ -1616,7 +1645,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 		DW_FEET_TO_METERS(A.g_altitude_ft), A.g_course, DW_MPH_TO_KNOTS(A.g_speed_mph), 
 		A.g_comment);
 	  }
-	}
+	}  // if ax25_is_aprs
 
 
 /* Send to another application if connected. */
@@ -1654,7 +1683,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  */
 
 	if (chan == audio_config.igate_vchannel) {
-	    return;
+	    return 0;
 	}
 
 /* 
@@ -1722,6 +1751,8 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	    }
 	  }
 	}
+
+	return 1;
 
 } /* end app_process_rec_packet */
 

@@ -340,14 +340,15 @@ void recv_process (void)
  *	- Digipeater.
  */
 
-		  app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->fec_type, pitem->retries, pitem->spectrum);
+		  int ok = app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->fec_type, pitem->retries, pitem->spectrum);
 
 
 /*
  * Link processing.
  */
-	          lm_data_indication(pitem);
-
+	          if (ok) {
+	            lm_data_indication(pitem);
+	          }
 	          break;
 
 
