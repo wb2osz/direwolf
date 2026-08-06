@@ -214,9 +214,10 @@ int main (int argc, char *argv[])
 	char L_opt_logfile[80];
 	char input_file[80];
 	char T_opt_timestamp[40];
-	
+	int T_opt_present = 0;	/* True when -T was specified on command line. */
+
 	int t_opt = 1;		/* Text color option. */
-	char o_opt[80] = "";	// Console capture received raw packets. 
+	char o_opt[80] = "";	// Console capture received raw packets.
 	char O_opt[80] = "";	// Console capture all output.
 
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
@@ -768,6 +769,7 @@ int main (int argc, char *argv[])
 
           case 'T':				/* -T for receive timestamp. */
 	    strlcpy (T_opt_timestamp, optarg, sizeof(T_opt_timestamp));
+	    T_opt_present = 1;
             break;
 
 	  case 'e':				/* -e Receive Bit Error Rate (BER). */
@@ -956,7 +958,9 @@ int main (int argc, char *argv[])
 	    audio_config.achan[0].upsample = U_opt;
 	}
 
-	strlcpy(audio_config.timestamp_format, T_opt_timestamp, sizeof(audio_config.timestamp_format));
+	if (T_opt_present) {
+	  strlcpy(audio_config.timestamp_format, T_opt_timestamp, sizeof(audio_config.timestamp_format));
+	}
 
 	// temp - only xmit errors.
 
