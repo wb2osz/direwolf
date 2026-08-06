@@ -4,6 +4,8 @@
 
 ### New Features:
 
+- New `TIMESTAMP` config file directive.  Equivalent to the `-T` command line option, for use when Direwolf is launched by a supervisor (e.g. Winlink Express) that can't pass command-line arguments.  See issue #625.
+
 - Improved generation of SREJ frames for more efficient AX.25 v2.2 connected mode.
 
 - Add delay before exit so any error messages can be read before window disappears.
