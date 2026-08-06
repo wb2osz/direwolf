@@ -5479,6 +5479,23 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
+ * TIMESTAMP	fmt	- Time stamp format for sent and received frames.
+ *			  Same as the -T command line option, which takes precedence
+ *			  if also specified.  Uses "strftime" format string, e.g. "%H:%M:%S ".
+ */
+	  else if (strcasecmp(t, "TIMESTAMP") == 0) {
+	    t = split(NULL,1);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing time stamp format for TIMESTAMP on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      strlcpy (p_audio_config->timestamp_format, t, sizeof(p_audio_config->timestamp_format));
+	    }
+	  }
+
+/*
  * BEACON channel delay every message
  *
  * Original handcrafted style.  Removed in version 1.0.

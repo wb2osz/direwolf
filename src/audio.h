@@ -126,9 +126,9 @@ struct audio_s {
 					/* Future: not used yet. */
 
 
-	char timestamp_format[40];	/* -T option */
+	char timestamp_format[40];	/* -T option, or TIMESTAMP in config file. */
 					/* Precede received & transmitted frames with timestamp. */
-					/* Command line option uses "strftime" format string. */
+					/* Uses "strftime" format string.  -T takes precedence over config file. */
 
 
 

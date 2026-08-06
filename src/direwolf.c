@@ -1884,6 +1884,7 @@ static void usage (void)
 	dw_printf ("    -u             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
 	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
+	dw_printf ("                   Overrides TIMESTAMP in the configuration file, if also present.\n");
 	dw_printf ("    -e ber         Receive Bit Error Rate (BER), e.g. 1e-5\n");
 	dw_printf ("\n");
 
