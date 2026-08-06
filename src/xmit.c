@@ -1091,8 +1091,9 @@ static int send_one_frame (int c, int p, packet_t pp)
 	nb = layer2_send_frame (c, pp, send_invalid_fcs2, save_audio_config_p);
 
 // Optionally send confirmation to AGW client app if monitoring enabled.
+// Own transmitted frame — no received signal, so pass a sentinel (rec < 0).
 
-	server_send_monitored (c, pp, 1);
+	server_send_monitored (c, pp, 1, (alevel_t){.rec = -1, .mark = -1, .space = -1}, 0);
 
 	return (nb);
 
