@@ -5491,6 +5491,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    else {
+	      if (strlen(t) >= sizeof(p_audio_config->timestamp_format)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: TIMESTAMP format on line %d is too long and will be truncated.\n", line);
+	      }
 	      strlcpy (p_audio_config->timestamp_format, t, sizeof(p_audio_config->timestamp_format));
 	    }
 	  }
