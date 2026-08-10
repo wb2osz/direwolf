@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021, 2023, 2024. 2025  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2019, 2020, 2021, 2023, 2024. 2025, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -131,15 +131,20 @@
 #include "dlq.h"		// for fec_type_t definition.
 #include "deviceid.h"
 #include "nettnc.h"
+#include "sertnc.h"
 
 
 //static int idx_decoded = 0;
 
+// Handle Control-C.
 #if __WIN32__
-static BOOL cleanup_win (int);
+static BOOL signal_handler_win (int);
 #else
-static void cleanup_linux (int);
+static void signal_handler_linux (int);
 #endif
+
+// Clean up after application exit.
+static void exit_handler (void);
 
 static void usage (void);
 
@@ -209,8 +214,12 @@ int main (int argc, char *argv[])
 	char L_opt_logfile[80];
 	char input_file[80];
 	char T_opt_timestamp[40];
-	
-	int t_opt = 1;		/* Text color option. */				
+	int T_opt_present = 0;	/* True when -T was specified on command line. */
+
+	int t_opt = 1;		/* Text color option. */
+	char o_opt[80] = "";	// Console capture received raw packets.
+	char O_opt[80] = "";	// Console capture all output.
+
 	int a_opt = 0;		/* "-a n" interval, in seconds, for audio statistics report.  0 for none. */
 	int g_opt = 0;		/* G3RUH mode, ignoring default for speed. */				
 	int j_opt = 0;		/* 2400 bps PSK compatible with direwolf <= 1.5 */
@@ -230,6 +239,8 @@ int main (int argc, char *argv[])
 	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
 	int d_2_opt = 0;	/* "-d 2" option for IL2P.  Default minimal. Repeat for more detail. */
 	int d_c_opt = 0;	/* "-d c" option for connected mode data link state machine. */
+	int d_q_opt = 0;	/* "-d q" option for data link state machine queue. */
+	int d_s_opt = 0;	/* "-d s" print statistics when link ends. */
 
 	int aprstt_debug = 0;	/* "-d d" option for APRStt (think Dtmf) debug. */
 
@@ -289,10 +300,18 @@ int main (int argc, char *argv[])
 
 // FIXME: consider case of no space between t and number.
 
+// Prescan for options that are needed before any text goes to console.
+
 	for (j=1; j<argc-1; j++) {
 	  if (strcmp(argv[j], "-t") == 0) {
 	    t_opt = atoi (argv[j+1]);
 	    //dw_printf ("DEBUG: text color option = %d.\n", t_opt);
+	  }
+	  if (strcmp(argv[j], "-o") == 0) {
+	    strlcpy (o_opt, argv[j+1], sizeof(o_opt));
+	  }
+	  if (strcmp(argv[j], "-O") == 0) {
+	    strlcpy (O_opt, argv[j+1], sizeof(O_opt));
 	  }
 	}
 
@@ -301,12 +320,21 @@ int main (int argc, char *argv[])
 
 	// Might want to print OS version here.   For Windows, see:
 	// https://msdn.microsoft.com/en-us/library/ms724451(v=VS.85).aspx
+	// https://www.dennisbabkin.com/blog/?t=how-to-tell-the-real-version-of-windows-your-app-is-running-on
 
 	text_color_init(t_opt);
+	dw_printf_capture_init (o_opt, O_opt);
+
+// Print application version.
+
 	text_color_set(DW_COLOR_INFO);
-	dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 1\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
-	//dw_printf ("Dire Wolf version %d.%d\n", MAJOR_VERSION, MINOR_VERSION);
+	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 1\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "D", __DATE__);
+// B = new -dq & tcp_wmem
+// C = AX.25 v2.2 improvements
+// D = KISSPTY config.
+// TBD? = AX.25 v2.2 negotiating status
+	//dw_printf ("Dire Wolf Release %d.%d,%d, October 2025\n", MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION);
 
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD || USE_GPIOD
@@ -331,13 +359,21 @@ int main (int argc, char *argv[])
 	dw_printf ("\n");
 #endif
 
+// Version 1.9 exit handling.
+// Previously we just trapped control-C and printed a QRT message.
+// When direwolf is run by double clicking an icon, rather than from
+// the command line, the terminal window disappears before any error
+// message can be read.
+// Add an atexit handler so messages can be seen before window disappears.
 
 #if __WIN32__
 	//setlinebuf (stdout);   setvbuf???
-	SetConsoleCtrlHandler ((PHANDLER_ROUTINE)cleanup_win, TRUE);
+	SetConsoleCtrlHandler ((PHANDLER_ROUTINE)signal_handler_win, TRUE);
+	atexit (exit_handler);
 #else
 	setlinebuf (stdout);
-	signal (SIGINT, cleanup_linux);
+	signal (SIGINT, signal_handler_linux);
+	atexit (exit_handler);
 #endif
 
 
@@ -437,7 +473,7 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:",
+          c = getopt_long(argc, argv, "hP:B:gjJD:U:c:px:r:b:n:d:q:t:ul:L:Sa:E:T:e:X:AI:i:o:O:",
                         long_options, &option_index);
           if (c == -1)
             break;
@@ -650,9 +686,12 @@ int main (int argc, char *argv[])
 	      case 'h':  d_h_opt++; break;			// Hamlib verbose level.
 #endif
 	      case 'c':  d_c_opt++; break;			// Connected mode data link state machine
+								// Repeat for more detail.
+	      case 's':  d_s_opt++; break;			// Print statistics when link ends
 	      case 'x':  d_x_opt++; break;			// FX.25
 	      case '2':  d_2_opt++; break;			// IL2P
 	      case 'd':	 aprstt_debug++; break;			// APRStt (mnemonic Dtmf)
+	      case 'q':  d_q_opt++;				// Data Link State Machine Queue
 	      default: break;
 	     }
 	    }
@@ -674,6 +713,8 @@ int main (int argc, char *argv[])
 	    break;
 	      
 	  case 't':				/* Was handled earlier. */
+	  case 'o':
+	  case 'O':
 	    break;
 
 
@@ -728,6 +769,7 @@ int main (int argc, char *argv[])
 
           case 'T':				/* -T for receive timestamp. */
 	    strlcpy (T_opt_timestamp, optarg, sizeof(T_opt_timestamp));
+	    T_opt_present = 1;
             break;
 
 	  case 'e':				/* -e Receive Bit Error Rate (BER). */
@@ -774,7 +816,6 @@ int main (int argc, char *argv[])
           }
 
 	  strlcpy (input_file, argv[optind], sizeof(input_file));
-
 	}
 
 /*
@@ -917,7 +958,9 @@ int main (int argc, char *argv[])
 	    audio_config.achan[0].upsample = U_opt;
 	}
 
-	strlcpy(audio_config.timestamp_format, T_opt_timestamp, sizeof(audio_config.timestamp_format));
+	if (T_opt_present) {
+	  strlcpy(audio_config.timestamp_format, T_opt_timestamp, sizeof(audio_config.timestamp_format));
+	}
 
 	// temp - only xmit errors.
 
@@ -939,8 +982,6 @@ int main (int argc, char *argv[])
 	  misc_config.log_daily_names = 1;
 	  strlcpy (misc_config.log_path, l_opt_logdir, sizeof(misc_config.log_path));
 	}
-
-	misc_config.enable_kiss_pt = enable_pseudo_terminal;
 
 	if (strlen(input_file) > 0) {
 
@@ -999,7 +1040,9 @@ int main (int argc, char *argv[])
  * Files not supported at this time.
  * Can always "cat" the file and pipe it into stdin.
  */
-	deviceid_init();
+	dlq_init (d_q_opt);		// Before anything that might use it.
+
+	deviceid_init();		// Read tocalls.yaml
 
 	err = audio_open (&audio_config);
 	if (err < 0) {
@@ -1018,11 +1061,12 @@ int main (int argc, char *argv[])
 	il2p_init (d_2_opt);
 
 /*
- * New in 1.8 - Allow a channel to be mapped to a network TNC rather than
- * an internal modem and radio.
+ * New in 1.8 - Allow a channel to be mapped to a network or serial TNC rather
+ * than an internal modem and radio.
  * I put it here so channel properties would come out in right order.
  */
 	nettnc_init (&audio_config);
+	sertnc_init (&audio_config);
 
 /*
  * Initialize the touch tone decoder & APRStt gateway.
@@ -1128,7 +1172,7 @@ int main (int argc, char *argv[])
 	igate_init (&audio_config, &igate_config, &digi_config, d_i_opt);
 	cdigipeater_init (&audio_config, &cdigi_config);
 	pfilter_init (&igate_config, d_f_opt);
-	ax25_link_init (&misc_config, d_c_opt);
+	ax25_link_init (&misc_config, d_c_opt, d_s_opt);
 
 /*
  * Provide the AGW & KISS socket interfaces for use by a client application.
@@ -1143,8 +1187,10 @@ int main (int argc, char *argv[])
 
 /*
  * Create a pseudo terminal and KISS TNC emulator.
+ * In 1.9 we now have kisspty definitions in config file as well.
+ * Provide the -p option state to add to this.
  */
-	kisspt_init (&misc_config);
+	kisspt_init (&misc_config, enable_pseudo_terminal);
 	kissserial_init (&misc_config);
 	kiss_frame_init (&audio_config);
 
@@ -1191,6 +1237,7 @@ int main (int argc, char *argv[])
  *				-1 for DTMF decoder.
  *				-2 for channel mapped to APRS-IS.
  *				-3 for channel mapped to network TNC.
+ *				-4 for channel mapped to serial TNC.
  *		slice	- Slicer which caught it.
  *		pp	- Packet handle.
  *		alevel	- Audio level, range of 0 - 100.
@@ -1200,6 +1247,8 @@ int main (int argc, char *argv[])
  *		retries	- Level of bit correction used.
  *		spectrum - Display of how well multiple decoders did.
  *
+ * Returns:	1 if it should be given to Data Link State Machine for consideration.
+ *		0 if not.
  *
  * Description:	Print decoded packet.
  *		Optionally send to another application.
@@ -1208,7 +1257,7 @@ int main (int argc, char *argv[])
 
 // TODO:  Use only one printf per line so output doesn't get jumbled up with stuff from other threads.
 
-void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
+int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alevel_t alevel, fec_type_t fec_type, retry_t retries, char *spectrum)
 {	
 	
 	char stemp[500];
@@ -1221,7 +1270,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 								// Can indicate FX.25/IL2P or fix_bits.
 
 	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);		// TOTAL for virtual channels
-	assert (subchan >= -3 && subchan < MAX_SUBCHANS);
+	assert (subchan >= -4 && subchan < MAX_SUBCHANS);
 	assert (slice >= 0 && slice < MAX_SLICERS);
 	assert (pp != NULL);	// 1.1J+
      
@@ -1334,7 +1383,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	// TODO:  suppress this message if not using soundcard input.
 	// i.e. we have no control over the situation when using SDR.
 
-	if (alevel.rec > 110) {
+	if (!q_h_opt && alevel.rec > 110) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too high. This may cause distortion and reduced decode performance.\n");
@@ -1342,7 +1391,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("Setting audio input level so most stations are around 50 will provide good dyanmic range.\n");
 	}
 // FIXME: rather than checking for ichannel, how about checking medium==radio
-	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != -3) {
+	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != SUBCHAN_NETTNC && subchan != SUBCHAN_SERTNC) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too low.  Increase so most stations are around 50.\n");
@@ -1367,15 +1416,19 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  strlcpy (ts, "", sizeof(ts));
 	}
 
-	if (subchan == -1) {	// dtmf
+	if (subchan == SUBCHAN_DTMF) {
 	  text_color_set(DW_COLOR_REC);
 	  dw_printf ("[%d.dtmf%s] ", chan, ts);
 	}
-	else if (subchan == -2) {	// APRS-IS
+	else if (subchan == SUBCHAN_APRSIS) {
 	  text_color_set(DW_COLOR_REC);
 	  dw_printf ("[%d.is%s] ", chan, ts);
 	}
-	else if (subchan == -3) {	// nettnc
+	else if (subchan == SUBCHAN_NETTNC) {
+	  text_color_set(DW_COLOR_REC);
+	  dw_printf ("[%d%s] ", chan, ts);
+	}
+	else if (subchan == SUBCHAN_SERTNC) {
 	  text_color_set(DW_COLOR_REC);
 	  dw_printf ("[%d%s] ", chan, ts);
 	}
@@ -1421,10 +1474,24 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("(%s)", desc);
 	  if (ftype == frame_type_U_XID) {
 	    struct xid_param_s param;
-	    char info2text[150];
+	    char info2text[256];
 
 	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
 	    dw_printf (" %s\n", info2text);
+	  }
+	  else if (ftype == frame_type_S_SREJ) {
+	    // Additional sequence numbers can be in the info part.
+	    for (int j = 0; j < info_len; j++) {
+	      if (j < info_len-1 && (pinfo[j] & 1) && (pinfo[j+1] & 1)) {
+	        // Span with first thru last.
+	        dw_printf (" +%d-%d", (unsigned int)(pinfo[j]) >> 1, (unsigned int)(pinfo[j+1]) >> 1);
+	        j++;
+	      }
+	      else {
+	        dw_printf (" +%d", (unsigned int)(pinfo[j]) >> 1);
+	      }
+	    }
+	    dw_printf ("\n");
 	  }
 	  else {
 	    ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
@@ -1442,7 +1509,6 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  ax25_safe_print ((char *)pinfo, info_len, ( ! ax25_is_aprs(pp)) && ( ! d_u_opt) );
 	  dw_printf ("\n");
 	}
-
 
 // Also display in pure ASCII if non-ASCII characters and "-d u" option specified.
 
@@ -1472,9 +1538,37 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  dw_printf ("------\n");
 	}
 
+// We have a command line option to randomly drop some percentage
+// of incoming frames received over the radio.  This is mostly
+// for testing connected mode REJ/SREJ recovery when frames get lost.
+// Previously, this was done in multimodem.c.  It mentioned that a frame
+// was intentionally dropped but we did now what it was.
+// In version 1.9, try putting the test here instead, just after the
+// frame was printed in human readable form but before any processing
+// is done with it.  This should provide better visibility for debugging.
+// This should only apply to channels corresponding to internal modems,
+// i.e. not for Internet or other virtual channel.
+
+	if (audio_config.recv_error_rate != 0 &&
+		audio_config.chan_medium[chan] == MEDIUM_RADIO) {
+
+	  float r = (float)(rand()) / (float)RAND_MAX;		// Random, 0.0 to 1.0
+
+	  //text_color_set(DW_COLOR_INFO);
+	  //dw_printf ("TEMP DEBUG.  recv error rate = %d\n", .audio_config.recv_error_rate);
+
+	  if (audio_config.recv_error_rate / 100.0 > r) {
+	    text_color_set(DW_COLOR_INFO);
+	    dw_printf ("Intentionally dropping incoming frame above.  Recv Error rate = %d per cent.\n", audio_config.recv_error_rate);
+	    // Don't delete pp; it is done by caller.
+	    return 0;
+	  }
+	}
+
+#warning
 
 /*
- * Decode the contents of UI frames and display in human-readable form.
+ * Decode the Information part of UI frames and display in human-readable form.
  * Could be APRS or anything random for old fashioned packet beacons.
  *
  * Suppress printed decoding if "-q d" option used.
@@ -1555,7 +1649,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 		DW_FEET_TO_METERS(A.g_altitude_ft), A.g_course, DW_MPH_TO_KNOTS(A.g_speed_mph), 
 		A.g_comment);
 	  }
-	}
+	}  // if ax25_is_aprs
 
 
 /* Send to another application if connected. */
@@ -1593,7 +1687,7 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
  */
 
 	if (chan == audio_config.igate_vchannel) {
-	    return;
+	    return 0;
 	}
 
 /* 
@@ -1662,36 +1756,29 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  }
 	}
 
+	return 1;
+
 } /* end app_process_rec_packet */
 
 
 
-/* Process control C and window close events. */
+/* Process control C and window close signals. */
 
 #if __WIN32__
-
-static BOOL cleanup_win (int ctrltype)
+static BOOL signal_handler_win (int ctrltype)
 {
 	if (ctrltype == CTRL_C_EVENT || ctrltype == CTRL_CLOSE_EVENT) {
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("\nQRT\n");
-	  log_term ();
-	  ptt_term ();
-	  waypoint_term ();
-	  dwgps_term ();
-	  SLEEP_SEC(1);
+          text_color_set(DW_COLOR_INFO);
+	  dw_printf ("\n *** Interrupted by user. **\n");
 	  ExitProcess (0);
 	}
 	return (TRUE);
 }
-
-
 #else
-
-static void cleanup_linux (int x)
+static void signal_handler_linux (int x)
 {
 	text_color_set(DW_COLOR_INFO);
-	dw_printf ("\nQRT\n");
+	dw_printf ("\n *** Interrupted by user. **\n");
 #if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
 	if (misc_config.dns_sd_enabled)
 	  dns_sd_term ();
@@ -1702,9 +1789,26 @@ static void cleanup_linux (int x)
 	SLEEP_SEC(1);
 	exit(0);
 }
-
 #endif
 
+// Exit handler.
+
+static void exit_handler (void)
+{
+	text_color_set(DW_COLOR_INFO);
+	dw_printf ("\nQRT in  ");
+
+	// If started from clicking on an icon, rather than the command line,
+	// window would disappear before any error message can be read.
+	// If people complain, we can add an option to skip delay.
+
+	for (int n=5; n>0; n--) {
+	  dw_printf ("%d...  ", n);
+	  fflush (stdout);
+	  SLEEP_SEC(1);
+	}
+	dw_printf ("\n");
+}
 
 
 static void usage (void)
@@ -1717,7 +1821,10 @@ static void usage (void)
 	dw_printf ("Usage: direwolf [options] [ - | stdin | UDP:nnnn ]\n");
 	dw_printf ("Options:\n");
 	dw_printf ("    -c fname       Configuration file name.\n");
-	dw_printf ("    -l logdir      Directory name for log files.  Use . for current.\n");
+	dw_printf ("    -l logdir      Directory name for daily log files.  Use . for current.\n");
+	dw_printf ("    -L logname     Generate single log file with fixed name.\n");
+	dw_printf ("    -o fname       Capture raw received packets to file.\n");
+	dw_printf ("    -O fname       Capture all console output to file.\n");
 	dw_printf ("    -r n           Audio sample rate, per sec.\n");
 	dw_printf ("    -n n           Number of audio channels, 1 or 2.\n");
 	dw_printf ("    -b n           Bits per audio sample, 8 or 16.\n");
@@ -1755,15 +1862,22 @@ static void usage (void)
 	dw_printf ("       h             h = hamlib increase verbose level.\n");
 #endif
 	dw_printf ("       c             c = Connected mode data link state machine.\n");
+	dw_printf ("       s             s = Print statistics when link ends.\n");
 	dw_printf ("       x             x = FX.25 increase verbose level.\n");
 	dw_printf ("       2             2 = IL2P.\n");
 	dw_printf ("       d             d = APRStt (DTMF to APRS object translation).\n");
+	dw_printf ("       q             q = data link state machine Queue.\n");
 	dw_printf ("    -q             Quiet (suppress output) options:\n");
 	dw_printf ("       h             h = Heard line with the audio level.\n");
 	dw_printf ("       d             d = Description of APRS packets.\n");
 	dw_printf ("       x             x = Silence FX.25 information.\n");
-	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.\n");
+#if __WIN32__
+	dw_printf ("    -t n           Text colors.  0=disabled. 1=default. 2=black background\n");
+#else
+	dw_printf ("    -t n           Text colors.  0=disabled. 1=default.  2,3,4 alternatives.\n");
+	dw_printf ("                         5=keep current background color.  6=black background.\n");
 	dw_printf ("                     Use 9 to test compatibility with your terminal.\n");
+#endif
 	dw_printf ("    -a n           Audio statistics interval in seconds.  0 to disable.\n");
 #if __WIN32__
 #else
@@ -1778,6 +1892,7 @@ static void usage (void)
 	dw_printf ("    -u             Print UTF-8 test string and exit.\n");
 	dw_printf ("    -S             Print symbol tables and exit.\n");
 	dw_printf ("    -T fmt         Time stamp format for sent and received frames.\n");
+	dw_printf ("                   Overrides TIMESTAMP in the configuration file, if also present.\n");
 	dw_printf ("    -e ber         Receive Bit Error Rate (BER), e.g. 1e-5\n");
 	dw_printf ("\n");
 

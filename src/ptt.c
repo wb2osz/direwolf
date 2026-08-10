@@ -171,6 +171,10 @@
 #endif
 
 /* So we can have more common code for fd. */
+/* On Windows HANDLE is a pointer. */
+/* Here, for Linux, we make HANDLE int for a file descriptor. */
+/* It would be clearer if a new type such as MY_FD_HANDLE was */
+/* defined as either int or HANDLE. */
 typedef int HANDLE;
 #define INVALID_HANDLE_VALUE (-1)
 
@@ -187,19 +191,65 @@ typedef int HANDLE;
 #include "demod.h"	// to mute recv audio during xmit if half duplex.
 
 
-#if __WIN32__
+#if __WIN32__	// Windows version
 
-#define RTS_ON(fd) 	EscapeCommFunction(fd,SETRTS);
-#define RTS_OFF(fd) 	EscapeCommFunction(fd,CLRRTS);
-#define DTR_ON(fd)    	EscapeCommFunction(fd,SETDTR);
-#define DTR_OFF(fd)	EscapeCommFunction(fd,CLRDTR);
+// These return nonzero for success, zero for failure.
+// Return type is actually BOOL.
 
-#else
+#define RTS_ON(fd) 	{ int ok = EscapeCommFunction(fd,SETRTS); \
+				if ( ! ok) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error setting RTS for channel %d.\n", chan); \
+				} \
+			}
+#define RTS_OFF(fd) 	{ int ok = EscapeCommFunction(fd,CLRRTS); \
+				if ( ! ok) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error clearing RTS for channel %d.\n", chan); \
+				} \
+			}
+#define DTR_ON(fd)    	{ int ok = EscapeCommFunction(fd,SETDTR); \
+				if ( ! ok) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error setting DTR for channel %d.\n", chan); \
+				} \
+			}
+#define DTR_OFF(fd)	{ int ok = EscapeCommFunction(fd,CLRDTR); \
+				if ( ! ok) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error clearing DTR for channel %d.\n", chan); \
+				} \
+			}
 
-#define RTS_ON(fd) 	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff |= TIOCM_RTS;  ioctl (fd, TIOCMSET, &stuff); }
-#define RTS_OFF(fd) 	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff &= ~TIOCM_RTS; ioctl (fd, TIOCMSET, &stuff); }
-#define DTR_ON(fd)    	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff |= TIOCM_DTR;  ioctl (fd, TIOCMSET, &stuff); }
-#define DTR_OFF(fd)	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff &= ~TIOCM_DTR;	ioctl (fd, TIOCMSET, &stuff); }
+#else	// Linux version
+
+// On success, 0 is returned.  On error, -1 is returned, and errno is
+// set to indicate the error.
+
+#define RTS_ON(fd) 	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff |= TIOCM_RTS;  int err = ioctl (fd, TIOCMSET, &stuff); \
+				if ( err != 0 ) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error setting RTS for channel %d, errno %d\n", chan, errno); \
+				} \
+			}
+#define RTS_OFF(fd) 	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff &= ~TIOCM_RTS; int err = ioctl (fd, TIOCMSET, &stuff); \
+				if ( err != 0 ) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error clearing RTS for channel %d, errno %d\n", chan, errno); \
+				} \
+			}
+#define DTR_ON(fd)    	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff |= TIOCM_DTR;  int err = ioctl (fd, TIOCMSET, &stuff); \
+				if ( err != 0 ) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error setting DTR for channel %d, errno %d\n", chan, errno); \
+				} \
+			}
+#define DTR_OFF(fd)	{ int stuff; ioctl (fd, TIOCMGET, &stuff); stuff &= ~TIOCM_DTR;	int err = ioctl (fd, TIOCMSET, &stuff); \
+				if ( err != 0 ) { \
+					text_color_set(DW_COLOR_ERROR); \
+					dw_printf ("Error clearing DTR for channel %d, errno %d\n", chan, errno); \
+				} \
+			}
 
 #define LPT_IO_ADDR 0x378
 
@@ -215,6 +265,8 @@ void ptt_set_debug(int debug)
 {
 	ptt_debug_level = debug;
 }
+
+static void ptt_term (void);
 
 
 /*-------------------------------------------------------------------
@@ -901,6 +953,11 @@ void ptt_init (struct audio_s *audio_config_p)
 	          /* Don't try using it later if device open failed. */
 
 	          audio_config_p->achan[ch].octrl[ot].ptt_method = PTT_METHOD_NONE;
+
+	          // Version 1.8 - Terminate - senseless to go on.
+	          // Someone could miss error message and be confused about no PTT signal later.
+
+	          exit(EXIT_FAILURE);
 	        }
 
 /*
@@ -1244,6 +1301,10 @@ void ptt_init (struct audio_s *audio_config_p)
 	  }
 	}
 
+// Turn off PTT, close devices, and otherwise clean up on exit.
+
+	atexit (ptt_term);
+
 } /* end ptt_init */
 
 
@@ -1338,9 +1399,11 @@ void ptt_set (int ot, int chan, int ptt_signal)
 	  if (save_audio_config_p->achan[chan].octrl[ot].ptt_line == PTT_LINE_RTS) {
 
 	    if (ptt) {
+	      //dw_printf ("DEBUG: RTS ON chan %d, fd %d, sizeof HANDLE %d\n", chan, (int)(ptt_fd[chan][ot]), (int)(sizeof(HANDLE)));
 	      RTS_ON(ptt_fd[chan][ot]);
 	    }
 	    else {
+	      //dw_printf ("DEBUG: RTS OFF chan %d, fd %d\n", chan, (int)(ptt_fd[chan][ot]));
 	      RTS_OFF(ptt_fd[chan][ot]);
 	    }
 	  }
@@ -1584,14 +1647,17 @@ int get_input (int it, int chan)
  * Name:        ptt_term
  *
  * Purpose:    	Make sure PTT and others are turned off when we exit.
+ *		Clean up such as closing devices.
  *
  * Inputs:	none
  *
  * Description:	
  *
+ * Assumption:	ptt_init has completed.  May crash otherwise.
+ *
  *--------------------------------------------------------------------*/
 
-void ptt_term (void)
+static void ptt_term (void)
 {
 	int n;
 

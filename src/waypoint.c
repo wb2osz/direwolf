@@ -77,7 +77,7 @@ static int s_waypoint_debug = 0;	/* Print information flowing to attached device
 
 static void append_checksum (char *sentence);
 static void send_sentence (char *sent);
-
+static void waypoint_term (void);
 
 
 void waypoint_set_debug (int n) 
@@ -198,6 +198,10 @@ void waypoint_init (struct misc_config_s *mc)
 	dw_printf ("end of waypoint_init: s_waypoint_serial_port_fd = %d\n", s_waypoint_serial_port_fd);
 	dw_printf ("end of waypoint_init: s_waypoint_udp_sock_fd = %d\n", s_waypoint_udp_sock_fd);
 #endif
+
+// Close/cleanup on exit.
+
+	atexit (waypoint_term);
 }
 
 
@@ -693,10 +697,10 @@ static void send_sentence (char *sent)
 
 
 
-void waypoint_term (void)
+static void waypoint_term (void)
 {
 	if (s_waypoint_serial_port_fd != MYFDERROR) {
-	  //serial_port_close (s_waypoint_port_fd);
+	  //serial_port_close (s_waypoint_port_fd);  // Why was this commented out?
 	  s_waypoint_serial_port_fd = MYFDERROR;
 	}
 	if (s_waypoint_udp_sock_fd != -1) {

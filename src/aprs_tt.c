@@ -408,7 +408,7 @@ void aprs_tt_sequence (int chan, char *msg)
  * It might be useful to run it for error cases as well but we currently
  * don't pass in the success / failure code to know the difference.
  */
-	char script_response[1000];
+	char script_response[1100];	// Very large to stop compiler warning.
 
 	strlcpy (script_response, "", sizeof(script_response));
 

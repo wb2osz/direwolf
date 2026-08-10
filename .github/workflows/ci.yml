@@ -33,6 +33,19 @@ jobs:
               build_type: 'Release',
               cmake_extra_flags: '-G "MinGW Makefiles"'
             }
+          - {
+              name: 'Windows Latest MinGW 64bit with Hamlib',
+              os: windows-latest,
+              cc: 'x86_64-w64-mingw32-gcc',
+              cxx: 'x86_64-w64-mingw32-g++',
+              ar: 'x86_64-w64-mingw32-ar',
+              windres: 'x86_64-w64-mingw32-windres',
+              arch: 'x86_64',
+              build_type: 'Release',
+              cmake_extra_flags: '-G "MinGW Makefiles"',
+              windows_hamlib: true,
+              hamlib_suffix: '-hamlib'
+            }
 # It seems that the MinGW 32 bit target is no longer supported
 # for the github runner.  There might be a work-around, but for
 # now, disable it so we don't get the annoying failure message.
@@ -101,6 +114,13 @@ jobs:
       - name: create build environment
         run: |
           cmake -E make_directory ${{github.workspace}}/build
+      - name: download hamlib for Windows
+        if: ${{ matrix.config.windows_hamlib }}
+        shell: bash
+        run: |
+          WORKSPACE_PATH=$(echo "/${{github.workspace}}" | sed -e 's/\\/\//g ; s/://g')
+          python .github/scripts/download_hamlib.py $WORKSPACE_PATH/build/hamlib
+          echo "HAMLIB_DEFINE=-DHAMLIB_ROOT_DIR=$WORKSPACE_PATH/build/hamlib/hamlib" >> "$GITHUB_ENV"
       - name: configure
         shell: bash
         working-directory: ${{github.workspace}}/build
@@ -117,7 +137,8 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} \
             -DCMAKE_CXX_FLAGS="-Werror" -DUNITTEST=1 \
             ${{ matrix.config.cmake_extra_flags }} \
-            ${{ github.event.inputs.cmake_flags }}
+            ${{ github.event.inputs.cmake_flags }} \
+            $HAMLIB_DEFINE
       - name: build
         shell: bash
         working-directory: ${{github.workspace}}/build
@@ -148,7 +169,7 @@ jobs:
       - name: archive binary
         uses: actions/upload-artifact@v4
         with:
-          name: direwolf_${{ matrix.config.os }}_${{ matrix.config.arch }}_${{ github.sha }}
+          name: direwolf${{ matrix.config.hamlib_suffix }}_${{ matrix.config.os }}_${{ matrix.config.arch }}_${{ github.sha }}
           path: |
             ${{github.workspace}}/build/direwolf-*.zip
             ${{github.workspace}}/build/direwolf.conf

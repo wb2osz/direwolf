@@ -250,7 +250,10 @@ void timestamp_user_format (char *result, int result_size, char *user_format)
 	struct tm tm;
 
 	localtime_r (&t, &tm);
-	strftime (result, result_size, user_format, &tm);
+	if (strftime (result, result_size, user_format, &tm) == 0) {
+	  // Expansion didn't fit in result_size.  Contents are unspecified per C standard; don't print them.
+	  result[0] = '\0';
+	}
 
 }  /* end timestamp_user_format */
 

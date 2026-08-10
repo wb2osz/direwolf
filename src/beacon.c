@@ -165,7 +165,8 @@ void beacon_init (struct audio_s *pmodem, struct misc_config_s *pconfig, struct 
 	  if (chan >= MAX_TOTAL_CHANS) chan = 0;	// For ICHANNEL, use channel 0 call.
 
 	  if (g_modem_config_p->chan_medium[chan] == MEDIUM_RADIO ||
-	      g_modem_config_p->chan_medium[chan] == MEDIUM_NETTNC) {
+	      g_modem_config_p->chan_medium[chan] == MEDIUM_NETTNC ||
+	      g_modem_config_p->chan_medium[chan] == MEDIUM_SERTNC) {
 
 	    if (strlen(g_modem_config_p->mycall[chan]) > 0 &&
 			 strcasecmp(g_modem_config_p->mycall[chan], "N0CALL") != 0 &&

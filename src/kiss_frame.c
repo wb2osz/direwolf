@@ -251,10 +251,12 @@ int kiss_encapsulate (unsigned char *in, int ilen, unsigned char *out)
  *
  * Inputs:	out	- Where to put the resulting frame without
  *			  the escapes or FEND.
+ *			  Storage must be at least as long as input.
+ *			  Output can never be longer than input.
  *			  First byte is the "type indicator" with type and 
  *			  channel but we don't care about that here.
  *			  We treat it like any other byte with special handling
- *			  if it happens to be FESC.
+ *			  if it happens to be one of the escaped characters.
  *			  Note that this is "binary" data and can contain
  *			  nul (0x00) values.   Don't treat it like a text string!
  *
@@ -280,7 +282,7 @@ int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
 	}
 
 	if (in[ilen-1] == FEND) {
-	  ilen--;	/* Don't try to process below. */
+	  ilen--;	/* Remove FEND from he end. */
 	}
 	else {
 	  text_color_set(DW_COLOR_ERROR);
@@ -342,6 +344,8 @@ int kiss_unwrap (unsigned char *in, int ilen, unsigned char *out)
  *
  * Inputs:	kf	- Current state of building a frame.
  *		ch	- A byte from the input stream.
+ *			  Note that it can be any value 0-255.
+ *			  This is binary data, not a nul terminated string.
  *		debug	- Activates debug output.
  *		kps	- KISS TCP port status block.
  *			  NULL for pseudo terminal and serial port.
@@ -442,8 +446,9 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug,
 
      
 	    if (ch == FEND) {
-	      
-	      unsigned char unwrapped[AX25_MAX_PACKET_LEN];
+	      // Unwrapped result can't be longer than received encoded KISS.
+	      //  kf->kiss_msg is MAX_KISS_LEN so that is enough for here.    
+	      unsigned char unwrapped[MAX_KISS_LEN];
 	      int ulen;
 
 	      /* End of frame. */
@@ -482,12 +487,17 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug,
 	      return;
 	    }
 
-	    if (kf->kiss_len < MAX_KISS_LEN) {
+	    // Issue 617.
+	    // In the KS_COLLECTING state, non-FEND bytes were being collected up until
+	    // the MAX_KISS_LEN limit, leaving no room for appending the final FEND byte
+	    // at the end. By reducing the collection limit by one, there is room for
+	    // that final byte. 
+	    if (kf->kiss_len < MAX_KISS_LEN - 1) {
 	      kf->kiss_msg[kf->kiss_len++] = ch;
 	    }
 	    else {	    
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("KISS message exceeded maximum length.\n");
+	      dw_printf ("KISS message exceeded maximum length.  Discarding excess.\n");
 	    }	      
 	    return;
 	    break;

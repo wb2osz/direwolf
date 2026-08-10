@@ -23,11 +23,12 @@
 
 #define AX25_N2_RETRY_MIN 1		// Number of times to retry before giving up.
 #define AX25_N2_RETRY_DEFAULT 10
-#define AX25_N2_RETRY_MAX 15
+#define AX25_N2_RETRY_MAX 20
 
 
-#define AX25_T1V_FRACK_MIN 1		// Number of seconds to wait before retrying.
-#define AX25_T1V_FRACK_DEFAULT 3	// KPC-3+ has 4.  TM-D710A has 3.
+#define AX25_T1V_FRACK_MIN 2		// Number of seconds to wait before retrying.
+#define AX25_T1V_FRACK_DEFAULT 4	// KPC-3+ has 4.  TM-D710A has 3.
+					// Previous 3 seems too agressive in practice for 1200 bps.
 #define AX25_T1V_FRACK_MAX 15
 
 
@@ -37,13 +38,27 @@
 
 #define AX25_K_MAXFRAME_EXTENDED_MIN 1
 #define AX25_K_MAXFRAME_EXTENDED_DEFAULT 32
-#define AX25_K_MAXFRAME_EXTENDED_MAX 63		// In theory 127 but I'm restricting as explained in SREJ handling.
+#define AX25_K_MAXFRAME_EXTENDED_MAX 63		// It cannot be 127 because SREJ requires out‑of‑order acceptance,
+						// which forces the window to be <= modulus/2.
+						// With a window of 127, the sender could have 126 outstanding
+						// unacknowledged frames.  If the receiver issues an SREJ for
+						// frame N, but the sender has already wrapped and reused sequence
+						// numbers, the receiver cannot know:
+						//  - Is this SREJ referring to the old frame N?
+						//  - Or the new frame N after wrap-around?
+						// This ambiguity makes SREJ unsafe with a window anywhere near the modulus.
 
-
+#define AX25_K_MAXFRAME_EXTENDED_START_SAFE 4	// We ran into a situation where we sent 32 I frames
+						// immediately after connecting.  Then we got an XID frame
+						// saying, "I can only handle 16 due to memory constraints."
+						// Let's try starting with a small value, which should be safe,
+						// until the negotiation is complete.  This is different than
+						// default which is what we suggest using in the negotiation.
+						// Should probably be configurable but let's try it first.
 
 // Call once at startup time.
 
-void ax25_link_init (struct misc_config_s *pconfig, int debug);
+void ax25_link_init (struct misc_config_s *pconfig, int debug, int stats);
 
 
 

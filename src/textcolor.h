@@ -23,6 +23,7 @@ typedef enum dw_color_e dw_color_t;
 
 			
 void text_color_init (int enable_color);
+void dw_printf_capture_init (char *o_opt, char *O_opt);
 void text_color_set (dw_color_t c);
 void text_color_term (void);
 

@@ -16,4 +16,3 @@ void log_write (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, retry_
 
 void log_rr_bits (decode_aprs_t *A, packet_t pp);
 
-void log_term (void); 	

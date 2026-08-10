@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2021, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2021, 2023, 2025, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -883,7 +883,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	p_misc_config->kiss_port[0] = DEFAULT_KISS_PORT;
 	p_misc_config->kiss_chan[0] = -1;	// all channels.
 
-	p_misc_config->enable_kiss_pt = 0;				/* -p option */
 	p_misc_config->kiss_copy = 0;
 
 	p_misc_config->dns_sd_enabled = 1;
@@ -1379,6 +1378,70 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    p_audio_config->nettnc_port[nchan] = atoi(t);
+	  }
+
+/*
+ * SCHANNEL chan device baudrate		- Define Serial TNC virtual channel.
+ *
+ *	This allows a client application to talk to to an external TNC over serial KISS
+ *	by using a channel number outside the normal range for modems.
+ *	This does not change the current channel number used by MODEM, PTT, etc.
+ *
+ *	chan = direwolf channel.
+ *	device = device (serial port) name of serial TNC.
+ *	baudrate = baud rate for communicating with serial TNC.
+ *
+ *	Future: Might allow selection of channel on the serial TNC.
+ *	For now, ignore incoming and set to 0 for outgoing.
+ *
+ * FIXME: Can't set mycall for schannel.
+ */
+
+	  else if (strcasecmp(t, "SCHANNEL") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing virtual channel number for SCHANNEL command.\n", line);
+	      continue;
+	    }
+	    int nchan = atoi(t);
+            if (nchan >= MAX_RADIO_CHANS && nchan < MAX_TOTAL_CHANS) {
+
+	      if (p_audio_config->chan_medium[nchan] == MEDIUM_NONE) {
+
+	        p_audio_config->chan_medium[nchan] = MEDIUM_SERTNC;
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+                dw_printf ("Line %d: SCHANNEL can't use channel %d because it is already in use.\n", line, nchan);
+	      }
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: SCHANNEL number must in range of %d to %d.\n", line, MAX_RADIO_CHANS, MAX_TOTAL_CHANS-1);
+	    }
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing serial TNC device for SCHANNEL command.\n", line);
+	      continue;
+	    }
+	    strlcpy (p_audio_config->sertnc_device[nchan], t, sizeof(p_audio_config->sertnc_device[nchan]));
+	    int n;
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      n = atoi(t);
+	      if (n != 1200 && n != 2400 && n != 4800 && n != 9600 && n != 19200 && n != 38400 && n != 57600 && n != 115200) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Warning: Unsupported data rate of %d bits per second.  Using 9600.\n", line, n);
+	        n = 9600;
+    	      }
+	      p_audio_config->sertnc_baud[nchan] = n;
+	    }
+	    else {
+	      p_audio_config->sertnc_baud[nchan] = 9600;
+	    }
 	  }
 
 /*
@@ -2198,7 +2261,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 #else
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file line %d: %s with CM108 is only available when USB Audio GPIO support is enabled.\n", line, otname);
-	      dw_printf ("You must rebuild direwolf with CM108 Audio Adapter GPIO PTT support.\n");
+	      dw_printf ("You must install libudev-dev and rebuild direwolf to have CM108 Audio Adapter GPIO PTT support.\n");
 	      dw_printf ("See Interface Guide for details.\n");
 	      rtfm();
 	      exit (EXIT_FAILURE);
@@ -2749,7 +2812,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    // Channels specified must be radio channels or network TNCs.
 
 	    if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
-	        p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC) {
+	        p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC &&
+	        p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -2777,7 +2841,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 
 	    if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
-	        p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC) {
+	        p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC &&
+	        p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
@@ -3111,7 +3176,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 
 	      if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
-		  p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC) {
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC &&
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -3149,7 +3215,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        continue;
 	      }
 	      if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
-		  p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC) {
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC &&
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
@@ -4429,7 +4496,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	          x = -1;
 	        }
 	        else if (p_audio_config->chan_medium[x] != MEDIUM_RADIO &&
-			 p_audio_config->chan_medium[x] != MEDIUM_NETTNC) {
+			 p_audio_config->chan_medium[x] != MEDIUM_NETTNC &&
+			 p_audio_config->chan_medium[x] != MEDIUM_SERTNC) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Config file, line %d: TTOBJ transmit channel %d is not valid.\n", line, x);
 	          x = -1;
@@ -4716,6 +4784,10 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * IGTXVIA  channel  [ path ]
  */
 
+// FIXME: Should allow multiple transmit channels.
+// Should probably have multiple IGTXVIA, rather than a list of channels,
+// because they might want different paths.
+
 	  else if (strcasecmp(t, "IGTXVIA") == 0) {
 	    int n;
 
@@ -4780,7 +4852,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (p_igate_config->t2_filter != NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Warning - Earlier IGFILTER value will be replaced by this one.\n", line);
+	      dw_printf ("Line %d: Warning - IGFILTER already configured (%s), this one (%s) will be ignored.\n", line, p_igate_config->t2_filter, t);
 	      continue;
 	    }
 
@@ -4884,7 +4956,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * SATGATE 		- Special SATgate mode to delay packets heard directly.
+ * SATGATE 		- Turned out to be not such a good idea.
  *
  * SATGATE [ n ]
  */
@@ -4892,24 +4964,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  else if (strcasecmp(t, "SATGATE") == 0) {
 
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Line %d: SATGATE is pretty useless and will be removed in a future version.\n", line);
+	    dw_printf ("Line %d: See User Guide for SATgate suggestions.\n", line);
 
-	    t = split(NULL,0);
-	    if (t != NULL) {
-
-	      int n = atoi(t);
-              if (n >= MIN_SATGATE_DELAY && n <= MAX_SATGATE_DELAY) {
-	        p_igate_config->satgate_delay = n;
-	      }
-	      else {
-	        p_igate_config->satgate_delay = DEFAULT_SATGATE_DELAY;
-	        text_color_set(DW_COLOR_ERROR);
-                dw_printf ("Line %d: Unreasonable SATgate delay.  Using default.\n", line);
-	      }
-	    }
-	    else {
-	      p_igate_config->satgate_delay = DEFAULT_SATGATE_DELAY;
-	    }
 	  }
 
 
@@ -5006,6 +5062,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    // "KISSPORT 0" is used to remove the default entry.
 
 	    if (tcp_port == 0) {
+// FIXME: This is no longer correct after allowing multiple TCP ports.
 	      p_misc_config->kiss_port[0] = 0;		// Should all be wiped out?
 	    }
 	    else {
@@ -5036,6 +5093,96 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	    }
 	  }
+
+
+/*
+ * KISSPTY [ chan ]		- Add pseudo terminal for KISS client. Linux only feature.
+ *				  Modern applications generally allow KISS over TCP.
+ *				  This is here mostly for those who insist on using AX.25 for Linux.
+ *				  https://www.ardc.net/apply/grants/2021-grants/grant-fixing-the-linux-kernel-ax-25/
+ */
+
+	// Originally, we could have a single KISS pty for client application use.
+	// This was activated by the -p command line option.  There was no config file equivalent.
+	//
+	// The pty number can't be specified and is unpredictable so we create a
+	// symlink of /tmp/kisstnc.
+	//
+	// In version 1.9, we add the capability to have multiple pty interfaces and a
+	// specific channel can be specified for applications that don't know how to deal
+	// with multi-port TNCs.
+	//
+	// New config file item:
+	//
+	// KISSPTY
+	//		Same as command line option -p. All channels. Symlink /tmp/kisstnc.
+	//
+	// KISSPTY n
+	//		Frames received from channel n would go to client app with 4 bit kiss channel field set to 0.
+	//		For KISS frames from client, the channel would be ignored, and it would be transmitted to channel n.
+	//		symlink /tmp/kisstnc{n}
+	//
+	//		e.g. PTYKISS 7 --> symlink /tmp/kisstnc7
+	//
+	// There is a maximum number of pty interfaces allowed.
+	// Edit kiss.h, increase number and rebuild, if you need more.
+	//
+	// The channel number, or lack of, may not be repeated.
+	// This would try to create multiple symlinks with the same name.
+
+
+	  else if (strcasecmp(t, "KISSPTY") == 0) {
+#if __WIN32__
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Line %d: KISSPTY is not available on Windows.\n", line);
+#else
+	    int chan = -1;	// optional.  default to all if not specified.
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      chan = atoi(t);
+	      if (chan < 0 || chan >= MAX_TOTAL_CHANS) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: Invalid channel %d for KISSPORT command.  Must be in range 0 thru %d.\n", line, chan, MAX_TOTAL_CHANS-1);
+	        continue;
+	      }
+	    }
+
+	    // Add to list if maximum number not exceeded.
+	    // FIXME: Don't allow duplicate channel number, including -1 for all.
+
+	    if (p_misc_config->num_kiss_pty < MAX_KISS_PTY) {
+	      p_misc_config->kiss_pty_chan[p_misc_config->num_kiss_pty++] = chan;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Too many KISSPTY commands.\n", line);
+	    }
+#endif
+	  }
+
+
+/*
+ * TCP_WMEM n		- Experiment for Issue 620.  Set KISS TCP write buffer size.
+ */
+
+	  else if (strcasecmp(t, "TCP_WMEM") == 0) {
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing size number for TCP_WMEM command.\n", line);
+	      continue;
+	    }
+	    int n = atoi(t);
+            if (n >= 4 * 1024 && n <= 4 * 1024 * 1024) {
+	      p_misc_config->tcp_wmem = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: Be serious.  Using default.\n", line);
+	    }
+	  }
+
 
 /*
  * NULLMODEM name [ speed ]	- Device name for serial port or our end of the virtual "null modem"
@@ -5105,8 +5252,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 
 /*
- * DNSSD 		- Enable or disable (1/0) dns-sd, DNS Service Discovery announcements
- * DNSSDNAME            - Set DNS-SD service name, defaults to "Dire Wolf on <hostname>"
+ * DNSSD n		 - Enable or disable (1/0) dns-sd, DNS Service Discovery announcements
+ * DNSSDNAME x           - Set DNS-SD service name, defaults to "Dire Wolf on <hostname>"
  */
 
 	  else if (strcasecmp(t, "DNSSD") == 0) {
@@ -5332,6 +5479,27 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
+ * TIMESTAMP	fmt	- Time stamp format for sent and received frames.
+ *			  Same as the -T command line option, which takes precedence
+ *			  if also specified.  Uses "strftime" format string, e.g. "%H:%M:%S ".
+ */
+	  else if (strcasecmp(t, "TIMESTAMP") == 0) {
+	    t = split(NULL,1);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Config file: Missing time stamp format for TIMESTAMP on line %d.\n", line);
+	      continue;
+	    }
+	    else {
+	      if (strlen(t) >= sizeof(p_audio_config->timestamp_format)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: TIMESTAMP format on line %d is too long and will be truncated.\n", line);
+	      }
+	      strlcpy (p_audio_config->timestamp_format, t, sizeof(p_audio_config->timestamp_format));
+	    }
+	  }
+
+/*
  * BEACON channel delay every message
  *
  * Original handcrafted style.  Removed in version 1.0.
@@ -5394,6 +5562,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Maximum number of beacons exceeded on line %d.\n", line);
+	      dw_printf ("Increase MAX_BEACONS value in config.h and rebuild.\n");
 	      continue;
 	    }
 	  }
@@ -5499,20 +5668,22 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  */
 
 	  else if (strcasecmp(t, "RETRY") == 0) {
-	    int n;
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing value for RETRY.\n", line);
 	      continue;
 	    }
-	    n = atoi(t);
-            if (n >= AX25_N2_RETRY_MIN && n <= AX25_N2_RETRY_MAX) {
-	      p_misc_config->retry = n;
-	    }
-	    else {
+	    p_misc_config->retry = atoi(t);
+            if (p_misc_config->retry < AX25_N2_RETRY_MIN) {
 	      text_color_set(DW_COLOR_ERROR);
-              dw_printf ("Line %d: Invalid RETRY number. Using default %d.\n", line, p_misc_config->retry);
+              dw_printf ("Line %d: RETRY number can't be less than %d.\n", line, AX25_N2_RETRY_MIN);
+	      p_misc_config->retry = AX25_N2_RETRY_MIN;
+	    }
+            if (p_misc_config->retry > AX25_N2_RETRY_MAX) {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: RETRY number can't be greater than %d.\n", line, AX25_N2_RETRY_MAX);
+	      p_misc_config->retry = AX25_N2_RETRY_MAX;
 	    }
 	  }
 
@@ -5657,6 +5828,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *					  Possible to have multiple and they are cumulative.
  */
 
+#if 1	// release 1.9
+// In hindsight, that was a bad idea. Was this ever used?
+// We should not be enablers of bad behavior.
+// Rip out all associated code in release 2.0 ???
+
 	  else if (strcasecmp(t, "NOXID") == 0) {
 
 	    t = split(NULL,0);
@@ -5684,7 +5860,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      t = split(NULL,0);
 	    }
 	  }
-
+#endif
 
 /*
  * Invalid command.
@@ -5784,7 +5960,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 /* When IGate is enabled, all radio channels must have a callsign associated. */
 
 	  if (strlen(p_igate_config->t2_login) > 0 &&
-	      (p_audio_config->chan_medium[i] == MEDIUM_RADIO || p_audio_config->chan_medium[i] == MEDIUM_NETTNC)) {
+	      (p_audio_config->chan_medium[i] == MEDIUM_RADIO ||
+	        p_audio_config->chan_medium[i] == MEDIUM_NETTNC ||
+	        p_audio_config->chan_medium[i] == MEDIUM_SERTNC)) {
 
 	    if (strcmp(p_audio_config->mycall[i], "NOCALL") == 0  || strcmp(p_audio_config->mycall[i], "N0CALL") == 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -5810,7 +5988,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	if (strlen(p_igate_config->t2_login) > 0) {
 	  for (j=0; j<MAX_TOTAL_CHANS; j++) {
-	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO || p_audio_config->chan_medium[j] == MEDIUM_NETTNC) {
+	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO ||
+	        p_audio_config->chan_medium[j] == MEDIUM_NETTNC ||
+	        p_audio_config->chan_medium[j] == MEDIUM_SERTNC) {
 	      if (p_digi_config->filter_str[MAX_TOTAL_CHANS][j] == NULL) {
 	        p_digi_config->filter_str[MAX_TOTAL_CHANS][j] = strdup("i/180");
 	      }

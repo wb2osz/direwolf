@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2016, 2017, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -25,8 +25,8 @@
  *
  * Purpose:   	Act as a virtual KISS TNC for use by other packet radio applications.
  *		This file implements it with a pseudo terminal for Linux only.
- *		
- * Description:	It implements the KISS TNC protocol as described in:
+ *
+ * Description:	This implements the KISS TNC protocol as described in:
  *		http://www.ka9q.net/papers/kiss.html
  *
  * 		Briefly, a frame is composed of 
@@ -40,6 +40,7 @@
  *		The first byte of the frame contains:
  *	
  *			* port number in upper nybble.
+ *				I call it a channel because there are too many other uses of the word port.
  *			* command in lower nybble.
  *
  *	
@@ -64,7 +65,7 @@
  *			FF	Return		Exit KISS mode.  Ignored.
  *
  *
- *		Messages sent to client application:
+ *		Frames sent to client application:
  *
  *			_0	Data Frame	Received AX.25 frame in raw format.
  *
@@ -72,9 +73,42 @@
  * Platform differences:
  *
  *		For the Linux case,
- *			We supply a pseudo terminal for use by other applications.
+ *			We supply a pseudo terminal(s) for use by other client applications.
  *
  * Version 1.5:	Split serial port version off into its own file.
+ *
+ * TODO:	This should probably be renamed to kisspty.c for consistency with kissnet and kissserial.
+ *
+ *
+ * Version 1.9:	Allow multiple pty interfaces and use of one specific channel.
+ *
+ *		Orignally, we could have a single KISS pty for client application use.
+ *		This was activated by the -p command line option.  There was no config file equivalent.
+ *
+ *		The pty number can't be specified and is unpredictable so we create a
+ *		symlink of /tmp/kisstnc.
+ *
+ *		In version 1.9, we add the capability to have multiple pty interfaces and a
+ *		specific channel can be specified for applications that don't know how to deal
+ *		with multi-port TNCs.
+ *
+ *		New config file item:
+ *
+ *		KISSPTY
+ *			 Same as command line option -p. All channels. Symlink /tmp/kisstnc.
+ *
+ *		KISSPTY n
+ *			Frames received from channel n would go to client app with 4 bit kiss channel field set to 0.
+ *			For KISS frames from client, the channel would be ignored, and it would be transmitted to channel n.
+ *			symlink /tmp/kisstnc{n}
+ *
+ *			e.g. PTYKISS 7 --> symlink /tmp/kisstnc7
+ *
+ *		There is a maximum number of pty interfaces allowed.
+ *		Edit kiss.h, increase number and rebuild, if you need more.
+ *
+ *		The channel number, or lack of, may not be repeated.
+ *		This would try to create multiple symlinks with the same name.
  *
  *---------------------------------------------------------------*/
 
@@ -84,7 +118,7 @@
 #include "direwolf.h"
 #include "kiss.h"
 
-void kisspt_init (struct misc_config_s *mc)
+void kisspt_init (struct misc_config_s *mc, int enable_pseudo_terminal)
 {
 	return;
 }
@@ -108,6 +142,7 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
@@ -130,26 +165,33 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
  * Accumulated KISS frame and state of decoder.
  */
 
-static kiss_frame_t kf;
+static kiss_frame_t kf[MAX_KISS_PTY];
 
 
 /*
  * These are for a Linux pseudo terminal.
  */
 
-static int pt_master_fd = -1;		/* File descriptor for my end. */
+static int pt_master_fd[MAX_KISS_PTY];		/* File descriptor for my end. -1 for none. */
 
-static char pt_slave_name[32];		/* Pseudo terminal slave name  */
-					/* like /dev/pts/999 */
+static char pt_slave_name[MAX_KISS_PTY][32];	/* Pseudo terminal slave name  */
+						/* like /dev/pts/999 */
+
+static char symlink_name[MAX_KISS_PTY][32];	/* Symlink names like /tmp/kisstnc{n} */
+						/* Keep them for cleanup on exit. */
+
+static struct kissport_status_s kps[MAX_KISS_PTY]; /* Needed for selecting/adjusting channel */
+						/* for kiss client app to direwolf direction. */
 
 
 /*
- * Symlink to pseudo terminal name which changes.
+ * Base bane for symlink to pseudo terminal.
+ * Channel number might be appended.
  */
 
 #define TMP_KISSTNC_SYMLINK "/tmp/kisstnc"
 
-
+static void kisspty_term (void);
 static void * kisspt_listen_thread (void *arg);
 
 
@@ -176,76 +218,117 @@ void hex_dump (unsigned char *p, int len);
  * Purpose:     Set up a pseudo terminal acting as a virtual KISS TNC.
  *		
  *
- * Inputs:
+ * Inputs:	mc->num_kiss_pty	- Number of pseudo terminals.
  *
- * Outputs:	
+ *		mc->kiss_pty_chan[]	- Channel number or -1 for all.
  *
- * Description:	(1) Create a pseudo terminal for the client to use.
- *		(2) Start a new thread to listen for commands from client app
+ *		enable_pseudo_terminal	- true if -p command line option.
+ *
+ * Outputs:	(local) pt_master_fd[]	- File descriptors for the pty devices.
+ *
+ * Description:	(1) Create pseudo terminal(s) for the client to use.
+ *		(2) For each, start a new thread to listen for commands from client app
  *		    so the main application doesn't block while we wait.
  *
  *
  *--------------------------------------------------------------------*/
 
-static int kisspt_open_pt (void);
+static int kisspt_open_pt (int pty_index);
 
+static struct misc_config_s *save_mc;
 
-void kisspt_init (struct misc_config_s *mc)
+void kisspt_init (struct misc_config_s *mc, int enable_pseudo_terminal)
 {
 
 	pthread_t kiss_pterm_listen_tid;
 	int e;
+	save_mc = mc;
 
-	memset (&kf, 0, sizeof(kf));
+	memset (kf, 0, sizeof(kf));
+	memset (kps, 0, sizeof(kps));
 
 /*
- * This reads messages from client.
+ * If -p was a command line option, act like there was a "KISSPTY" in the config file.
  */
-	pt_master_fd = -1;
+	if (enable_pseudo_terminal) {
+	  int needed = 1;
+	  for (int j = 0; j < mc->num_kiss_pty; j++) {
+	    if (mc->kiss_pty_chan[j] == -1) {
+	      needed = 0;
+	    }
+	  }
+	  if (needed) {
+	    if (mc->num_kiss_pty < MAX_KISS_PTY) {
+	      mc->kiss_pty_chan[mc->num_kiss_pty++] = -1;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Command line option -p ignored because max pty count would be exceeded.");
+	    }
+	  }
+	}
 
-	if (mc->enable_kiss_pt) {
+/*
+ * This reads frames from client.
+ */
+	for (int j = 0; j < MAX_KISS_PTY; j++) {
+	   pt_master_fd[j] = -1;
+	   kps[j].chan = mc->kiss_pty_chan[j];
+	}
 
-	  pt_master_fd = kisspt_open_pt ();
+	//if (mc->enable_kiss_pt) {
+	for (int j = 0; j < mc->num_kiss_pty; j++) {
+	  pt_master_fd[j] = kisspt_open_pt (j);
 
-	  if (pt_master_fd != -1) {
-	    e = pthread_create (&kiss_pterm_listen_tid, (pthread_attr_t*)NULL, kisspt_listen_thread, NULL);
+	  if (pt_master_fd[j] != -1) {
+	    e = pthread_create (&kiss_pterm_listen_tid, (pthread_attr_t*)NULL, kisspt_listen_thread, (void*)(ptrdiff_t)j);
 	    if (e != 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      perror("Could not create kiss listening thread for Linux pseudo terminal");
 	    }
 	  }
-	}
-	else {
-	  //text_color_set(DW_COLOR_INFO);
-	  //dw_printf ("Use -p command line option to enable KISS pseudo terminal.\n");
+	   kps[j].chan = mc->kiss_pty_chan[j];
 	}
 
+	if (kisspt_debug >= 3) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("end of kisspt_init: \n");
+	}
 
-#if DEBUG
-	text_color_set (DW_COLOR_DEBUG);
+	atexit (kisspty_term);
 
-	dw_printf ("end of kisspt_init: pt_master_fd = %d\n", pt_master_fd);
-#endif
+}  // end kisspty_init
 
-}
+
+// Clean up symlinks on exit.
+
+static void kisspty_term (void)
+{
+	for (int j = 0; j < save_mc->num_kiss_pty; j++) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("Removing symlink %s\n", symlink_name[j]);
+	  unlink (symlink_name[j]);
+ 	}
+
+}  // end kisspty_term
+
 
 
 /*
  * Returns fd for master side of pseudo terminal or -1 for error.
  */
 
-static int kisspt_open_pt (void)
+static int kisspt_open_pt (int pty_index)
 {
 	int fd;
 	char *pts;
 	struct termios ts;
 	int e;
 
-
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("kisspt_open_pt (  )\n");
-#endif
+	if (kisspt_debug >= 3) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("kisspt_open_pt (pty_index=%d)\n", pty_index);
+	}
 
 	fd = posix_openpt(O_RDWR|O_NOCTTY);
 
@@ -258,7 +341,7 @@ static int kisspt_open_pt (void)
 	  return (-1);
 	}
 
-	strlcpy (pt_slave_name, pts, sizeof(pt_slave_name));
+	strlcpy (pt_slave_name[pty_index], pts, sizeof(pt_slave_name[pty_index]));
 
 	e = tcgetattr (fd, &ts);
 	if (e != 0) { 
@@ -305,10 +388,9 @@ static int kisspt_open_pt (void)
 	}
 
 	text_color_set(DW_COLOR_INFO);
-	dw_printf("Virtual KISS TNC is available on %s\n", pt_slave_name);
+	dw_printf("Virtual KISS TNC is available on %s\n", pt_slave_name[pty_index]);
 	
 
-#if 1
 	// Sample code shows this. Why would we open it here?
 	// On Ubuntu, the slave side disappears after a few
 	// seconds if no one opens it.  Same on Raspbian which
@@ -317,15 +399,14 @@ static int kisspt_open_pt (void)
 
 	int pt_slave_fd;
 
-	pt_slave_fd = open(pt_slave_name, O_RDWR|O_NOCTTY);
+	pt_slave_fd = open(pt_slave_name[pty_index], O_RDWR|O_NOCTTY);
 
 	if (pt_slave_fd < 0) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Can't open %s\n", pt_slave_name);	
+	    dw_printf ("Can't open %s\n", pt_slave_name[pty_index]);
 	    perror ("");
 	    return -1;
 	}
-#endif
 
 /*
  * The device name is not the same every time.
@@ -333,24 +414,34 @@ static int kisspt_open_pt (void)
  * be necessary to change the device name in the configuration.
  * Create a symlink, /tmp/kisstnc, so the application configuration
  * does not need to change when the pseudo terminal name changes.
+ *
+ * In version 1.9, we append the channel number if not all.
  */
+	
+	if (save_mc->kiss_pty_chan[pty_index] >= 0) {
+	  snprintf (symlink_name[pty_index], sizeof(symlink_name[pty_index]), "%s%d", TMP_KISSTNC_SYMLINK, save_mc->kiss_pty_chan[pty_index]);
+	}
+	else {
+	  strlcpy (symlink_name[pty_index], TMP_KISSTNC_SYMLINK, sizeof(symlink_name));
+	}
 
-	unlink (TMP_KISSTNC_SYMLINK);
+	// Just in case it didn't get cleaned up.
+	unlink (symlink_name[pty_index]);
 
-
-// TODO: Is this removed when application exits?
-
-	if (symlink (pt_slave_name, TMP_KISSTNC_SYMLINK) == 0) {
-	    dw_printf ("Created symlink %s -> %s\n", TMP_KISSTNC_SYMLINK, pt_slave_name);
+	if (symlink (pt_slave_name[pty_index], symlink_name[pty_index]) == 0) {
+	    dw_printf ("Created symlink %s -> %s\n", symlink_name[pty_index], pt_slave_name[pty_index]);
 	}
 	else {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Failed to create symlink %s\n", TMP_KISSTNC_SYMLINK);	
+	    dw_printf ("Failed to create symlink %s -> %s\n", symlink_name[pty_index], pt_slave_name[pty_index]);
 	    perror ("");
+	    // Serious.  Should probably exit.
 	}
 
 	return (fd);
-}
+
+}  // end kisspt_open_pt
+
 
 
 
@@ -358,10 +449,10 @@ static int kisspt_open_pt (void)
  *
  * Name:        kisspt_send_rec_packet
  *
- * Purpose:     Send a received packet or text string to the client app.
+ * Purpose:     Send a received (from radio) packet or text string to the client app.
  *
  * Inputs:	chan		- Channel number where packet was received.
- *				  0 = first, 1 = second if any.
+ *				  0 = first, 1 = second if any, etc.
  *
  *		kiss_cmd	- Usually KISS_CMD_DATA_FRAME but we can also have
  *				  KISS_CMD_SET_HARDWARE when responding to a query.
@@ -374,11 +465,19 @@ static int kisspt_open_pt (void)
  *		flen		- Length of raw received frame not including the FCS
  *				  or -1 for a text string.
  *
+ *	formerly:
  *		kps, client	- Not used for pseudo terminal.
  *				  Here so that 3 related functions all have
  *				  the same parameter list.
  *
- * Description:	Send message to client.
+ *	version 1.9:
+ *		kps		- Need to use this because it contains the specific channel
+ *				  (or -1 for all) associated with each pty.
+ *
+ *		client		- This is for responses to a specific client.
+ *			FIXME FIXME
+ *
+ * Description:	Send received frames to to client(s).
  *		We really don't care if anyone is listening or not.
  *		I don't even know if we can find out.
  *
@@ -391,10 +490,17 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
 	int kiss_len;
 	int err;
 
-
-	if (pt_master_fd == -1) {
-	  return;
+	if (kisspt_debug >= 3) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("kisspt_send_rec_packet (chan=%d, kiss_cmd=%d, ..., kps=%p, client=%d)\n", chan, kiss_cmd, kps, client);
 	}
+
+	for (int j = 0; j < save_mc->num_kiss_pty; j++) {
+	  if (pt_master_fd[j] == -1) {
+	    // Shouldn't happen.
+	    continue;
+	  }
+
 
 	if (flen < 0) {
 	  flen = strlen((char*)fbuf);
@@ -408,14 +514,28 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
 
 	  unsigned char stemp[AX25_MAX_PACKET_LEN + 1];
 	 
+// If no channel specified, for the pty, send everything with normal channel numbers.
+// However, when a single channel has been specified, send only that
+// channel and set the kiss port/channel field to zero, to appease an application
+// that doesn't know how to deal with multi-port TNCs.
+
+	  if (save_mc->kiss_pty_chan[j] < 0) {
+	    stemp[0] = (chan << 4) | kiss_cmd;
+	    memcpy (stemp+1, fbuf, flen);
+	  }
+	  else if (chan == save_mc->kiss_pty_chan[j]) {
+	    stemp[0] = (0 << 4) | kiss_cmd;
+	    memcpy (stemp+1, fbuf, flen);
+	  }
+	  else {
+	    continue;
+	  }
+
 	  if (flen > (int)(sizeof(stemp)) - 1) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("\nPseudo Terminal KISS buffer too small.  Truncated.\n\n");
 	    flen = (int)(sizeof(stemp)) - 1;
 	  }
-
-	  stemp[0] = (chan << 4) | kiss_cmd;
-	  memcpy (stemp+1, fbuf, flen);
 
 	  if (kisspt_debug >= 2) {
 	    /* AX.25 frame with the CRC removed. */
@@ -435,20 +555,21 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
 
 	}
 
-        err = write (pt_master_fd, kiss_buff, (size_t)kiss_len);
+        err = write (pt_master_fd[j], kiss_buff, (size_t)kiss_len);
 
 	if (err == -1 && errno == EWOULDBLOCK) {
 	  text_color_set (DW_COLOR_INFO);
-	  dw_printf ("KISS SEND - Discarding message because no one is listening.\n");
+	  dw_printf ("Discarding packet to client app via %s because no one is listening.\n", symlink_name[j]);
 	  dw_printf ("This happens when you use the -p option and don't read from the pseudo terminal.\n");
 	}
 	else if (err != kiss_len)
 	{
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError sending KISS message to client application on pseudo terminal.  fd=%d, len=%d, write returned %d, errno = %d\n\n",
-		pt_master_fd, kiss_len, err, errno);
+	  dw_printf ("\nError sending KISS frame to client application on pseudo terminal.  fd=%d, len=%d, write returned %d, errno = %d\n\n",
+		pt_master_fd[j], kiss_len, err, errno);
 	  perror ("pt write"); 
 	}
+	}  // for each pty
 
 } /* kisspt_send_rec_packet */
 
@@ -461,7 +582,9 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
  *
  * Purpose:     Read one byte from the KISS client app.
  *
- * Global In:	pt_master_fd
+ * input:	pty_index - Index into tables of pty info.
+ *
+ * Global In:	pt_master_fd[]	- File descriptor, indexed by above.
  *
  * Returns:	one byte (value 0 - 255) or terminate thread on error.
  *
@@ -474,7 +597,7 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
  *--------------------------------------------------------------------*/
 
 
-static int kisspt_get (void)
+static int kisspt_get (int pty_index)
 {
 	unsigned char ch;
 
@@ -524,12 +647,12 @@ static int kisspt_get (void)
  */
 
 	  FD_ZERO(&fd_in);
-	  FD_SET(pt_master_fd, &fd_in);
+	  FD_SET(pt_master_fd[pty_index], &fd_in);
 
 	  FD_ZERO(&fd_ex);
-	  FD_SET(pt_master_fd, &fd_ex);
+	  FD_SET(pt_master_fd[pty_index], &fd_ex);
 
-	  rc = select(pt_master_fd + 1, &fd_in, NULL, &fd_ex, NULL);
+	  rc = select(pt_master_fd[pty_index] + 1, &fd_in, NULL, &fd_ex, NULL);
 
 #if 0
 	  text_color_set(DW_COLOR_DEBUG);
@@ -542,16 +665,18 @@ static int kisspt_get (void)
 	  }
 
 	  if (rc == -1
-	      || (n = read(pt_master_fd, &ch, (size_t)1)) != 1)
+	      || (n = read(pt_master_fd[pty_index], &ch, (size_t)1)) != 1)
 	  {
 
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\nError receiving KISS message from client application.  Closing %s.\n\n", pt_slave_name);
+	    dw_printf ("\nError receiving KISS frame from client application.  Closing %s.\n\n", pt_slave_name[pty_index]);
 	    perror ("");
 
-	    close (pt_master_fd);
+	    close (pt_master_fd[pty_index]);
 
-	    pt_master_fd = -1;
+	    pt_master_fd[pty_index] = -1;
+
+// FIXME: Generate symlink name based on specified channel.
 	    unlink (TMP_KISSTNC_SYMLINK);
 	    pthread_exit (NULL);
 	  }
@@ -570,7 +695,7 @@ static int kisspt_get (void)
  *
  * Name:        kisspt_listen_thread
  *
- * Purpose:     Read messages from serial port KISS client application.
+ * Purpose:     Read KISS frames from serial port KISS client application.
  *
  * Global In:
  *
@@ -581,17 +706,17 @@ static int kisspt_get (void)
 
 static void * kisspt_listen_thread (void *arg)
 {
+	int pty_index = (int)(ptrdiff_t)arg;
 	unsigned char ch;
 			
-#if DEBUG
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf ("kisspt_listen_thread ( %d )\n", fd);
-#endif
-
+	if (kisspt_debug >= 3) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("kisspt_listen_thread ( pty_index=%d )\n", pty_index);
+	}
 
 	while (1) {
-	  ch = kisspt_get();
-	  kiss_rec_byte (&kf, ch, kisspt_debug, NULL, -1, kisspt_send_rec_packet);
+	  ch = kisspt_get(pty_index);
+	  kiss_rec_byte (&kf[pty_index], ch, kisspt_debug, &(kps[pty_index]), pty_index, kisspt_send_rec_packet);
 	}
 
 	return (void *) 0;	/* Unreachable but avoids compiler warning. */

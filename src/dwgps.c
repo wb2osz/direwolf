@@ -85,6 +85,8 @@ static dwgps_info_t s_dwgps_info = {
 
 static dw_mutex_t s_gps_mutex;
 
+static void dwgps_term (void);
+
 
 /*-------------------------------------------------------------------
  *
@@ -129,6 +131,10 @@ void dwgps_init (struct misc_config_s *pconfig, int debug)
 
 	SLEEP_MS(500);		/* So receive thread(s) can clear the */
 				/* not init status before it gets checked. */
+
+// Clean shutdown at exit.
+
+	atexit (dwgps_term);
 
 } /* end dwgps_init */
 
@@ -225,7 +231,7 @@ void dwgps_print (char *msg, dwgps_info_t *gpsinfo)
  *
  *--------------------------------------------------------------------*/
 
-void dwgps_term (void) {
+static void dwgps_term (void) {
 
 	dwgpsnmea_term ();
 

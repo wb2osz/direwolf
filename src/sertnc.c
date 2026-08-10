@@ -56,11 +56,11 @@
 #include "textcolor.h"
 #include "audio.h"		// configuration.
 #include "kiss.h"
-#include "dwsock.h"		// socket helper functions.
 #include "ax25_pad.h"		// for AX25_MAX_PACKET_LEN
 #include "dlq.h"		// received packet queue
 
-#include "nettnc.h"
+#include "serial_port.h"
+#include "sertnc.h"
 #include "tnc_common.h"
 
 
@@ -74,22 +74,21 @@
 #endif
 
 #if __WIN32__
-static HANDLE nettnc_listen_th[MAX_TOTAL_CHANS];
-static THREAD_F nettnc_listen_thread (void *arg);
+static HANDLE sertnc_listen_th[MAX_TOTAL_CHANS];
+static THREAD_F sertnc_listen_thread (void *arg);
 #else
-static pthread_t nettnc_listen_tid[MAX_TOTAL_CHANS];
-static THREAD_F nettnc_listen_thread (void *arg);	
+static pthread_t sertnc_listen_tid[MAX_TOTAL_CHANS];
+static THREAD_F sertnc_listen_thread (void *arg);	
 #endif
 
 static int s_kiss_debug = 0;
 
 
-
 /*-------------------------------------------------------------------
  *
- * Name:        nettnc_init
+ * Name:        sertnc_init
  *
- * Purpose:      Attach to Network KISS TNC(s) for NCHANNEL config file item(s).
+ * Purpose:      Attach to Serial KISS TNC(s) for SCHANNEL config file item(s).
  *
  * Inputs:	pa              - Address of structure of type audio_s.
  *
@@ -99,18 +98,18 @@ static int s_kiss_debug = 0;
  * Returns:	0 for success, -1 for failure.
  *
  * Description:	Called once at direwolf application start up time.
- *		Calls nettnc_attach for each NCHANNEL configuration item.
+ *		Calls sertnc_attach for each SCHANNEL configuration item.
  *
  *--------------------------------------------------------------------*/
 
-void nettnc_init (struct audio_s *pa)
+void sertnc_init (struct audio_s *pa)
 {
 	for (int i = 0; i < MAX_TOTAL_CHANS; i++) {
 
-	  if (pa->chan_medium[i] == MEDIUM_NETTNC) {
+	  if (pa->chan_medium[i] == MEDIUM_SERTNC) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("Channel %d: Network TNC %s %d\n", i, pa->nettnc_addr[i], pa->nettnc_port[i]);
-	    int e = nettnc_attach (i, pa->nettnc_addr[i], pa->nettnc_port[i]);
+	    dw_printf ("Channel %d: Serial TNC %s %d\n", i, pa->sertnc_device[i], pa->sertnc_baud[i]);
+	    int e = sertnc_attach (i, pa->sertnc_device[i], pa->sertnc_baud[i]);
 	    if (e < 0) {
 	      exit (1);
 	    }
@@ -123,77 +122,63 @@ void nettnc_init (struct audio_s *pa)
 
 /*-------------------------------------------------------------------
  *
- * Name:        nettnc_attach
+ * Name:        sertnc_attach
  *
- * Purpose:      Attach to one Network KISS TNC.
+ * Purpose:      Attach to one Serial KISS TNC.
  *
- * Inputs:	chan	- channel number from NCHANNEL configuration.
+ * Inputs:	chan	- channel number from SCHANNEL configuration.
  *
- *		host	- Host name or IP address.  Often "localhost".
+ *		device	- Serial device name.  Something like "/dev/ttyS0" or "COM4".
  *
- *		port	- TCP port number.  Typically 8001.
- *
- *		init_func - Call this function after establishing communication //
- *			with the TNC.  We put it here, so that it can be done//
- *			again automatically if the TNC disappears and we//
- *			reattach to it.//
- *			It must return 0 for success.//
- *			Can be NULL if not needed.//
+ *		baud	- Serial baud rate.  Typically 9600.
  *
  * Returns:	0 for success, -1 for failure.
  *
- * Description:	This starts up a thread, for each socket, which listens to the socket and
+ * Description:	This starts up a thread, for each device, which listens to the port and
  *		dispatches the messages to the corresponding callback functions.
  *		It will also attempt to re-establish communication with the
- *		TNC if it goes away.
+ *		device if it goes away.
  *
  *--------------------------------------------------------------------*/
 
-static char s_tnc_host[MAX_TOTAL_CHANS][80];
-static char s_tnc_port[MAX_TOTAL_CHANS][20];
-static volatile int s_tnc_sock[MAX_TOTAL_CHANS];	// Socket handle or file descriptor. -1 for invalid.
+static char s_tnc_device[MAX_TOTAL_CHANS][80];
+static int s_tnc_baud[MAX_TOTAL_CHANS];
+static volatile MYFDTYPE s_tnc_fd[MAX_TOTAL_CHANS];	// File descriptor. MYFDERROR for invalid.
 
 
-int nettnc_attach (int chan, char *host, int port)
+int sertnc_attach (int chan, char *device, int baud)
 {
 	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);
 
-	char tncaddr[DWSOCK_IPADDR_LEN];
+	strlcpy (s_tnc_device[chan], device, sizeof(s_tnc_device[chan]));
+	s_tnc_baud[chan] = baud;
+	s_tnc_fd[chan] = MYFDERROR;
 
-	char sport[20];		// need port as text string later.
-	snprintf (sport, sizeof(sport), "%d", port);
+	s_tnc_fd[chan] = serial_port_open (s_tnc_device[chan], s_tnc_baud[chan]);
 
-	strlcpy (s_tnc_host[chan], host, sizeof(s_tnc_host[chan]));
-	strlcpy (s_tnc_port[chan], sport, sizeof(s_tnc_port[chan]));
-	s_tnc_sock[chan] = -1;
-
-	dwsock_init();
-
-	s_tnc_sock[chan] = dwsock_connect (s_tnc_host[chan], s_tnc_port[chan], "Network TNC", 0, 0, tncaddr);
-
-	if (s_tnc_sock[chan] == -1) {
+	if (s_tnc_fd[chan] == MYFDERROR) {
 	  return (-1);
 	}
 
 
 /*
- * Read frames from the network TNC.
+ * Read frames from the serial TNC.
  * If the TNC disappears, try to reestablish communication.
  */
 
 
 #if __WIN32__
-	nettnc_listen_th[chan] = (HANDLE)_beginthreadex (NULL, 0, nettnc_listen_thread, (void *)(ptrdiff_t)chan, 0, NULL);
-	if (nettnc_listen_th[chan] == NULL) {
+	sertnc_listen_th[chan] = (HANDLE)_beginthreadex (NULL, 0, sertnc_listen_thread, (void *)(ptrdiff_t)chan, 0, NULL);
+	if (sertnc_listen_th[chan] == NULL) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Internal error: Could not create remore TNC listening thread\n");
+	  dw_printf ("Internal error: Could not create serial TNC listening thread\n");
 	  return (-1);
 	}
 #else
-	int e = pthread_create (&nettnc_listen_tid[chan], NULL, nettnc_listen_thread, (void *)(ptrdiff_t)chan);
+	int e = pthread_create (&sertnc_listen_tid[chan], NULL, sertnc_listen_thread, (void *)(ptrdiff_t)chan);
 	if (e != 0) {
 	  text_color_set(DW_COLOR_ERROR);
-	  perror("Internal error: Could not create network TNC listening thread");
+	  perror("Internal error: Could not create serial TNC listening thread");
 	  return (-1);
 	}
 #endif
@@ -207,30 +192,30 @@ int nettnc_attach (int chan, char *host, int port)
 
 	return (0);
 
-}  // end nettnc_attach
+}  // end sertnc_attach
 
 
 
 /*-------------------------------------------------------------------
  *
- * Name:        nettnc_listen_thread
+ * Name:        sertnc_listen_thread
  *
  * Purpose:     Listen for anything from TNC and process it.
  *		Reconnect if something goes wrong and we got disconnected.
  *
  * Inputs:	arg			- Channel number.
- *		s_tnc_host[chan]	- Host & port for re-connection.
- *		s_tnc_port[chan]
+ *		s_tnc_device[chan]	- Device & baud rate for re-connection.
+ *		s_tnc_baud[chan]
  *
- * Outputs:	s_tnc_sock[chan] - File descriptor for communicating with TNC.
- *				  Will be -1 if not connected.
+ * Outputs:	s_tnc_fd[chan] - File descriptor for communicating with TNC.
+ *				  Will be MYFDERROR if not connected.
  *
  *--------------------------------------------------------------------*/
 
 #if __WIN32__
-static unsigned __stdcall nettnc_listen_thread (void *arg)
+static unsigned __stdcall sertnc_listen_thread (void *arg)
 #else
-static void * nettnc_listen_thread (void *arg)	
+static void * sertnc_listen_thread (void *arg)	
 #endif	
 {
 	int chan = (int)(ptrdiff_t)arg;
@@ -239,71 +224,71 @@ static void * nettnc_listen_thread (void *arg)
 	kiss_frame_t kstate;	 // State machine to gather a KISS frame.
 	memset (&kstate, 0, sizeof(kstate));
 
-	char tncaddr[DWSOCK_IPADDR_LEN];	// IP address used by dwsock_connect.
-						// Useful when rotate addresses used.
+	int ch;		// normally 0-255 but -1 for error.
 
-// Set up buffer for collecting a KISS frame.$CC exttnc.c
+	int reattach_delay = 30;	// Could happen if USB serial device is unplugged.
 
 	while (1) {
 /*
  * Re-attach to TNC if not currently attached.
  */
-	  if (s_tnc_sock[chan] == -1) {
-
+	  if (s_tnc_fd[chan] == MYFDERROR) {
 	    text_color_set(DW_COLOR_ERROR);
 	    // I'm using the term "attach" here, in an attempt to
 	    // avoid confusion with the AX.25 connect.
-	    dw_printf ("Attempting to reattach to network TNC...\n");
+	    dw_printf ("Attempting to reattach to serial TNC...\n");
 
-	    s_tnc_sock[chan] = dwsock_connect (s_tnc_host[chan], s_tnc_port[chan], "Network TNC", 0, 0, tncaddr);
+	    s_tnc_fd[chan] = serial_port_open (s_tnc_device[chan], s_tnc_baud[chan]);
 
-	    if (s_tnc_sock[chan] != -1) {
-	      dw_printf ("Successfully reattached to network TNC.\n");
+	    if (s_tnc_fd[chan] != MYFDERROR) {
+	      dw_printf ("Successfully reattached to serial TNC.\n");
+	    }
+	    else {
+	      dw_printf ("Failed to reattach.  Try again in %d seconds.\n", reattach_delay);
+	      serial_port_close (s_tnc_fd[chan]);
+	      s_tnc_fd[chan] = MYFDERROR;
+	      SLEEP_SEC (reattach_delay);
+	      continue;
 	    }
 	  }
 	  else {
-#define NETTNCBUFSIZ 2048
-	    unsigned char buf[NETTNCBUFSIZ];
-	    int n = SOCK_RECV (s_tnc_sock[chan], (char *)buf, sizeof(buf));
+	    ch = serial_port_get1 (s_tnc_fd[chan]);
 
-	    if (n == -1) {
+	    if (ch == -1) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Lost communication with network TNC. Will try to reattach.\n");
-	      dwsock_close (s_tnc_sock[chan]);
-	      s_tnc_sock[chan] = -1;
-	      SLEEP_SEC(5);
+	      dw_printf ("Lost communication with serial TNC. Will try to reattach in %d seconds.\n", reattach_delay);
+	      serial_port_close (s_tnc_fd[chan]);
+	      s_tnc_fd[chan] = MYFDERROR;
+	      SLEEP_SEC (reattach_delay);
 	      continue;
 	    }
 
 #if 0
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("TEMP DEBUG:  %d bytes received from channel %d network TNC.\n", n, chan);
+	    dw_printf ("TEMP DEBUG:  byte received from channel %d serial TNC.\n", chan);
 #endif
-	    for (int j = 0; j < n; j++) {
-	      // Separate the byte stream into KISS frame(s) and make it
-	      // look like this came from a radio channel.
-	      my_kiss_rec_byte (&kstate, buf[j], s_kiss_debug, chan, SUBCHAN_NETTNC);
-	    }
-	  } // s_tnc_sock != -1
+	    // Separate the byte stream into KISS frame(s) and make it
+	    // look like this came from a radio channel.
+	    my_kiss_rec_byte (&kstate, ch, s_kiss_debug, chan, SUBCHAN_SERTNC);
+	  } // s_tnc_fd != MYFDERROR
 	} // while (1)
 
 	return (0);	// unreachable but shutup warning.
 
-} // end nettnc_listen_thread
+} // end sertnc_listen_thread
 
 
 
 /*-------------------------------------------------------------------
  *
- * Name:	nettnc_send_packet
+ * Name:	sertnc_send_packet
  *
- * Purpose:	Send packet to a KISS network TNC.
+ * Purpose:	Send packet to a KISS serial TNC.
  *
- * Inputs:	chan	- Channel number from NCHANNEL configuration.
+ * Inputs:	chan	- Channel number from SCHANNEL configuration.
  *		pp	- Packet object.
- *		b	- A byte from the input stream.
  *
- * Outputs:	Packet is converted to KISS and send to network TNC.
+ * Outputs:	Packet is converted to KISS and send to serial TNC.
  *
  * Returns:	none.
  *
@@ -311,7 +296,7 @@ static void * nettnc_listen_thread (void *arg)
  *
  *-----------------------------------------------------------------*/
 
-void nettnc_send_packet (int chan, packet_t pp)
+void sertnc_send_packet (int chan, packet_t pp)
 {
 
 // First, get the on-air frame format from packet object.
@@ -331,23 +316,13 @@ void nettnc_send_packet (int chan, packet_t pp)
 	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
 	int kiss_len = kiss_encapsulate (frame_buff, flen+1, kiss_buff);
 
-#if __WIN32__	
-	int err = SOCK_SEND(s_tnc_sock[chan], (char*)kiss_buff, kiss_len);
-	if (err == SOCKET_ERROR) {
-	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError %d sending packet to KISS Network TNC for channel %d.  Closing connection.\n\n", WSAGetLastError(), chan);
-	  closesocket (s_tnc_sock[chan]);
-	  s_tnc_sock[chan] = -1;
-	}
-#else
-	int err = SOCK_SEND (s_tnc_sock[chan], kiss_buff, kiss_len);
+	int err = serial_port_write (s_tnc_fd[chan], (char*) kiss_buff, kiss_len);
 	if (err <= 0) {
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("\nError %d sending packet to KISS Network TNC for channel %d.  Closing connection.\n\n", err, chan);
-	  close (s_tnc_sock[chan]);
-	  s_tnc_sock[chan] = -1;
+	  dw_printf ("\nError %d sending packet to KISS Serial TNC for channel %d.  Closing connection.\n\n", err, chan);
+	  serial_port_close (s_tnc_fd[chan]);
+	  s_tnc_fd[chan] = MYFDERROR;
 	}
-#endif
 	
 	// Do not free packet object;  caller will take care of it.
 

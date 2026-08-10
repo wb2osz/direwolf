@@ -54,7 +54,7 @@
 
 #include "textcolor.h"
 #include "xid.h"
-
+#include "ax25_link.h"
 
 
 #define FI_Format_Indicator	0x82	
@@ -62,12 +62,15 @@
 
 #define PI_Classes_of_Procedures	2	
 #define PI_HDLC_Optional_Functions	3	
-#define PI_I_Field_Length_Rx		6	
+#define PI_I_Field_Length_Tx		5	// Maximum
+#define PI_I_Field_Length_Rx		6	// Maximum
+#define PI_Window_Size_Tx		7
 #define PI_Window_Size_Rx		8	
-#define PI_Ack_Timer			9	
-#define PI_Retries			10	
+#define PI_Ack_Timer			9	// T1
+#define PI_Retries			10	// N2
+#define PI_Idle_Timer			11	// T3
 
-// Is this stanard or Dave's creation?
+// Vendor specific range.
 #define PI_Compression_Algorithm_Mask	65
 #define PI_TX_Window_Bits		66
 #define PI_RX_Window_Bits		67
@@ -129,7 +132,7 @@
  *		info_len	- Number of bytes in information part of frame.
  *				  Could be 0.
  *
- *		desc_size	- Size of desc.  100 is good.
+ *		desc_size	- Size of desc.  Seeing 150 result length so make it bigger
  *
  * Outputs:	result		- Structure with extracted values.
  *
@@ -165,7 +168,9 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 	result->full_duplex = G_UNKNOWN;
 	result->srej = srej_not_specified;
 	result->modulo = modulo_unknown;
+	result->i_field_length_tx = G_UNKNOWN;
 	result->i_field_length_rx = G_UNKNOWN;
+	result->window_size_tx = G_UNKNOWN;
 	result->window_size_rx = G_UNKNOWN;
 	result->ack_timer = G_UNKNOWN;
 	result->retries = G_UNKNOWN;
@@ -305,6 +310,20 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 
 	      break;
 
+	    case PI_I_Field_Length_Tx:	
+	      
+	      result->i_field_length_tx = pval / 8;
+
+	      snprintf (stemp, sizeof(stemp), "I-Field-Length-Tx=%d ", result->i_field_length_tx);
+	      strlcat (desc, stemp, desc_size);
+
+	      if (pval & 0x7) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("XID error: I Field Length Tx, %d, is not a whole number of bytes.\n", pval);
+	      }
+
+	      break;
+
 	    case PI_I_Field_Length_Rx:	
 	      
 	      result->i_field_length_rx = pval / 8;
@@ -319,6 +338,22 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 
 	      break;
 
+	    case PI_Window_Size_Tx:	
+
+	      result->window_size_tx = pval;
+
+	      snprintf (stemp, sizeof(stemp), "Window-Size-Tx=%d ", result->window_size_tx);
+	      strlcat (desc, stemp, desc_size);
+
+	      if (pval < AX25_K_MAXFRAME_EXTENDED_MIN || pval > AX25_K_MAXFRAME_EXTENDED_MAX) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("XID error: Window Size Tx, %d, is not in range of %d thru %d.\n", pval,
+						AX25_K_MAXFRAME_EXTENDED_MIN, AX25_K_MAXFRAME_EXTENDED_MAX);
+	        result->window_size_rx = AX25_K_MAXFRAME_EXTENDED_DEFAULT;
+	      }
+
+	      break;
+
 	    case PI_Window_Size_Rx:	
 
 	      result->window_size_rx = pval;
@@ -326,11 +361,11 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 	      snprintf (stemp, sizeof(stemp), "Window-Size-Rx=%d ", result->window_size_rx);
 	      strlcat (desc, stemp, desc_size);
 
-	      if (pval < 1 || pval > 127) {
+	      if (pval < AX25_K_MAXFRAME_EXTENDED_MIN || pval > AX25_K_MAXFRAME_EXTENDED_MAX) {
 	        text_color_set (DW_COLOR_ERROR);
-	        dw_printf ("XID error: Window Size Rx, %d, is not in range of 1 thru 127.\n", pval);
-	        result->window_size_rx = 127;
-		// Let the caller deal with modulo 8 consideration.
+	        dw_printf ("XID error: Window Size Rx, %d, is not in range of %d thru %d.\n", pval,
+				AX25_K_MAXFRAME_EXTENDED_MIN, AX25_K_MAXFRAME_EXTENDED_MAX);
+	        result->window_size_rx = AX25_K_MAXFRAME_EXTENDED_DEFAULT;
 	      }
 
 //continue here with more error checking.
@@ -396,8 +431,26 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
  *					    Up to 8191 will fit into the field.
  *					    Use G_UNKNOWN to omit this.
  *
- *			window_size_rx 	- Maximum window size ("k") that I can handle.
- *				   Defaults are are 4 for modulo 8 and 32 for modulo 128.
+ *			window_size_tx
+ *				   This is the size of the transmit window that I will use when sending I‑frames.
+ *				   - It tells the peer:
+ *				      "I will send up to N unacknowledged frames at a time."
+ *				   - It defines my outbound pipeline depth.
+ *				   - Larger TX window = I can send more before waiting for RR/RNR/ACK.
+ *				   This initially comes from the configuration file EMAXFRAME but
+ *				   can be scaled back by the XID exchange if the other side doesn't
+ *				   have enough buffer space.  Also known as "k".
+ *
+ *			window_size_rx
+ *				   This is the size of the receive window that I can accept from the peer.
+ *				   - It tells the peer:
+ *				      "You may send me up to N unacknowledged frames before I must ACK."
+ *				   - It defines my inbound buffering capability.
+ *				   - Larger RX window = the peer can send more before needing my RR.
+ *				   I would offer AX25_K_MAXFRAME_EXTENDED_MAX (63) because I don't have memory
+ *				   constraints.  I really don't care if the peer negotiates this down.
+ *				   I generate an ack, of some sort, at the end of the incoming
+ *				   transmission, i.e. when DCD drops.
  *
  *			ack_timer	- Acknowledge timer in milliseconds.
  *					*** describe meaning.  ***
@@ -413,8 +466,9 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
  * Outputs:	info	- Information part of XID frame.
  *			  Does not include the control byte.
  *			  Use buffer of 40 bytes just to be safe.
+#warning make it bigger.
  *
- * Returns:	Number of bytes in the info part.  Should be at most 27.
+ * Returns:	Number of bytes in the info part.  Should be at most 27(?).
  *		Again, provide a larger space just to be safe in case this ever changes.
  *
  * Description:	6.3.2  "Parameter negotiation occurs at any time. It is accomplished by sending
@@ -463,12 +517,14 @@ int xid_encode (struct xid_param_s *param, unsigned char *info, cmdres_t cr)
 
 	m = 4;		// classes of procedures
 	m += 5;		// HDLC optional features
+	if (param->i_field_length_tx != G_UNKNOWN) m += 4;
 	if (param->i_field_length_rx != G_UNKNOWN) m += 4;
+	if (param->window_size_tx != G_UNKNOWN) m += 3;
 	if (param->window_size_rx != G_UNKNOWN) m += 3;
 	if (param->ack_timer != G_UNKNOWN) m += 4;
 	if (param->retries != G_UNKNOWN) m += 3;
 
-	*p++ = m;		// 0x17 if all present.
+	*p++ = m;		// 0x1e if all present.
 
 // "Classes of Procedures" has half / full duplex.
 
@@ -549,7 +605,18 @@ int xid_encode (struct xid_param_s *param, unsigned char *info, cmdres_t cr)
 
 // The rest are skipped if undefined values.
 
-// "I Field Length Rx" - max I field length acceptable to me.
+// "I Field Length Tx" - max I frame info field length that I would like to send.
+// This is in bits.  8191 would be max number of bytes to fit in field.
+
+	if (param->i_field_length_tx != G_UNKNOWN) {
+	  *p++ = PI_I_Field_Length_Tx;
+	  *p++ = 2;
+	  x = param->i_field_length_tx * 8;
+	  *p++ = (x >> 8) & 0xff;
+	  *p++ = x & 0xff;
+	}
+
+// "I Field Length Rx" - max I frame info field length that I am capable of receiving.
 // This is in bits.  8191 would be max number of bytes to fit in field.
 
 	if (param->i_field_length_rx != G_UNKNOWN) {
@@ -558,6 +625,14 @@ int xid_encode (struct xid_param_s *param, unsigned char *info, cmdres_t cr)
 	  x = param->i_field_length_rx * 8;
 	  *p++ = (x >> 8) & 0xff;
 	  *p++ = x & 0xff;
+	}
+
+// "Window Size Tx"
+
+	if (param->window_size_tx != G_UNKNOWN) {
+	  *p++ = PI_Window_Size_Tx;
+	  *p++ = 1;
+	  *p++ = param->window_size_tx;
 	}
 
 // "Window Size Rx"
@@ -663,8 +738,8 @@ int main (int argc, char *argv[]) {
 	struct xid_param_s param;
 	struct xid_param_s param2;
 	int n;
-	unsigned char info[40];	// Currently max of 27 but things can change.
-	char desc[150];		// I've seen 109.
+	unsigned char info[80];	// Currently max of 27 but things can change.
+	char desc[256];		// I've seen 150.
 
 
 /* parse example. */

@@ -30,6 +30,8 @@ find_path(HAMLIB_INCLUDE_DIR
   HINTS
   ${PC_HAMLIB_INCLUDEDIR}
   ${HAMLIB_ROOT_DIR}
+  PATH_SUFFIXES
+  include
   )
 
 find_library(HAMLIB_LIBRARY
@@ -48,7 +50,8 @@ find_library(HAMLIB_LIBRARY
   HINTS
   ${PC_HAMLIB_LIBDIR}
   ${HAMLIB_ROOT_DIR}
-
+  PATH_SUFFIXES
+  lib/gcc
   )
 
 include(FindPackageHandleStandardArgs)
@@ -61,6 +64,9 @@ find_package_handle_standard_args(hamlib
 if(HAMLIB_FOUND)
   list(APPEND HAMLIB_LIBRARIES ${HAMLIB_LIBRARY})
   list(APPEND HAMLIB_INCLUDE_DIRS ${HAMLIB_INCLUDE_DIR})
+  if(WIN32 OR CYGWIN)
+    file(GLOB HAMLIB_DLLS ${HAMLIB_ROOT_DIR}/bin/*.dll)
+  endif()
   mark_as_advanced(HAMLIB_ROOT_DIR)
 endif()
 

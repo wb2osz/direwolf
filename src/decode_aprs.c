@@ -496,6 +496,18 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	
 	      //break;
 
+	    case 'D':
+
+	      // This is not valid APRS.  Should we do something with it?
+	      // From https://github.com/wb2osz/direwolf/issues/623
+	      // F5KTJ-3>DX,F1ZCK-3*:DX de   F5KTJ-3>144800.0  F5ZFL-4      086 dg frm   F5KTJ-3            98km<0x0d>
+	      // Reference: http://aprsisce.wikidot.com/kenwood-dx-cluster
+
+	      if (strncmp((char*)pinfo, "DX", 2) == 0) {
+	        strlcpy (A->g_data_type_desc, "DX Cluster", sizeof(A->g_data_type_desc));
+	      }
+	      break;
+
 	    default:
 
 	      break;
@@ -1669,7 +1681,16 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
 	char mcomment[256];
 	strlcpy (mcomment, ((char*)info) + sizeof(struct aprs_mic_e_s), sizeof(mcomment));
 
-	assert (strlen(mcomment) > 0);
+	// This would seem redundant after the previous test of ilen.
+	// The contrived test case, in issue 618, contained a nul character
+	// near the end of the packet which should not happen with APRS.
+	// So strlen() turns out to be shorter than number of bytes.
+
+	if (strlen(mcomment) < 1) {
+	  // No comment.  We are finished.
+	  strlcpy (A->g_mfr, "UNKNOWN vendor/model", sizeof(A->g_mfr));
+	  return;
+	}
 
 	if (mcomment[strlen(mcomment)-1] == '\r') {
 	  mcomment[strlen(mcomment)-1] = '\0';
@@ -1957,6 +1978,7 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	}
 
 /* ack or rej?  Message number is required for these. */
+// A lot of duplicate code in two cases.
 
 	else if (strncasecmp(p->message,"ack",3) == 0) {
 	  if (strncmp(p->message,"ack",3) != 0) {
@@ -1980,6 +2002,13 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      *p = '\0';
 	  }
  
+	  // Look for invalid case:  ABC>APRS::XYZ      :ack1348{4205
+	  char *r = strchr(A->g_message_number, '{');
+	  if (r != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Additional message identifier %s, at end, is not valid for ack.\n", r);
+	      *r = '\0';
+	  }
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" ACKnowledged message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -2006,6 +2035,13 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	      *p = '\0';
 	  }
 
+	  // Look for invalid case:  ABC>APRS::XYZ      :rej1348{4205
+	  char *r = strchr(A->g_message_number, '{');
+	  if (r != NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf("Additional message identifier %s, at end, is not valid for rej.\n", r);
+	      *r = '\0';
+	  }
 	  if (strlen(A->g_message_number) >= 3 && A->g_message_number[2] == '}') A->g_message_number[2] = '\0';
 	  snprintf (A->g_data_type_desc, sizeof(A->g_data_type_desc), "\"%s\" REJected message number \"%s\" from \"%s\"", A->g_src, A->g_message_number, addressee);
 	  A->g_message_subtype = message_subtype_ack;
@@ -2024,6 +2060,9 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{12}
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{12}34
 // X>Y:}A>B::WA1XYX-15:Howdy y'all{toolong
+//
+// Error: Extra message id at end of ack.
+// MPAD>APRS,qAR,X32DVA::KD4DRA-10:ack1348{4205
 
 	else {
 	  // Normal messaage case.  Look for message number.
@@ -2625,11 +2664,6 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
 	*q2 = '\0';
 	strlcpy (A->g_query_type, stemp+1, sizeof(A->g_query_type));
 
-// TODO: remove debug
-
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf("DEBUG: General Query type = \"%s\"\n", A->g_query_type);
-
 	p = q2 + 1;
 	if (strlen(p) == 0) {
 	  return;
@@ -2702,11 +2736,6 @@ static void aprs_general_query (decode_aprs_t *A, char *info, int ilen, int quie
 	  return;
 	}
 	
-// TODO: remove debug
-
-	text_color_set(DW_COLOR_DEBUG);
-	dw_printf("DEBUG: General Query footprint = %.6f %.6f %.2f\n", lat, lon, radius);
-
 
 } /* end aprs_general_query */
 
@@ -2997,10 +3026,12 @@ static void aprs_positionless_weather_report (decode_aprs_t *A, unsigned char *i
  *		wind is in the form c999s999.
  *
  * References:	APRS Weather specification comments.
- *		http://aprs.org/aprs11/spec-wx.txt
+ *		http://aprs.org/aprs11/spec-wx.txt   (originally - page has disappeared!)
+ *		https://www.aprs.org/aprs11/spec-wx.txt    (now here)
  *
  *		Weather updates to the spec.
- *		http://aprs.org/aprs12/weather-new.txt
+ *		http://aprs.org/aprs12/weather-new.txt   (originally - page has disappeared!)
+ *		https://www.aprs.org/aprs12/weather-new.txt    (now here)
  *
  * Examples:
  *	
@@ -3250,9 +3281,13 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	  }
 	  else if (getwdata (&wp, 'X', 3, &fval)) {	
 
-	/* X = Nuclear Radiation.  */
-	/* Encoded as two significant digits and order of magnitude */
-	/* like resistor color code. */
+	    /* X = Nuclear Radiation.  */
+	    /* The xxx are like the resistor
+		code.  First, two digits of precision and the last digit is the order
+		of magnitude in NANOSEVERTS/Hr.  So 123 is 12 * 10^3 nanosieverts/hr or
+		12 microsieverts/hr. Or 456 is 45 * 10^6 nanosieverts/hr or 45
+		millisieverts/hr.  One bananna generates about .1 uSieverts/hr,
+		a Brazil nut .4 uS/hr. */
 
 // TODO: decode this properly
 	
@@ -3264,6 +3299,37 @@ static void weather_data (decode_aprs_t *A, char *wdata, int wind_prefix)
 	  }
 
 // TODO: add new flood level, battery voltage, etc.
+// https://www.aprs.org/aprs12/watergage.txt
+
+	  else if (getwdata (&wp, 'F', 4, &fval)) {
+
+	    /* Fxxxx = water level above or below flood stage or mean tide in tenths
+		of a foot.  Values can range between +999 and -999 in tenths
+		meaning -99.9 to +99.9 feet.  Meters are not used for the on
+		air format because it gives too little or too much resolution
+		to fit in the fixed length 4 bytes that are required.  */
+
+	    if (fval != G_UNKNOWN) {
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", %.1f ft relative to mean tide", fval * 0.1);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
+	    }
+	  }
+
+	  else if (getwdata (&wp, 'V', 3, &fval)) {
+
+	    /* Vxxx = battery volts in tenths   128 would mean 12.8 volts  */
+
+	    if (fval != G_UNKNOWN) {
+	      char ctemp[40];
+	      snprintf (ctemp, sizeof(ctemp), ", %.1f battery volts", fval * 0.1);
+	      strlcat (A->g_weather, ctemp, sizeof(A->g_weather));
+	    }
+	  }
+
+	  // else if ... Z
+
+	    /* Zxx = Device type -- Inconsistent with all others: Two alpha[numeric?] characters */
 
 	  else {
 	    keep_going = 0;
@@ -3976,13 +4042,12 @@ time_t get_timestamp (decode_aprs_t *A, char *p)
 	}
 
 	struct tm *ptm;
-
+	struct tm tm_buf;
 	time_t ts;
 
 	ts = time(NULL);
-	// FIXME: use gmtime_r instead.
-	// Besides not being thread safe, gmtime could possibly return null.
-	ptm = gmtime(&ts);
+	ptm = gmtime_r(&ts, &tm_buf);
+	if (ptm == NULL) return ((time_t)0);
 
 	pdhm = (void *)p;
 	phms = (void *)p;
@@ -4481,7 +4546,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
 	  }
 
-	  e = regcomp (&bad_tone_re, "(^|[^0-9.])([6789][0-9]\\.[0-9]|[12][0-9][0-9]\\.[0-9]|67|77|100|123)($|[^0-9.])", REG_EXTENDED);
+	  e = regcomp (&bad_tone_re, "(^|[^0-9.])([6789][0-9]\\.[0-9]|[12][0-9][0-9]\\.[0-9]|67|77|100|123)($|[^0-9.%])", REG_EXTENDED);
 	  if (e) {
 	    regerror (e, &bad_tone_re, emsg, sizeof(emsg));
 	    dw_printf("%s:%d: %s\n", __FILE__, __LINE__, emsg);
@@ -4853,6 +4918,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
  * standardized format.
  * Don't complain if we have already found a valid value.
  */
+
 	if (A->g_freq == G_UNKNOWN && regexec (&bad_freq_re, A->g_comment, MAXMATCH, match, 0) == 0) 
 	{
 	  char bad[30];
@@ -4879,7 +4945,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  }
 	}
 
-	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
+	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0)
 	{
 	  char bad1[30];	/* original 99.9 or 999.9 format or one of 67 77 100 123 */
 	  char bad2[30];	/* 99.9 or 999.9 format.  ".0" appended for special cases. */

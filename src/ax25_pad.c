@@ -1356,7 +1356,13 @@ void ax25_get_addr_with_ssid (packet_t this_p, int n, char *station)
 	for (i=5; i>=0; i--) {
 	  if (station[i] == '\0') {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Station address \"%s\" contains nul character.  AX.25 protocol requires trailing ASCII spaces when less than 6 characters.\n", station);
+	    dw_printf ("Station address \"%s\" contains nul character:", station);
+	    for (int k=0; k<6; k++) {
+	      dw_printf (" %02x", station[k]);
+	    }
+	    dw_printf ("\n");
+	    dw_printf ("AX.25 protocol requires trailing ASCII spaces when less than 6 characters.\n");
+	    break;
 	  }
 	  else if (station[i] == ' ')
 	    station[i] = '\0';
@@ -2201,6 +2207,14 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, in
 	  this_p->modulo = modulo_128;
 	}
 
+// Display "n(s)" & "n(r)" as upper case to indicate modulo 128.
+
+	char ns_str[8] = "n(s)";
+	char nr_str[8] = "n(r)";
+	if (this_p->modulo == modulo_128) {
+	  strlcpy (ns_str, "N(S)", sizeof(ns_str));
+	  strlcpy (nr_str, "N(R)", sizeof(nr_str));
+	}
 
 	if (this_p->modulo == modulo_128) {
 	  c2 = ax25_get_c2 (this_p);
@@ -2236,8 +2250,8 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, in
 	    *nr = (c >> 5) & 7;
 	  }
 
-	  //snprintf (desc, DESC_SIZ, "I %s, n(s)=%d, n(r)=%d, %s=%d", cr_text, *ns, *nr, pf_text, *pf);
-	  snprintf (desc, DESC_SIZ, "I %s, n(s)=%d, n(r)=%d, %s=%d, pid=0x%02x", cr_text, *ns, *nr, pf_text, *pf, ax25_get_pid(this_p));
+	  snprintf (desc, DESC_SIZ, "I %s, %s=%d, %s=%d, %s=%d, pid=0x%02x",
+			cr_text, ns_str, *ns, nr_str, *nr, pf_text, *pf, ax25_get_pid(this_p));
 	  return (frame_type_I);
 	}
 	else if ((c & 2) == 0) {
@@ -2253,12 +2267,11 @@ ax25_frame_type_t ax25_frame_type (packet_t this_p, cmdres_t *cr, char *desc, in
 	    *nr = (c >> 5) & 7;
 	  }
 
- 
 	  switch ((c >> 2) & 3) {
-	    case 0: snprintf (desc, DESC_SIZ, "RR %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf);   return (frame_type_S_RR);   break;
-	    case 1: snprintf (desc, DESC_SIZ, "RNR %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf);  return (frame_type_S_RNR);  break;
-	    case 2: snprintf (desc, DESC_SIZ, "REJ %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf);  return (frame_type_S_REJ);  break;
-	    case 3: snprintf (desc, DESC_SIZ, "SREJ %s, n(r)=%d, %s=%d", cr_text, *nr, pf_text, *pf); return (frame_type_S_SREJ); break;
+	    case 0: snprintf (desc, DESC_SIZ, "RR %s, %s=%d, %s=%d", cr_text, nr_str, *nr, pf_text, *pf);   return (frame_type_S_RR);   break;
+	    case 1: snprintf (desc, DESC_SIZ, "RNR %s, %s=%d, %s=%d", cr_text, nr_str, *nr, pf_text, *pf);  return (frame_type_S_RNR);  break;
+	    case 2: snprintf (desc, DESC_SIZ, "REJ %s, %s=%d, %s=%d", cr_text, nr_str, *nr, pf_text, *pf);  return (frame_type_S_REJ);  break;
+	    case 3: snprintf (desc, DESC_SIZ, "SREJ %s, %s=%d, %s=%d", cr_text, nr_str, *nr, pf_text, *pf); return (frame_type_S_SREJ); break;
 	 } 
 	}
 	else {

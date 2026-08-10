@@ -4,7 +4,7 @@ project(direwolf)
 
 # configure version
 set(direwolf_VERSION_MAJOR "1")
-set(direwolf_VERSION_MINOR "8")
+set(direwolf_VERSION_MINOR "9")
 set(direwolf_VERSION_PATCH "0")
 set(direwolf_VERSION_SUFFIX "Development")
 
@@ -126,7 +126,23 @@ include(FindCompiler)
 # find cpu flags (and set compiler)
 include(FindCPUflags)
 
-if(${ARCHITECTURE} MATCHES "x86")
+# temp for testing
+#message(STATUS "CMAKE_C_COMPILER: ${CMAKE_C_COMPILER}")
+#message(STATUS "Pointer size: ${CMAKE_SIZEOF_VOID_P}")
+#if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+#    message(STATUS "Target is 64-bit")
+#elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+#    message(STATUS "Target is 32-bit")
+#else()
+#    message(WARNING "Unknown pointer size: ${CMAKE_SIZEOF_VOID_P}")
+#endif()
+
+
+#message(STATUS "ARCHITECTURE: ${ARCHITECTURE}")
+# For Intel/AMD target, we should see x86 or x86_64.
+# i686 package name for 32 bit is to imply minimum Pentium III with SSE instructions.
+
+if(${ARCHITECTURE} STREQUAL "x86")
   set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_i686")
 else()
   set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${direwolf_VERSION}_${ARCHITECTURE}")
@@ -171,6 +187,7 @@ elseif(APPLE)
   endif()
 
 elseif (WIN32)
+
   if(C_MSVC)
     if (NOT VS2015 AND NOT VS2017 AND NOT VS2019)
       message(FATAL_ERROR "You must use Microsoft Visual Studio 2015, 2017 or 2019 as compiler")
@@ -211,16 +228,16 @@ if (C_CLANG OR C_GCC)
   # It might go back in someday when I have more patience to clean up all the warnings.
   #
 
-  # TODO:
-  # Try error checking -fsanitize=bounds-strict -fsanitize=leak
-  # Requires libubsan and liblsan, respectively.
-  # Maybe -fstack-protector-all, -fstack-check
 
-  ###set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_XOPEN_SOURCE=600 -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
+  # Address Sanitizer.  See https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html
+  # gcc links with libasan automatically when compiled with -fsanitize=address
+
+  # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -g -Og -fno-optimize-sibling-calls -fno-omit-frame-pointer")
+
+
   if(FREEBSD)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wvla -ffast-math -ftree-vectorize -D_DEFAULT_SOURCE ${EXTRA_FLAGS}")
   else()
-    #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE -fsanitize=bounds-strict ${EXTRA_FLAGS}")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wvla -ffast-math -ftree-vectorize -D_GNU_SOURCE ${EXTRA_FLAGS}")
   endif()
   #
@@ -320,6 +337,9 @@ endif()
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
+  if(WIN32 OR CYGWIN)
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
+  endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
@@ -451,6 +471,13 @@ add_subdirectory(man)
 if (LINUX OR FREEBSD)
   install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop DESTINATION share/applications)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}_icon.png DESTINATION share/pixmaps)
+endif()
+
+# install hamlib DLLs and license files on Windows
+if ((WIN32 OR CYGWIN) AND HAMLIB_FOUND)
+  install(FILES ${HAMLIB_DLLS} DESTINATION ${INSTALL_BIN_DIR})
+  install(FILES ${HAMLIB_ROOT_DIR}/COPYING.LIB.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-COPYING.LIB.txt)
+  install(FILES ${HAMLIB_ROOT_DIR}/LICENSE.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-LICENSE.txt)
 endif()
 
 ############ uninstall target ################

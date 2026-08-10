@@ -982,6 +982,20 @@ tocalls:
    os: embedded
    contact: richonguzman@gmail.com
 
+ - tocall: APLRM?
+   vendor: Railab Srl, IU2TZK
+   model: Railab LoRa board
+   class: tracker
+   os: embedded
+   contact: support@railab.com
+
+ - tocall: APLRS?
+   vendor: Railab Srl, IU2TZK
+   model: Railab LoRa board
+   class: igate
+   os: embedded
+   contact: support@railab.com
+
  - tocall: APLRT?
    vendor: Ricardo, CA2RXU
    model: ESP32 LoRa Tracker
@@ -1153,6 +1167,11 @@ tocalls:
    class: tracker
    os: embedded
 
+ - tocall: APNIFC
+   vendor: Mike, NA7Q
+   model: National Interagency Fire Center Alerts
+   class: service
+
  - tocall: APNJS?
    vendor: Julien Sansonnens, HB9HRD
    model: Web messaging service
@@ -1257,6 +1276,19 @@ tocalls:
    vendor: AMSAT-LU
    model: Oscar
    class: satellite
+
+ - tocall: APONE?
+   vendor: aprs.one
+
+ - tocall: APONEA
+   vendor: aprs.one
+   model: Mobile app tracker
+   class: app
+
+ - tocall: APONET
+   vendor: aprs.one
+   model: Hardware tracker
+   class: tracker
 
  - tocall: APOPEN
    vendor: David Platt, AE6EO
@@ -1479,6 +1511,14 @@ tocalls:
    class: wx
    os: embedded
    contact: info@rf.guru
+
+ - tocall: APRFTH
+   vendor: "Xian Stannard 2E1IPS & Chung Poon M7UNG"
+   model: Treasure Hunt Service
+   class: service
+   contact: maintainers@rftrsr.net
+   features:
+     - messaging
 
  - tocall: APRG??
    vendor: OH2GVE

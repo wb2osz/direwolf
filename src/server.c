@@ -159,6 +159,7 @@
 #include <time.h>
 #include <ctype.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "tq.h"
 #include "ax25_pad.h"
@@ -166,6 +167,7 @@
 #include "audio.h"
 #include "server.h"
 #include "dlq.h"
+#include "mheard.h"
 
 
 
@@ -410,6 +412,55 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	}
 
 }
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:	format_heard_time
+ *
+ * Purpose:	Format a timestamp as required for the Heard Stations ('H') response,
+ *		which includes both text and binary representations of heard times.
+ *
+ * Inputs:	heard	 - Timestamp to be formatted.
+ *
+ *		time_str - Buffer into which the text format will be written.
+ *			   This must be at least 23 characters long.
+ *
+ *		time_bin - Buffer into which the binary format will be written.
+ *			   This must be at least 16 bytes long.
+ *
+ * Outputs:	Provided buffers are populated with timestamps.
+ *
+ * Description:	The text format as described in the AGWPE spec is always exactly
+ *		22 characters long.
+ *
+ *		The binary format is the Windows SYSTEMTIME format, so the standard
+ *		time_tm structure must be transformed into that.
+ *
+ *		Both of the formats are created at one time because the time_tm
+ *		instance returned from localtime() does not belong to us, and may
+ *		be overwritten by other calls to time-related functions.
+ *
+ *--------------------------------------------------------------------*/
+
+static void format_heard_time(time_t heard, char *time_str, char *time_bin)
+{
+	struct tm *time_tm = localtime (&heard);
+
+	strftime (time_str, 23, "%a,%d%b%Y %H:%M:%S", time_tm);
+
+	uint16_t *ptr = (uint16_t*)time_bin;
+
+	*ptr++ = time_tm->tm_year + 1900;
+	*ptr++ = time_tm->tm_mon + 1;
+	*ptr++ = time_tm->tm_wday;
+	*ptr++ = time_tm->tm_mday;
+	*ptr++ = time_tm->tm_hour;
+	*ptr++ = time_tm->tm_min;
+	*ptr++ = time_tm->tm_sec;
+	*ptr = 0;
+}
+
 
 /*-------------------------------------------------------------------
  *
@@ -1419,8 +1470,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 	  n = read_from_socket (client_sock[client], (char *)(&cmd.hdr), sizeof(cmd.hdr));
 	  if (n != sizeof(cmd.hdr)) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\nError getting message header from AGW client application %d.\n", client);
-	    dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
+	    dw_printf ("\nAGW client application %d has disappeared.\n", client);
+	    //dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
 	    dw_printf ("Closing connection.\n\n");
 #if __WIN32__
 	    closesocket (client_sock[client]);
@@ -1569,7 +1620,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 		for (j=0; j<MAX_TOTAL_CHANS; j++) {
 	          if (save_audio_config_p->chan_medium[j] == MEDIUM_RADIO ||
 	              save_audio_config_p->chan_medium[j] == MEDIUM_IGATE ||
-	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC) {
+	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_SERTNC) {
 		    count++;
 		  }
 		}
@@ -1611,6 +1663,15 @@ static THREAD_F cmd_listen_thread (void *arg)
 	                // could elaborate with hostname, etc.
 		        char stemp[100];
 		        snprintf (stemp, sizeof(stemp), "Port%d Network TNC;", j+1);
+		        strlcat (reply.info, stemp, sizeof(reply.info));
+	              }
+	              break;
+
+	            case MEDIUM_SERTNC:
+	              {
+	                // could elaborate with device, etc.
+		        char stemp[100];
+		        snprintf (stemp, sizeof(stemp), "Port%d Serial TNC;", j+1);
 		        strlcat (reply.info, stemp, sizeof(reply.info));
 	              }
 	              break;
@@ -1676,38 +1737,77 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'H':				/* Ask about recently heard stations on given port. */
 
-		/* This should send back 20 'H' frames for the most recently heard stations. */
-		/* If there are less available, empty frames are sent to make a total of 20. */
+		/* This sends back 20 'H' frames for the most recently heard stations. */
+		/* If there are fewer available, empty frames are sent to make a total of 20. */
 		/* Each contains the first and last heard times. */
 
 	      {
-#if 0						/* Currently, this information is not being collected. */
+
 		struct {
 		  struct agwpe_s hdr;
-	 	  char info[100];
+		  char data[100];
 		} reply;
 
-
 	        memset (&reply.hdr, 0, sizeof(reply.hdr));
+	        reply.hdr.portx = cmd.hdr.portx;
 	        reply.hdr.datakind = 'H';
 
-		// TODO:  Implement properly.  
+		mheard_times_t times[20];
+	        int chan = cmd.hdr.portx;
+		int count;
+		char time_str[23], first_st[16], last_st[16];
+		char *ptr;
+		int i;
 
-	        reply.hdr.portx = cmd.hdr.portx
+		if (chan == save_audio_config_p->igate_vchannel)
+		  count = mheard_latest_for_is (times, 20);
+		else
+		  count = mheard_latest_for_channel (chan, times, 20);
 
-	        strlcpy (reply.hdr.call_from, "WB2OSZ-15 Mon,01Jan2000 01:02:03  Tue,31Dec2099 23:45:56", sizeof(reply.hdr.call_from));
-		// or                                                  00:00:00                00:00:00
+		// Format of reply data is a null-terminated string of the form:
+		// "<callsign> <first_heard> <last_heard>"
+		// followed by first heard and last heard times in binary using
+		// a Windows SYSTEMTIME structure.
 
-	        strlcpy (agwpe_msg.data, ..., sizeof(agwpe_msg.data));
+		for (i = 0; i < count; i++) {
+		  strcpy (reply.data, times[i].callsign);
+		  strcat (reply.data, " ");
 
-	        reply.hdr.data_len_NETLE = host2netle(strlen(reply.info));
+		  format_heard_time (times[i].first_heard, time_str, first_st);
+		  strcat (reply.data, time_str);
+		  strcat (reply.data, " ");
 
-	        send_to_client (client, &reply);
-#endif
+		  format_heard_time (times[i].last_heard, time_str, last_st);
+		  strcat (reply.data, time_str);
+
+		  ptr = reply.data + strlen(reply.data) + 1;
+		  memcpy (ptr, first_st, 16);
+		  ptr += 16;
+		  memcpy (ptr, last_st, 16);
+
+		  reply.hdr.data_len_NETLE = host2netle(strlen(reply.data) + 33);
+
+		  send_to_client (client, &reply);
+		}
+
+		if (count < 20) {
+		  // Send blank records to make up a total of 20. Blank format
+		  // follows that in the AGWPE spec.
+
+		  // 9 spaces for callsign
+		  strcpy (reply.data, "          ");
+		  // space + 13 for date + space + empty time
+		  strcat (reply.data, "               00:00:00");
+		  strcat (reply.data, "               00:00:00");
+		  // 32 bytes for 2 empty SYSTEMTIME values
+		  memset (reply.data + strlen(reply.data) + 1, 0, 32);
+
+		  for (i = count; i < 20; i++) {
+		    send_to_client (client, &reply);
+		  }
+		}
 	      }
 	      break;
-	    
-
 
 
 	    case 'k':				/* Ask to start receiving RAW AX25 frames */
@@ -2065,6 +2165,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("Failed to create frame from AGW 'M' message.\n");
+			break;
 		}
 
 	        ax25_set_info (pp, (unsigned char*)cmd.data, data_len);

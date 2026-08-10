@@ -155,7 +155,7 @@ x = Silence FX.25 information.
 
 .TP
 .BI "-t " "n"
-Text colors.  0=disabled. 1=default.  2,3,4,... alternatives.  Use 9 to test compatibility with your terminal.
+Text colors.  0=disabled. 1=default.  2,3,4=alternatives for misbehaving terminal emulators.  5=keep existing background color.  6=black background.  Use 9 to test compatibility with your terminal.
 
 
 .TP
@@ -196,6 +196,7 @@ Report audio device statistics each n seconds.
 .TP
 .BI "-T " "fmt"
 Time stamp format for sent and received frames.
+Overrides the TIMESTAMP directive in the configuration file, if also present.
 
 .TP
 .BI "-e " "ber"

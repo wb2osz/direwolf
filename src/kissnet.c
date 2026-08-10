@@ -1,6 +1,6 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
-//    Copyright (C) 2011-2014, 2015, 2017, 2021  John Langner, WB2OSZ
+//    Copyright (C) 2011-2014, 2015, 2017, 2021, 2025  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -449,6 +449,19 @@ static THREAD_F connect_listen_thread (void *arg)
 	  return (0);
 	}
 
+	// Issue 620 - TCP send buffer might be too small.
+	// Add option for experimenation.  More discussion in dlq.c.
+
+	if (s_misc_config_p->tcp_wmem != 0) {
+	  socklen_t optlen = sizeof(int);
+	  int oldbufsiz = 0;
+	  getsockopt (listen_sock, SOL_SOCKET, SO_SNDBUF, (void*)(&oldbufsiz), &optlen);
+	  int newbufsiz = s_misc_config_p->tcp_wmem;
+	  int err = setsockopt (listen_sock, SOL_SOCKET, SO_SNDBUF, (void*)(&newbufsiz), optlen);
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("TCP KISS send buffer size changed from %d to %d (%d)\n", oldbufsiz, newbufsiz, err);
+	}
+
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf("Binding to port %s ... \n", tcp_port_str);
@@ -545,6 +558,19 @@ static THREAD_F connect_listen_thread (void *arg)
 	  text_color_set(DW_COLOR_ERROR);
 	  perror ("connect_listen_thread: Socket creation failed");
 	  return (NULL);
+	}
+
+	// Issue 620 - TCP send buffer might be too small.
+	// Add option for experimentation.  More discussion in dlq.c.
+
+	if (s_misc_config_p->tcp_wmem != 0) {
+	  socklen_t optlen = sizeof(int);
+	  int oldbufsiz = 0;
+	  getsockopt (listen_sock, SOL_SOCKET, SO_SNDBUF, (void*)(&oldbufsiz), &optlen);
+	  int newbufsiz = s_misc_config_p->tcp_wmem;
+	  int err = setsockopt (listen_sock, SOL_SOCKET, SO_SNDBUF, (void*)(&newbufsiz), optlen);
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("TCP KISS send buffer size changed from %d to %d (%d)\n", oldbufsiz, newbufsiz, err);
 	}
 
 	/* Version 1.3 - as suggested by G8BPQ. */

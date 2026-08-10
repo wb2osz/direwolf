@@ -156,7 +156,8 @@ void digipeater (int from_chan, packet_t pp)
 
 	if ( from_chan < 0 || from_chan >= MAX_TOTAL_CHANS ||
 	     (save_audio_config_p->chan_medium[from_chan] != MEDIUM_RADIO &&
-	      save_audio_config_p->chan_medium[from_chan] != MEDIUM_NETTNC)) {
+	      save_audio_config_p->chan_medium[from_chan] != MEDIUM_NETTNC &&
+	      save_audio_config_p->chan_medium[from_chan] != MEDIUM_SERTNC)) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("APRS digipeater: Did not expect to receive on invalid channel %d.\n", from_chan);
 	}
