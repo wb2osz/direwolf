@@ -1181,7 +1181,7 @@ int main (int argc, char *argv[])
 	kissnet_init (&misc_config);
 
 #if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
-	if (misc_config.kiss_port[0] > 0 && misc_config.dns_sd_enabled)
+	if (misc_config.dns_sd_enabled)
 	  dns_sd_announce(&misc_config);
 #endif
 
@@ -1565,8 +1565,6 @@ int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, aleve
 	  }
 	}
 
-#warning
-
 /*
  * Decode the Information part of UI frames and display in human-readable form.
  * Could be APRS or anything random for old fashioned packet beacons.
@@ -1777,8 +1775,15 @@ static BOOL signal_handler_win (int ctrltype)
 #else
 static void signal_handler_linux (int x)
 {
-        text_color_set(DW_COLOR_INFO);
+	text_color_set(DW_COLOR_INFO);
 	dw_printf ("\n *** Interrupted by user. **\n");
+#if (USE_AVAHI_CLIENT|USE_MACOS_DNSSD)
+	if (misc_config.dns_sd_enabled)
+	  dns_sd_term ();
+#endif
+	ptt_term ();
+	dwgps_term ();
+	SLEEP_SEC(1);
 	exit(0);
 }
 #endif
