@@ -1659,7 +1659,7 @@ int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, aleve
 
 	flen = ax25_pack(pp, fbuf);
 
-	server_send_rec_packet (chan, pp, fbuf, flen);					// AGW net protocol
+	server_send_rec_packet (chan, pp, fbuf, flen, alevel, retries);			// AGW net protocol
 	kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);	// KISS TCP
 	kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);	// KISS serial port
 	kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);	// KISS pseudo terminal
@@ -1670,7 +1670,9 @@ int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, aleve
 	    unsigned char ao_fbuf[AX25_MAX_PACKET_LEN];
 	    int ao_flen = ax25_pack(ao_pp, ao_fbuf);
 
-	    server_send_rec_packet (chan, ao_pp, ao_fbuf, ao_flen);
+	    // Synthetic object derived from an AIS reception — no direct RF signal
+	    // to attribute, so pass a "no measurement" sentinel (rec < 0).
+	    server_send_rec_packet (chan, ao_pp, ao_fbuf, ao_flen, (alevel_t){.rec = -1, .mark = -1, .space = -1}, 0);
 	    kissnet_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);
 	    kissserial_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);
 	    kisspt_send_rec_packet (chan, KISS_CMD_DATA_FRAME, ao_fbuf, ao_flen, NULL, -1);

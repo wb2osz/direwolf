@@ -196,6 +196,13 @@ static int enable_send_raw_to_client[MAX_NET_CLIENTS];
 static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
 					/* Should we send received packets to client app in monitor form? */
 					/* Note that it starts as false for a new connection. */
+
+static int enable_ext_sig_to_client[MAX_NET_CLIENTS];
+					/* Optional extension (non-standard): when set, monitor frames sent to */
+					/* this client carry per-frame signal quality in the otherwise-zero */
+					/* user_reserved header bytes.  Enabled by the 'q' command; stays */
+					/* false for stock clients so they see byte-identical frames. */
+					/* See AGWPE-SIGNAL-QUALITY-EXTENSION.md. */
 					/* the client app must send a command to enable this. */
 
 
@@ -348,6 +355,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	      case 'x': strlcpy (datakind, "Unregister CallSign",			sizeof(datakind)); break;
 	      case 'G': strlcpy (datakind, "Ask Port Information",			sizeof(datakind)); break;
 	      case 'm': strlcpy (datakind, "Enable Reception of Monitoring Frames",	sizeof(datakind)); break;
+	      case 'q': strlcpy (datakind, "Enable Extended Signal Quality",		sizeof(datakind)); break;
 	      case 'R': strlcpy (datakind, "AGWPE Version Info",			sizeof(datakind)); break;
 	      case 'g': strlcpy (datakind, "Ask Port Capabilities",			sizeof(datakind)); break;
 	      case 'H': strlcpy (datakind, "Callsign Heard on a Port",			sizeof(datakind)); break;
@@ -514,6 +522,7 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	  client_sock[client] = -1;
 	  enable_send_raw_to_client[client] = 0;
 	  enable_send_monitor_to_client[client] = 0;
+	  enable_ext_sig_to_client[client] = 0;
 	}
 
 	if (server_port == 0) {
@@ -713,6 +722,7 @@ static THREAD_F connect_listen_thread (void *arg)
  */ 
 	    enable_send_raw_to_client[client] = 0;
 	    enable_send_monitor_to_client[client] = 0;
+	    enable_ext_sig_to_client[client] = 0;
 	  }
 	  else {
 	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
@@ -804,6 +814,7 @@ static THREAD_F connect_listen_thread (void *arg)
  */ 
 	    enable_send_raw_to_client[client] = 0;
 	    enable_send_monitor_to_client[client] = 0;
+	    enable_ext_sig_to_client[client] = 0;
 	  }
 	  else {
 	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
@@ -841,7 +852,7 @@ static void mon_addrs (int chan, packet_t pp, char *result, int result_size);
 static char mon_desc (packet_t pp, char *result, int result_size);
 
 
-void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int flen)
+void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int flen, alevel_t alevel, int retries)
 {
 	struct {	
 	  struct agwpe_s hdr;
@@ -905,13 +916,13 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 
 	// Application might want more human readable format.
 
-	server_send_monitored (chan, pp, 0);
+	server_send_monitored (chan, pp, 0, alevel, retries);
 
 } /* end server_send_rec_packet */
 
 
 
-void server_send_monitored (int chan, packet_t pp, int own_xmit)
+void server_send_monitored (int chan, packet_t pp, int own_xmit, alevel_t alevel, int retries)
 {
 /*
  * MONITOR format - 	'I' for information frames.
@@ -994,6 +1005,19 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 
 	    agwpe_msg.data[msg_data_len++] = '\0';	// add nul at end, included in length.
 	    agwpe_msg.hdr.data_len_NETLE = host2netle(msg_data_len);
+
+	    // Optional extension (non-standard, opt-in via 'q'): stash per-frame signal
+	    // quality in the otherwise-zero user_reserved header bytes.  Only for
+	    // clients that asked, so stock clients get byte-identical frames.
+	    // alevel.rec < 0 means "no measurement" (e.g. own transmitted frames).
+	    // See AGWPE-SIGNAL-QUALITY-EXTENSION.md.
+	    if (enable_ext_sig_to_client[client] && alevel.rec >= 0) {
+	      unsigned char *sig = (unsigned char *)(&agwpe_msg.hdr.user_reserved_NETLE);
+	      sig[0] = (unsigned char) (alevel.rec   > 255 ? 255 : alevel.rec);
+	      sig[1] = (unsigned char) (alevel.mark  < 0 ? 0xFF : (alevel.mark  > 255 ? 255 : alevel.mark));
+	      sig[2] = (unsigned char) (alevel.space < 0 ? 0xFF : (alevel.space > 255 ? 255 : alevel.space));
+	      sig[3] = (unsigned char) (retries < 0 ? 0 : (retries > 255 ? 255 : retries));
+	    }
 
 	    if (debug_client) {
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
@@ -1822,6 +1846,30 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      // Actually it is a toggle so we must be sure to clear it for a new connection.
 
 	      enable_send_monitor_to_client[client] = ! enable_send_monitor_to_client[client];
+	      break;
+
+
+	    case 'q':				/* Optional extension: enable extended signal quality reporting */
+
+	      // Non-standard extension (see AGWPE-SIGNAL-QUALITY-EXTENSION.md).
+	      // Turn on per-frame signal quality in the user_reserved header bytes
+	      // of monitor frames sent to THIS client, then acknowledge so the
+	      // client can positively confirm the server supports it.  Stock clients
+	      // never send 'q', so their frames are byte-for-byte unchanged.
+	      {
+		struct {
+		  struct agwpe_s hdr;
+		  char data[16];
+		} reply;
+
+		enable_ext_sig_to_client[client] = 1;
+
+		memset (&reply, 0, sizeof(reply));
+		reply.hdr.datakind = 'q';
+		strlcpy (reply.data, "ExtSig=1", sizeof(reply.data));
+		reply.hdr.data_len_NETLE = host2netle(strlen(reply.data) + 1);
+		send_to_client (client, &reply);
+	      }
 	      break;
 
 

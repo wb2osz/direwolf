@@ -896,7 +896,8 @@ static void xmit_object_report (int i, int first_time)
 
 	  flen = ax25_pack(pp, fbuf);
 
-	  server_send_rec_packet (save_tt_config_p->obj_recv_chan, pp, fbuf, flen);
+	  // Synthetic APRStt object — no direct RF signal, pass a sentinel (rec < 0).
+	  server_send_rec_packet (save_tt_config_p->obj_recv_chan, pp, fbuf, flen, (alevel_t){.rec = -1, .mark = -1, .space = -1}, 0);
 	  kissnet_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);
 	  kissserial_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);
 	  kisspt_send_rec_packet (save_tt_config_p->obj_recv_chan, KISS_CMD_DATA_FRAME, fbuf, flen, NULL, -1);
