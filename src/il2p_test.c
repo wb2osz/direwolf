@@ -120,7 +120,7 @@ static void test_scramble(void)
 	unsigned char scramout[sizeof(scramin1)];
 
 	il2p_scramble_block (scramin1, scramout, sizeof(scramin1));
-	assert (memcmp(scramout, scramout, sizeof(scramout1)) == 0);
+	assert (memcmp(scramout, scramout1, sizeof(scramout1)) == 0);
 
 }  // end test_scramble.
 
