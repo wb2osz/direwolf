@@ -1781,8 +1781,6 @@ static void signal_handler_linux (int x)
 	if (misc_config.dns_sd_enabled)
 	  dns_sd_term ();
 #endif
-	ptt_term ();
-	dwgps_term ();
 	SLEEP_SEC(1);
 	exit(0);
 }
