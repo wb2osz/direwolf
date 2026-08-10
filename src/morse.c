@@ -98,27 +98,30 @@ static const struct morse_s {
 	{ '8', "---.." },
 	{ '9', "----." },
 	{ '0', "-----" },
-	{ '.', ".-.-.-" },
-	{ ',', "--..--" },
-	{ '?', "..--.." },
-	{ '/', "-..-." },
+	{ '.', ".-.-.-" },	/* Period */
+	{ ',', "--..--" },	/* Comma */
+	{ '?', "..--.." },	/* Question Mark */
+	{ '/', "-..-." },	/* Slash */
 
-	{ '=', "-...-" },	/* from ARRL */
-	{ '-', "-....-" },
-	{ ')', "-.--.-" },	/* does not distinguish open/close */
-	{ ':', "---..." },
-	{ ';', "-.-.-." },
-	{ '"', ".-..-." },
-	{ '\'', ".----." },
-	{ '$', "...-..-" },
+// https://www.itu.int/dms_pubrec/itu-r/rec/m/R-REC-M.1677-1-200910-I!!PDF-E.pdf
 
-	{ '!', "-.-.--" },	/* more from wikipedia */
-	{ '(', "-.--." },
-	{ '&', ".-..." },
-	{ '+', ".-.-." },
-	{ '_', "..--.-" },
-	{ '@', ".--.-." },
+	{ ':', "---..." },	/* Colon */
+	{ '\'', ".----." },	/* Apostrophe */
+	{ '-', "-....-" },	/* Hyphen, dash, minus */
+	{ '(', "-.--." },	/* Left parenthesis */
+	{ ')', "-.--.-" },	/* Right parenthesis */
+	{ '"', ".-..-." },	/* Quotation mark */
+	{ '=', "-...-" },	/* Double hyphen */
+	{ '+', ".-.-." },	/* Plus */
+	{ '@', ".--.-." },	/* Commercial At */
 
+// Non-standard from Wikipedia
+
+	{ '!', "-.-.--" },	/* Exclamation mark */
+	{ '&', ".-..." },	/* Ampersand */
+	{ ';', "-.-.-." },	/* Semicolon */
+	{ '_', "..--.-" },	/* Underscore */
+	{ '$', "...-..-" },	/* Dollar sign */
 };
 
 #define NUM_MORSE ((int)(sizeof(morse) / sizeof(struct morse_s)))
