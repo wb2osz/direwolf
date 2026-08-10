@@ -2165,6 +2165,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("Failed to create frame from AGW 'M' message.\n");
+			break;
 		}
 
 	        ax25_set_info (pp, (unsigned char*)cmd.data, data_len);
