@@ -4852,7 +4852,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (p_igate_config->t2_filter != NULL) {
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Line %d: Warning - Earlier IGFILTER value will be replaced by this one.\n", line);
+	      dw_printf ("Line %d: Warning - IGFILTER already configured (%s), this one (%s) will be ignored.\n", line, p_igate_config->t2_filter, t);
 	      continue;
 	    }
 
