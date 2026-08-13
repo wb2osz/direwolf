@@ -1241,8 +1241,6 @@ static THREAD_F client_send_thread (void *arg)
 
 	}  /* end outer while(1) */
 
-	return ((THREAD_F)0);
-
 } /* end client_send_thread */
 
 
