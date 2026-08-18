@@ -687,7 +687,7 @@ int audio_open (struct audio_s *pa)
 					//Create UDP Socket
 					if ((adev[a].udp_sock=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1) {
 						text_color_set(DW_COLOR_ERROR);
-						dw_printf ("Couldn't create socket, errno %d\n", errno);
+						dw_printf ("Couldn't create socket, errno %d (%s)\n", errno, strerror(errno));
 						return -1;
 					}
 
@@ -699,7 +699,7 @@ int audio_open (struct audio_s *pa)
 					//Bind to the socket
 					if (bind(adev[a].udp_sock, (const struct sockaddr *) &si_me, sizeof(si_me))==-1) {
 						text_color_set(DW_COLOR_ERROR);
-						dw_printf ("Couldn't bind socket, errno %d\n", errno);
+						dw_printf ("Couldn't bind socket, errno %d (%s)\n", errno, strerror(errno));
 						return -1;
 					}
 				}
