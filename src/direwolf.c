@@ -1318,8 +1318,7 @@ int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, aleve
 // The HEARD line.
 
 	if (( ! q_h_opt ) && alevel.rec >= 0) {    /* suppress if "-q h" option */
-// FIXME: rather than checking for ichannel, how about checking medium==radio
-	 if (chan != audio_config.igate_vchannel) {	// suppress if from ICHANNEL
+	 if (audio_config.chan_medium[chan] == MEDIUM_RADIO) {
 	  if (h != -1 && h != AX25_SOURCE) {
 	    dw_printf ("Digipeater ");
 	  }
@@ -1380,18 +1379,15 @@ int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, aleve
 	/* Version 1.2:   Cranking the input level way up produces 199. */
 	/* Keeping it under 100 gives us plenty of headroom to avoid saturation. */
 
-	// TODO:  suppress this message if not using soundcard input.
-	// i.e. we have no control over the situation when using SDR.
-
-	if (!q_h_opt && alevel.rec > 110) {
+	if (!q_h_opt && alevel.rec > 110 && audio_config.chan_medium[chan] == MEDIUM_RADIO) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too high. This may cause distortion and reduced decode performance.\n");
 	  dw_printf ("Solution is to decrease the audio input level.\n");
 	  dw_printf ("Setting audio input level so most stations are around 50 will provide good dynamic range.\n");
 	}
-// FIXME: rather than checking for ichannel, how about checking medium==radio
-	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != SUBCHAN_NETTNC && subchan != SUBCHAN_SERTNC) {
+	else if (alevel.rec < 5 && audio_config.chan_medium[chan] == MEDIUM_RADIO
+	         && subchan != SUBCHAN_NETTNC && subchan != SUBCHAN_SERTNC) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too low.  Increase so most stations are around 50.\n");
