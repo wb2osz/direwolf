@@ -728,7 +728,7 @@ int main ()
 
 	memset (&my_audio_config, 0, sizeof(my_audio_config));
 	strlcpy (my_audio_config.adev[0].adevice_in, DEFAULT_ADEVICE, sizeof(my_audio_config.adev[0].adevice_in));
-	strlcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE, , sizeof(my_audio_config.adev[0].adevice_out));
+	strlcpy (my_audio_config.adev[0].adevice_out, DEFAULT_ADEVICE, sizeof(my_audio_config.adev[0].adevice_out));
 	my_audio_config.adev[0].num_channels = 2;
 
 	audio_open (&my_audio_config);
