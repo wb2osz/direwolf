@@ -1440,6 +1440,21 @@ static int wait_for_clear_channel (int chan, int slottime, int persist, int full
 	int n = 0;
 
 /*
+ * Hard gate on TXINH - block transmission regardless of fulldup mode.
+ * Wait until inhibit is released or timeout.
+ */
+#if defined(USE_GPIOD)
+   while (get_input(ICTYPE_TXINH, chan) == 1) {
+     SLEEP_MS(WAIT_CHECK_EVERY_MS);
+     n++;
+     if (n > (WAIT_TIMEOUT_MS / WAIT_CHECK_EVERY_MS)) {
+       return 0;
+     }
+   }
+   n = 0;  /* reset counter for subsequent busy checks */
+#endif
+
+/*
  * For dull duplex we skip the channel busy check and random wait.
  * We still need to wait if operating in stereo and the other audio
  * half is busy.
