@@ -132,6 +132,7 @@
 #include "deviceid.h"
 #include "nettnc.h"
 #include "sertnc.h"
+#include "loraspi.h"
 
 
 //static int idx_decoded = 0;
@@ -1067,6 +1068,7 @@ int main (int argc, char *argv[])
  */
 	nettnc_init (&audio_config);
 	sertnc_init (&audio_config);
+	loraspi_init (&audio_config);
 
 /*
  * Initialize the touch tone decoder & APRStt gateway.
