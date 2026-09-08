@@ -316,7 +316,7 @@ void recv_process (void)
 	    dl_timer_expiry ();
 	  }
 	  else {
-
+	    int ok;
 	    pitem = dlq_remove ();
 
 #if DEBUG
@@ -340,7 +340,7 @@ void recv_process (void)
  *	- Digipeater.
  */
 
-		  int ok = app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->fec_type, pitem->retries, pitem->spectrum);
+		  ok = app_process_rec_packet (pitem->chan, pitem->subchan, pitem->slice, pitem->pp, pitem->alevel, pitem->fec_type, pitem->retries, pitem->spectrum);
 
 
 /*
