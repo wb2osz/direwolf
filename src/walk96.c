@@ -156,7 +156,7 @@ static void walk96 (int fix, double lat, double lon, float knots, float course, 
 		'/', '=',
 		G_UNKNOWN, G_UNKNOWN, G_UNKNOWN, "",	// PHGd
 		(int)roundf(course), (int)roundf(knots),
-		445.925, 0, 0,
+		445.925, 'T', 0, 0,
 		comment,
 		info, sizeof(info));
 
