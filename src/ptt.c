@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017, 2023, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -54,6 +54,7 @@
  *
  * Version 1.5:	Ability to use GPIO pins of CM108/CM119 for PTT signal.
  *
+ * Version 1.9:	Compatbility with new API for hamlib 5.
  *
  * References:	http://www.robbayer.com/files/serial-win.pdf
  *
@@ -160,6 +161,9 @@
 
 #ifdef USE_HAMLIB
 #include <hamlib/rig.h>
+#if HAMLIB_VERSION_MAJOR >= 5
+#include <hamlib/port.h>
+#endif
 #endif
 
 #ifdef USE_GPIOD
@@ -1153,6 +1157,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	            hamlib_port_t hport;	// http://hamlib.sourceforge.net/manuals/1.2.15/structhamlib__port__t.html
 
 	            memset (&hport, 0, sizeof(hport));
+	            hport.type.rig = RIG_PORT_SERIAL;
 	            strlcpy (hport.pathname, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(hport.pathname));
 
 	            if (audio_config_p->achan[ch].octrl[ot].ptt_rate > 0) {
@@ -1164,19 +1169,47 @@ void ptt_init (struct audio_s *audio_config_p)
 	              hport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
 	            }
 
-	            rig_load_all_backends();
+	            int err = rig_load_all_backends();
+	            if (err != RIG_OK) {
+	              text_color_set(DW_COLOR_ERROR);
+	              dw_printf ("Hamlib Error: rig_load_all_backends: %s\n", rigerror(err));
+	              dw_printf ("Couldn't guess rig model number for AUTO option.\n");
+	              dw_printf ("Run \"rigctl --list\" for a list of model numbers.\n");
+	              exit (EXIT_FAILURE);
+	            }
+
+	            // Probe the radio and try to determine its model.
+
                     audio_config_p->achan[ch].octrl[ot].ptt_model = rig_probe(&hport);
 
 	            if (audio_config_p->achan[ch].octrl[ot].ptt_model == RIG_MODEL_NONE) {
 	              text_color_set(DW_COLOR_ERROR);
-	              dw_printf ("Hamlib Error: Couldn't guess rig model number for AUTO option.  Run \"rigctl --list\" for a list of model numbers.\n");
-	              continue;
+	              dw_printf ("Hamlib Error: Couldn't guess rig model number for AUTO option.\n");
+	              dw_printf ("Run \"rigctl --list\" for a list of model numbers.\n");
+	              exit (EXIT_FAILURE);
 	            }
 
 	            text_color_set(DW_COLOR_INFO);
 	            dw_printf ("Hamlib AUTO option detected rig model %d.  Run \"rigctl --list\" for a list of model numbers.\n",
 							audio_config_p->achan[ch].octrl[ot].ptt_model);
 	          }
+
+#if HAMLIB_VERSION_MAJOR >= 5
+
+	          rig_model_t model = (rig_model_t)audio_config_p->achan[ch].octrl[ot].ptt_model;
+
+	          rig[ch][ot] = rig_init(model);
+	          if (rig[ch][ot] == NULL) {
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Hamlib error: Unknown rig model %d.  Run \"rigctl --list\" for a list of model numbers.\n",
+	                          (int)model);
+	            continue;
+	          }
+
+	          rig_set_conf(rig[ch][ot],
+	                   rig_token_lookup(rig[ch][ot], "rig_pathname"),
+	                   audio_config_p->achan[ch].octrl[ot].ptt_device);
+#else // pre hamlib 5
 
 	          rig[ch][ot] = rig_init(audio_config_p->achan[ch].octrl[ot].ptt_model);
 	          if (rig[ch][ot] == NULL) {
@@ -1186,7 +1219,10 @@ void ptt_init (struct audio_s *audio_config_p)
 	            continue;
 	          }
 
-	          strlcpy (rig[ch][ot]->state.rigport.pathname, audio_config_p->achan[ch].octrl[ot].ptt_device, sizeof(rig[ch][ot]->state.rigport.pathname));
+	          strlcpy (rig[ch][ot]->state.rigport.pathname,
+	                          audio_config_p->achan[ch].octrl[ot].ptt_device,
+	                          sizeof(rig[ch][ot]->state.rigport.pathname));
+#endif
 
 	          // Issue 290.
 	          // We had a case where hamlib defaulted to 9600 baud for a particular
@@ -1195,13 +1231,33 @@ void ptt_init (struct audio_s *audio_config_p)
 
 	          text_color_set(DW_COLOR_INFO);
 	          if (audio_config_p->achan[ch].octrl[ot].ptt_model != 2) {	// 2 is network, not serial port.
+#if HAMLIB_VERSION_MAJOR >= 5
+	            char serial_speed[16];
+	            rig_get_conf2(rig[ch][ot],
+	                   rig_token_lookup(rig[ch][ot], "serial_speed"),
+	                   serial_speed,
+	                   sizeof(serial_speed));
+
+	            dw_printf ("Hamlib determined CAT control serial port rate of %s.\n", serial_speed);
+#else
 	            dw_printf ("Hamlib determined CAT control serial port rate of %d.\n", rig[ch][ot]->state.rigport.parm.serial.rate);
+#endif
 	          }
 
 	          // Config file can optionally override the rate that hamlib came up with.
 
 	          if (audio_config_p->achan[ch].octrl[ot].ptt_rate > 0) {
 	            dw_printf ("User configuration overriding hamlib CAT control speed to %d.\n", audio_config_p->achan[ch].octrl[ot].ptt_rate);
+
+#if HAMLIB_VERSION_MAJOR >= 5
+	            char serial_speed[16];
+	            snprintf (serial_speed, sizeof(serial_speed), "%d",
+	                            audio_config_p->achan[ch].octrl[ot].ptt_rate);
+	            rig_set_conf(rig[ch][ot],
+	                   rig_token_lookup(rig[ch][ot], "serial_speed"),
+	                   serial_speed);
+
+#else
 	            rig[ch][ot]->state.rigport.parm.serial.rate = audio_config_p->achan[ch].octrl[ot].ptt_rate;
 
 		    // Do we want to explicitly set all of these or let it default?
@@ -1209,6 +1265,7 @@ void ptt_init (struct audio_s *audio_config_p)
 	            rig[ch][ot]->state.rigport.parm.serial.stop_bits = 1;
 	            rig[ch][ot]->state.rigport.parm.serial.parity = RIG_PARITY_NONE;
 	            rig[ch][ot]->state.rigport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
+#endif
 	          }
 		  tries = 0;
 		  do {

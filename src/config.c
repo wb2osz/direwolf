@@ -2125,7 +2125,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	          continue;
 	        }
 	        int n = atoi(t);
-		if (n < 1 || n > 9999) {
+		if (n < 1 || n > 99999) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Config file line %d: Unreasonable model number %d for hamlib.\n", line, n);
 	          continue;
