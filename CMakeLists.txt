@@ -341,28 +341,35 @@ if(HAMLIB_FOUND)
   # Version 5 uses a significantly different API.
   # Try to determine version and put it on compile command line.
 
-  # Require pkg-config support
-  find_package(PkgConfig REQUIRED)
-  # Probe for hamlib
-  pkg_check_modules(HAMLIB REQUIRED hamlib)
-  # Abort if not found
-  if(NOT HAMLIB_FOUND)
-    message(FATAL_ERROR "hamlib not found via pkg-config")
+  # On Linux, we can find hamlib version with pkg-config.
+  # FIXME: Need another way to find library version on Windows.
+
+  if(LINUX OR APPLE)
+    find_package(PkgConfig REQUIRED)
+    # Probe for hamlib
+    pkg_check_modules(HAMLIB REQUIRED hamlib)
+    # Already found above so this should not fail.
+    if(NOT HAMLIB_FOUND)
+      message(FATAL_ERROR "hamlib not found via pkg-config")
+    endif()
+
+    # HAMLIB_VERSION holds the full x.y.z string
+    # Now split out major and minor versions into separate integers
+
+    string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
+    list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+    list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+    message(STATUS "hamlib version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
   endif()
-
-  # HAMLIB_VERSION holds the full x.y.z string
-
-  # Now split out major and minor versions into separate integers
-  string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
-  list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
-  list(GET VLIST 1 HAMLIB_VERSION_MINOR)
-  message(STATUS "libgpiod version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
 
   if(WIN32 OR CYGWIN)
     set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
+    message(STATUS "Windows hamlib package ${CPACK_PACKAGE_FILE_NAME}")
+    # FIXME: Need to set HAMLIB_VERSION_MAJOR,MINOR somehow.
+    message(STATUS "Version if we get lucky ${HAMLIB_VERSION}")
   endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
