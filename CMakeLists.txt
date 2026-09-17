@@ -338,12 +338,55 @@ endif()
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
+
+  # Version 5 uses a significantly different API.
+  # Try to determine version and put it on compile command line.
+  #
+  # pkg-config works for the usual Linux install path but it is not available
+  # in the Windows GitHub Actions environment.  For the Windows Hamlib ZIP
+  # package, extract the version from README.w64-bin.txt in HAMLIB_ROOT_DIR.
+  unset(HAMLIB_VERSION)
+  unset(HAMLIB_VERSION_MAJOR)
+  unset(HAMLIB_VERSION_MINOR)
+
+  find_package(PkgConfig QUIET)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_HAMLIB QUIET hamlib)
+    if(PC_HAMLIB_FOUND AND PC_HAMLIB_VERSION)
+      set(HAMLIB_VERSION "${PC_HAMLIB_VERSION}")
+    endif()
+  endif()
+
+  if((WIN32 OR CYGWIN) AND NOT HAMLIB_VERSION)
+    set(HAMLIB_WINDOWS_README "${HAMLIB_ROOT_DIR}/README.w64-bin.txt")
+    if(EXISTS "${HAMLIB_WINDOWS_README}")
+      file(STRINGS "${HAMLIB_WINDOWS_README}" HAMLIB_WINDOWS_VERSION_LINE
+        REGEX "build of Hamlib-[0-9]+\\.[0-9]+(\\.[0-9]+)?"
+        LIMIT_COUNT 1)
+      if(HAMLIB_WINDOWS_VERSION_LINE)
+        string(REGEX MATCH "Hamlib-([0-9]+\\.[0-9]+(\\.[0-9]+)?)"
+          _hamlib_version_match "${HAMLIB_WINDOWS_VERSION_LINE}")
+        set(HAMLIB_VERSION "${CMAKE_MATCH_1}")
+      endif()
+    endif()
+  endif()
+
+  if(HAMLIB_VERSION)
+      string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
+      list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+      list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+      message(STATUS "hamlib version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
+  endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
 endif()
 
-find_package(gpiod)
+if(LINUX)
+  find_package(gpiod)
+endif()
 if(GPIOD_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
 
