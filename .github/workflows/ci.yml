@@ -107,6 +107,13 @@ jobs:
             # just to simplify I use homebrew but
             # we can use macports (latest direwolf is already available as port)
             brew install portaudio hamlib gpsd hidapi
+            HAMLIB_PREFIX="$(brew --prefix hamlib)"
+            export LDFLAGS="-L${HAMLIB_PREFIX}/lib ${LDFLAGS}"
+            export CPPFLAGS="-I${HAMLIB_PREFIX}/include ${CPPFLAGS}"
+            echo "HAMLIB_PREFIX=$HAMLIB_PREFIX" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$HAMLIB_PREFIX" >> "$GITHUB_ENV"
+            echo "CMAKE_LIBRARY_PATH=$HAMLIB_PREFIX/lib" >> "$GITHUB_ENV"
+            echo "CMAKE_INCLUDE_PATH=$HAMLIB_PREFIX/include" >> "$GITHUB_ENV"
           elif [ "$RUNNER_OS" == "Windows" ]; then
             # add the folder to PATH
             echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH
