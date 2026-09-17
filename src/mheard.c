@@ -92,11 +92,15 @@ typedef struct mheard_s {
 						// Just something potentially interesting when looking at data dump.
 
 	int chan;				// Most recent channel where heard.
+						// This identifies the latest RF time for the
+						// existing IGate statistics and nearby checks.
 
 	int num_digi_hops;			// Number of digipeater hops before we heard it.
 						// over radio.  Zero when heard directly.
 
-	time_t last_heard_rf;			// Timestamp when last heard over the radio.
+	time_t first_heard_rf[MAX_TOTAL_CHANS];	// Timestamp when first heard on each radio channel.
+
+	time_t last_heard_rf[MAX_TOTAL_CHANS];	// Timestamp when last heard on each radio channel.
 
 	time_t last_heard_is;			// Timestamp when last heard from Internet Server.
 
@@ -107,15 +111,7 @@ typedef struct mheard_s {
 						// Then decremented.
 
 						// What else would be useful?
-						// The AGW protocol is by channel and returns
-						// first heard in addition to last heard.
 } mheard_t;
-
-
-
-
-
-
 
 /*
  * The list could be quite long and we hit this a lot so use a hash table.
@@ -230,8 +226,8 @@ static int compar(const void *a, const void *b)
 	mheard_t *ma = *((mheard_t **)a);
 	mheard_t *mb = *((mheard_t **)b);
 
-	time_t ta = MAXX(ma->last_heard_rf, ma->last_heard_is);
-	time_t tb = MAXX(mb->last_heard_rf, mb->last_heard_is);
+	time_t ta = MAXX(ma->last_heard_rf[ma->chan], ma->last_heard_is);
+	time_t tb = MAXX(mb->last_heard_rf[mb->chan], mb->last_heard_is);
 
 	return (tb - ta);
 }
@@ -281,7 +277,7 @@ static void mheard_dump (void)
 
 	  mptr = station[i];
 
-	  age (rf, now, mptr->last_heard_rf);
+	  age (rf, now, mptr->last_heard_rf[mptr->chan]);
 	  age (is, now, mptr->last_heard_is);
 	  latlon (position, mptr->dlat, mptr->dlon);
 
@@ -291,6 +287,68 @@ static void mheard_dump (void)
 	}
 
 } /* end mheard_dump */
+
+
+static int compar_times(const void *a, const void *b)
+{
+	const mheard_times_t *ta = a;
+	const mheard_times_t *tb = b;
+
+	if (ta->last_heard < tb->last_heard) {
+	  return 1;
+	}
+	if (ta->last_heard > tb->last_heard) {
+	  return -1;
+	}
+	return 0;
+}
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	mheard_latest_for_channel
+ *
+ * Purpose:	Provide the most recently heard stations on a radio channel.
+ *
+ *------------------------------------------------------------------*/
+
+int mheard_latest_for_channel (int chan, mheard_times_t *times, int num_times)
+{
+	int i;
+	mheard_t *mptr;
+	mheard_times_t station[MAXDUMP];
+	int num_stations = 0;
+
+	if (chan < 0 || chan >= MAX_TOTAL_CHANS || times == NULL || num_times <= 0) {
+	  return 0;
+	}
+
+	for (i = 0; i < MHEARD_HASH_SIZE; i++) {
+	  for (mptr = mheard_hash[i]; mptr != NULL; mptr = mptr->pnext) {
+	    if (mptr->first_heard_rf[chan] == 0) {
+	      continue;
+	    }
+	    if (num_stations >= MAXDUMP) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("mheard_latest_for_channel - max number of stations exceeded.\n");
+	      break;
+	    }
+	    strlcpy (station[num_stations].callsign, mptr->callsign, sizeof(station[num_stations].callsign));
+	    station[num_stations].chan = chan;
+	    station[num_stations].first_heard = mptr->first_heard_rf[chan];
+	    station[num_stations].last_heard = mptr->last_heard_rf[chan];
+	    num_stations++;
+	  }
+	}
+
+	qsort (station, num_stations, sizeof(mheard_times_t), compar_times);
+
+	for (i = 0; i < num_stations && i < num_times; i++) {
+	  times[i] = station[i];
+	}
+
+	return i;
+}
 
 
 /*------------------------------------------------------------------
@@ -322,6 +380,9 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	char source[AX25_MAX_ADDR_LEN];
 	int hops;
 	mheard_t *mptr;
+	time_t previous_last;
+
+	assert (chan >= 0 && chan < MAX_TOTAL_CHANS);
 
 	ax25_get_addr_with_ssid (pp, AX25_SOURCE, source);
 
@@ -405,7 +466,8 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	  mptr->count = 1;
 	  mptr->chan = chan;
 	  mptr->num_digi_hops = hops;
-	  mptr->last_heard_rf = now;
+	  mptr->first_heard_rf[chan] = now;
+	  mptr->last_heard_rf[chan] = now;
 	  // Why did I do this instead of saving the location for a position report?
 	  mptr->dlat = G_UNKNOWN;
 	  mptr->dlon = G_UNKNOWN;
@@ -423,27 +485,34 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
  * Update existing entry.
  * The only tricky part here is that we might hear the same transmission
  * several times.  First direct, then thru various digipeater paths.
- * We are interested in the shortest path if heard very recently.
+ * We are interested in the shortest path if heard very recently.  The H
+ * command, however, needs every channel's reception time, so record that
+ * independently of whether this packet updates the aggregate entry.
  */
 
-	  if (hops > mptr->num_digi_hops && (int)(now - mptr->last_heard_rf) < 15) {
+	  previous_last = mptr->last_heard_rf[mptr->chan];
+	  if (mptr->first_heard_rf[chan] == 0) {
+	    mptr->first_heard_rf[chan] = now;
+	  }
+	  mptr->last_heard_rf[chan] = now;
+
+	  if (hops > mptr->num_digi_hops && (int)(now - previous_last) < 15) {
 
 	    if (mheard_debug) {
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("mheard_save_rf: %s %d - skip because hops was %d %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - mptr->last_heard_rf) );
+	      dw_printf ("mheard_save_rf: %s %d - skip because hops was %d %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - previous_last) );
 	    }
 	  }
 	  else {
 
 	    if (mheard_debug) {
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("mheard_save_rf: %s %d - update time, was %d hops %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - mptr->last_heard_rf));
+	      dw_printf ("mheard_save_rf: %s %d - update time, was %d hops %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - previous_last));
 	    }
 
 	    mptr->count++;
 	    mptr->chan = chan;
 	    mptr->num_digi_hops = hops;
-	    mptr->last_heard_rf = now;
 	  }
 	}
 
@@ -578,7 +647,7 @@ void mheard_save_is (char *ptext)
 
 	  if (mheard_debug) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("mheard_save_is: %s - update time, was %d seconds ago.\n", source, (int)(now - mptr->last_heard_rf));
+	    dw_printf ("mheard_save_is: %s - update time, was %d seconds ago.\n", source, (int)(now - mptr->last_heard_rf[mptr->chan]));
 	  }
 	  mptr->count++;
 	  mptr->last_heard_is = now;
@@ -674,7 +743,7 @@ int mheard_count (int max_hops, int time_limit)
 
 	for (i = 0; i < MHEARD_HASH_SIZE; i++) {
 	  for (p = mheard_hash[i]; p != NULL; p = p->pnext) {
-	    if (p->last_heard_rf >= since && p->num_digi_hops <= max_hops) {
+	    if (p->last_heard_rf[p->chan] >= since && p->num_digi_hops <= max_hops) {
 	      count++;
 	    }
 	  }
@@ -735,7 +804,7 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 
 	mptr = mheard_ptr(callsign);
 
-	if (mptr == NULL || mptr->last_heard_rf == 0) {
+	if (mptr == NULL || mptr->last_heard_rf[mptr->chan] == 0) {
 
 	  if (role != NULL && strlen(role) > 0) {
 	    text_color_set(DW_COLOR_INFO);
@@ -745,7 +814,7 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 	}
 
 	now = time(NULL);
-	heard_ago = (int)(now - mptr->last_heard_rf) / 60;
+	heard_ago = (int)(now - mptr->last_heard_rf[mptr->chan]) / 60;
 
 	if (heard_ago > time_limit) {
 

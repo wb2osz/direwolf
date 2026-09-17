@@ -159,6 +159,7 @@
 #include <time.h>
 #include <ctype.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "tq.h"
 #include "ax25_pad.h"
@@ -166,6 +167,7 @@
 #include "audio.h"
 #include "server.h"
 #include "dlq.h"
+#include "mheard.h"
 
 
 
@@ -410,6 +412,66 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	}
 
 }
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        format_heard_time
+ *
+ * Purpose:     Format a timestamp for an AGWPE Heard Stations ('H') reply.
+ *
+ * Description: The payload contains both a 22-character local-time string
+ *              and a Windows SYSTEMTIME value (eight little-endian 16-bit
+ *              fields).  Keep the binary representation explicitly little
+ *              endian so it remains an AGWPE wire-format value on all hosts.
+ *
+ *--------------------------------------------------------------------*/
+
+static int format_heard_time (time_t heard, char *time_str, size_t time_str_size, unsigned char *time_bin)
+{
+	static const char *weekday[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+	static const char *month[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+	struct tm time_tm;
+	uint16_t fields[8];
+	int i;
+
+	if (time_str_size < 23) {
+	  return 0;
+	}
+
+#if __WIN32__
+	if (localtime_s (&time_tm, &heard) != 0) {
+	  return 0;
+	}
+#else
+	if (localtime_r (&heard, &time_tm) == NULL) {
+	  return 0;
+	}
+#endif
+
+	if (snprintf (time_str, time_str_size, "%s,%02d%s%04d %02d:%02d:%02d",
+		weekday[time_tm.tm_wday], time_tm.tm_mday, month[time_tm.tm_mon],
+		time_tm.tm_year + 1900, time_tm.tm_hour, time_tm.tm_min,
+		time_tm.tm_sec) != 22) {
+	  return 0;
+	}
+
+	fields[0] = (uint16_t)(time_tm.tm_year + 1900);
+	fields[1] = (uint16_t)(time_tm.tm_mon + 1);
+	fields[2] = (uint16_t)time_tm.tm_wday;
+	fields[3] = (uint16_t)time_tm.tm_mday;
+	fields[4] = (uint16_t)time_tm.tm_hour;
+	fields[5] = (uint16_t)time_tm.tm_min;
+	fields[6] = (uint16_t)time_tm.tm_sec;
+	fields[7] = 0;
+
+	for (i = 0; i < 8; i++) {
+	  time_bin[i * 2] = (unsigned char)(fields[i] & 0xff);
+	  time_bin[i * 2 + 1] = (unsigned char)(fields[i] >> 8);
+	}
+
+	return 1;
+}
+
 
 /*-------------------------------------------------------------------
  *
@@ -1676,34 +1738,64 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'H':				/* Ask about recently heard stations on given port. */
 
-		/* This should send back 20 'H' frames for the most recently heard stations. */
-		/* If there are less available, empty frames are sent to make a total of 20. */
+		/* Send the 20 most recently heard RF stations for this port. */
+		/* If fewer are available, empty frames make a total of 20. */
 		/* Each contains the first and last heard times. */
 
 	      {
-#if 0						/* Currently, this information is not being collected. */
 		struct {
 		  struct agwpe_s hdr;
-	 	  char info[100];
+		  unsigned char data[100];
 		} reply;
+		mheard_times_t times[20];
+		char first_time[23];
+		char last_time[23];
+		unsigned char first_st[16];
+		unsigned char last_st[16];
+		int count;
+		int sent = 0;
+		int i;
 
-
-	        memset (&reply.hdr, 0, sizeof(reply.hdr));
+	        memset (&reply, 0, sizeof(reply));
+	        reply.hdr.portx = cmd.hdr.portx;
 	        reply.hdr.datakind = 'H';
 
-		// TODO:  Implement properly.  
+		count = mheard_latest_for_channel (cmd.hdr.portx, times, 20);
 
-	        reply.hdr.portx = cmd.hdr.portx
+		for (i = 0; i < count; i++) {
+		  int text_len;
 
-	        strlcpy (reply.hdr.call_from, "WB2OSZ-15 Mon,01Jan2000 01:02:03  Tue,31Dec2099 23:45:56", sizeof(reply.hdr.call_from));
-		// or                                                  00:00:00                00:00:00
+		  if (!format_heard_time (times[i].first_heard, first_time, sizeof(first_time), first_st) ||
+		      !format_heard_time (times[i].last_heard, last_time, sizeof(last_time), last_st)) {
+		    continue;
+		  }
 
-	        strlcpy (agwpe_msg.data, ..., sizeof(agwpe_msg.data));
+		  text_len = snprintf ((char *)reply.data, sizeof(reply.data), "%s %s %s",
+				       times[i].callsign, first_time, last_time);
+		  assert (text_len >= 0 && text_len + 1 + 32 <= (int)sizeof(reply.data));
 
-	        reply.hdr.data_len_NETLE = host2netle(strlen(reply.info));
+		  memcpy (reply.data + text_len + 1, first_st, sizeof(first_st));
+		  memcpy (reply.data + text_len + 1 + sizeof(first_st), last_st, sizeof(last_st));
+		  reply.hdr.data_len_NETLE = host2netle(text_len + 1 + sizeof(first_st) + sizeof(last_st));
 
-	        send_to_client (client, &reply);
-#endif
+		  send_to_client (client, &reply);
+		  sent++;
+		}
+
+		/* Blank records use the layout shown in the AGWPE API documentation. */
+		if (sent < 20) {
+		  int text_len = snprintf ((char *)reply.data, sizeof(reply.data),
+					   "          "
+					   "               00:00:00"
+					   "               00:00:00");
+		  assert (text_len >= 0 && text_len + 1 + 32 <= (int)sizeof(reply.data));
+		  memset (reply.data + text_len + 1, 0, 32);
+		  reply.hdr.data_len_NETLE = host2netle(text_len + 1 + 32);
+
+		  for (; sent < 20; sent++) {
+		    send_to_client (client, &reply);
+		  }
+		}
 	      }
 	      break;
 	    

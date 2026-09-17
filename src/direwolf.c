@@ -1512,9 +1512,12 @@ void app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, alev
 	  // temp experiment.
 	  //log_rr_bits (&A, pp);
 
-	  // Add to list of stations heard over the radio.
+	  // Add only RF stations to the heard list.  ICHANNEL traffic can flow
+	  // through this decoder too, but must not appear in AGW 'H' replies.
 
-	  mheard_save_rf (chan, &A, pp, alevel, retries);
+	  if (audio_config.chan_medium[chan] == MEDIUM_RADIO) {
+	    mheard_save_rf (chan, &A, pp, alevel, retries);
+	  }
 
 // For AIS, we have an option to convert the NMEA format, in User Defined data,
 // into an APRS "Object Report" and send that to the clients as well.
