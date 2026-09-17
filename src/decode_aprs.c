@@ -4945,13 +4945,7 @@ static void process_comment (decode_aprs_t *A, char *pstart, int clen)
 	  }
 	}
 
-<<<<<<< HEAD
-// TODO: Don't complain if followed by %.  e.g. Battery voltage 100%.
-
-	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0) 
-=======
 	if (A->g_tone == G_UNKNOWN && regexec (&bad_tone_re, A->g_comment, MAXMATCH, match, 0) == 0)
->>>>>>> origin/dev
 	{
 	  char bad1[30];	/* original 99.9 or 999.9 format or one of 67 77 100 123 */
 	  char bad2[30];	/* 99.9 or 999.9 format.  ".0" appended for special cases. */

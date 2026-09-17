@@ -329,10 +329,6 @@ int main (int argc, char *argv[])
 
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 1\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-<<<<<<< HEAD
-	//dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
-	dw_printf ("Dire Wolf Release %d.%d.%d, November 2025\n", MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION);
-=======
 	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
 // B = new -dq & tcp_wmem
 // C = AX.25 v2.2 improvements
@@ -340,7 +336,6 @@ int main (int argc, char *argv[])
 // E = hamlib 5
 // TBD? = AX.25 v2.2 negotiating status
 	//dw_printf ("Dire Wolf Release %d.%d.%d, October 2025\n", MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION);
->>>>>>> origin/dev
 
 
 #if defined(ENABLE_GPSD) || defined(USE_HAMLIB) || defined(USE_CM108) || USE_AVAHI_CLIENT || USE_MACOS_DNSSD || USE_GPIOD

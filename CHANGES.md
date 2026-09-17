@@ -1,15 +1,5 @@
 # Revision History
 
-<<<<<<< HEAD
-## Version 1.8.2 -- May 2026
-
-### Bugs Fixed:
-
-Vulnerabilities reported by dkgkdfg65 (https://github.com/dkgkdfg65) and backported from development 1.9.
-
-- KISS stack-buffer-overflow ([CVE-2025-34457](https://github.com/advisories/GHSA-28g2-hxcm-j3q2))
-- MIC-E packet abort [(CVE-2025-34458)](https://github.com/advisories/GHSA-28g2-hxcm-j3q2)
-=======
 ## Development Version 1.9
 
 ### New Features:
@@ -27,7 +17,6 @@ Vulnerabilities reported by dkgkdfg65 (https://github.com/dkgkdfg65) and backpor
 - New KISSPTY configuration item allows multiple pseudo terminals and mapping of desired channel.
 
 - New text background modes.  Windows: 2 for black background.  Others: 5 to leave current background color alone, 6 for black background.
->>>>>>> origin/dev
 
 ## Version 1.8.1 -- November 2025
 
@@ -35,11 +24,7 @@ Vulnerabilities reported by dkgkdfg65 (https://github.com/dkgkdfg65) and backpor
 
 - Crash (sigsegv) after AX.25 connection attempt timeout with AGW network interface.
 
-<<<<<<< HEAD
-## Version 1.8 -- October 2025
-=======
 ## Version 1.8  --  October 2025
->>>>>>> origin/dev
 
 ### New Documentation:
 

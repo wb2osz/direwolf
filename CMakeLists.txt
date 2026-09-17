@@ -4,13 +4,8 @@ project(direwolf)
 
 # configure version
 set(direwolf_VERSION_MAJOR "1")
-<<<<<<< HEAD
-set(direwolf_VERSION_MINOR "8")
-set(direwolf_VERSION_PATCH "2")
-=======
 set(direwolf_VERSION_MINOR "9")
 set(direwolf_VERSION_PATCH "0")
->>>>>>> origin/dev
 set(direwolf_VERSION_SUFFIX "Development")
 
 # options
@@ -344,28 +339,21 @@ find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
 
-  # Version 5 uses a significantly different API.
-  # Try to determine version and put it on compile command line.
-
-  # Require pkg-config support
-  find_package(PkgConfig REQUIRED)
-  # Probe for hamlib
-  pkg_check_modules(HAMLIB REQUIRED hamlib)
-  # Abort if not found
-  if(NOT HAMLIB_FOUND)
-    message(FATAL_ERROR "hamlib not found via pkg-config")
+  # Newer Hamlib releases use a significantly different API.
+  # Try to determine the version and put it on the compile command line.
+  # pkg-config is optional because Windows CI downloads a Hamlib binary package
+  # without installing pkg-config.
+  if(PC_HAMLIB_VERSION)
+    # PC_HAMLIB_VERSION holds the full x.y.z string.
+    # Now split out major and minor versions into separate integers.
+    string(REPLACE "." ";" VLIST ${PC_HAMLIB_VERSION})
+    list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+    list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+    message(STATUS "hamlib version ${PC_HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${PC_HAMLIB_VERSION}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
   endif()
-
-  # HAMLIB_VERSION holds the full x.y.z string
-
-  # Now split out major and minor versions into separate integers
-  string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
-  list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
-  list(GET VLIST 1 HAMLIB_VERSION_MINOR)
-  message(STATUS "libgpiod version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
 
   if(WIN32 OR CYGWIN)
     set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
