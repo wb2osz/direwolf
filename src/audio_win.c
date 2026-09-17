@@ -974,7 +974,6 @@ int audio_put (int a, int c)
 	    dw_printf ("space after waiting and retrying many times.\n");
 	    //dw_printf ("In recent years, this has been reported only when running the\n");
 	    //dw_printf ("Windows version with VMWare on a Macintosh.\n");
-	    ptt_term ();
 	    return (-1);
 	  }
 	}

@@ -17,6 +17,7 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#define DLQ_C 1
 
 /*------------------------------------------------------------------
  *
@@ -92,6 +93,7 @@ static volatile int s_delete_count = 0;		// TODO:  need to test.
 static volatile int s_cdata_new_count = 0;		/* To detect memory leak for connected mode data. */
 static volatile int s_cdata_delete_count = 0;		// TODO:  need to test.
 
+static int s_dlq_debug = 0;			/* Print debug stuff. */
 
 
 /*-------------------------------------------------------------------
@@ -100,7 +102,7 @@ static volatile int s_cdata_delete_count = 0;		// TODO:  need to test.
  *
  * Purpose:     Initialize the queue.
  *
- * Inputs:	None.
+ * Inputs:	debug_level, 0 or 1.  Naybe more levels later.
  *
  * Outputs:	
  *
@@ -110,12 +112,13 @@ static volatile int s_cdata_delete_count = 0;		// TODO:  need to test.
  *--------------------------------------------------------------------*/
 
 
-void dlq_init (void)
+void dlq_init (int debug_level)
 {
 #if DEBUG
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("dlq_init ( )\n");
 #endif
+	s_dlq_debug = debug_level;
 
 	queue_head = NULL;
 
@@ -271,6 +274,7 @@ void dlq_rec_frame (int chan, int subchan, int slice, packet_t pp, alevel_t alev
 	  dw_printf ("INTERNAL ERROR:  DLQ memory leak, new=%d, delete=%d\n", s_new_count, s_delete_count);
 	}
 
+	pnew->unique_id = s_new_count;
 	pnew->nextp = NULL;
 	pnew->type = DLQ_REC_FRAME;
 	pnew->chan = chan;
@@ -317,16 +321,20 @@ static void append_to_queue (struct dlq_item_s *pnew)
 	struct dlq_item_s *plast;
 	int queue_length = 0;
 
-	if ( ! was_init) {
-	  dlq_init ();
-	}
+	assert(was_init);
 
 	pnew->nextp = NULL;
+
+	if (s_dlq_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  dw_printf ("dlq append_to_queue: id=%d %s\n", pnew->unique_id, dlq_type_str[pnew->type]);
+	}
 
 #if DEBUG1
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("dlq append_to_queue: enter critical section\n");
 #endif
+
 #if __WIN32__
 	EnterCriticalSection (&dlq_cs);
 #else
@@ -416,7 +424,26 @@ static void append_to_queue (struct dlq_item_s *pnew)
  * and blocking on a write.
  */
 
-	if (queue_length > 10) {
+
+// Could the same thing happen if a TCP KISS application can't read fast enough?  Yes.
+// We might be able to increase the TCP sending buffer size with:
+//	int bufferSize = 65536; // 64 KB
+//	setsockopt(socket, SOL_SOCKET, SO_SNDBUF, (char*)&bufferSize, sizeof(bufferSize));
+//
+// On Linux, we can check the size with
+//	cat /proc/sys/net/ipv4/tcp_wmem
+//	16384   16384   4194304
+// Values are minimum, default, and maximum.
+//
+// On Windows, the default is 8192 according to multiple sources.
+// My observation was 65536 on Windows 11.
+// There might be automatic scaling based on load.
+
+// https://github.com/wb2osz/direwolf/issues/620
+// Complaint limit was initially 10.  Make it larger.
+// Maybe we need to increase tcp socket memory.  See kissnet.c and tcp_wmem in config.c.
+
+	if (queue_length >= 40 && queue_length % 10 == 0) {
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Received frame queue is out of control. Length=%d.\n", queue_length);
 	  dw_printf ("Reader thread is probably frozen.\n");
@@ -510,6 +537,7 @@ void dlq_connect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int num
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_CONNECT_REQUEST;
 	pnew->chan = chan;
 	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
@@ -568,6 +596,7 @@ void dlq_disconnect_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int 
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_DISCONNECT_REQUEST;
 	pnew->chan = chan;
 	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
@@ -631,6 +660,7 @@ void dlq_outstanding_frames_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LE
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_OUTSTANDING_FRAMES_REQUEST;
 	pnew->chan = chan;
 	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
@@ -703,6 +733,7 @@ void dlq_xmit_data_request (char addrs[AX25_MAX_ADDRS][AX25_MAX_ADDR_LEN], int n
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_XMIT_DATA_REQUEST;
 	pnew->chan = chan;
 	memcpy (pnew->addrs, addrs, sizeof(pnew->addrs));
@@ -770,6 +801,7 @@ void dlq_register_callsign (char *addr, int chan, int client)
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_REGISTER_CALLSIGN;
 	pnew->chan = chan;
 	strlcpy (pnew->addrs[0], addr, sizeof(pnew->addrs[0]));
@@ -805,6 +837,7 @@ void dlq_unregister_callsign (char *addr, int chan, int client)
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_UNREGISTER_CALLSIGN;
 	pnew->chan = chan;
 	strlcpy (pnew->addrs[0], addr, sizeof(pnew->addrs[0]));
@@ -864,6 +897,7 @@ void dlq_channel_busy (int chan, int activity, int status)
 	  }
 	  s_new_count++;
 
+	  pnew->unique_id = s_new_count;
 	  pnew->type = DLQ_CHANNEL_BUSY;
 	  pnew->chan = chan;
 	  pnew->activity = activity;
@@ -917,6 +951,7 @@ void dlq_seize_confirm (int chan)
 	}
 	s_new_count++;
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_SEIZE_CONFIRM;
 	pnew->chan = chan;
 
@@ -969,6 +1004,7 @@ void dlq_client_cleanup (int client)
 
 	// All we care about is the client number.
 
+	pnew->unique_id = s_new_count;
 	pnew->type = DLQ_CLIENT_CLEANUP;
 	pnew->client = client;
 
@@ -1007,10 +1043,7 @@ int dlq_wait_while_empty (double timeout)
 	dw_printf ("dlq_wait_while_empty (%.3f)\n", timeout);
 #endif
 
-	if ( ! was_init) {
-	  dlq_init ();
-	}
-
+	assert(was_init);
 
 	if (queue_head == NULL) {
 
@@ -1105,16 +1138,13 @@ struct dlq_item_s *dlq_remove (void)
 {
 
 	struct dlq_item_s *result = NULL;
-	//int err;
 
 #if DEBUG1
 	text_color_set(DW_COLOR_DEBUG);
 	dw_printf ("dlq_remove() enter critical section\n");
 #endif
 
-	if ( ! was_init) {
-	  dlq_init ();
-	}
+	assert(was_init);
 
 #if __WIN32__
 	EnterCriticalSection (&dlq_cs);
@@ -1165,6 +1195,17 @@ struct dlq_item_s *dlq_remove (void)
 	  }
 	}
 #endif
+
+
+	if (s_dlq_debug) {
+	  text_color_set(DW_COLOR_DEBUG);
+	  if (result != NULL) {
+	    dw_printf ("dlq_remove: id=%d %s\n", result->unique_id, dlq_type_str[result->type]);
+	  }
+	  else {
+	    dw_printf ("dlq_remove: queue is empty\n");
+	  }
+	}
 
 	return (result);
 }

@@ -17,8 +17,10 @@ struct xid_param_s {
 
 	enum ax25_modulo_e modulo;
 
+	int i_field_length_tx;	/* In bytes.  XID has it in bits. */
 	int i_field_length_rx;	/* In bytes.  XID has it in bits. */
 
+	int window_size_tx;
 	int window_size_rx;
 
 	int ack_timer;		/* "T1" in mSec. */

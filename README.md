@@ -166,11 +166,15 @@ Then on any flavor of Linux:
     git checkout dev
     mkdir build && cd build
     cmake ..
-    make -j4
+    make -j $(nproc)
     sudo make install
     make install-conf
 
-This gives you the latest development version.  Leave out the "git checkout dev" to get the most recent stable release.
+Note 1: This gives you the latest development version. Leave out the "git checkout dev" to get the most recent stable release.
+
+Note 2:  Using "-j  $(nproc)" is optional.  it will speed up compilation when multiple CPU cores are available.
+
+
 
 For more details see the **User Guide** in the [**doc** directory](https://github.com/wb2osz/direwolf/tree/master/doc).  Special considerations for the Raspberry Pi are found in **Raspberry-Pi-APRS.pdf**
 
@@ -213,7 +217,7 @@ Then follow the same instructions as above for the Linux `git clone` build:
     git checkout dev
     mkdir build && cd build
     cmake ..
-    make -j4
+    make
     sudo make install
     make install-conf
 

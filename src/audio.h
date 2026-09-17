@@ -60,7 +60,8 @@ typedef enum retry_e {
 enum medium_e { MEDIUM_NONE = 0,	// Channel is not valid for use.
 		MEDIUM_RADIO,		// Internal modem for radio.
 		MEDIUM_IGATE,		// Access IGate as ordinary channel.
-		MEDIUM_NETTNC };	// Remote network TNC.  (new in 1.8)
+		MEDIUM_NETTNC, 		// Remote network TNC.  (new in 1.8)
+		MEDIUM_SERTNC };	// Local serial TNC.  (new in 1.8)
 
 
 typedef enum sanity_e { SANITY_APRS, SANITY_AX25, SANITY_NONE } sanity_t;
@@ -125,9 +126,9 @@ struct audio_s {
 					/* Future: not used yet. */
 
 
-	char timestamp_format[40];	/* -T option */
+	char timestamp_format[40];	/* -T option, or TIMESTAMP in config file. */
 					/* Precede received & transmitted frames with timestamp. */
-					/* Command line option uses "strftime" format string. */
+					/* Uses "strftime" format string.  -T takes precedence over config file. */
 
 
 
@@ -152,6 +153,7 @@ struct audio_s {
 					// MEDIUM_RADIO for internal modem.  (only possibility earlier)
 					// MEDIUM_IGATE allows application access to IGate.
 					// MEDIUM_NETTNC for external TNC via TCP.
+					// MEDIUM_SERTNC for external TNC via serial port.
 
 	int igate_vchannel;		/* Virtual channel mapped to APRS-IS. */
 					/* -1 for none. */
@@ -163,6 +165,12 @@ struct audio_s {
 	char nettnc_addr[MAX_TOTAL_CHANS][80];		// Network TNC address:  hostname or IP addr.
 
 	int nettnc_port[MAX_TOTAL_CHANS];		// Network TNC TCP port.
+
+	// Applies only to serial TNC type channels.
+
+	char sertnc_device[MAX_TOTAL_CHANS][80];		// Serial TNC device name.
+
+	int sertnc_baud[MAX_TOTAL_CHANS];		// Serial TNC baud rate.
 
 
 

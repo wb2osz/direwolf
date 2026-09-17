@@ -4,8 +4,13 @@ project(direwolf)
 
 # configure version
 set(direwolf_VERSION_MAJOR "1")
+<<<<<<< HEAD
 set(direwolf_VERSION_MINOR "8")
 set(direwolf_VERSION_PATCH "2")
+=======
+set(direwolf_VERSION_MINOR "9")
+set(direwolf_VERSION_PATCH "0")
+>>>>>>> origin/dev
 set(direwolf_VERSION_SUFFIX "Development")
 
 # options
@@ -338,6 +343,33 @@ endif()
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
+
+  # Version 5 uses a significantly different API.
+  # Try to determine version and put it on compile command line.
+
+  # Require pkg-config support
+  find_package(PkgConfig REQUIRED)
+  # Probe for hamlib
+  pkg_check_modules(HAMLIB REQUIRED hamlib)
+  # Abort if not found
+  if(NOT HAMLIB_FOUND)
+    message(FATAL_ERROR "hamlib not found via pkg-config")
+  endif()
+
+  # HAMLIB_VERSION holds the full x.y.z string
+
+  # Now split out major and minor versions into separate integers
+  string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
+  list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+  list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+  message(STATUS "libgpiod version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
+
+  if(WIN32 OR CYGWIN)
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
+  endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
@@ -473,6 +505,13 @@ add_subdirectory(man)
 if (LINUX OR FREEBSD)
   install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop DESTINATION share/applications)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}_icon.png DESTINATION share/pixmaps)
+endif()
+
+# install hamlib DLLs and license files on Windows
+if ((WIN32 OR CYGWIN) AND HAMLIB_FOUND)
+  install(FILES ${HAMLIB_DLLS} DESTINATION ${INSTALL_BIN_DIR})
+  install(FILES ${HAMLIB_ROOT_DIR}/COPYING.LIB.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-COPYING.LIB.txt)
+  install(FILES ${HAMLIB_ROOT_DIR}/LICENSE.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-LICENSE.txt)
 endif()
 
 ############ uninstall target ################

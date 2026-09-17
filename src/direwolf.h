@@ -72,6 +72,10 @@
 					// Someone with very unusual requirements could increase this and
 					// use only the AGW network protocol.
 
+#define MAX_KISS_PTY 6		// Maximum number of KISS pty interfaces for client apps.
+				// Increase and rebuild if not enough.
+
+
 /*
  * Maximum number of rigs.
  */

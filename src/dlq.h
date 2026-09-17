@@ -35,8 +35,13 @@ typedef struct cdata_s {
 
 
 /* Types of things that can be in queue. */
+/* Obviously, next two must be kept in sync. */
 
 typedef enum dlq_type_e {DLQ_REC_FRAME, DLQ_CONNECT_REQUEST, DLQ_DISCONNECT_REQUEST, DLQ_XMIT_DATA_REQUEST, DLQ_REGISTER_CALLSIGN, DLQ_UNREGISTER_CALLSIGN, DLQ_OUTSTANDING_FRAMES_REQUEST, DLQ_CHANNEL_BUSY, DLQ_SEIZE_CONFIRM, DLQ_CLIENT_CLEANUP} dlq_type_t;
+
+#if DLQ_C
+static const char* dlq_type_str[] = {"DLQ_REC_FRAME", "DLQ_CONNECT_REQUEST", "DLQ_DISCONNECT_REQUEST", "DLQ_XMIT_DATA_REQUEST", "DLQ_REGISTER_CALLSIGN", "DLQ_UNREGISTER_CALLSIGN", "DLQ_OUTSTANDING_FRAMES_REQUEST", "DLQ_CHANNEL_BUSY", "DLQ_SEIZE_CONFIRM", "DLQ_CLIENT_CLEANUP"};
+#endif
 
 typedef enum fec_type_e {fec_type_none=0, fec_type_fx25=1, fec_type_il2p=2} fec_type_t;
 
@@ -53,6 +58,9 @@ typedef struct dlq_item_s {
 	dlq_type_t type;		/* Type of item. */
 					/* See enum definition above. */
 
+	int unique_id;			/* Sequence number when allocated. */
+					/* used to observe what goes in and out of queue. */
+
 	int chan;			/* Radio channel of origin. */
 
 // I'm not worried about amount of memory used but this might be a
@@ -62,8 +70,12 @@ typedef struct dlq_item_s {
 
 	int subchan;			/* Winning "subchannel" when using multiple */
 					/* decoders on one channel.  */
-					/* Special case, -1 means DTMF decoder. */
 					/* Maybe we should have a different type in this case? */
+
+#define SUBCHAN_DTMF   -1
+#define SUBCHAN_APRSIS -2
+#define SUBCHAN_NETTNC -3
+#define SUBCHAN_SERTNC -4
 
 	int slice;			/* Winning slicer. */
 
@@ -105,7 +117,7 @@ typedef struct dlq_item_s {
 
 
 
-void dlq_init (void);
+void dlq_init (int debug_level);
 
 
 

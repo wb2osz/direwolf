@@ -61,10 +61,8 @@
 #include "dlq.h"		// received packet queue
 
 #include "nettnc.h"
+#include "tnc_common.h"
 
-
-
-void hex_dump (unsigned char *p, int len);
 
 
 // TODO: define macros in common locaation to hide platform specifics.
@@ -83,9 +81,8 @@ static pthread_t nettnc_listen_tid[MAX_TOTAL_CHANS];
 static THREAD_F nettnc_listen_thread (void *arg);	
 #endif
 
-static void my_kiss_rec_byte (kiss_frame_t *kf, unsigned char b, int debug, int channel_override);
+static int s_kiss_debug = 0;
 
-int s_kiss_debug = 0;
 
 
 /*-------------------------------------------------------------------
@@ -285,7 +282,7 @@ static void * nettnc_listen_thread (void *arg)
 	    for (int j = 0; j < n; j++) {
 	      // Separate the byte stream into KISS frame(s) and make it
 	      // look like this came from a radio channel.
-	      my_kiss_rec_byte (&kstate, buf[j], s_kiss_debug, chan);
+	      my_kiss_rec_byte (&kstate, buf[j], s_kiss_debug, chan, SUBCHAN_NETTNC);
 	    }
 	  } // s_tnc_sock != -1
 	} // while (1)
@@ -293,139 +290,6 @@ static void * nettnc_listen_thread (void *arg)
 	return (0);	// unreachable but shutup warning.
 
 } // end nettnc_listen_thread
-
-
-
-/*-------------------------------------------------------------------
- *
- * Name:        my_kiss_rec_byte 
- *
- * Purpose:     Process one byte from a KISS network TNC.
- *
- * Inputs:	kf	- Current state of building a frame.
- *		b	- A byte from the input stream.
- *		debug	- Activates debug output.
- *		channel_overide - Set incoming channel number to the NCHANNEL
- *				number rather than the channel in the KISS frame.
- *
- * Outputs:	kf	- Current state is updated.
- *
- * Returns:	none.
- *
- * Description:	This is a simplified version of kiss_rec_byte used
- *		for talking to KISS client applications.  It already has
- *		too many special cases and I don't want to make it worse.
- *		This also needs to make the packet look like it came from
- *		a radio channel, not from a client app.
- *
- *-----------------------------------------------------------------*/
-
-static void my_kiss_rec_byte (kiss_frame_t *kf, unsigned char b, int debug, int channel_override)
-{
-
-	//dw_printf ("my_kiss_rec_byte ( %c %02x ) \n", b, b);
-	
-	switch (kf->state) {
-	 
-  	  case KS_SEARCHING:		/* Searching for starting FEND. */
-	  default:
-
-	    if (b == FEND) {
-	      
-	      /* Start of frame.  */
-	      
-	      kf->kiss_len = 0;
-	      kf->kiss_msg[kf->kiss_len++] = b;
-	      kf->state = KS_COLLECTING;
-	      return;
-	    }
-	    return;
-	    break;
-
-	  case KS_COLLECTING:		/* Frame collection in progress. */
-
-     
-	    if (b == FEND) {
-	      
-	      unsigned char unwrapped[AX25_MAX_PACKET_LEN];
-	      int ulen;
-
-	      /* End of frame. */
-
-	      if (kf->kiss_len == 0) {
-		/* Empty frame.  Starting a new one. */
-	        kf->kiss_msg[kf->kiss_len++] = b;
-	        return;
-	      }
-	      if (kf->kiss_len == 1 && kf->kiss_msg[0] == FEND) {
-		/* Empty frame.  Just go on collecting. */
-	        return;
-	      }
-
-	      kf->kiss_msg[kf->kiss_len++] = b;
-	      if (debug) {
-		/* As received over the wire from network TNC. */
-		// May include escapted characters.  What about FEND?
-// FIXME: make it say Network TNC.
-	        kiss_debug_print (FROM_CLIENT, NULL, kf->kiss_msg, kf->kiss_len);
-	      }
-
-	      ulen = kiss_unwrap (kf->kiss_msg, kf->kiss_len, unwrapped);
-
-	      if (debug >= 2) {
-	        /* Append CRC to this and it goes out over the radio. */
-	        text_color_set(DW_COLOR_DEBUG);
-	        dw_printf ("\n");
-	        dw_printf ("Frame content after removing KISS framing and any escapes:\n");
-	        /* Don't include the "type" indicator. */
-		/* It contains the radio channel and type should always be 0 here. */
-	        hex_dump (unwrapped+1, ulen-1);
-	      }
-
-	      // Convert to packet object and send to received packet queue.
-	      // Note that we use channel associated with the network TNC, not channel in KISS frame.
-
-	      int subchan = -3;
-	      int slice = 0;
-	      alevel_t alevel;  
-	      memset(&alevel, 0, sizeof(alevel));
-	      packet_t pp = ax25_from_frame (unwrapped+1, ulen-1, alevel);
-	      if (pp != NULL) {
-	        fec_type_t fec_type = fec_type_none;
-	        retry_t retries;
-	        memset (&retries, 0, sizeof(retries));
-	        char spectrum[] = "Network TNC";
-	        dlq_rec_frame (channel_override, subchan, slice, pp, alevel, fec_type, retries, spectrum);
-	      }
-	      else {
-	   	text_color_set(DW_COLOR_ERROR);
-	        dw_printf ("Failed to create packet object for KISS frame from channel %d network TNC.\n", channel_override);
-	      }
-     
-	      kf->state = KS_SEARCHING;
-	      return;
-	    }
-
-	    if (kf->kiss_len < MAX_KISS_LEN) {
-	      kf->kiss_msg[kf->kiss_len++] = b;
-	    }
-	    else {	    
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("KISS frame from network TNC exceeded maximum length.\n");
-	    }	      
-	    return;
-	    break;
-	}
-	
-	return;	/* unreachable but suppress compiler warning. */
-
-} /* end my_kiss_rec_byte */   
-	      	    
-
-
-
-
-
 
 
 
