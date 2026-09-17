@@ -343,33 +343,37 @@ else()
   set(HAMLIB_LIBRARIES "")
 endif()
 
-find_package(gpiod)
-if(GPIOD_FOUND)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
+if(LINUX)
+  find_package(gpiod)
+  if(GPIOD_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
 
-  # Version 2 uses a completely different API.
-  # Try to determine version and put it on compile command line.
+    # Version 2 uses a completely different API.
+    # Try to determine version and put it on compile command line.
 
-  # Require pkg-config support
-  find_package(PkgConfig REQUIRED)
-  # Probe for libgpiod
-  pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
-  # Abort if not found
-  if(NOT LIBGPIOD_FOUND)
-    message(FATAL_ERROR "libgpiod not found via pkg-config")
+    # Require pkg-config support
+    find_package(PkgConfig REQUIRED)
+    # Probe for libgpiod
+    pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
+    # Abort if not found
+    if(NOT LIBGPIOD_FOUND)
+      message(FATAL_ERROR "libgpiod not found via pkg-config")
+    endif()
+
+    # LIBGPIOD_VERSION holds the full x.y.z string
+
+    # Now split out major and minor versions into separate integers
+    string(REPLACE "." ";" VLIST ${LIBGPIOD_VERSION})
+    list(GET VLIST 0 LIBGPIOD_VERSION_MAJOR)
+    list(GET VLIST 1 LIBGPIOD_VERSION_MINOR)
+    message(STATUS "libgpiod version ${LIBGPIOD_VERSION} major=${LIBGPIOD_VERSION_MAJOR} minor=${LIBGPIOD_VERSION_MINOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION=${LIBGPIOD_VERSION}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MAJOR=${LIBGPIOD_VERSION_MAJOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MINOR=${LIBGPIOD_VERSION_MINOR}")
+  else()
+    set(GPIOD_INCLUDE_DIRS "")
+    set(GPIOD_LIBRARIES "")
   endif()
-
-  # LIBGPIOD_VERSION holds the full x.y.z string
-
-  # Now split out major and minor versions into separate integers
-  string(REPLACE "." ";" VLIST ${LIBGPIOD_VERSION})
-  list(GET VLIST 0 LIBGPIOD_VERSION_MAJOR)
-  list(GET VLIST 1 LIBGPIOD_VERSION_MINOR)
-  message(STATUS "libgpiod version ${LIBGPIOD_VERSION} major=${LIBGPIOD_VERSION_MAJOR} minor=${LIBGPIOD_VERSION_MINOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION=${LIBGPIOD_VERSION}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MAJOR=${LIBGPIOD_VERSION_MAJOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MINOR=${LIBGPIOD_VERSION_MINOR}")
-
 else()
   set(GPIOD_INCLUDE_DIRS "")
   set(GPIOD_LIBRARIES "")
