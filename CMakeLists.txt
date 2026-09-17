@@ -345,24 +345,23 @@ if(HAMLIB_FOUND)
   # FIXME: Need another way to find library version on Windows.
 
   if(LINUX OR APPLE)
-    find_package(PkgConfig REQUIRED)
-    # Probe for hamlib
-    pkg_check_modules(HAMLIB_PKG REQUIRED hamlib)
-    # Already found above so this should not fail.
-    if(NOT HAMLIB_PKG_FOUND)
-      message(FATAL_ERROR "hamlib not found via pkg-config")
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+      # Probe for hamlib version without overwriting HAMLIB_LIBRARIES.
+      pkg_check_modules(HAMLIB_PKG QUIET hamlib)
+      if(HAMLIB_PKG_FOUND)
+        # HAMLIB_VERSION holds the full x.y.z string
+        # Now split out major and minor versions into separate integers
+
+        string(REPLACE "." ";" VLIST ${HAMLIB_PKG_VERSION})
+        list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+        list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+        message(STATUS "hamlib version ${HAMLIB_PKG_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_PKG_VERSION}")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
+      endif()
     endif()
-
-    # HAMLIB_VERSION holds the full x.y.z string
-    # Now split out major and minor versions into separate integers
-
-    string(REPLACE "." ";" VLIST ${HAMLIB_PKG_VERSION})
-    list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
-    list(GET VLIST 1 HAMLIB_VERSION_MINOR)
-    message(STATUS "hamlib version ${HAMLIB_PKG_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_PKG_VERSION}")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
   endif()
 
   if(WIN32 OR CYGWIN)
