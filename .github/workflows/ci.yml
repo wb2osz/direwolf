@@ -137,6 +137,9 @@ jobs:
             export CXX=${{ matrix.config.cxx }}
             export AR=${{ matrix.config.ar }}
             export WINDRES=${{ matrix.config.windres }}
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            export CPPFLAGS="${CPPFLAGS} -I/opt/homebrew/include"
+            export LDFLAGS="${LDFLAGS} -L/opt/homebrew/lib"
           fi
           cmake $GITHUB_WORKSPACE \
             -DCMAKE_BUILD_TYPE=${{ matrix.config.build_type }} \
