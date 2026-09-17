@@ -1056,7 +1056,7 @@ static int cm108_write (char *name, int iomask, int iodata)
 	  //  as root		EPIPE           32      /* Broken pipe - Happens if we send 4 bytes */
 
 	  text_color_set(DW_COLOR_ERROR);
-	  dw_printf ("Write to %s failed, n=%d, errno=%d\n", name, n, errno);
+	  dw_printf ("Write to %s failed, n=%d, errno=%d (%s)\n", name, n, errno, strerror(errno));
 
 	  if (errno == EACCES) {
 	    dw_printf ("Type \"ls -l %s\" and verify that it has audio group rw similar to this:\n", name);
