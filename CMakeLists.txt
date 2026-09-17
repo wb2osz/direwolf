@@ -338,12 +338,30 @@ endif()
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
+
+  # Version 5 uses a significantly different API.
+  # Try to determine version and put it on compile command line when
+  # pkg-config support is available.
+  find_package(PkgConfig QUIET)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_HAMLIB QUIET hamlib)
+    if(PC_HAMLIB_FOUND AND PC_HAMLIB_VERSION)
+      string(REPLACE "." ";" VLIST ${PC_HAMLIB_VERSION})
+      list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+      list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+      message(STATUS "hamlib version ${PC_HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
+    endif()
+  endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
 endif()
 
-find_package(gpiod)
+if(LINUX)
+  find_package(gpiod)
+endif()
 if(GPIOD_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
 
