@@ -48,8 +48,6 @@ dwfix_t dwgps_read (dwgps_info_t *gpsinfo);
 
 void dwgps_print (char *msg, dwgps_info_t *gpsinfo);
 
-void dwgps_term (void);
-
 void dwgps_set_data (dwgps_info_t *gpsinfo);
 
 

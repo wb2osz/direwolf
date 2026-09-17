@@ -18,7 +18,5 @@ void waypoint_send_sentence (char *wname_in, double dlat, double dlong, char sym
 
 void waypoint_send_ais (char *sentence);
 
-void waypoint_term ();
-
 
 /* end waypoint.h */

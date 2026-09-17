@@ -2185,7 +2185,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	  ax25_get_addr_with_ssid (pp3, n + AX25_REPEATER_1, via);
 
 	  if (strcmp(via, "qAX") == 0 ||		// qAX deprecated. http://www.aprs-is.net/q.aspx
-	      strcmp(via, "TCPXX") == 0 ||		// TCPXX deprecated.
+	      strcmp(via, "TCPXX") == 0 ||		// TCPXX deprecated but we see it used for CWOP.
 	      strcmp(via, "RFONLY") == 0 ||
 	      strcmp(via, "NOGATE") == 0) {
 
@@ -2198,6 +2198,39 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	    return;
 	  }
 	}
+
+#if 0
+// TODO: JWL
+
+// This is probably a good place to avoid some unnecessary transmissions.
+// Does APRS-IS catch the first two?  Am I wasting time here?
+
+// (1) IGate should not forward to RF if the IGate sent the packet to APRS-IS.
+
+	int nrep = ax25_get_num_repeaters(pp3);
+	if (nrep >= 2) {
+	  char q[AX25_MAX_ADDR_LEN];
+	  char ig[AX25_MAX_ADDR_LEN];
+	  ax25_get_addr_with_ssid (pp3, AX25_REPEATER_1 + nrep - 2, q);
+	  ax25_get_addr_with_ssid (pp3, AX25_REPEATER_1 + nrep - 1, ig);
+
+	  if ( q[0] == 'q' && strcmp (ig, mycall[to_chan]) == 0 {
+	    if (s_debug >= 1) {
+	      text_color_set(DW_COLOR_DEBUG);
+	      dw_printf ("Tx IGate: Do not transmit something that I sent to APRS-IS.\n");
+	    }
+
+	    ax25_delete (pp3);
+	    return;
+	  }
+	}
+
+// (2) IGate should not forward to RF if its name is the source address.
+// use src not get_addr
+
+// (3) It has been suggested that there is no reason to forward a "message"
+//	to RF if the addressee is the IGate station name.  TBD..?
+#endif 
 
 /*
  * Apply our own packet filtering if configured.

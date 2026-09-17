@@ -92,11 +92,17 @@ typedef struct mheard_s {
 						// Just something potentially interesting when looking at data dump.
 
 	int chan;				// Most recent channel where heard.
+						// This allows us to get the most recently heard time
+						// on any radio channel using last_heard_rf[chan].
 
 	int num_digi_hops;			// Number of digipeater hops before we heard it.
 						// over radio.  Zero when heard directly.
 
-	time_t last_heard_rf;			// Timestamp when last heard over the radio.
+	time_t first_heard_rf[MAX_TOTAL_CHANS];	// Timestamp when first heard over the radio.
+
+	time_t last_heard_rf[MAX_TOTAL_CHANS];	// Timestamp when last heard over the radio.
+
+	time_t first_heard_is;			// Timestamp when first heard from Internet Server.
 
 	time_t last_heard_is;			// Timestamp when last heard from Internet Server.
 
@@ -107,14 +113,34 @@ typedef struct mheard_s {
 						// Then decremented.
 
 						// What else would be useful?
-						// The AGW protocol is by channel and returns
-						// first heard in addition to last heard.
 } mheard_t;
 
 
+/*
+ * A variant of qsort that takes a context argument is available on all platforms, but
+ * has significant differences both in function signature and comparator signature. No
+ * two are the same. The function is needed so that a list of mheard_t pointers can be
+ * sorted by last heard time for a specific channel, which is used to provide last
+ * heard times to AGWPE clients. The following macros encapsulate the differences in
+ * a hopefully coherent manner.
+ */
 
+#if __WIN32__
 
+#define DW_QSORT_R_COMPAR(name) int name(void *thunk, const void *a, const void *b)
+#define DW_QSORT_R(base, num, size, compar, thunk) qsort_s(base, num, size, compar, thunk)
 
+#elif __APPLE__
+
+#define DW_QSORT_R_COMPAR(name) int name(void *thunk, const void *a, const void *b)
+#define DW_QSORT_R(base, num, size, compar, thunk) qsort_r(base, num, size, thunk, compar)
+
+#else // Linux
+
+#define DW_QSORT_R_COMPAR(name) int name(const void *a, const void *b, void *thunk)
+#define DW_QSORT_R(base, num, size, compar, thunk) qsort_r(base, num, size, compar, thunk)
+
+#endif
 
 
 /*
@@ -230,8 +256,8 @@ static int compar(const void *a, const void *b)
 	mheard_t *ma = *((mheard_t **)a);
 	mheard_t *mb = *((mheard_t **)b);
 
-	time_t ta = MAXX(ma->last_heard_rf, ma->last_heard_is);
-	time_t tb = MAXX(mb->last_heard_rf, mb->last_heard_is);
+	time_t ta = MAXX(ma->last_heard_rf[ma->chan], ma->last_heard_is);
+	time_t tb = MAXX(mb->last_heard_rf[ma->chan], mb->last_heard_is);
 
 	return (tb - ta);
 }
@@ -265,6 +291,7 @@ static void mheard_dump (void)
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("mheard_dump - max number of stations exceeded.\n");
+	      break;
 	    }
 	  }
 	}
@@ -281,7 +308,7 @@ static void mheard_dump (void)
 
 	  mptr = station[i];
 
-	  age (rf, now, mptr->last_heard_rf);
+	  age (rf, now, mptr->last_heard_rf[mptr->chan]);
 	  age (is, now, mptr->last_heard_is);
 	  latlon (position, mptr->dlat, mptr->dlon);
 
@@ -291,6 +318,162 @@ static void mheard_dump (void)
 	}
 
 } /* end mheard_dump */
+
+
+static DW_QSORT_R_COMPAR(compar_chan)
+{
+	mheard_t *ma = *((mheard_t **)a);
+	mheard_t *mb = *((mheard_t **)b);
+	int chan = *((int *)thunk);
+
+	time_t ta = ma->last_heard_rf[chan];
+	time_t tb = mb->last_heard_rf[chan];
+
+	return (tb - ta);
+}
+
+/*------------------------------------------------------------------
+ *
+ * Function:	mheard_latest_for_channel
+ *
+ * Purpose:	Provide a list of the most recently heard stations on a
+ *		specified channel.
+ *
+ * Inputs:	chan	  - Radio channel where heard.
+ *
+ *		times	  - Pointer to an array of mheard_times_t which will
+ *			    be populated with the latest heard times.
+ *
+ *		num_times - Number of elements in the times array.
+ *
+ * Description:	Sorts callsigns heard on the specified channel by most recently
+ *		heard, and returns the top elements, up to a maximum of num_times
+ *		elements.
+ *
+ *		This function will not give the correct results if called for
+ *		an iGate channel. Those statistics are maintained separately,
+ *		so mheard_latest_for_is() should be used instead.
+ *
+ *------------------------------------------------------------------*/
+
+int mheard_latest_for_channel (int chan, mheard_times_t *times, int num_times)
+{
+	int i;
+	mheard_t *mptr;
+	mheard_t *station[MAXDUMP];
+	int num_stations = 0;
+
+/*
+ * Get linear array of node pointers so they can be sorted easily. Filter by
+ * channel to skip "empty" entries.
+ */
+
+	num_stations = 0;
+
+	for (i = 0; i < MHEARD_HASH_SIZE; i++) {
+	  for (mptr = mheard_hash[i]; mptr != NULL; mptr = mptr->pnext) {
+
+	    if (num_stations < MAXDUMP && mptr->first_heard_rf[chan] != 0) {
+	      station[num_stations] = mptr;
+	      num_stations++;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("mheard_latest_for_channel - max number of stations exceeded.\n");
+	      break;
+	    }
+	  }
+	}
+
+/* Sort most recently heard to the top. */
+
+	DW_QSORT_R (station, num_stations, sizeof(mheard_t *), compar_chan, (void *)&chan);
+
+	for (i = 0; i < num_stations && i < num_times; i++) {
+	  mptr = station[i];
+
+	  strcpy (times[i].callsign, mptr->callsign);
+	  times[i].chan = chan;
+	  times[i].first_heard = mptr->first_heard_rf[chan];
+	  times[i].last_heard = mptr->last_heard_rf[chan];
+	}
+
+	return i;
+
+} /* mheard_latest_for_channel */
+
+
+static int compar_is(const void *a, const void *b)
+{
+	mheard_t *ma = *((mheard_t **)a);
+	mheard_t *mb = *((mheard_t **)b);
+
+	time_t ta = ma->last_heard_is;
+	time_t tb = mb->last_heard_is;
+
+	return (tb - ta);
+}
+
+/*------------------------------------------------------------------
+ *
+ * Function:	mheard_latest_for_is
+ *
+ * Purpose:	Provide a list of the most recently heard stations via iGate.
+ *
+ * Inputs:	times	  - Pointer to an array of mheard_times_t which will
+ *			    be populated with the latest heard times.
+ *
+ *		num_times - Number of elements in the times array.
+ *
+ * Description:	Sorts callsigns heard via iGate by most recently heard, and
+ *		returns the top elements, up to a maximum of num_times
+ *		elements.
+ *
+ *------------------------------------------------------------------*/
+
+int mheard_latest_for_is (mheard_times_t *times, int num_times)
+{
+	int i;
+	mheard_t *mptr;
+	mheard_t *station[MAXDUMP];
+	int num_stations = 0;
+
+/*
+ * Get linear array of node pointers so they can be sorted easily. */
+
+	num_stations = 0;
+
+	for (i = 0; i < MHEARD_HASH_SIZE; i++) {
+	  for (mptr = mheard_hash[i]; mptr != NULL; mptr = mptr->pnext) {
+
+	    if (num_stations < MAXDUMP && mptr->first_heard_is != 0) {
+	      station[num_stations] = mptr;
+	      num_stations++;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("mheard_latest_for_is - max number of stations exceeded.\n");
+	      break;
+	    }
+	  }
+	}
+
+/* Sort most recently heard to the top. */
+
+	qsort (station, num_stations, sizeof(mheard_t *), compar_is);
+
+	for (i = 0; i < num_stations && i < num_times; i++) {
+	  mptr = station[i];
+
+	  strcpy (times[i].callsign, mptr->callsign);
+	  times[i].chan = -1;
+	  times[i].first_heard = mptr->first_heard_is;
+	  times[i].last_heard = mptr->last_heard_is;
+	}
+
+	return i;
+
+} /* mheard_latest_for_is */
 
 
 /*------------------------------------------------------------------
@@ -405,7 +588,8 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	  mptr->count = 1;
 	  mptr->chan = chan;
 	  mptr->num_digi_hops = hops;
-	  mptr->last_heard_rf = now;
+	  mptr->first_heard_rf[chan] = now;
+	  mptr->last_heard_rf[chan] = now;
 	  // Why did I do this instead of saving the location for a position report?
 	  mptr->dlat = G_UNKNOWN;
 	  mptr->dlon = G_UNKNOWN;
@@ -426,24 +610,24 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
  * We are interested in the shortest path if heard very recently.
  */
 
-	  if (hops > mptr->num_digi_hops && (int)(now - mptr->last_heard_rf) < 15) {
+	  if (hops > mptr->num_digi_hops && (int)(now - mptr->last_heard_rf[mptr->chan]) < 15) {
 
 	    if (mheard_debug) {
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("mheard_save_rf: %s %d - skip because hops was %d %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - mptr->last_heard_rf) );
+	      dw_printf ("mheard_save_rf: %s %d - skip because hops was %d %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - mptr->last_heard_rf[mptr->chan]) );
 	    }
 	  }
 	  else {
 
 	    if (mheard_debug) {
 	      text_color_set(DW_COLOR_DEBUG);
-	      dw_printf ("mheard_save_rf: %s %d - update time, was %d hops %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - mptr->last_heard_rf));
+	      dw_printf ("mheard_save_rf: %s %d - update time, was %d hops %d seconds ago.\n", source, hops, mptr->num_digi_hops, (int)(now - mptr->last_heard_rf[mptr->chan]));
 	    }
 
 	    mptr->count++;
 	    mptr->chan = chan;
 	    mptr->num_digi_hops = hops;
-	    mptr->last_heard_rf = now;
+	    mptr->last_heard_rf[chan] = now;
 	  }
 	}
 
@@ -561,6 +745,7 @@ void mheard_save_is (char *ptext)
 	  }
 	  strlcpy (mptr->callsign, source, sizeof(mptr->callsign));
 	  mptr->count = 1;
+	  mptr->first_heard_is = now;
 	  mptr->last_heard_is = now;
 	  mptr->dlat = G_UNKNOWN;
 	  mptr->dlon = G_UNKNOWN;
@@ -578,7 +763,7 @@ void mheard_save_is (char *ptext)
 
 	  if (mheard_debug) {
 	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("mheard_save_is: %s - update time, was %d seconds ago.\n", source, (int)(now - mptr->last_heard_rf));
+	    dw_printf ("mheard_save_is: %s - update time, was %d seconds ago.\n", source, (int)(now - mptr->last_heard_is));
 	  }
 	  mptr->count++;
 	  mptr->last_heard_is = now;
@@ -674,7 +859,7 @@ int mheard_count (int max_hops, int time_limit)
 
 	for (i = 0; i < MHEARD_HASH_SIZE; i++) {
 	  for (p = mheard_hash[i]; p != NULL; p = p->pnext) {
-	    if (p->last_heard_rf >= since && p->num_digi_hops <= max_hops) {
+	    if (p->last_heard_rf[p->chan] >= since && p->num_digi_hops <= max_hops) {
 	      count++;
 	    }
 	  }
@@ -735,7 +920,7 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 
 	mptr = mheard_ptr(callsign);
 
-	if (mptr == NULL || mptr->last_heard_rf == 0) {
+	if (mptr == NULL || mptr->last_heard_rf[mptr->chan] == 0) {
 
 	  if (role != NULL && strlen(role) > 0) {
 	    text_color_set(DW_COLOR_INFO);
@@ -745,7 +930,7 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 	}
 
 	now = time(NULL);
-	heard_ago = (int)(now - mptr->last_heard_rf) / 60;
+	heard_ago = (int)(now - mptr->last_heard_rf[mptr->chan]) / 60;
 
 	if (heard_ago > time_limit) {
 

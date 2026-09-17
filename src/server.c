@@ -159,6 +159,7 @@
 #include <time.h>
 #include <ctype.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "tq.h"
 #include "ax25_pad.h"
@@ -166,6 +167,7 @@
 #include "audio.h"
 #include "server.h"
 #include "dlq.h"
+#include "mheard.h"
 
 
 
@@ -194,7 +196,50 @@ static int enable_send_raw_to_client[MAX_NET_CLIENTS];
 static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
 					/* Should we send received packets to client app in monitor form? */
 					/* Note that it starts as false for a new connection. */
+
+static int enable_ext_sig_to_client[MAX_NET_CLIENTS];
+					/* Optional extension (non-standard): when set, monitor frames sent to */
+					/* this client carry per-frame signal quality in the otherwise-zero */
+					/* user_reserved header bytes.  Enabled by the 'q' command; stays */
+					/* false for stock clients so they see byte-identical frames. */
+					/* See AGWPE-SIGNAL-QUALITY-EXTENSION.md. */
 					/* the client app must send a command to enable this. */
+
+
+/*
+ * Per-client non-blocking send queue.
+ * recv_process() enqueues frames via enqueue_for_client() without ever blocking.
+ * A dedicated client_send_thread() drains each queue to the socket.
+ * SO_SNDTIMEO=10s on the socket provides a final backstop.
+ */
+
+#define MAX_SEND_QUEUE_LEN 512		/* Drop frames beyond this to bound memory per slow client */
+
+#define SEND_QUEUE_RESUME_LEN (MAX_SEND_QUEUE_LEN / 2)
+					/* Hysteresis for the "queue full" warning.  Without a gap */
+					/* between the drop threshold and the recovery threshold, a */
+					/* client sitting right at the limit would re-arm the warning */
+					/* every time a single frame drained, and the warning itself */
+					/* would flood the console. */
+
+struct send_item_s {
+	struct send_item_s *nextp;
+	int len;
+	unsigned char data[];		/* C99 flexible array member */
+};
+
+static struct send_item_s *send_queue_head[MAX_NET_CLIENTS];
+static struct send_item_s *send_queue_tail[MAX_NET_CLIENTS];
+static volatile int send_queue_len[MAX_NET_CLIENTS];
+static int send_queue_overflow_warned[MAX_NET_CLIENTS];
+
+#if __WIN32__
+static CRITICAL_SECTION send_queue_cs[MAX_NET_CLIENTS];
+static HANDLE send_queue_event[MAX_NET_CLIENTS];	/* auto-reset, signalled when queue non-empty */
+#else
+static pthread_mutex_t send_queue_mutex[MAX_NET_CLIENTS];
+static pthread_cond_t  send_queue_cond[MAX_NET_CLIENTS];
+#endif
 
 
 // TODO:  define in one place, use everywhere.
@@ -208,6 +253,8 @@ static int enable_send_monitor_to_client[MAX_NET_CLIENTS];
 
 static THREAD_F connect_listen_thread (void *arg);
 static THREAD_F cmd_listen_thread (void *arg);
+static THREAD_F client_send_thread (void *arg);
+static void client_disconnect (int client);
 
 /*
  * Message header for AGW protocol.
@@ -346,6 +393,7 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 	      case 'x': strlcpy (datakind, "Unregister CallSign",			sizeof(datakind)); break;
 	      case 'G': strlcpy (datakind, "Ask Port Information",			sizeof(datakind)); break;
 	      case 'm': strlcpy (datakind, "Enable Reception of Monitoring Frames",	sizeof(datakind)); break;
+	      case 'q': strlcpy (datakind, "Enable Extended Signal Quality",		sizeof(datakind)); break;
 	      case 'R': strlcpy (datakind, "AGWPE Version Info",			sizeof(datakind)); break;
 	      case 'g': strlcpy (datakind, "Ask Port Capabilities",			sizeof(datakind)); break;
 	      case 'H': strlcpy (datakind, "Callsign Heard on a Port",			sizeof(datakind)); break;
@@ -411,6 +459,55 @@ static void debug_print (fromto_t fromto, int client, struct agwpe_s *pmsg, int 
 
 }
 
+
+/*-------------------------------------------------------------------
+ *
+ * Name:	format_heard_time
+ *
+ * Purpose:	Format a timestamp as required for the Heard Stations ('H') response,
+ *		which includes both text and binary representations of heard times.
+ *
+ * Inputs:	heard	 - Timestamp to be formatted.
+ *
+ *		time_str - Buffer into which the text format will be written.
+ *			   This must be at least 23 characters long.
+ *
+ *		time_bin - Buffer into which the binary format will be written.
+ *			   This must be at least 16 bytes long.
+ *
+ * Outputs:	Provided buffers are populated with timestamps.
+ *
+ * Description:	The text format as described in the AGWPE spec is always exactly
+ *		22 characters long.
+ *
+ *		The binary format is the Windows SYSTEMTIME format, so the standard
+ *		time_tm structure must be transformed into that.
+ *
+ *		Both of the formats are created at one time because the time_tm
+ *		instance returned from localtime() does not belong to us, and may
+ *		be overwritten by other calls to time-related functions.
+ *
+ *--------------------------------------------------------------------*/
+
+static void format_heard_time(time_t heard, char *time_str, char *time_bin)
+{
+	struct tm *time_tm = localtime (&heard);
+
+	strftime (time_str, 23, "%a,%d%b%Y %H:%M:%S", time_tm);
+
+	uint16_t *ptr = (uint16_t*)time_bin;
+
+	*ptr++ = time_tm->tm_year + 1900;
+	*ptr++ = time_tm->tm_mon + 1;
+	*ptr++ = time_tm->tm_wday;
+	*ptr++ = time_tm->tm_mday;
+	*ptr++ = time_tm->tm_hour;
+	*ptr++ = time_tm->tm_min;
+	*ptr++ = time_tm->tm_sec;
+	*ptr = 0;
+}
+
+
 /*-------------------------------------------------------------------
  *
  * Name:        server_init
@@ -463,6 +560,23 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	  client_sock[client] = -1;
 	  enable_send_raw_to_client[client] = 0;
 	  enable_send_monitor_to_client[client] = 0;
+	  enable_ext_sig_to_client[client] = 0;
+	  send_queue_head[client] = NULL;
+	  send_queue_tail[client] = NULL;
+	  send_queue_len[client] = 0;
+	  send_queue_overflow_warned[client] = 0;
+#if __WIN32__
+	  InitializeCriticalSection (&send_queue_cs[client]);
+	  send_queue_event[client] = CreateEvent (NULL, 0, 0, NULL);
+	  if (send_queue_event[client] == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Could not create AGW send queue event for client %d\n", client);
+	    return;
+	  }
+#else
+	  pthread_mutex_init (&send_queue_mutex[client], NULL);
+	  pthread_cond_init (&send_queue_cond[client], NULL);
+#endif
 	}
 
 	if (server_port == 0) {
@@ -511,6 +625,32 @@ void server_init (struct audio_s *audio_config_p, struct misc_config_s *mc)
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf ("Could not create AGW command listening thread for client %d\n", client);
 	    // Replace add perror with better message handling.
+	    perror("");
+	    return;
+	  }
+#endif
+	}
+
+/*
+ * These drain the per-client send queues to the sockets.
+ * One thread per potential client connection, mirrors cmd_listen_thread pattern.
+ */
+	for (client = 0; client < MAX_NET_CLIENTS; client++) {
+
+#if __WIN32__
+	  HANDLE send_th;
+	  send_th = (HANDLE)_beginthreadex (NULL, 0, client_send_thread, (void*)(ptrdiff_t)client, 0, NULL);
+	  if (send_th == NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Could not create AGW send thread for client %d\n", client);
+	    return;
+	  }
+#else
+	  pthread_t send_tid;
+	  e = pthread_create (&send_tid, NULL, client_send_thread, (void *)(ptrdiff_t)client);
+	  if (e != 0) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Could not create AGW send thread for client %d\n", client);
 	    perror("");
 	    return;
 	  }
@@ -657,11 +797,21 @@ static THREAD_F connect_listen_thread (void *arg)
 	    dw_printf("\nAttached to AGW client application %d ...\n\n", client);
 
 /*
+ * Set a 10-second send timeout so a stalled client gets disconnected rather
+ * than blocking the send thread indefinitely.
+ */
+	    {
+	      DWORD tv = 10000;
+	      setsockopt (client_sock[client], SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof(tv));
+	    }
+
+/*
  * The command to change this is actually a toggle, not explicit on or off.
  * Make sure it has proper state when we get a new connection.
  */ 
 	    enable_send_raw_to_client[client] = 0;
 	    enable_send_monitor_to_client[client] = 0;
+	    enable_ext_sig_to_client[client] = 0;
 	  }
 	  else {
 	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
@@ -748,11 +898,23 @@ static THREAD_F connect_listen_thread (void *arg)
 	    dw_printf("\nAttached to AGW client application %d...\n\n", client);
 
 /*
+ * Set a 10-second send timeout so a stalled client gets disconnected rather
+ * than blocking the send thread indefinitely.
+ */
+	    {
+	      struct timeval tv;
+	      tv.tv_sec = 10;
+	      tv.tv_usec = 0;
+	      setsockopt (client_sock[client], SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	    }
+
+/*
  * The command to change this is actually a toggle, not explicit on or off.
  * Make sure it has proper state when we get a new connection.
  */ 
 	    enable_send_raw_to_client[client] = 0;
 	    enable_send_monitor_to_client[client] = 0;
+	    enable_ext_sig_to_client[client] = 0;
 	  }
 	  else {
 	    SLEEP_SEC(1);	/* wait then check again if more clients allowed. */
@@ -790,14 +952,305 @@ static void mon_addrs (int chan, packet_t pp, char *result, int result_size);
 static char mon_desc (packet_t pp, char *result, int result_size);
 
 
-void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int flen)
+/*-------------------------------------------------------------------
+ *
+ * Name:        client_disconnect
+ *
+ * Purpose:     Close the socket, flush the send queue, and notify
+ *              the AX.25 link layer for a given client slot.
+ *
+ * Inputs:	client		- client number, 0 .. MAX_NET_CLIENTS-1
+ *
+ * Description: Idempotent — safe to call from either client_send_thread
+ *              or cmd_listen_thread; only the first caller does the work.
+ *
+ *--------------------------------------------------------------------*/
+
+static void client_disconnect (int client)
+{
+	int fd;
+	struct send_item_s *p;
+
+#if __WIN32__
+	EnterCriticalSection (&send_queue_cs[client]);
+	fd = client_sock[client];
+	client_sock[client] = -1;
+	p = send_queue_head[client];
+	send_queue_head[client] = NULL;
+	send_queue_tail[client] = NULL;
+	send_queue_len[client] = 0;
+	LeaveCriticalSection (&send_queue_cs[client]);
+	SetEvent (send_queue_event[client]);	/* wake send thread so it sees fd=-1 */
+	while (p != NULL) {
+	  struct send_item_s *next = p->nextp;
+	  free (p);
+	  p = next;
+	}
+	if (fd > 0) {
+	  closesocket (fd);
+	  dlq_client_cleanup (client);
+	}
+#else
+	pthread_mutex_lock (&send_queue_mutex[client]);
+	fd = client_sock[client];
+	client_sock[client] = -1;
+	p = send_queue_head[client];
+	send_queue_head[client] = NULL;
+	send_queue_tail[client] = NULL;
+	send_queue_len[client] = 0;
+	pthread_cond_signal (&send_queue_cond[client]);	/* wake send thread */
+	pthread_mutex_unlock (&send_queue_mutex[client]);
+	while (p != NULL) {
+	  struct send_item_s *next = p->nextp;
+	  free (p);
+	  p = next;
+	}
+	if (fd > 0) {
+	  close (fd);
+	  dlq_client_cleanup (client);
+	}
+#endif
+
+} /* end client_disconnect */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        enqueue_for_client
+ *
+ * Purpose:     Append a message to the per-client send queue without blocking.
+ *
+ * Inputs:	client		- client number, 0 .. MAX_NET_CLIENTS-1
+ *		data		- message bytes to copy
+ *		len		- number of bytes
+ *
+ * Description:	Never blocks.  If the queue exceeds MAX_SEND_QUEUE_LEN,
+ *              the frame is dropped and a warning is printed once.
+ *              client_send_thread() drains the queue to the socket.
+ *
+ *--------------------------------------------------------------------*/
+
+static void enqueue_for_client (int client, const void *data, int len)
+{
+	struct send_item_s *pitem;
+
+	pitem = (struct send_item_s *) malloc (sizeof(struct send_item_s) + len);
+	if (pitem == NULL) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("enqueue_for_client: out of memory for client %d\n", client);
+	  return;
+	}
+	pitem->nextp = NULL;
+	pitem->len = len;
+	memcpy (pitem->data, data, len);
+
+#if __WIN32__
+	EnterCriticalSection (&send_queue_cs[client]);
+	if (send_queue_len[client] >= MAX_SEND_QUEUE_LEN) {
+	  if (! send_queue_overflow_warned[client]) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("AGW client %d send queue full; dropping frames until client catches up.\n", client);
+	    send_queue_overflow_warned[client] = 1;
+	  }
+	  LeaveCriticalSection (&send_queue_cs[client]);
+	  free (pitem);
+	  return;
+	}
+	if (send_queue_overflow_warned[client] && send_queue_len[client] < SEND_QUEUE_RESUME_LEN) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("AGW client %d send queue recovered.\n", client);
+	  send_queue_overflow_warned[client] = 0;
+	}
+	if (send_queue_tail[client] == NULL) {
+	  send_queue_head[client] = pitem;
+	} else {
+	  send_queue_tail[client]->nextp = pitem;
+	}
+	send_queue_tail[client] = pitem;
+	send_queue_len[client]++;
+	LeaveCriticalSection (&send_queue_cs[client]);
+	SetEvent (send_queue_event[client]);
+#else
+	pthread_mutex_lock (&send_queue_mutex[client]);
+	if (send_queue_len[client] >= MAX_SEND_QUEUE_LEN) {
+	  if (! send_queue_overflow_warned[client]) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("AGW client %d send queue full; dropping frames until client catches up.\n", client);
+	    send_queue_overflow_warned[client] = 1;
+	  }
+	  pthread_mutex_unlock (&send_queue_mutex[client]);
+	  free (pitem);
+	  return;
+	}
+	if (send_queue_overflow_warned[client] && send_queue_len[client] < SEND_QUEUE_RESUME_LEN) {
+	  text_color_set(DW_COLOR_INFO);
+	  dw_printf ("AGW client %d send queue recovered.\n", client);
+	  send_queue_overflow_warned[client] = 0;
+	}
+	if (send_queue_tail[client] == NULL) {
+	  send_queue_head[client] = pitem;
+	} else {
+	  send_queue_tail[client]->nextp = pitem;
+	}
+	send_queue_tail[client] = pitem;
+	send_queue_len[client]++;
+	pthread_cond_signal (&send_queue_cond[client]);
+	pthread_mutex_unlock (&send_queue_mutex[client]);
+#endif
+
+} /* end enqueue_for_client */
+
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        client_send_thread
+ *
+ * Purpose:     Drain the per-client send queue to the socket.
+ *
+ * Inputs:	arg		- client number, 0 .. MAX_NET_CLIENTS-1
+ *
+ * Description:	One thread per client slot.  Sleeps until a client
+ *              connects, then drains the send queue to the socket.
+ *              On socket error (including SO_SNDTIMEO expiry) calls
+ *              client_disconnect() and loops back to wait for the
+ *              next connection.  This keeps recv_process() from ever
+ *              blocking on a slow or stalled AGWPE client.
+ *
+ *--------------------------------------------------------------------*/
+
+static THREAD_F client_send_thread (void *arg)
+{
+	int client = (int)(ptrdiff_t)arg;
+	struct send_item_s *pitem;
+
+	assert (client >= 0 && client < MAX_NET_CLIENTS);
+
+	while (1) {
+
+	  /* Wait until a client connects. */
+	  while (client_sock[client] <= 0) {
+	    SLEEP_SEC(1);
+	  }
+
+#if __WIN32__
+	  /* Drain send queue to socket until disconnected. */
+	  while (1) {
+	    int fd;
+
+	    /* Block until an item is enqueued or the socket is closed. */
+	    while (1) {
+	      EnterCriticalSection (&send_queue_cs[client]);
+	      if (send_queue_head[client] != NULL || client_sock[client] <= 0)
+	        break;		/* exit holding CS */
+	      LeaveCriticalSection (&send_queue_cs[client]);
+	      WaitForSingleObject (send_queue_event[client], 1000);
+	    }
+
+	    if (client_sock[client] <= 0) {
+	      LeaveCriticalSection (&send_queue_cs[client]);
+	      break;		/* back to outer "wait for connection" loop */
+	    }
+
+	    pitem = send_queue_head[client];
+	    send_queue_head[client] = pitem->nextp;
+	    if (send_queue_head[client] == NULL)
+	      send_queue_tail[client] = NULL;
+	    send_queue_len[client]--;
+	    fd = client_sock[client];
+	    LeaveCriticalSection (&send_queue_cs[client]);
+
+	    int len = pitem->len;
+	    int err = SOCK_SEND (fd, (char*)(pitem->data), pitem->len);
+	    free (pitem);
+
+	    if (err == SOCKET_ERROR) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("\nError %d sending to AGW client application %d.  Closing connection.\n\n",
+	                 WSAGetLastError(), client);
+	      client_disconnect (client);
+	      break;
+	    }
+
+/*
+ * A short count is possible when the SO_SNDTIMEO timeout expires part way
+ * through the frame.  AGWPE is a length prefixed byte stream with no way to
+ * resync, so sending a truncated frame would desynchronize the client for
+ * the rest of the session.  Drop the connection instead.
+ */
+	    if (err != len) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("\nOnly %d of %d bytes sent to AGW client application %d.  Closing connection.\n\n",
+	                 err, len, client);
+	      client_disconnect (client);
+	      break;
+	    }
+	  }
+
+#else  /* Linux / macOS */
+
+	  /* Drain send queue to socket until disconnected. */
+	  while (1) {
+	    int fd;
+
+	    pthread_mutex_lock (&send_queue_mutex[client]);
+	    while (send_queue_head[client] == NULL && client_sock[client] > 0) {
+	      pthread_cond_wait (&send_queue_cond[client], &send_queue_mutex[client]);
+	    }
+
+	    if (client_sock[client] <= 0) {
+	      pthread_mutex_unlock (&send_queue_mutex[client]);
+	      break;		/* back to outer "wait for connection" loop */
+	    }
+
+	    pitem = send_queue_head[client];
+	    send_queue_head[client] = pitem->nextp;
+	    if (send_queue_head[client] == NULL)
+	      send_queue_tail[client] = NULL;
+	    send_queue_len[client]--;
+	    fd = client_sock[client];	/* Captured under the lock so we don't send to -1 */
+					/* after a concurrent client_disconnect(). */
+	    pthread_mutex_unlock (&send_queue_mutex[client]);
+
+	    int len = pitem->len;
+	    int err = SOCK_SEND (fd, pitem->data, pitem->len);
+	    free (pitem);
+
+	    if (err <= 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("\nError sending to AGW client application %d.  Closing connection.\n\n", client);
+	      client_disconnect (client);
+	      break;
+	    }
+
+/*
+ * A short count is possible when the SO_SNDTIMEO timeout expires part way
+ * through the frame.  AGWPE is a length prefixed byte stream with no way to
+ * resync, so sending a truncated frame would desynchronize the client for
+ * the rest of the session.  Drop the connection instead.
+ */
+	    if (err != len) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("\nOnly %d of %d bytes sent to AGW client application %d.  Closing connection.\n\n",
+	                 err, len, client);
+	      client_disconnect (client);
+	      break;
+	    }
+	  }
+
+#endif
+
+	}  /* end outer while(1) */
+
+} /* end client_send_thread */
+
+
+
+void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int flen, alevel_t alevel, int retries)
 {
 	struct {	
 	  struct agwpe_s hdr;
 	  char data[1+AX25_MAX_PACKET_LEN];		
 	} agwpe_msg;
-
-	int err;
 
 /*
  * RAW format
@@ -827,40 +1280,19 @@ void server_send_rec_packet (int chan, packet_t pp, unsigned char *fbuf,  int fl
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
-#if __WIN32__	
-            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
-	    if (err == SOCKET_ERROR)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to AGW client application.  Closing connection.\n\n", WSAGetLastError());
-	      closesocket (client_sock[client]);
-	      client_sock[client] = -1;
-	      WSACleanup();
-	      dlq_client_cleanup (client);
-	    }
-#else
-            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
-	    if (err <= 0)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to AGW client application.  Closing connection.\n\n");
-	      close (client_sock[client]);
-	      client_sock[client] = -1;    
-	      dlq_client_cleanup (client);
-	    }
-#endif
+	    enqueue_for_client (client, &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	  }
 	}
 
 	// Application might want more human readable format.
 
-	server_send_monitored (chan, pp, 0);
+	server_send_monitored (chan, pp, 0, alevel, retries);
 
 } /* end server_send_rec_packet */
 
 
 
-void server_send_monitored (int chan, packet_t pp, int own_xmit)
+void server_send_monitored (int chan, packet_t pp, int own_xmit, alevel_t alevel, int retries)
 {
 /*
  * MONITOR format - 	'I' for information frames.
@@ -873,8 +1305,6 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 	  struct agwpe_s hdr;
 	  char data[128+AX25_MAX_PACKET_LEN];	// Add plenty of room for header prefix.
 	} agwpe_msg;
-
-	int err;
 
 	for (int client=0; client<MAX_NET_CLIENTS; client++) {
 	  if (enable_send_monitor_to_client[client] && client_sock[client] > 0) {
@@ -944,32 +1374,24 @@ void server_send_monitored (int chan, packet_t pp, int own_xmit)
 	    agwpe_msg.data[msg_data_len++] = '\0';	// add nul at end, included in length.
 	    agwpe_msg.hdr.data_len_NETLE = host2netle(msg_data_len);
 
+	    // Optional extension (non-standard, opt-in via 'q'): stash per-frame signal
+	    // quality in the otherwise-zero user_reserved header bytes.  Only for
+	    // clients that asked, so stock clients get byte-identical frames.
+	    // alevel.rec < 0 means "no measurement" (e.g. own transmitted frames).
+	    // See AGWPE-SIGNAL-QUALITY-EXTENSION.md.
+	    if (enable_ext_sig_to_client[client] && alevel.rec >= 0) {
+	      unsigned char *sig = (unsigned char *)(&agwpe_msg.hdr.user_reserved_NETLE);
+	      sig[0] = (unsigned char) (alevel.rec   > 255 ? 255 : alevel.rec);
+	      sig[1] = (unsigned char) (alevel.mark  < 0 ? 0xFF : (alevel.mark  > 255 ? 255 : alevel.mark));
+	      sig[2] = (unsigned char) (alevel.space < 0 ? 0xFF : (alevel.space > 255 ? 255 : alevel.space));
+	      sig[3] = (unsigned char) (retries < 0 ? 0 : (retries > 255 ? 255 : retries));
+	    }
+
 	    if (debug_client) {
 	      debug_print (TO_CLIENT, client, &agwpe_msg.hdr, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	    }
 
-#if __WIN32__
-            err = SOCK_SEND (client_sock[client], (char*)(&agwpe_msg), sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
-	    if (err == SOCKET_ERROR)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError %d sending message to AGW client application %d.  Closing connection.\n\n", WSAGetLastError(), client);
-	      closesocket (client_sock[client]);
-	      client_sock[client] = -1;
-	      WSACleanup();
-	      dlq_client_cleanup (client);
-	    }
-#else
-            err = SOCK_SEND (client_sock[client], &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
-	    if (err <= 0)
-	    {
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("\nError sending message to AGW client application %d.  Closing connection.\n\n", client);
-	      close (client_sock[client]);
-	      client_sock[client] = -1;
-	      dlq_client_cleanup (client);
-	    }
-#endif
+	    enqueue_for_client (client, &agwpe_msg, sizeof(agwpe_msg.hdr) + netle2host(agwpe_msg.hdr.data_len_NETLE));
 	  }
 	}
 
@@ -1371,7 +1793,6 @@ static void send_to_client (int client, void *reply_p)
 {
 	struct agwpe_s *ph;
 	int len;
-	int err;
 
 	ph = (struct agwpe_s *) reply_p;	// Replies are often hdr + other stuff.
 
@@ -1389,8 +1810,7 @@ static void send_to_client (int client, void *reply_p)
 	  debug_print (TO_CLIENT, client, ph, len);
 	}
 
-	err = SOCK_SEND (client_sock[client], (char*)(ph), len);
-	(void)err;
+	enqueue_for_client (client, ph, len);
 }
 
 
@@ -1419,16 +1839,10 @@ static THREAD_F cmd_listen_thread (void *arg)
 	  n = read_from_socket (client_sock[client], (char *)(&cmd.hdr), sizeof(cmd.hdr));
 	  if (n != sizeof(cmd.hdr)) {
 	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("\nError getting message header from AGW client application %d.\n", client);
-	    dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
+	    dw_printf ("\nAGW client application %d has disappeared.\n", client);
+	    //dw_printf ("Tried to read %d bytes but got only %d.\n", (int)sizeof(cmd.hdr), n);
 	    dw_printf ("Closing connection.\n\n");
-#if __WIN32__
-	    closesocket (client_sock[client]);
-#else
-	    close (client_sock[client]);
-#endif
-	    client_sock[client] = -1;
-	    dlq_client_cleanup (client);
+	    client_disconnect (client);
 	    continue;
 	  }
 
@@ -1468,13 +1882,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	    /* No point in trying to continue reading.  */
 
 	    dw_printf ("Closing connection.\n\n");
-#if __WIN32__
-	    closesocket (client_sock[client]);
-#else
-	    close (client_sock[client]);
-#endif
-	    client_sock[client] = -1;
-	    dlq_client_cleanup (client);
+	    client_disconnect (client);
 	    return (0);
 	  }
 
@@ -1487,13 +1895,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      dw_printf ("\nError getting message data from AGW client application %d.\n", client);
 	      dw_printf ("Tried to read %d bytes but got only %d.\n", data_len, n);
 	      dw_printf ("Closing connection.\n\n");
-#if __WIN32__
-	      closesocket (client_sock[client]);
-#else
-	      close (client_sock[client]);
-#endif
-	      client_sock[client] = -1;
-	      dlq_client_cleanup (client);
+	      client_disconnect (client);
 	      return (0);
 	    }
 	    if (n >= 0) {
@@ -1569,7 +1971,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 		for (j=0; j<MAX_TOTAL_CHANS; j++) {
 	          if (save_audio_config_p->chan_medium[j] == MEDIUM_RADIO ||
 	              save_audio_config_p->chan_medium[j] == MEDIUM_IGATE ||
-	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC) {
+	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_SERTNC) {
 		    count++;
 		  }
 		}
@@ -1611,6 +2014,15 @@ static THREAD_F cmd_listen_thread (void *arg)
 	                // could elaborate with hostname, etc.
 		        char stemp[100];
 		        snprintf (stemp, sizeof(stemp), "Port%d Network TNC;", j+1);
+		        strlcat (reply.info, stemp, sizeof(reply.info));
+	              }
+	              break;
+
+	            case MEDIUM_SERTNC:
+	              {
+	                // could elaborate with device, etc.
+		        char stemp[100];
+		        snprintf (stemp, sizeof(stemp), "Port%d Serial TNC;", j+1);
 		        strlcat (reply.info, stemp, sizeof(reply.info));
 	              }
 	              break;
@@ -1676,38 +2088,77 @@ static THREAD_F cmd_listen_thread (void *arg)
 
 	    case 'H':				/* Ask about recently heard stations on given port. */
 
-		/* This should send back 20 'H' frames for the most recently heard stations. */
-		/* If there are less available, empty frames are sent to make a total of 20. */
+		/* This sends back 20 'H' frames for the most recently heard stations. */
+		/* If there are fewer available, empty frames are sent to make a total of 20. */
 		/* Each contains the first and last heard times. */
 
 	      {
-#if 0						/* Currently, this information is not being collected. */
+
 		struct {
 		  struct agwpe_s hdr;
-	 	  char info[100];
+		  char data[100];
 		} reply;
 
-
 	        memset (&reply.hdr, 0, sizeof(reply.hdr));
+	        reply.hdr.portx = cmd.hdr.portx;
 	        reply.hdr.datakind = 'H';
 
-		// TODO:  Implement properly.  
+		mheard_times_t times[20];
+	        int chan = cmd.hdr.portx;
+		int count;
+		char time_str[23], first_st[16], last_st[16];
+		char *ptr;
+		int i;
 
-	        reply.hdr.portx = cmd.hdr.portx
+		if (chan == save_audio_config_p->igate_vchannel)
+		  count = mheard_latest_for_is (times, 20);
+		else
+		  count = mheard_latest_for_channel (chan, times, 20);
 
-	        strlcpy (reply.hdr.call_from, "WB2OSZ-15 Mon,01Jan2000 01:02:03  Tue,31Dec2099 23:45:56", sizeof(reply.hdr.call_from));
-		// or                                                  00:00:00                00:00:00
+		// Format of reply data is a null-terminated string of the form:
+		// "<callsign> <first_heard> <last_heard>"
+		// followed by first heard and last heard times in binary using
+		// a Windows SYSTEMTIME structure.
 
-	        strlcpy (agwpe_msg.data, ..., sizeof(agwpe_msg.data));
+		for (i = 0; i < count; i++) {
+		  strcpy (reply.data, times[i].callsign);
+		  strcat (reply.data, " ");
 
-	        reply.hdr.data_len_NETLE = host2netle(strlen(reply.info));
+		  format_heard_time (times[i].first_heard, time_str, first_st);
+		  strcat (reply.data, time_str);
+		  strcat (reply.data, " ");
 
-	        send_to_client (client, &reply);
-#endif
+		  format_heard_time (times[i].last_heard, time_str, last_st);
+		  strcat (reply.data, time_str);
+
+		  ptr = reply.data + strlen(reply.data) + 1;
+		  memcpy (ptr, first_st, 16);
+		  ptr += 16;
+		  memcpy (ptr, last_st, 16);
+
+		  reply.hdr.data_len_NETLE = host2netle(strlen(reply.data) + 33);
+
+		  send_to_client (client, &reply);
+		}
+
+		if (count < 20) {
+		  // Send blank records to make up a total of 20. Blank format
+		  // follows that in the AGWPE spec.
+
+		  // 9 spaces for callsign
+		  strcpy (reply.data, "          ");
+		  // space + 13 for date + space + empty time
+		  strcat (reply.data, "               00:00:00");
+		  strcat (reply.data, "               00:00:00");
+		  // 32 bytes for 2 empty SYSTEMTIME values
+		  memset (reply.data + strlen(reply.data) + 1, 0, 32);
+
+		  for (i = count; i < 20; i++) {
+		    send_to_client (client, &reply);
+		  }
+		}
 	      }
 	      break;
-	    
-
 
 
 	    case 'k':				/* Ask to start receiving RAW AX25 frames */
@@ -1722,6 +2173,30 @@ static THREAD_F cmd_listen_thread (void *arg)
 	      // Actually it is a toggle so we must be sure to clear it for a new connection.
 
 	      enable_send_monitor_to_client[client] = ! enable_send_monitor_to_client[client];
+	      break;
+
+
+	    case 'q':				/* Optional extension: enable extended signal quality reporting */
+
+	      // Non-standard extension (see AGWPE-SIGNAL-QUALITY-EXTENSION.md).
+	      // Turn on per-frame signal quality in the user_reserved header bytes
+	      // of monitor frames sent to THIS client, then acknowledge so the
+	      // client can positively confirm the server supports it.  Stock clients
+	      // never send 'q', so their frames are byte-for-byte unchanged.
+	      {
+		struct {
+		  struct agwpe_s hdr;
+		  char data[16];
+		} reply;
+
+		enable_ext_sig_to_client[client] = 1;
+
+		memset (&reply, 0, sizeof(reply));
+		reply.hdr.datakind = 'q';
+		strlcpy (reply.data, "ExtSig=1", sizeof(reply.data));
+		reply.hdr.data_len_NETLE = host2netle(strlen(reply.data) + 1);
+		send_to_client (client, &reply);
+	      }
 	      break;
 
 
@@ -2065,6 +2540,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		if (pp == NULL) {
 	          text_color_set(DW_COLOR_ERROR);
 		  dw_printf ("Failed to create frame from AGW 'M' message.\n");
+			break;
 		}
 
 	        ax25_set_info (pp, (unsigned char*)cmd.data, data_len);

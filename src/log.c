@@ -60,6 +60,8 @@
 #include "decode_aprs.h"
 #include "log.h"
 
+static void log_term (void);
+
 
 /*
  * CSV format needs quotes if value contains comma or quote.
@@ -191,6 +193,10 @@ void log_init (int daily_names, char *path)
 	  dw_printf ("Log file is \"%s\"\n", path);
 	  strlcpy (g_log_path, path, sizeof(g_log_path));
 	}
+
+// Clean close on exit.
+
+	atexit (log_term);
 
 } /* end log_init */
 
@@ -521,7 +527,7 @@ void log_rr_bits (decode_aprs_t *A, packet_t pp)
  *------------------------------------------------------------------*/
 
 
-void log_term (void)
+static void log_term (void)
 {
 	if (g_log_fp != NULL) {
 

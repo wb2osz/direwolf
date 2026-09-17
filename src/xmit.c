@@ -1031,10 +1031,24 @@ static int send_one_frame (int c, int p, packet_t pp)
 
 	  if (ftype == frame_type_U_XID) {
 	    struct xid_param_s param;
-	    char info2text[150];
+	    char info2text[256];
 
 	    xid_parse (pinfo, info_len, &param, info2text, sizeof(info2text));
 	    dw_printf (" %s\n", info2text);
+	  }
+	  else if (ftype == frame_type_S_SREJ) {
+	    // Additional sequence numbers can be in the info part.
+	    for (int j = 0; j < info_len; j++) {
+	      if (j < info_len-1 && (pinfo[j] & 1) && (pinfo[j+1] & 1)) {
+	        // Span with first thru last.
+	        dw_printf (" +%d-%d", (unsigned int)(pinfo[j]) >> 1, (unsigned int)(pinfo[j+1]) >> 1);
+	        j++;
+	      }
+	      else {
+	        dw_printf (" +%d", (unsigned int)(pinfo[j]) >> 1);
+	      }
+	    }
+	    dw_printf ("\n");
 	  }
 	  else {
 	    ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
@@ -1077,8 +1091,9 @@ static int send_one_frame (int c, int p, packet_t pp)
 	nb = layer2_send_frame (c, pp, send_invalid_fcs2, save_audio_config_p);
 
 // Optionally send confirmation to AGW client app if monitoring enabled.
+// Own transmitted frame — no received signal, so pass a sentinel (rec < 0).
 
-	server_send_monitored (c, pp, 1);
+	server_send_monitored (c, pp, 1, (alevel_t){.rec = -1, .mark = -1, .space = -1}, 0);
 
 	return (nb);
 

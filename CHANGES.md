@@ -1,13 +1,22 @@
 # Revision History
 
-## Version 1.8.2 -- May 2026
+## Development Version 1.9
 
-### Bugs Fixed:
+### New Features:
 
-Vulnerabilities reported by dkgkdfg65 (https://github.com/dkgkdfg65) and backported from development 1.9.
+- Compatibility with hamlib version 5.
 
-- KISS stack-buffer-overflow ([CVE-2025-34457](https://github.com/advisories/GHSA-28g2-hxcm-j3q2))
-- MIC-E packet abort [(CVE-2025-34458)](https://github.com/advisories/GHSA-28g2-hxcm-j3q2)
+- New `TIMESTAMP` config file directive.  Equivalent to the `-T` command line option, for use when Direwolf is launched by a supervisor (e.g. Winlink Express) that can't pass command-line arguments.  See issue #625.
+
+- Improved generation of SREJ frames for more efficient AX.25 v2.2 connected mode.
+
+- Add delay before exit so any error messages can be read before window disappears.
+
+- New SCHANNEL feature to map a channel number to an external serial port TNC.    See [APRS-LoRa-VHF-APRS-Bridge.pdf](https://raw.githubusercontent.com/wb2osz/direwolf-doc/main/APRS-LoRa-VHF-APRS-Bridge.pdf) for explanation and example.
+
+- New KISSPTY configuration item allows multiple pseudo terminals and mapping of desired channel.
+
+- New text background modes.  Windows: 2 for black background.  Others: 5 to leave current background color alone, 6 for black background.
 
 ## Version 1.8.1 -- November 2025
 
@@ -15,7 +24,7 @@ Vulnerabilities reported by dkgkdfg65 (https://github.com/dkgkdfg65) and backpor
 
 - Crash (sigsegv) after AX.25 connection attempt timeout with AGW network interface.
 
-## Version 1.8 -- October 2025
+## Version 1.8  --  October 2025
 
 ### New Documentation:
 

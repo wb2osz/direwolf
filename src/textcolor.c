@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2019  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2019, 2025  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -85,11 +85,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
+#include <errno.h>
 
 
 #if __WIN32__
 
+// For Windows platform:
+//    -t 0 disables color
+//    -t 1 enables with white background (default)
+//    -t 2 enables with black background
+
 #define BACKGROUND_WHITE (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY)
+#define FOREGROUND_WHITE (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY)
 
 #else 	/* Linux, BSD, Mac OSX */
 
@@ -133,18 +141,28 @@
 // In recent tests, background is always gray, not white like it should be.
 
 
-#define MAX_T 4
+// Alternative 5:
 
-static const char *t_background_white[MAX_T+1] = { "", "\e[48;2;255;255;255m",	    	   "\e[48;2;255;255;255m",		    "\e[5;47m",		   "\e[1;47m" };
+// This uses the 8-color foreground colors like alternative 2, but with a reset background color.
+// For people that prefer dark backgrounds or use terminals with color theming.
 
-static const char *t_black[MAX_T+1]	= 	{ "", "\e[38;2;0;0;0m",		"\e[0;30m" "\e[48;2;255;255;255m",	"\e[0;30m" "\e[5;47m",	"\e[0;30m" "\e[1;47m" };
-static const char *t_red[MAX_T+1] 	= 	{ "", "\e[38;2;255;0;0m",	"\e[1;31m" "\e[48;2;255;255;255m",	"\e[1;31m" "\e[5;47m",	"\e[1;31m" "\e[1;47m" };
-static const char *t_green[MAX_T+1] 	= 	{ "", "\e[38;2;0;255;0m",	"\e[1;32m" "\e[48;2;255;255;255m",	"\e[1;32m" "\e[5;47m",	"\e[1;32m" "\e[1;47m" };
-static const char *t_dark_green[MAX_T+1]= 	{ "", "\e[38;2;0;192;0m",	"\e[0;32m" "\e[48;2;255;255;255m",	"\e[0;32m" "\e[5;47m",	"\e[0;32m" "\e[1;47m" };
-static const char *t_yellow[MAX_T+1] 	= 	{ "", "\e[38;2;255;255;0m",	"\e[1;33m" "\e[48;2;255;255;255m",	"\e[1;33m" "\e[5;47m",	"\e[1;33m" "\e[1;47m" };
-static const char *t_blue[MAX_T+1] 	= 	{ "", "\e[38;2;0;0;255m",	"\e[1;34m" "\e[48;2;255;255;255m",	"\e[1;34m" "\e[5;47m",	"\e[1;34m" "\e[1;47m" };
-static const char *t_magenta[MAX_T+1] 	= 	{ "", "\e[38;2;255;0;255m",	"\e[1;35m" "\e[48;2;255;255;255m",	"\e[1;35m" "\e[5;47m",	"\e[1;35m" "\e[1;47m" };
-static const char *t_cyan[MAX_T+1] 	= 	{ "", "\e[38;2;0;255;255m",	"\e[0;36m" "\e[48;2;255;255;255m",	"\e[0;36m" "\e[5;47m",	"\e[0;36m" "\e[1;47m" };
+
+// Alternative 6:
+
+// This uses the RGB color setting like alternative 1, but with a black background.
+
+#define MAX_T 6
+
+static const char *t_background_white[MAX_T+1] = { "", "\e[48;2;255;255;255m",	    	   "\e[48;2;255;255;255m",		    "\e[5;47m",		   "\e[1;47m", "\e[0;49m"           , "\e[48;2;0;0;0m" };
+
+static const char *t_black[MAX_T+1]	= 	{ "", "\e[38;2;0;0;0m",		"\e[0;30m" "\e[48;2;255;255;255m",	"\e[0;30m" "\e[5;47m",	"\e[0;30m" "\e[1;47m", "\e[0;49m" "\e[0;39m", "\e[38;2;255;255;255m" };
+static const char *t_red[MAX_T+1] 	= 	{ "", "\e[38;2;255;0;0m",	"\e[1;31m" "\e[48;2;255;255;255m",	"\e[1;31m" "\e[5;47m",	"\e[1;31m" "\e[1;47m", "\e[0;49m" "\e[1;31m", "\e[38;2;255;0;0m"};
+static const char *t_green[MAX_T+1] 	= 	{ "", "\e[38;2;0;255;0m",	"\e[1;32m" "\e[48;2;255;255;255m",	"\e[1;32m" "\e[5;47m",	"\e[1;32m" "\e[1;47m", "\e[0;49m" "\e[1;32m", "\e[38;2;0;255;0m"};
+static const char *t_dark_green[MAX_T+1]= 	{ "", "\e[38;2;0;192;0m",	"\e[0;32m" "\e[48;2;255;255;255m",	"\e[0;32m" "\e[5;47m",	"\e[0;32m" "\e[1;47m", "\e[0;49m" "\e[0;32m", "\e[38;2;0;192;0m"};
+static const char *t_yellow[MAX_T+1] 	= 	{ "", "\e[38;2;255;255;0m",	"\e[1;33m" "\e[48;2;255;255;255m",	"\e[1;33m" "\e[5;47m",	"\e[1;33m" "\e[1;47m", "\e[0;49m" "\e[1;33m", "\e[38;2;255;255;0m"};
+static const char *t_blue[MAX_T+1] 	= 	{ "", "\e[38;2;0;0;255m",	"\e[1;34m" "\e[48;2;255;255;255m",	"\e[1;34m" "\e[5;47m",	"\e[1;34m" "\e[1;47m", "\e[0;49m" "\e[1;34m", "\e[38;2;0;0;255m"};
+static const char *t_magenta[MAX_T+1] 	= 	{ "", "\e[38;2;255;0;255m",	"\e[1;35m" "\e[48;2;255;255;255m",	"\e[1;35m" "\e[5;47m",	"\e[1;35m" "\e[1;47m", "\e[0;49m" "\e[1;35m", "\e[38;2;255;0;255m"};
+static const char *t_cyan[MAX_T+1] 	= 	{ "", "\e[38;2;0;255;255m",	"\e[0;36m" "\e[48;2;255;255;255m",	"\e[0;36m" "\e[5;47m",	"\e[0;36m" "\e[1;47m", "\e[0;49m" "\e[0;36m", "\e[38;2;0;255;255m"};
 
 
 /* Clear from cursor to end of screen. */
@@ -170,15 +188,20 @@ static const char clear_eos[]	= "\e[0J";
  *	9 (more accurately any invalid value) = try all of them and exit.
  */
 
+// TODO:  Should we have an exit handler to restore initial condition?
+
 static int g_enable_color = 1;
+static FILE *o_fp = NULL;
+static FILE *O_fp = NULL;
+static int current_color = 0;
 
 
 void text_color_init (int enable_color)
 {
 
+	g_enable_color = enable_color;
 
 #if __WIN32__
-
 
 	if (g_enable_color != 0) {
 
@@ -188,6 +211,10 @@ void text_color_init (int enable_color)
 	  DWORD length;
 	  COORD coord;
 	  DWORD nwritten;
+
+	  if (g_enable_color > 1) {
+	    attr = 0;
+	  }
 
 	  h = GetStdHandle(STD_OUTPUT_HANDLE);
 	  if (h != NULL && h != INVALID_HANDLE_VALUE) {
@@ -205,12 +232,12 @@ void text_color_init (int enable_color)
 
 // Run a test if outside of acceptable range.
 
-	if (enable_color < 0 || enable_color > MAX_T) {
+	if (g_enable_color < 0 || g_enable_color > MAX_T) {
 	  int t;
 	  for (t = 0; t <= MAX_T; t++) {
 	    text_color_init (t);
 	    printf ("-t %d", t);
-	    if (t) printf ("   [white background]   ");
+	    if (t < 5) printf ("   [white background]   ");
 	    printf ("\n");
 	    printf ("%sBlack ", t_black[t]);
 	    printf ("%sRed ", t_red[t]);
@@ -224,8 +251,6 @@ void text_color_init (int enable_color)
 	   exit (EXIT_SUCCESS);
 	}
 
-	g_enable_color = enable_color;
-
 	if (g_enable_color != 0) {
 	  int t = g_enable_color;
 
@@ -237,12 +262,54 @@ void text_color_init (int enable_color)
 	  printf ("%s", t_black[t]);
 	}
 #endif
-}
+
+} //end text_color_init
+
+
+// Creat screen output capture files.
+// "-o" is for only raw received packets.
+// "-O" is for everything.
+
+void dw_printf_capture_init (char *o_opt, char *O_opt)
+{
+	if (strlen(o_opt) > 0) {
+	  o_fp = fopen (o_opt, "w");
+	  if (o_fp == NULL) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Failed to open -o %s for write.\n", o_opt);
+	    exit (EXIT_FAILURE);
+	  }
+	}
+	// printf ("DEBUG O_opt=%s, strlen=%d\n", O_opt, (int)strlen(O_opt));
+	if (strlen(O_opt) > 0) {
+	  O_fp = fopen (O_opt, "w");
+	  if (O_fp == NULL) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("Failed to open -O %s for write.\n", O_opt);
+	    //dw_printf ("errno=%d\n", errno);
+	    exit (EXIT_FAILURE);
+	  }
+	}
+
+}  // end dw_printf_capture_init
 
 
 #if __WIN32__
 
 /* Seems that ANSI.SYS is no longer available. */
+
+// Issue 627 pointed out:
+
+//      textcolor.c makes the complaint that windows no longer offers ansi.sys.
+//      This is true, but the functionality remains.
+//      By default processing of VT sequences is off but they can be enabled by
+//	setting the ENABLE_VIIRTUAL_TERMINAL_PROCESSING flag using SetConsoleMode.
+//      The result should be requiring only a little on-startup initialisation
+//	code for windows, with further output code being common between windows
+//	and linux.
+
+//      The microsoft documentation is here:
+//	https://learn.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
 
 
 void text_color_set ( enum dw_color_e c )
@@ -254,34 +321,41 @@ void text_color_set ( enum dw_color_e c )
 	  return;
 	}
 
+	WORD info_fg = 0;
+	WORD background = BACKGROUND_WHITE;
+	if (g_enable_color > 1) {
+	  info_fg = FOREGROUND_WHITE;
+	  background = 0;
+	}
+
 	switch (c) {
 
 	  default:
 	  case DW_COLOR_INFO:
-	    attr = BACKGROUND_WHITE;
+	    attr = info_fg | background;
 	    break;
 
 	  case DW_COLOR_ERROR:
-	    attr = FOREGROUND_RED | FOREGROUND_INTENSITY | BACKGROUND_WHITE;
+	    attr = FOREGROUND_RED | FOREGROUND_INTENSITY | background;
 	    break;
 
 	  case DW_COLOR_REC:
 	    // Release 1.6.   Dark green, same as for debug.
 	    // Bright green is too hard to see with white background,
 	    // attr = FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_WHITE;
-	    attr = FOREGROUND_GREEN | BACKGROUND_WHITE;
+	    attr = FOREGROUND_GREEN | background;
 	    break;
 
 	  case DW_COLOR_DECODED:
-	    attr = FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_WHITE;
+	    attr = FOREGROUND_BLUE | FOREGROUND_INTENSITY | background;
 	    break;
 
 	  case DW_COLOR_XMIT:
-	    attr = FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_WHITE;
+	    attr = FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY | background;
 	    break;
 
 	  case DW_COLOR_DEBUG:
-	    attr = FOREGROUND_GREEN | BACKGROUND_WHITE;
+	    attr = FOREGROUND_GREEN | background;
 	    break;
 	}
 
@@ -293,6 +367,7 @@ void text_color_set ( enum dw_color_e c )
 }
 
 #else
+
 
 void text_color_set ( enum dw_color_e c )
 {
@@ -336,6 +411,8 @@ void text_color_set ( enum dw_color_e c )
 	    printf ("%s", t_dark_green[t]);
 	    break;
 	}
+
+	current_color = c;
 }
 
 #endif
@@ -375,7 +452,14 @@ int dw_printf (const char *fmt, ...)
 	len = vsnprintf (buffer, BSIZE, fmt, args);
 	va_end (args);
 
-// TODO: other possible destinations...
+// other possible destinations...
+
+	if (o_fp != NULL && current_color == DW_COLOR_REC) {
+	  fputs (buffer, o_fp);
+	}
+	if (O_fp != NULL) {
+	  fputs (buffer, O_fp);
+	}
 
 	fputs (buffer, stdout);
 	return (len);

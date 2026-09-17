@@ -4,8 +4,8 @@ project(direwolf)
 
 # configure version
 set(direwolf_VERSION_MAJOR "1")
-set(direwolf_VERSION_MINOR "8")
-set(direwolf_VERSION_PATCH "2")
+set(direwolf_VERSION_MINOR "9")
+set(direwolf_VERSION_PATCH "0")
 set(direwolf_VERSION_SUFFIX "Development")
 
 # options
@@ -338,38 +338,62 @@ endif()
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")
+
+  # Newer Hamlib releases use a significantly different API.
+  # Try to determine the version and put it on the compile command line.
+  # pkg-config is optional because Windows CI downloads a Hamlib binary package
+  # without installing pkg-config.
+  if(PC_HAMLIB_VERSION)
+    # PC_HAMLIB_VERSION holds the full x.y.z string.
+    # Now split out major and minor versions into separate integers.
+    string(REPLACE "." ";" VLIST ${PC_HAMLIB_VERSION})
+    list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+    list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+    message(STATUS "hamlib version ${PC_HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${PC_HAMLIB_VERSION}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
+  endif()
+
+  if(WIN32 OR CYGWIN)
+    set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
+  endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
   set(HAMLIB_LIBRARIES "")
 endif()
 
-find_package(gpiod)
-if(GPIOD_FOUND)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
+if(LINUX)
+  find_package(gpiod)
+  if(GPIOD_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
 
-  # Version 2 uses a completely different API.
-  # Try to determine version and put it on compile command line.
+    # Version 2 uses a completely different API.
+    # Try to determine version and put it on compile command line.
 
-  # Require pkg-config support
-  find_package(PkgConfig REQUIRED)
-  # Probe for libgpiod
-  pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
-  # Abort if not found
-  if(NOT LIBGPIOD_FOUND)
-    message(FATAL_ERROR "libgpiod not found via pkg-config")
+    # Require pkg-config support
+    find_package(PkgConfig REQUIRED)
+    # Probe for libgpiod
+    pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
+    # Abort if not found
+    if(NOT LIBGPIOD_FOUND)
+      message(FATAL_ERROR "libgpiod not found via pkg-config")
+    endif()
+
+    # LIBGPIOD_VERSION holds the full x.y.z string
+
+    # Now split out major and minor versions into separate integers
+    string(REPLACE "." ";" VLIST ${LIBGPIOD_VERSION})
+    list(GET VLIST 0 LIBGPIOD_VERSION_MAJOR)
+    list(GET VLIST 1 LIBGPIOD_VERSION_MINOR)
+    message(STATUS "libgpiod version ${LIBGPIOD_VERSION} major=${LIBGPIOD_VERSION_MAJOR} minor=${LIBGPIOD_VERSION_MINOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION=${LIBGPIOD_VERSION}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MAJOR=${LIBGPIOD_VERSION_MAJOR}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MINOR=${LIBGPIOD_VERSION_MINOR}")
+  else()
+    set(GPIOD_INCLUDE_DIRS "")
+    set(GPIOD_LIBRARIES "")
   endif()
-
-  # LIBGPIOD_VERSION holds the full x.y.z string
-
-  # Now split out major and minor versions into separate integers
-  string(REPLACE "." ";" VLIST ${LIBGPIOD_VERSION})
-  list(GET VLIST 0 LIBGPIOD_VERSION_MAJOR)
-  list(GET VLIST 1 LIBGPIOD_VERSION_MINOR)
-  message(STATUS "libgpiod version ${LIBGPIOD_VERSION} major=${LIBGPIOD_VERSION_MAJOR} minor=${LIBGPIOD_VERSION_MINOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION=${LIBGPIOD_VERSION}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MAJOR=${LIBGPIOD_VERSION_MAJOR}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DLIBGPIOD_VERSION_MINOR=${LIBGPIOD_VERSION_MINOR}")
-
 else()
   set(GPIOD_INCLUDE_DIRS "")
   set(GPIOD_LIBRARIES "")
@@ -469,6 +493,13 @@ add_subdirectory(man)
 if (LINUX OR FREEBSD)
   install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.desktop DESTINATION share/applications)
   install(FILES ${CMAKE_SOURCE_DIR}/cmake/cpack/${CMAKE_PROJECT_NAME}_icon.png DESTINATION share/pixmaps)
+endif()
+
+# install hamlib DLLs and license files on Windows
+if ((WIN32 OR CYGWIN) AND HAMLIB_FOUND)
+  install(FILES ${HAMLIB_DLLS} DESTINATION ${INSTALL_BIN_DIR})
+  install(FILES ${HAMLIB_ROOT_DIR}/COPYING.LIB.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-COPYING.LIB.txt)
+  install(FILES ${HAMLIB_ROOT_DIR}/LICENSE.txt DESTINATION ${INSTALL_DOC_DIR} RENAME hamlib-LICENSE.txt)
 endif()
 
 ############ uninstall target ################

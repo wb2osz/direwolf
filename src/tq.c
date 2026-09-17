@@ -53,6 +53,7 @@
 #include "igate.h"
 #include "dtime_now.h"
 #include "nettnc.h"
+#include "sertnc.h"
 
 
 static packet_t queue_head[MAX_RADIO_CHANS][TQ_NUM_PRIO];	/* Head of linked list for each queue. */
@@ -261,7 +262,8 @@ void tq_append (int chan, int prio, packet_t pp)
 #ifndef DIGITEST		// avoid dtest link error
 
 	if (save_audio_config_p->chan_medium[chan] == MEDIUM_IGATE ||
-		save_audio_config_p->chan_medium[chan] == MEDIUM_NETTNC) {
+		save_audio_config_p->chan_medium[chan] == MEDIUM_NETTNC ||
+		save_audio_config_p->chan_medium[chan] == MEDIUM_SERTNC) {
 
 	  char ts[100];		// optional time stamp.
 
@@ -290,13 +292,22 @@ void tq_append (int chan, int prio, packet_t pp)
 
 	    igate_send_rec_packet (chan, pp);
 	  }
-	  else {	// network TNC
+	  else if (save_audio_config_p->chan_medium[chan] == MEDIUM_NETTNC) {	// network TNC
 	    dw_printf ("[%d>nt%s] ", chan, ts);
 	    dw_printf ("%s", stemp);			/* stations followed by : */
 	    ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
 	    dw_printf ("\n");
 
 	    nettnc_send_packet (chan, pp);
+
+	  }
+	  else if (save_audio_config_p->chan_medium[chan] == MEDIUM_SERTNC) {	// serial TNC
+	    dw_printf ("[%d>st%s] ", chan, ts);
+	    dw_printf ("%s", stemp);			/* stations followed by : */
+	    ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
+	    dw_printf ("\n");
+
+	    sertnc_send_packet (chan, pp);
 
 	  }
 
