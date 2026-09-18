@@ -373,13 +373,17 @@ if(HAMLIB_FOUND)
   #        D:/a/direwolf/direwolf/build/hamlib/hamlib/bin/libwinpthread-1.dll
 
   if(WIN32 OR CYGWIN)
+      message(STATUS "DEBUG0: Windows case")
     # Only a single digit major version has been seen so far but
     # handle a minor version in case it ever happens.
     if ("${HAMLIB_DLLS}" MATCHES "libhamlib-([0-9.]+)\\.dll")
+      message(STATUS "DEBUG1: Found version match: ${CMAKE_MATCH_1}")
       set(HAMLIB_VERSION, "${CMAKE_MATCH_1}")
+      message(STATUS "DEBUG2: version is now: ${HAMLIB_VERSION}")
       # If no decimal point, append fake ".0" to keep later major.minor separation happy.
-      if (NOT "${HAMLIB_VERSION}" MATCHES "\.")
+      if(HAMLIB_VERSION AND NOT "${HAMLIB_VERSION}" MATCHES "[.]")
         string (APPEND HAMLIB_VERSION ".0")
+        message(STATUS "DEBUG3: version is now: ${HAMLIB_VERSION}")
       endif()
     else()
       message(STATUS "Can't determine Windows libhamlib.dll version.")
