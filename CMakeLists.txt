@@ -341,29 +341,27 @@ if(HAMLIB_FOUND)
   # Version 5 uses a significantly different API.
   # Try to determine version and put it on compile command line.
 
-  # On Linux, we can find hamlib version with pkg-config.
-  # FIXME: Need another way to find library version on Windows.
-
-  if(LINUX OR APPLE)
-    find_package(PkgConfig REQUIRED)
-    # Probe for hamlib
-    pkg_check_modules(HAMLIB REQUIRED hamlib)
-    # Already found above so this should not fail.
-    if(NOT HAMLIB_FOUND)
-      message(FATAL_ERROR "hamlib not found via pkg-config")
+  # JWL temp debug
+  message(STATUS, "---------------  hamlib found  ---------------------")
+  get_cmake_property(_variableNames VARIABLES)
+  list (SORT _variableNames)
+  foreach (_variableName ${_variableNames})
+    if(_variableName MATCHES "HAMLIB|hamlib")
+      message(STATUS "${_variableName}=${${_variableName}}")
     endif()
+  endforeach()
+  message(STATUS, "-----------------------  end  ---------------------")
 
-    # HAMLIB_VERSION holds the full x.y.z string
-    # Now split out major and minor versions into separate integers
+  # find_package() sets many ...HAMLIB... variables, among them:
+  # HAMLIB_VERSION which holds the full x.y.z string
 
-    string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
-    list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
-    list(GET VLIST 1 HAMLIB_VERSION_MINOR)
-    message(STATUS "hamlib version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
-  endif()
+  string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
+  list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
+  list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+  message(STATUS "hamlib version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MINOR=${HAMLIB_VERSION_MINOR}")
 
   if(WIN32 OR CYGWIN)
     set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
@@ -383,16 +381,19 @@ if(GPIOD_FOUND)
   # Version 2 uses a completely different API.
   # Try to determine version and put it on compile command line.
 
-  # Require pkg-config support
-  find_package(PkgConfig REQUIRED)
-  # Probe for libgpiod
-  pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
-  # Abort if not found
-  if(NOT LIBGPIOD_FOUND)
-    message(FATAL_ERROR "libgpiod not found via pkg-config")
-  endif()
+  # JWL temp debug
+  #message(STATUS, "---------------  gpiod found  ---------------------")
+  #get_cmake_property(_variableNames VARIABLES)
+  #list (SORT _variableNames)
+  #foreach (_variableName ${_variableNames})
+  #  if(_variableName MATCHES "GPIOD|gpiod")
+  #    message(STATUS "${_variableName}=${${_variableName}}")
+  #  endif()
+  #endforeach()
+  #message(STATUS, "-----------------------  end  ---------------------")
 
-  # LIBGPIOD_VERSION holds the full x.y.z string
+  # find_package() sets many ...GPIOD... variables, among them:
+  # LIBGPIOD_VERSION which holds the full x.y.z string
 
   # Now split out major and minor versions into separate integers
   string(REPLACE "." ";" VLIST ${LIBGPIOD_VERSION})
