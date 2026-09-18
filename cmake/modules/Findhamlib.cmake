@@ -21,6 +21,10 @@ if(PKG_CONFIG_FOUND)
   pkg_check_modules(PC_HAMLIB hamlib)
 endif()
 
+if(NOT HAMLIB_VERSION AND PC_HAMLIB_VERSION)
+  set(HAMLIB_VERSION "${PC_HAMLIB_VERSION}")
+endif()
+
 find_path(HAMLIB_INCLUDE_DIR
   NAMES hamlib/rig.h
   PATHS
@@ -61,6 +65,9 @@ find_package_handle_standard_args(hamlib
 if(HAMLIB_FOUND)
   list(APPEND HAMLIB_LIBRARIES ${HAMLIB_LIBRARY})
   list(APPEND HAMLIB_INCLUDE_DIRS ${HAMLIB_INCLUDE_DIR})
+  if(WIN32 OR CYGWIN)
+    file(GLOB HAMLIB_DLLS ${HAMLIB_ROOT_DIR}/bin/*.dll)
+  endif()
   mark_as_advanced(HAMLIB_ROOT_DIR)
 endif()
 
