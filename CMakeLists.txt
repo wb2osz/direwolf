@@ -355,9 +355,45 @@ if(HAMLIB_FOUND)
   # find_package() sets many ...HAMLIB... variables, among them:
   # HAMLIB_VERSION which holds the full x.y.z string
 
+  # I wish it was that simple.
+  #
+  # On Raspberry Pi OS trixie, we have both of these:
+  #    HAMLIB_VERSION=5.0.0~git
+  #    PC_HAMLIB_VERSION=5.0.0~git
+  #
+  # On GitHub build system, we have only this for Linux and MacOS:
+  #    PC_HAMLIB_VERSION=4.7.2
+  #
+  # So, you are probably thinking we could simply use the PC_... variable.
+  # Then, we get to the Windows build and neither is set.
+  # The only version clue is buried in here (single long line):
+  #    HAMLIB_DLLS=D:/a/direwolf/direwolf/build/hamlib/hamlib/bin/libgcc_s_seh-1.dll;
+  #        D:/a/direwolf/direwolf/build/hamlib/hamlib/bin/libhamlib-4.dll;
+  #        D:/a/direwolf/direwolf/build/hamlib/hamlib/bin/libusb-1.0.dll;
+  #        D:/a/direwolf/direwolf/build/hamlib/hamlib/bin/libwinpthread-1.dll
+
+  if(WIN32 OR CYGWIN)
+    # Only a single digit major version has been seen so far but
+    # handle a minor version in case it ever happens.
+    if ("${HAMLIB_DLLS}" MATCHES "libhamlib-([0-9\.]+)\.dll")
+      set(HAMLIB_VERSION, "${CMAKE_MATCH_1}")
+      # If no decimal point, append fake ".0" to keep later major.minor separation happy.
+      if (NOT "${HAMLIB_VERSION}" MATCHES "\.")
+        string (APPEND HAMLIB_VERSION ".0")
+      endif()
+    else()
+      message(STATUS "Can't determine Windows libhamlib.dll version.")
+    endif()
+  else()
+    if (PC_HAMLIB_VERSION AND NOT HAMLIB_VERSION)
+      set(HAMLIB_VERSION, PC_HAMLIB_VERSION)
+    endif()
+  endif()
+
   string(REPLACE "." ";" VLIST ${HAMLIB_VERSION})
   list(GET VLIST 0 HAMLIB_VERSION_MAJOR)
   list(GET VLIST 1 HAMLIB_VERSION_MINOR)
+
   message(STATUS "hamlib version ${HAMLIB_VERSION} major=${HAMLIB_VERSION_MAJOR} minor=${HAMLIB_VERSION_MINOR}")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION=${HAMLIB_VERSION}")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAMLIB_VERSION_MAJOR=${HAMLIB_VERSION_MAJOR}")
@@ -380,6 +416,11 @@ if(GPIOD_FOUND)
 
   # Version 2 uses a completely different API.
   # Try to determine version and put it on compile command line.
+  # See discussion above in ham lib section.
+
+  if (PC_LIBGPIOD_VERSION AND NOT LIBGPIOD_VERSION)
+    set(LIBGPIOD_VERSION, PC_LIBGPIOD_VERSION)
+  endif()
 
   # JWL temp debug
   #message(STATUS, "---------------  gpiod found  ---------------------")
