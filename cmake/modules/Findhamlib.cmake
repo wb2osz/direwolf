@@ -21,6 +21,12 @@ if(PKG_CONFIG_FOUND)
   pkg_check_modules(PC_HAMLIB hamlib)
 endif()
 
+# On Raspberry Pi OS trixie, both of these are set but
+# on github build environment only the PC_... variable is set.
+if(NOT DEFINED HAMLIB_VERSION AND PC_HAMLIB_VERSION)
+  set(HAMLIB_VERSION "${PC_HAMLIB_VERSION}")
+endif()
+
 find_path(HAMLIB_INCLUDE_DIR
   NAMES hamlib/rig.h
   PATHS
