@@ -375,7 +375,7 @@ if(HAMLIB_FOUND)
   if(WIN32 OR CYGWIN)
     # Only a single digit major version has been seen so far but
     # handle a minor version in case it ever happens.
-    if ("${HAMLIB_DLLS}" MATCHES "libhamlib-([0-9\.]+)\.dll")
+    if ("${HAMLIB_DLLS}" MATCHES "libhamlib-([0-9.]+)\\.dll")
       set(HAMLIB_VERSION, "${CMAKE_MATCH_1}")
       # If no decimal point, append fake ".0" to keep later major.minor separation happy.
       if (NOT "${HAMLIB_VERSION}" MATCHES "\.")
