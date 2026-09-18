@@ -386,7 +386,7 @@ if(HAMLIB_FOUND)
     endif()
   else()
     if (PC_HAMLIB_VERSION AND NOT HAMLIB_VERSION)
-      set(HAMLIB_VERSION, PC_HAMLIB_VERSION)
+      set(HAMLIB_VERSION, "${PC_HAMLIB_VERSION}")
     endif()
   endif()
 
