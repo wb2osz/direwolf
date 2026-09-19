@@ -373,14 +373,14 @@ int mheard_latest_for_channel (int chan, mheard_times_t *times, int num_times)
 	for (i = 0; i < MHEARD_HASH_SIZE; i++) {
 	  for (mptr = mheard_hash[i]; mptr != NULL; mptr = mptr->pnext) {
 
-	    if (num_stations < MAXDUMP && mptr->first_heard_rf[chan] != 0) {
-	      station[num_stations] = mptr;
-	      num_stations++;
-	    }
-	    else {
+	    if (num_stations >= MAXDUMP) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("mheard_latest_for_channel - max number of stations exceeded.\n");
 	      break;
+	    }
+	    if (mptr->first_heard_rf[chan] != 0) {
+	      station[num_stations] = mptr;
+	      num_stations++;
 	    }
 	  }
 	}
