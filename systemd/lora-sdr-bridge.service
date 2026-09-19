@@ -1,0 +1,15 @@
+[Unit]
+Description=LoRa APRS SDR Bridge (RTL-SDR + GNU Radio receive path)
+After=network.target direwolf.service
+Wants=direwolf.service
+
+[Service]
+User=pi
+ExecStart=/usr/bin/python3 /usr/local/bin/lora_sdr_bridge.py -c /etc/direwolf/lora.conf
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

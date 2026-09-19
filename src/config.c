@@ -63,6 +63,7 @@
 #include "xmit.h"
 #include "tt_text.h"
 #include "ax25_link.h"
+#include "loraspi.h"
 
 #if USE_CM108		// Current Linux or Windows only
 #include "cm108.h"
@@ -1445,6 +1446,181 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  }
 
 /*
+ * LCHANNEL  chan
+ *
+ *	Declare a virtual channel as a native SPI LoRa channel (SX1276/SX1262).
+ *	Sets the current channel context so subsequent MYCALL, LORAHW, LORAFREQ,
+ *	LORASF, LORABW, LORACR, LORASW, LORATXPOWER directives apply to it.
+ *
+ *	Example:
+ *		LCHANNEL 10
+ *		MYCALL   K6ATV-2
+ *		LORAHW   lorapi_rfm95w
+ *		LORAFREQ 915.0
+ *		LORASF   12
+ */
+	  else if (strcasecmp(t, "LCHANNEL") == 0) {
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing channel number for LCHANNEL command.\n", line);
+	      continue;
+	    }
+	    int lchan = atoi(t);
+	    if (lchan >= MAX_RADIO_CHANS && lchan < MAX_TOTAL_CHANS) {
+	      if (p_audio_config->chan_medium[lchan] == MEDIUM_NONE) {
+	        p_audio_config->chan_medium[lchan] = MEDIUM_LORA;
+	        /* Set defaults */
+	        p_audio_config->lora_freq_mhz[lchan]    = 915.0f;
+	        p_audio_config->lora_sf[lchan]           = 12;
+	        p_audio_config->lora_bw_khz[lchan]       = 125.0f;
+	        p_audio_config->lora_cr[lchan]           = 5;
+	        p_audio_config->lora_sw[lchan]           = 0x12;	/* LoRa-APRS sync word */
+	        p_audio_config->lora_txpower[lchan]      = 20;
+	        p_audio_config->lora_pin_cs[lchan]       = -1;
+	        p_audio_config->lora_pin_reset[lchan]    = -1;
+	        p_audio_config->lora_pin_irq[lchan]      = -1;
+	        p_audio_config->lora_pin_busy[lchan]     = -1;
+	        p_audio_config->lora_pin_tx_en[lchan]    = -1;
+	        p_audio_config->lora_pin_rx_en[lchan]    = -1;
+	        p_audio_config->lora_pa_boost[lchan]     = 0;
+	        p_audio_config->lora_tcxo[lchan]         = 0;
+	        p_audio_config->lora_tcxo_voltage[lchan] = 1.8f;
+	        p_audio_config->lora_spi_bus[lchan]      = 0;
+	        p_audio_config->lora_spi_dev[lchan]      = 0;
+	        p_audio_config->lora_spi_speed[lchan]    = 8000000;
+	        channel = lchan;	/* set context for subsequent LORAHW etc. */
+	      }
+	      else {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Line %d: LCHANNEL can't use channel %d because it is already in use.\n", line, lchan);
+	      }
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LCHANNEL number must be in range %d to %d.\n", line, MAX_RADIO_CHANS, MAX_TOTAL_CHANS-1);
+	    }
+	  }
+
+/*
+ * LORAHW  profile-name
+ *
+ *	Load GPIO pin and chip settings from a built-in hardware profile.
+ *	Must follow an LCHANNEL directive.  Profile names match entries in
+ *	the s_profiles[] table in loraspi.c.
+ *	Example: LORAHW lorapi_rfm95w
+ */
+	  else if (strcasecmp(t, "LORAHW") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORAHW must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing hardware profile name for LORAHW.\n", line);
+	      continue;
+	    }
+	    if (loraspi_apply_profile(channel, t, p_audio_config) != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Unknown LoRa hardware profile '%s'.\n", line, t);
+	    }
+	  }
+
+/*
+ * LORAFREQ  frequency_mhz
+ *	Example: LORAFREQ 915.0
+ */
+	  else if (strcasecmp(t, "LORAFREQ") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORAFREQ must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) p_audio_config->lora_freq_mhz[channel] = (float)atof(t);
+	  }
+
+/*
+ * LORASF  spreading_factor    (6-12)
+ *	Example: LORASF 12
+ */
+	  else if (strcasecmp(t, "LORASF") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORASF must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      int sf = atoi(t);
+	      if (sf >= 6 && sf <= 12) p_audio_config->lora_sf[channel] = sf;
+	      else { text_color_set(DW_COLOR_ERROR); dw_printf ("Line %d: LORASF must be 6-12.\n", line); }
+	    }
+	  }
+
+/*
+ * LORABW  bandwidth_khz    (125, 250, or 500)
+ *	Example: LORABW 125
+ */
+	  else if (strcasecmp(t, "LORABW") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORABW must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) p_audio_config->lora_bw_khz[channel] = (float)atof(t);
+	  }
+
+/*
+ * LORACR  coding_rate    (5-8, meaning 4/5 to 4/8)
+ *	Example: LORACR 5
+ */
+	  else if (strcasecmp(t, "LORACR") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORACR must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) {
+	      int cr = atoi(t);
+	      if (cr >= 5 && cr <= 8) p_audio_config->lora_cr[channel] = cr;
+	      else { text_color_set(DW_COLOR_ERROR); dw_printf ("Line %d: LORACR must be 5-8.\n", line); }
+	    }
+	  }
+
+/*
+ * LORASW  sync_word_hex    (0x12 for LoRa-APRS standard)
+ * Example: LORASW 0x12
+ */
+	  else if (strcasecmp(t, "LORASW") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORASW must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) p_audio_config->lora_sw[channel] = (int)strtol(t, NULL, 0);
+	  }
+
+/*
+ * LORATXPOWER  dbm
+ *	Example: LORATXPOWER 20
+ */
+	  else if (strcasecmp(t, "LORATXPOWER") == 0) {
+	    if (channel < MAX_RADIO_CHANS || p_audio_config->chan_medium[channel] != MEDIUM_LORA) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: LORATXPOWER must follow an LCHANNEL directive.\n", line);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t != NULL) p_audio_config->lora_txpower[channel] = atoi(t);
+	  }
+
+/*
  * MYCALL station
  */
 	  else if (strcasecmp(t, "mycall") == 0) {
@@ -2813,7 +2989,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
 	        p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC &&
-	        p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC) {
+	        p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC &&
+	        p_audio_config->chan_medium[from_chan] != MEDIUM_LORA) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -2842,7 +3019,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	    if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
 	        p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC &&
-	        p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC) {
+	        p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC &&
+	        p_audio_config->chan_medium[to_chan] != MEDIUM_LORA) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
@@ -3177,7 +3355,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	      if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
 		  p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC &&
-		  p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC) {
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC &&
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_LORA) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -3216,7 +3395,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	      if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
 		  p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC &&
-		  p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC) {
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC &&
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_LORA) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);
@@ -4497,7 +4677,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        }
 	        else if (p_audio_config->chan_medium[x] != MEDIUM_RADIO &&
 			 p_audio_config->chan_medium[x] != MEDIUM_NETTNC &&
-			 p_audio_config->chan_medium[x] != MEDIUM_SERTNC) {
+			 p_audio_config->chan_medium[x] != MEDIUM_SERTNC &&
+			 p_audio_config->chan_medium[x] != MEDIUM_LORA) {
 	          text_color_set(DW_COLOR_ERROR);
 	          dw_printf ("Config file, line %d: TTOBJ transmit channel %d is not valid.\n", line, x);
 	          x = -1;
@@ -5962,7 +6143,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  if (strlen(p_igate_config->t2_login) > 0 &&
 	      (p_audio_config->chan_medium[i] == MEDIUM_RADIO ||
 	        p_audio_config->chan_medium[i] == MEDIUM_NETTNC ||
-	        p_audio_config->chan_medium[i] == MEDIUM_SERTNC)) {
+	        p_audio_config->chan_medium[i] == MEDIUM_SERTNC ||
+	        p_audio_config->chan_medium[i] == MEDIUM_LORA)) {
 
 	    if (strcmp(p_audio_config->mycall[i], "NOCALL") == 0  || strcmp(p_audio_config->mycall[i], "N0CALL") == 0) {
 	      text_color_set(DW_COLOR_ERROR);
@@ -5990,7 +6172,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  for (j=0; j<MAX_TOTAL_CHANS; j++) {
 	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO ||
 	        p_audio_config->chan_medium[j] == MEDIUM_NETTNC ||
-	        p_audio_config->chan_medium[j] == MEDIUM_SERTNC) {
+	        p_audio_config->chan_medium[j] == MEDIUM_SERTNC ||
+	        p_audio_config->chan_medium[j] == MEDIUM_LORA) {
 	      if (p_digi_config->filter_str[MAX_TOTAL_CHANS][j] == NULL) {
 	        p_digi_config->filter_str[MAX_TOTAL_CHANS][j] = strdup("i/180");
 	      }
