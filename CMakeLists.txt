@@ -390,7 +390,7 @@ if(HAMLIB_FOUND)
     endif()
   else()
     if (PC_HAMLIB_VERSION AND NOT DEFINED HAMLIB_VERSION)
-      set(HAMLIB_VERSION, "${PC_HAMLIB_VERSION}")
+      set(HAMLIB_VERSION "${PC_HAMLIB_VERSION}")
     endif()
   endif()
 
@@ -423,7 +423,7 @@ if(GPIOD_FOUND)
   # See discussion above in ham lib section.
 
   if (PC_LIBGPIOD_VERSION AND NOT LIBGPIOD_VERSION)
-    set(LIBGPIOD_VERSION, PC_LIBGPIOD_VERSION)
+    set(LIBGPIOD_VERSION PC_LIBGPIOD_VERSION)
   endif()
 
   # JWL temp debug
