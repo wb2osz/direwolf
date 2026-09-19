@@ -1,0 +1,4 @@
+#Type Name     ID      GECOS                                 Home directory      Shell
+u     direwolf -:audio 'Direwolf Sound Card-based AX.25 TNC' /usr/share/direwolf -
+m     direwolf audio
+m     direwolf dialout
