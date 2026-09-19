@@ -378,7 +378,7 @@ if(HAMLIB_FOUND)
     # handle a minor version in case it ever happens.
     if ("${HAMLIB_DLLS}" MATCHES "libhamlib-([0-9.]+)\\.dll")
       message(STATUS "DEBUG1: Found version match: ${CMAKE_MATCH_1}")
-      set(HAMLIB_VERSION, "${CMAKE_MATCH_1}")
+      set(HAMLIB_VERSION "${CMAKE_MATCH_1}")
       message(STATUS "DEBUG2: version is now: ${HAMLIB_VERSION}")
       # If no decimal point, append fake ".0" to keep later major.minor separation happy.
       if(HAMLIB_VERSION AND NOT "${HAMLIB_VERSION}" MATCHES "[.]")
