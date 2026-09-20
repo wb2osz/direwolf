@@ -345,7 +345,7 @@ int main (int argc, char *argv[])
  #endif
  #if defined(USE_HAMLIB)
   #ifdef HAMLIB_VERSION_MAJOR
-	dw_printf (" hamlib-%d.%d", HAMLIB_VERSION_MAJOR, HAMLIB_VERSION_MINOR);
+	dw_printf (" hamlib-%d", HAMLIB_VERSION_MAJOR);
   #else
  	dw_printf (" hamlib");
   #endif
