@@ -342,15 +342,15 @@ if(HAMLIB_FOUND)
   # Try to determine version and put it on compile command line.
 
   # JWL temp debug
-  message(STATUS, "---------------  hamlib found  ---------------------")
-  get_cmake_property(_variableNames VARIABLES)
-  list (SORT _variableNames)
-  foreach (_variableName ${_variableNames})
-    if(_variableName MATCHES "HAMLIB|hamlib")
-      message(STATUS "${_variableName}=${${_variableName}}")
-    endif()
-  endforeach()
-  message(STATUS, "-----------------------  end  ---------------------")
+  #message(STATUS, "---------------  hamlib found  ---------------------")
+  #get_cmake_property(_variableNames VARIABLES)
+  #list (SORT _variableNames)
+  #foreach (_variableName ${_variableNames})
+  #  if(_variableName MATCHES "HAMLIB|hamlib")
+  #    message(STATUS "${_variableName}=${${_variableName}}")
+  #  endif()
+  #endforeach()
+  #message(STATUS, "-----------------  hamlib end  ---------------------")
 
   # find_package() sets many ...HAMLIB... variables, among them:
   # HAMLIB_VERSION which holds the full x.y.z string
@@ -373,17 +373,17 @@ if(HAMLIB_FOUND)
   #        D:/a/direwolf/direwolf/build/hamlib/hamlib/bin/libwinpthread-1.dll
 
   if(WIN32 OR CYGWIN)
-      message(STATUS "DEBUG0: Windows case")
+    #message(STATUS "DEBUG0: Windows case")
     # Only a single digit major version has been seen so far but
     # handle a minor version in case it ever happens.
     if ("${HAMLIB_DLLS}" MATCHES "libhamlib-([0-9.]+)\\.dll")
-      message(STATUS "DEBUG1: Found version match: ${CMAKE_MATCH_1}")
+      #message(STATUS "DEBUG1: Found version match: ${CMAKE_MATCH_1}")
       set(HAMLIB_VERSION "${CMAKE_MATCH_1}")
-      message(STATUS "DEBUG2: version is now: ${HAMLIB_VERSION}")
-      # If no decimal point, append fake ".0" to keep later major.minor separation happy.
+      #message(STATUS "DEBUG2: version is now: ${HAMLIB_VERSION}")
+      # If no decimal point, append ".x" to keep later major.minor splitting happy.
       if(HAMLIB_VERSION AND NOT "${HAMLIB_VERSION}" MATCHES "[.]")
-        string (APPEND HAMLIB_VERSION ".0")
-        message(STATUS "DEBUG3: version is now: ${HAMLIB_VERSION}")
+        string (APPEND HAMLIB_VERSION ".x")
+        #message(STATUS "DEBUG3: version is now: ${HAMLIB_VERSION}")
       endif()
     else()
       message(STATUS "Can't determine Windows libhamlib.dll version.")
@@ -406,8 +406,6 @@ if(HAMLIB_FOUND)
   if(WIN32 OR CYGWIN)
     set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-hamlib")
     message(STATUS "Windows hamlib package ${CPACK_PACKAGE_FILE_NAME}")
-    # FIXME: Need to set HAMLIB_VERSION_MAJOR,MINOR somehow.
-    message(STATUS "Version if we get lucky ${HAMLIB_VERSION}")
   endif()
 else()
   set(HAMLIB_INCLUDE_DIRS "")
@@ -435,7 +433,7 @@ if(GPIOD_FOUND)
   #    message(STATUS "${_variableName}=${${_variableName}}")
   #  endif()
   #endforeach()
-  #message(STATUS, "-----------------------  end  ---------------------")
+  #message(STATUS, "-----------------  gpiod end  ---------------------")
 
   # find_package() sets many ...GPIOD... variables, among them:
   # LIBGPIOD_VERSION which holds the full x.y.z string

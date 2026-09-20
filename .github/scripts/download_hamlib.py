@@ -3,7 +3,9 @@
 #
 #    Copyright (C) 2025, Martin F N Cooper, KD6YAM
 #
-# Purpose: Download and unzip the latest 4.x release of Hamlib.
+#    September 2026: direwolf version 1.9 also supports hamlib 5.
+#
+# Purpose: Download and unzip the latest 4.x or 5.x release of Hamlib.
 #
 
 import json
@@ -23,12 +25,12 @@ if len(sys.argv) != 2:
 target_dir = pathlib.Path(sys.argv[1])
 
 #
-# Step 2: Identify the latest 4.x release.
+# Step 2: Identify the latest 4.x or 5.x release.
 #
 # We do not want the latest release per se, since that could be a later major
-# version with an incompatible API. Thus we need to identify the latest 4.x
+# version with an incompatible API. Thus we need to identify the latest 4.x or 5.x
 # release. We do that by querying GitHub for data on all of the releases and
-# finding the tag with the greatest 4.x value.
+# finding the tag with the greatest 4.x or 5.x value.
 #
 # For information on the relevant GitHub JSON API, see:
 #   https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#list-releases-for-a-repository
@@ -47,10 +49,10 @@ req = urllib.request.Request(LIST_RELEASES_URL, headers=GITHUB_API_HEADERS)
 with urllib.request.urlopen(req) as f:
     data = json.loads(f.read())
 
-# Find the latest 4.x release, by tag
+# Find the latest 4.x or 5.x release, by tag
 
 tags = [r['tag_name'] for r in data]
-version = next(reversed(sorted([t for t in tags if t.startswith('4.')])))
+version = next(reversed(sorted([t for t in tags if t.startswith(('4.','5.'))])))
 release = [r for r in data if r['tag_name'] == version][0]
 
 #
@@ -75,6 +77,8 @@ download_url = asset['browser_download_url']
 target_dir.mkdir(parents=True, exist_ok=True)
 target_file = target_dir / zipfile_name
 
+print ("Downloading", zipfile_name, "into", target_dir)
+
 urllib.request.urlretrieve(download_url, target_file)
 
 zip_file = zipfile.ZipFile(target_file)
@@ -88,6 +92,10 @@ zip_file.extractall(target_dir)
 # directory to simply 'hamlib' to avoid the need for the version number to be
 # known outside this script.
 #
+# direwolf release 1.9:  We do need to know the hamlib major version because
+# the API has changed between 4 and 5.
+# We find it buried down in here even although it was removed from top level directory:
+#        hamlib/bin/libhamlib-4.dll
 
 orig_dir = target_dir / zipfile_root
 norm_dir = target_dir / 'hamlib'
