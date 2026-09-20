@@ -820,6 +820,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	  p_audio_config->achan[channel].txdelay = DEFAULT_TXDELAY;				
 	  p_audio_config->achan[channel].txtail = DEFAULT_TXTAIL;				
 	  p_audio_config->achan[channel].fulldup = DEFAULT_FULLDUP;
+	  p_audio_config->achan[channel].adigibundle = DEFAULT_ADIGIBUNDLE;
 	}
 
 	p_audio_config->fx25_auto_enable = AX25_N2_RETRY_DEFAULT / 2;
@@ -2619,6 +2620,36 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Expected ON or OFF for FULLDUP.\n", line);
 	    }
+	  }
+
+/*
+ * ADIGIBUNDLE n		- APRS digipeater max number of packets in one transmission.
+ *
+ * Normally an APRS digipeater will send only one digipeated packet per transmission.
+ * We now have an option to allow a larger number of packets to be bundled in one transmission.
+ * This is a per-channel (transmit channel), not global, configuration option.
+ * 0 may be using to mean unlimited.
+ */
+
+	  else if (strcasecmp(t, "ADIGIBUNDLE") == 0) {
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: ADIGIBUNDLE can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing count for ADIGIBUNDLE command.\n", line);
+	      continue;
+	    }
+	    int n = atoi(t);
+	    // 0 may be usied to mean unlimited.
+	    // Quietly change to large number so later logic does not have to check for it.
+	    if (n < 1 || n > 256) {
+	      n = 256;
+	    }
+	    p_audio_config->achan[channel].adigibundle = n;
 	  }
 
 /*

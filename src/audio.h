@@ -404,6 +404,11 @@ struct audio_s {
 
 	    int fulldup;		/* Full Duplex. */
 
+	    int adigibundle;		/* APRS digipeater max number of packets in one transmission. */
+ 					/* Normally an APRS digipeater will send only one digipeated packet */
+					/* per transmission.  We now have an option to allow a larger number */
+					/* of packets to be bundled in one transmission. Must be >= 1. */
+
 	} achan[MAX_RADIO_CHANS];
 
 #ifdef USE_HAMLIB
@@ -507,7 +512,9 @@ struct audio_s {
 #define DEFAULT_TXDELAY		30	// *10mS = 300mS
 #define DEFAULT_TXTAIL		10	// *10mS = 100mS	
 #define DEFAULT_FULLDUP		0	// false = half duplex
-
+#define DEFAULT_ADIGIBUNDLE	1	// APRS digipeater normally sends only single
+					// packet per transmission even if others
+					// are queued up ready to go.
 /* 
  * Note that we have two versions of these in audio.c and audio_win.c.
  * Use one or the other depending on the platform.

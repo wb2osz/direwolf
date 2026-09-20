@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -503,6 +503,8 @@ static flavor_t frame_flavor (packet_t pp)
  *		The rule is that Speech, Morse Code, DTMF, and APRS digipeated frames
  *		are all sent separately.  The rest can be bundled.
  *
+ * Version 1.9:	Option to bundle multiple digipeated APRS frames in one transmission.
+ *
  *--------------------------------------------------------------------*/
 
 #if __WIN32__
@@ -596,12 +598,35 @@ static void * xmit_thread (void *arg)
 	            break;
 
 	          case FLAVOR_APRS_DIGI:
-	            xmit_ax25_frames (chan, prio, pp, 1);	/* 1 means don't bundle */
-					// I don't know if this in some official specification
-					// somewhere, but it is generally agreed that APRS digipeaters
+	            xmit_ax25_frames (chan, prio, pp,
+			save_audio_config_p->achan[chan].adigibundle);	/* Formerly hardcoded 1. */
+
+					// There is very little official word on how an APRS digipeater
+					// is supposed to behave so I captured the tribal knowledge here:
+					// https://github.com/wb2osz/aprsspec/blob/main/APRS-Digipeater-Algorithm.pdf
+					//
+					// It is generally agreed that APRS digipeaters
 					// should send only one frame at a time rather than
 					// bundling multiple frames into a single transmission.
-					// Discussion here:  http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2021-September/049034.html
+					// Discussion here:
+					// http://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2021-September/049034.html
+					// 
+					// Reconsidering later, I don't buy some of the arguments.
+					// 
+					//     "Bursts of packets can cause issues with some receiving TNCs that have
+					//      limited buffer space."
+					//
+					// It's not the 20th Century anymore where we were using microcontrollers with
+					// 1k or less of RAM.
+					// 
+					//     "Some digipeaters transmit the split second they see an end-of-packet
+					//      indicator under the assumption that the tx is done since the packet is completed."
+					//
+					// That's just plain wrong. They need to wait until the modem data carrier detect
+					// signal drops and the channel is clear.
+					//
+					// In version 1.9, we add an option so the user can experiment with bundling more
+					// in one transmission.
 	            break;
 
 	          case FLAVOR_APRS_NEW:
@@ -742,8 +767,9 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	double time_ptt;	/* Time when PTT is turned on. */
 	double time_now;	/* Current time. */
 
-
 	int nb;
+
+	assert (max_bundle >= 1);
 
 /* 
  * Turn on transmitter.
@@ -830,12 +856,12 @@ static void xmit_ax25_frames (int chan, int prio, packet_t pp, int max_bundle)
 	      case FLAVOR_SPEECH:
 	      case FLAVOR_MORSE:
 	      case FLAVOR_DTMF:
-	      case FLAVOR_APRS_DIGI:
 	      default:
 		done = 1;		// not eligible for bundling.
 	        break;
 
 	      case FLAVOR_APRS_NEW:
+	      case FLAVOR_APRS_DIGI:
 	      case FLAVOR_OTHER:
 
 	        pp = tq_remove (chan, prio);
