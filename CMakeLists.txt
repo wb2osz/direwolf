@@ -416,26 +416,34 @@ find_package(gpiod)
 if(GPIOD_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPIOD")
 
-  # Version 2 uses a completely different API.
+  # libgpiod version 2 uses a completely different API.
   # Try to determine version and put it on compile command line.
-  # See discussion above in ham lib section.
+  # No version is detected for gpiod so we have another
+  # search here for the libgpiod version.
+  # Is this unnecessarily complicated and confusing?
+  # Could the initial find_package look for libgpiod instead?
 
-  if (PC_LIBGPIOD_VERSION AND NOT LIBGPIOD_VERSION)
-    set(LIBGPIOD_VERSION PC_LIBGPIOD_VERSION)
+  # Require pkg-config support
+  find_package(PkgConfig REQUIRED)
+  # Probe for libgpiod
+  pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
+  # Abort if not found
+  if(NOT LIBGPIOD_FOUND)
+    message(FATAL_ERROR "libgpiod not found via pkg-config")
   endif()
 
   # JWL temp debug
-  #message(STATUS, "---------------  gpiod found  ---------------------")
-  #get_cmake_property(_variableNames VARIABLES)
-  #list (SORT _variableNames)
-  #foreach (_variableName ${_variableNames})
-  #  if(_variableName MATCHES "GPIOD|gpiod")
-  #    message(STATUS "${_variableName}=${${_variableName}}")
-  #  endif()
-  #endforeach()
-  #message(STATUS, "-----------------  gpiod end  ---------------------")
+  message(STATUS, "---------------  gpiod found  ---------------------")
+  get_cmake_property(_variableNames VARIABLES)
+  list (SORT _variableNames)
+  foreach (_variableName ${_variableNames})
+    if(_variableName MATCHES "GPIOD|gpiod")
+      message(STATUS "${_variableName}=${${_variableName}}")
+    endif()
+  endforeach()
+  message(STATUS, "-----------------  gpiod end  ---------------------")
 
-  # find_package() sets many ...GPIOD... variables, among them:
+  # pkg_check_modules(LIBGPIOD...) sets many ...LIBGPIOD... variables, among them:
   # LIBGPIOD_VERSION which holds the full x.y.z string
 
   # Now split out major and minor versions into separate integers
