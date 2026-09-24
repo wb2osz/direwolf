@@ -49,7 +49,7 @@
  *
  *			'V'	Transmit UI data frame.
  *
- *			'H'	Report recently heard stations.  Not implemented yet.
+ *			'H'	Report recently heard stations.
  *
  *			'K'	Transmit raw AX.25 frame.
  *		
@@ -2152,6 +2152,7 @@ static THREAD_F cmd_listen_thread (void *arg)
 		  strcat (reply.data, "               00:00:00");
 		  // 32 bytes for 2 empty SYSTEMTIME values
 		  memset (reply.data + strlen(reply.data) + 1, 0, 32);
+		  reply.hdr.data_len_NETLE = host2netle(strlen(reply.data) + 33);
 
 		  for (i = count; i < 20; i++) {
 		    send_to_client (client, &reply);
