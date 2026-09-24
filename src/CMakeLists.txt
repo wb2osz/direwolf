@@ -88,6 +88,7 @@ list(APPEND direwolf_SOURCES
   tnc_common.c
   nettnc.c
   sertnc.c
+  loraspi.c
   serial_port.c
   pfilter.c
   ptt.c
