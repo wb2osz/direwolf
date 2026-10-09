@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2021  John Langner, WB2OSZ
+//    Copyright (C) 2021, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include "il2p.h"
 #include "textcolor.h"
 #include "demod.h"
+#include "fcs_calc.h"
 
 
 /*-------------------------------------------------------------
@@ -49,6 +50,7 @@
  *		pp	- Packet object pointer.
  *
  *		max_fec	- 1 to send maximum FEC size rather than automatic.
+ *			  0 for weak FEC was removed from IL2P spec version 0.6.
  *
  * Outputs:	iout	- Encoded result, excluding the 3 byte sync word.
  *			  Caller should provide  IL2P_MAX_PACKET_SIZE  bytes.
@@ -70,6 +72,31 @@
 int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
 {
 
+// New in IL2P 0.6 - Compute CRC of the original frame.
+// Same technique as used in AX.25 HDLC frame.
+// Encode it into 4 bytes using Hamming code.
+
+	static const unsigned char ham_it_up[16] = {
+			0x0, 0x71, 0x62, 0x13, 0x54, 0x25, 0x36, 0x47,
+			0x38, 0x49, 0x5a, 0x2b, 0x6c, 0x1d, 0x0e, 0x7f };
+
+	unsigned char *fbuf = ax25_get_frame_data_ptr(pp);
+	int flen = ax25_get_frame_len (pp);
+	unsigned int fcs = fcs_calc (fbuf, flen);
+
+	unsigned char ham_crc[4];
+	ham_crc[0] = ham_it_up[(fcs >> 12) & 0xf];	// CRC3 in spec, transmitted first.
+	ham_crc[1] = ham_it_up[(fcs >>  8) & 0xf];
+	ham_crc[2] = ham_it_up[(fcs >>  4) & 0xf];
+	ham_crc[3] = ham_it_up[(fcs      ) & 0xf];
+
+// FIXME: Remove debug out.
+
+	text_color_set(DW_COLOR_DEBUG);
+	dw_printf ("--------\n");
+	dw_printf ("IL2P CRC = %04x, Hamming = %02x %02x %02x %02x \n", fcs, ham_crc[0], ham_crc[1], ham_crc[2], ham_crc[3]);
+	dw_printf ("--------\n");
+
 // Can a type 1 header be used?
 
 	unsigned char hdr[IL2P_HEADER_SIZE + IL2P_HEADER_PARITY];
@@ -84,6 +111,8 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
 
 	    if (e == 0) {
 	        // Success. No info part.
+	        memcpy (iout+out_len, ham_crc, sizeof(ham_crc));
+	        out_len += sizeof(ham_crc);
 	        return (out_len);
 	    }
 
@@ -96,6 +125,8 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
 	    if (k > 0) {
 	        out_len += k;
 	        // Success. Info part was <= 1023 bytes.
+	        memcpy (iout+out_len, ham_crc, sizeof(ham_crc));
+	        out_len += sizeof(ham_crc);
 	        return (out_len);
 	    }
 
@@ -122,6 +153,8 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
 	        if (k > 0) {
 	            out_len += k;
 	            // Success. Entire AX.25 frame <= 1023 bytes.
+	            memcpy (iout+out_len, ham_crc, sizeof(ham_crc));
+	            out_len += sizeof(ham_crc);
 	            return (out_len);
 	        }
 	        // Something went wrong with the payload encoding.
@@ -231,7 +264,7 @@ packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayloa
 	}
 	else {
 
-// Header type 0.  The payload is the entire AX.25 frame.
+// Header type 0.  The payload is the entire encapsulated AX.25 frame.
 
 	    unsigned char extracted[IL2P_MAX_PAYLOAD_SIZE];
 	    int e = il2p_decode_payload (epayload, payload_len, max_fec, extracted, symbols_corrected);

@@ -326,8 +326,8 @@ static void test_example_headers()
 //----------- Example 1:  AX.25 S-Frame   --------------
  
 //	This frame sample only includes a 15 byte header, without PID field.
-//	Destination Callsign: ?KA2DEW-2
-//	Source Callsign: ?KK4HEJ-7
+//	Destination Callsign: KA2DEW-2
+//	Source Callsign: KK4HEJ-7
 //	N(R): 5
 //	P/F: 1
 //	C: 1
@@ -416,11 +416,11 @@ static void test_example_headers()
 	dw_printf ("Example 1 header OK\n");
 
 
-// -------------- Example 2 - UI frame, no info part  ------------------
+// -------------- Example 2A (0.4 spec) - UI frame, no info part  ------------------
 
 //	This is an AX.25 Unnumbered Information frame, such as APRS.
-//	Destination Callsign: ?CQ    -0
-//	Source Callsign: ?KK4HEJ-15
+//	Destination Callsign: CQ    -0
+//	Source Callsign: KK4HEJ-15
 //	P/F: 0
 //	C: 0
 //	Control Opcode:  3 Unnumbered Information
@@ -436,26 +436,26 @@ static void test_example_headers()
 //	6a ea 9c c2 01 11 fc 14 1f da 6e f2 53 91 bd
 
 
-	//dw_printf ("---------- example 2 ------------\n");
-	static unsigned char example2[] = { 0x86, 0xa2, 0x40, 0x40, 0x40, 0x40, 0x60, 0x96, 0x96, 0x68, 0x90, 0x8a, 0x94, 0x7f, 0x03, 0xf0 };
-	static unsigned char header2[]  = { 0x63, 0xf1, 0x40, 0x40, 0x40, 0x00, 0x6b, 0x2b, 0x54, 0x28, 0x25, 0x2a, 0x0f };
+	//dw_printf ("---------- example 2A ------------\n");
+	static unsigned char example2a[] = { 0x86, 0xa2, 0x40, 0x40, 0x40, 0x40, 0x60, 0x96, 0x96, 0x68, 0x90, 0x8a, 0x94, 0x7f, 0x03, 0xf0 };
+	static unsigned char header2a[]  = { 0x63, 0xf1, 0x40, 0x40, 0x40, 0x00, 0x6b, 0x2b, 0x54, 0x28, 0x25, 0x2a, 0x0f };
 	memset (header, 0, sizeof(header));
 	memset (sresult, 0, sizeof(sresult));
 	memset(&alevel, 0, sizeof(alevel));
 
-	pp = ax25_from_frame (example2, sizeof(example2), alevel);
+	pp = ax25_from_frame (example2a, sizeof(example2a), alevel);
 	assert (pp != NULL);
 	e = il2p_type_1_header (pp, 0, header);
 	assert (e == 0);
 	ax25_delete(pp);
 
-	//dw_printf ("Example 2 header:\n");
+	//dw_printf ("Example 2a header:\n");
 	//for (int i = 0 ; i < sizeof(header); i++) {
 	//    dw_printf (" %02x", header[i]);
 	//}
 	//dw_printf ("\n");
 
-	assert (memcmp(header, header2, sizeof(header2)) == 0);
+	assert (memcmp(header, header2a, sizeof(header2a)) == 0);
 
 	il2p_scramble_block (header, sresult, 13);
 	//dw_printf ("Expect scrambled  6a ea 9c c2 01 11 fc 14 1f da 6e f2 53\n");
@@ -493,7 +493,57 @@ static void test_example_headers()
 	ax25_delete (pp);
 // TODO: more examples
 
-	dw_printf ("Example 2 header OK\n");
+	dw_printf ("Example 2A header OK\n");
+
+
+// -------------- Example 2B (0.6 spec) - UI frame, no info part  ------------------
+
+//	This is an AX.25 Unnumbered Information frame, such as APRS.
+//	Destination Callsign: CQ    -0
+//	Source Callsign: KK4HEJ-15
+//	P/F: 0
+//	C: 0
+//	Control Opcode:  3 Unnumbered Information
+//	PID: 0xF0 No L3
+//
+//	AX.25 Data:
+//	86 a2 40 40 40 40 60 96 96 68 90 8a 94 7f 03 f0 <-- 0.4
+//		Incorrect: Both address C bits are 0.
+//	86 A2 40 40 40 40 60 96 96 68 90 8A 94 FF 03 F0 <-- 0.6
+//		Now they are different.
+//
+//	IL2P Data After Scrambling and RS Encoding:
+//	6a ea 9c c2 01 11 fc 14 1f da 6e f2 53 91 bd <-- 0.4
+//	6A EA 9C C2 01 11 FC 14 1F DA 6E F2 53 91 BD 47 6C 54 54 <-- 0.6
+//		Note: 4 more bytes for new CRC.
+
+	//dw_printf ("---------- example 2B ------------\n");
+	static unsigned char example2b[] = { 0x86, 0xa2, 0x40, 0x40, 0x40, 0x40, 0x60, 0x96, 0x96, 0x68, 0x90, 0x8a, 0x94, 0xff, 0x03, 0xf0 };
+	static unsigned char result2b[]  = { 0x6A, 0xEA, 0x9C, 0xC2, 0x01, 0x11, 0xFC, 0x14, 0x1F, 0xDA, 0x6E, 0xF2, 0x53, 0x91, 0xBD, 0x47, 0x6C, 0x54, 0x54 };
+	memset (header, 0, sizeof(header));
+	memset (sresult, 0, sizeof(sresult));
+	memset(&alevel, 0, sizeof(alevel));
+
+	pp = ax25_from_frame (example2b, sizeof(example2b), alevel);
+	assert (pp != NULL);
+
+	// Here we use il2p_encode_frame rather than separate scramble and endode_rs.
+	// This also verifies correct generation of the new Hamming encoded CRC.
+
+	e = il2p_encode_frame (pp, 0, sresult);
+
+	//dw_printf ("Example 2b result:\n");
+	//for (int i = 0 ; i < e; i++) {
+	//    dw_printf (" %02x", sresult[i]);
+	//}
+	//dw_printf ("\n");
+
+	assert (memcmp(sresult, result2b, sizeof(result2b)) == 0);
+	ax25_delete (pp);
+
+	dw_printf ("Example 2B with new Hamming CRC OK\n");
+
+// TODO: more examples
 
 
 // -------------- Example 3 - I Frame  ------------------
@@ -513,8 +563,14 @@ static void test_example_headers()
 //	96 82 64 88 8a ae e4 96 96 68 90 8a 94 65 b8 cf 30 31 32 33 34 35 36 37 38
 //
 //	IL2P Scrambled and Encoded Data:
-//	26 13 6d 02 8c fe fb e8 aa 94 2d 6a 34 43 35 3c 69 9f 0c 75 5a 38 a1 7f f3 fc
+//	26 13 6d 02 8c fe fb e8 aa 94 2d 6a 34 43 35 3c 69 9f 0c 75 5a 38 a1 7f f3 fc <-- 0.4
+//	26 13 6D 02 8C FE FB E8 AA 94 2D 6A 34 43 35 3C 69 9F 0C 75 5A 38 A1 7F
+//							A5 DA D8 F6 EA 57 37 3D B1 2A B0 DE 44 A8 20 D0
+//							1D 5A 2B 38 <-- 0.6
+//		Why is it so much longer?
+//		FEC changes from 2 to 16.  New FCS at the end.
 
+// FIXME: Update for new 0.6 example.
 
 	//dw_printf ("---------- example 3 ------------\n");
 	static unsigned char example3[]  = { 0x96, 0x82, 0x64, 0x88, 0x8a, 0xae, 0xe4, 0x96, 0x96, 0x68, 0x90, 0x8a, 0x94, 0x65, 0xb8, 0xcf, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38 };
@@ -530,11 +586,11 @@ static void test_example_headers()
 	assert (e == 9);
 	ax25_delete(pp);
 
-	//dw_printf ("Example 3 header:\n");
-	//for (int i = 0 ; i < sizeof(header); i++) {
-	//    dw_printf (" %02x", header[i]);
-	//}
-	//dw_printf ("\n");
+	dw_printf ("Example 3 header:\n");
+	for (int i = 0 ; i < sizeof(header); i++) {
+	    dw_printf (" %02x", header[i]);
+	}
+	dw_printf ("\n");
 
 	assert (memcmp(header, header3, sizeof(header)) == 0);
 
@@ -582,16 +638,19 @@ static void test_example_headers()
 	pp = ax25_from_frame (example3, sizeof(example3), alevel);
 	assert (pp != NULL);
 
+// FIXME: Change to 1 because 0 was removed from IL2P spec 0.6.
+
 	int max_fec = 0;
 	unsigned char iout[IL2P_MAX_PACKET_SIZE];
 	e = il2p_encode_frame (pp, max_fec, iout);
 
-	//dw_printf ("expected for example 3:\n");
-	//fx_hex_dump(complete3, sizeof(complete3));
-	//dw_printf ("actual result for example 3:\n");
-	//fx_hex_dump(iout, e);
+	dw_printf ("expected for example 3:\n");
+	fx_hex_dump(complete3, sizeof(complete3));
+	dw_printf ("actual result for example 3:\n");
+	fx_hex_dump(iout, e);
 	// Does it match the example in the protocol spec?
-	assert (e == sizeof(complete3));
+	// direwolf 1.9: Extra for for the new CRC.
+	assert (e == sizeof(complete3) + 4);
 	assert (memcmp(iout, complete3, sizeof(complete3)) == 0);
 	ax25_delete (pp);
 

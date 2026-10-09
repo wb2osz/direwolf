@@ -13,6 +13,6 @@
 @ATEST_BIN@ -B9600 -P+ -L73 -G77 test96-il2p-i1.wav
 
 @GEN_PACKETS_BIN@ -B9600 -i0 -n 100 -o test96-il2p-i0.wav
-@ATEST_BIN@ -B9600 -L67 -G71 test96-il2p-i0.wav
+@ATEST_BIN@ -B9600 -L65 -G71 test96-il2p-i0.wav
 
 

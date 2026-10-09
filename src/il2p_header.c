@@ -130,8 +130,16 @@ static int encode_pid (packet_t pp)
 {
 	int pid = ax25_get_pid(pp);	
 
-	if ((pid & 0x30) == 0x20) return (0x2);		// AX.25 Layer 3
-	if ((pid & 0x30) == 0x10) return (0x2);		// AX.25 Layer 3
+	// We have a problem for the first two because they are a
+	// many-to-one mapping.  It's likely the same value won't
+	// get recreated and the new CRC, added in IL2p 0.6, will fail.
+	// The correct solution would be to return 0x2 only for input 0x20.
+	// Of course, there is probably no one using those PID values.
+
+	// if ((pid & 0x30) == 0x20) return (0x2);		// AX.25 Layer 3
+	// if ((pid & 0x30) == 0x10) return (0x2);		// AX.25 Layer 3
+	if (pid == 0x20) return (0x2);			// AX.25 Layer 3 - only one that works correctly
+
 	if (pid == 0x01) return (0x3);			// ISO 8208 / CCIT X.25 PLP
 	if (pid == 0x06) return (0x4);			// Compressed TCP/IP
 	if (pid == 0x07) return (0x5);			// Uncompressed TCP/IP
@@ -152,20 +160,20 @@ static int decode_pid (int pid)
 	static const unsigned char axpid[16] = {
 	0xf0,			// Should not happen. 0 is for 'S' frames.
 	0xf0,			// Should not happen. 1 is for 'U' frames (but not UI).
-	0x20,			// AX.25 Layer 3
-	0x01,			// ISO 8208 / CCIT X.25 PLP
-	0x06,			// Compressed TCP/IP
-	0x07,			// Uncompressed TCP/IP
-	0x08,			// Segmentation fragment
-	0xf0,			// Future
-	0xf0,			// Future
-	0xf0,			// Future
-	0xf0,			// Future
-	0xcc,			// ARPA Internet Protocol
-	0xcd,			// ARPA Address Resolution
-	0xce,			// FlexNet
-	0xcf,			// TheNET
-	0xf0 };			// No L3
+	0x20,			// 0x2 = AX.25 Layer 3
+	0x01,			// 0x3 = ISO 8208 / CCIT X.25 PLP
+	0x06,			// 0x4 = Compressed TCP/IP
+	0x07,			// 0x5 = Uncompressed TCP/IP
+	0x08,			// 0x6 = Segmentation fragment
+	0xf0,			// 0x7 = Future
+	0xf0,			// 0x8 = Future
+	0xf0,			// 0x9 = Future
+	0xf0,			// 0xA = Future
+	0xcc,			// 0xB = ARPA Internet Protocol
+	0xcd,			// 0xC = ARPA Address Resolution
+	0xce,			// 0xD = FlexNet
+	0xcf,			// 0xE = TheNET
+	0xf0 };			// 0xF = No L3
 
 	assert (pid >= 0 && pid <= 15);
 	return (axpid[pid]);
@@ -260,6 +268,17 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 	    case frame_type_S_REJ:		// Reject Frame - Out of Sequence or Duplicate
 	    case frame_type_S_SREJ:		// Selective Reject - Request single frame repeat
 
+	        // There are 4 different posible combinations for the "C" bits in the
+	        // source and destination addresses.  Only one bit is available in
+	        // the type 1 compact encoding so encapsulate if they are not the command
+	        // or response combination.
+		// Should probably complain because the application creating the
+		// frames seems to be defective.
+
+	        if (cr != cr_cmd && cr != cr_res) {
+	          return (-1);
+	        }
+
 	        // S frames (RR, RNR, REJ, SREJ), mod 8, have control N(R) P/F S S 0 1
 	        // These are mapped into    P/F N(R) C S S
 	        // Bit 6 is not mentioned in documentation but it is used for P/F for the other frame types.
@@ -324,8 +343,14 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 		// one cares.  Here we copy from the C bit in the destination address.
 		// It should be noted that the case of both C bits being the same can't
 		// be represented so the il2p encode/decode bit not produce exactly the
-		// same bits.  We see this in the second example in the protocol spec.
+		// same bits.  We see this in the second example in the 0.4 protocol spec.
 		// The original UI frame has both C bits of 0 so it is received as a response.
+		// Should probably complain because the application creating the
+		// frames seems to be defective.
+
+	        if (cr != cr_cmd && cr != cr_res && frame_type != frame_type_U_UI) {
+	          return (-1);
+	        }
 
 	        SET_CONTROL(hdr, (pf<<6) | (((cr == cr_cmd) | (cr == cr_11))<<2));
 
@@ -441,7 +466,7 @@ packet_t il2p_decode_header_type_1 (unsigned char *hdr, int num_sym_changed)
 // The frame should be rejected in this case.  The question is whether to discard it
 // silently or print a message so the user can see that something strange is happening?
 // My current thinking is that it should be silently ignored if the header has been
-// modified (correctee or more likely, made worse in this cases).
+// modified (corrected or more likely, made worse in this cases).
 // If no changes were made, something weird is happening.  We should mention it for
 // troubleshooting rather than sweeping it under the rug.
 

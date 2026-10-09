@@ -2762,7 +2762,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *					(command line -I for first channel)
  *				"-" means inverted polarity. Do not use for 1200 bps.
  *					(command line -i for first channel)
- *				"0" means weak FEC.  Not recommended.
+ *				"0" means weak FEC.  Not recommended. Removed in IL2P spec version 0.6.
  *				"1" means stronger FEC.  "Max FEC."  Default if not specified.
  */
 
@@ -2787,6 +2787,9 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	            p_audio_config->achan[channel].il2p_invert_polarity = 1;
 	            break;
 	          case '0':
+	            text_color_set(DW_COLOR_ERROR);
+	            dw_printf ("Line %d: IL2P Baseline (weak) FEC has been removed in spec version 0.6.\n", line);
+	            dw_printf ("Line %d: Newer implementations might not be able to receive this format.\n", line);
 	            p_audio_config->achan[channel].il2p_max_fec = 0;
 	            break;
 	          case '1':
