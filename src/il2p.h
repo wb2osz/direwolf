@@ -84,8 +84,11 @@ extern int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout);
 
 packet_t il2p_decode_frame (unsigned char *irec);
 
-packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, int *symbols_corrected);
+packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, unsigned char *crc, int *symbols_corrected);
 
+void il2p_create_crc (packet_t pp, unsigned char *crc);
+
+int il2p_check_crc (packet_t pp, unsigned char *crc);
 
 
 

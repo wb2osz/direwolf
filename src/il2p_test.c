@@ -741,15 +741,22 @@ static void all_frame_types(void)
 
 	    switch (ftype) {
 					// 0 = response, 1 = command
-	      case frame_type_U_SABME:	cmin = 1; cmax = 1; break;
-	      case frame_type_U_SABM:	cmin = 1; cmax = 1; break;
-	      case frame_type_U_DISC:	cmin = 1; cmax = 1; break;
-	      case frame_type_U_DM:	cmin = 0; cmax = 0; break;
-	      case frame_type_U_UA:	cmin = 0; cmax = 0; break;
-	      case frame_type_U_FRMR:	cmin = 0; cmax = 0; break;
-	      case frame_type_U_UI:	cmin = 0; cmax = 1; break;
-	      case frame_type_U_XID:	cmin = 0; cmax = 1; break;
-	      case frame_type_U_TEST:	cmin = 0; cmax = 1; break;
+	      case frame_type_U_SABME:	cmin = 1; cmax = 1; break;	// Command Only
+	      case frame_type_U_SABM:	cmin = 1; cmax = 1; break;	// Command Only
+	      case frame_type_U_DISC:	cmin = 1; cmax = 1; break;	// Command Only
+	      case frame_type_U_DM:	cmin = 0; cmax = 0; break;	// Response Only
+	      case frame_type_U_UA:	cmin = 0; cmax = 0; break;	// Response Only
+	      case frame_type_U_FRMR:	cmin = 0; cmax = 0; break;	// Response Only
+	      case frame_type_U_UI:	cmin = 0; cmax = 1; break;	// Either One
+									//    APRS should use Command but the
+									//    early spec was not clear so we see
+									//    all four src/dst C bit combinations.
+									//    X.25 LAPB doesn't use UI at all.
+									//    In theory it could be response too
+									//    but I doubt that we will ever see it
+									//    done intentionally.
+	      case frame_type_U_XID:	cmin = 0; cmax = 1; break;	// Either One
+	      case frame_type_U_TEST:	cmin = 0; cmax = 1; break;	// Either One
 	      default:			break;	// avoid compiler warning.		
 	    }
 	  
@@ -776,7 +783,8 @@ static void all_frame_types(void)
 
 	for (ftype = frame_type_S_RR; ftype <= frame_type_S_SREJ; ftype++) {
 
-	  for (pf = 0; pf <= 1; pf++) {
+	  for (pf = 0; pf <= 1; pf++) {	// IL2P allows all S frames to be either command or response.
+					// In reality, SREJ is response only.
 
 	    modulo = 8;
 	    nr = modulo / 2 + 1;
@@ -821,7 +829,7 @@ static void all_frame_types(void)
 
 	  modulo = 128;
 	  nr = 127;
-	  cr = cr_res;
+	  cr = cr_res;	// SREJ can only be RESPONSE but IL2P encoding allows both.
 
 	  text_color_set(DW_COLOR_INFO);
 	  dw_printf ("\nConstruct Multi-SREJ S frame, cmd=%d, ftype=%d, pid=0x%02x\n", cr, ftype, pid);
@@ -847,7 +855,7 @@ static void all_frame_types(void)
 	  nr = 0x55 & (modulo - 1);
 	  ns = 0xaa & (modulo - 1);
 
- 	  for (cr = 1; cr <= 1; cr++) {		// can only be command
+	  for (cr = 1; cr <= 1; cr++) {		// I frame can only be COMMAND
 
 	    text_color_set(DW_COLOR_INFO);
 	    dw_printf ("\nConstruct I frame, cmd=%d, ftype=%d, pid=0x%02x\n", cr, ftype, pid);

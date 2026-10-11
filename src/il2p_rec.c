@@ -43,7 +43,7 @@
 
 struct il2p_context_s {
 
-	enum { IL2P_SEARCHING=0, IL2P_HEADER, IL2P_PAYLOAD, IL2P_DECODE } state;
+	enum { IL2P_SEARCHING=0, IL2P_HEADER, IL2P_PAYLOAD, IL2P_CRC, IL2P_DECODE } state;
 
 	unsigned int acc;	// Accumulate most recent 24 bits for sync word matching.
 				// Lower 8 bits are also used for accumulating bytes for
@@ -67,6 +67,10 @@ struct il2p_context_s {
 	int pc;			// Number of bytes placed in above.
 
 	int corrected;		// Number of symbols corrected by RS FEC.
+
+	unsigned char crc[4];	// Collect 4 bytes of CRC at the end.
+
+	int crc_bc;		// Number of CRC bytes collected.
 };
 
 static struct il2p_context_s *il2p_context[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SLICERS];
@@ -126,6 +130,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	      F->state = IL2P_HEADER;
 	      F->bc = 0;
 	      F->hc = 0;
+	      F->crc_bc = 0;
 	    }
 	    else if (__builtin_popcount ((~F->acc & 0x00ffffff) ^ IL2P_SYNC_WORD) <= 1) {
 	      text_color_set (DW_COLOR_INFO);
@@ -136,6 +141,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	      F->state = IL2P_HEADER;
 	      F->bc = 0;
 	      F->hc = 0;
+	      F->crc_bc = 0;
 	    }
 	    break;
 
@@ -186,7 +192,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	           }
 	           else if (F->eplen == 0) {	// No payload.
 	             F->pc = 0;
-	             F->state = IL2P_DECODE;
+	             F->state = IL2P_CRC;
 	           }
 	           else {			// Error.
 
@@ -217,16 +223,36 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	        F->spayload[F->pc++] = (~ F->acc) & 0xff;
 	      }
 	      if (F->pc == F->eplen) {
+	         F->state = IL2P_CRC;
+	      }
+	    }
+	    break;
 
-		 // TODO?: for symmetry it seems like we should clarify the payload before combining.
+	  case IL2P_CRC:
 
+	    // After collecting the header, and any payload, get 4 bytes of CRC.
+	    // What if sender did not include a CRC?  It will probably be random
+	    // noise or some idle filler pattern.  Collect it now, worry what to
+	    // do with it later.
+
+	    F->bc++;
+	    if (F->bc == 8) {	// full byte has been collected.
+	      F->bc = 0;
+	      if ( ! F->polarity) {
+	        F->crc[F->crc_bc++] = F->acc & 0xff;
+	      }
+	      else {
+	        F->crc[F->crc_bc++] = (~ F->acc) & 0xff;
+	      }
+	      if (F->crc_bc == 4) {
 	         F->state = IL2P_DECODE;
 	      }
 	    }
 	    break;
 
 	  case IL2P_DECODE:
-	    // We get here after a good header and any payload has been collected.
+
+	    // We get here after a good header, any payload, and CRC have been collected.
 	    // Processing is delayed by one bit but I think it makes the logic cleaner.
 	    // During unit testing be sure to send an extra bit to flush it out at the end.
 
@@ -235,7 +261,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	    // TODO?:  for symmetry, we might decode the payload here and later build the frame.
 
 	    {
-	      packet_t pp = il2p_decode_header_payload (F->uhdr, F->spayload, &(F->corrected));
+	      packet_t pp = il2p_decode_header_payload (F->uhdr, F->spayload, F->crc, &(F->corrected));
 
 	      if (il2p_get_debug() >= 1) {
 	          if (pp != NULL) {
@@ -245,6 +271,20 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	              // Most likely too many FEC errors.
 	              text_color_set(DW_COLOR_ERROR);
 	              dw_printf ("FAILED to construct frame in %s.\n", __func__);
+	          }
+	      }
+
+	      // New in IL2P 0.6 and direwolf 1.9:
+	      // Verify the new hamming encoded CRC at the end.
+
+// FIXME: Need a option to bypass
+	      if (pp != NULL) {
+		  // dw_printf ("%s:%d: received CRC %02x %02x %02x %02x\n", __FILE__, __LINE__, F->crc[0], F->crc[1], F->crc[2], F->crc[3]);
+	          int e = il2p_check_crc (pp, F->crc);
+		  // dw_printf ("%s:%d: e = %d\n", __FILE__, __LINE__, e);
+		  if (e < 0) {
+		      ax25_delete (pp);
+		      pp = NULL;
 	          }
 	      }
 

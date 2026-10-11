@@ -425,10 +425,10 @@ packet_t ax25_from_text (char *monitor, int strict)
  * for APRS.
  */
 	memset (this_p->frame_data + AX25_DESTINATION*7, ' ' << 1, 6);
-	this_p->frame_data[AX25_DESTINATION*7+6] = SSID_H_MASK | SSID_RR_MASK;
+	this_p->frame_data[AX25_DESTINATION*7+6] = SSID_H_MASK | SSID_RR_MASK;  // Set C for command
  
 	memset (this_p->frame_data + AX25_SOURCE*7, ' ' << 1, 6);
-	this_p->frame_data[AX25_SOURCE*7+6] = SSID_RR_MASK | SSID_LAST_MASK;
+	this_p->frame_data[AX25_SOURCE*7+6] = SSID_RR_MASK | SSID_LAST_MASK;	// Clear C for command
 
 	this_p->frame_data[14] = AX25_UI_FRAME;
 	this_p->frame_data[15] = AX25_PID_NO_LAYER_3;
@@ -478,7 +478,6 @@ packet_t ax25_from_text (char *monitor, int strict)
 	}
 
 	ax25_set_addr (this_p, AX25_SOURCE, atemp);
-	ax25_set_h (this_p, AX25_SOURCE);	// c/r in this position
 	ax25_set_ssid (this_p, AX25_SOURCE, ssid_temp);
 
 /*
@@ -501,7 +500,6 @@ packet_t ax25_from_text (char *monitor, int strict)
 	}
 
 	ax25_set_addr (this_p, AX25_DESTINATION, atemp);
-	ax25_set_h (this_p, AX25_DESTINATION);	// c/r in this position
 	ax25_set_ssid (this_p, AX25_DESTINATION, ssid_temp);
 
 /*

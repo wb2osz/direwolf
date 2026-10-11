@@ -348,6 +348,9 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 		// Should probably complain because the application creating the
 		// frames seems to be defective.
 
+// FIXME: Remove UI exception from test.  If both C bits are same we should encapsulate.
+// Example 2A needs to reflect this.
+
 	        if (cr != cr_cmd && cr != cr_res && frame_type != frame_type_U_UI) {
 	          return (-1);
 	        }
@@ -370,7 +373,7 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 
 	    case frame_type_I:		// Information
 
-	        // I frames (mod 8 only)
+	        // I frame (mod 8 only) is always a command.
 	        // encoded control: P/F N(R) N(S)
 
 	        SET_UI(hdr, 0);
