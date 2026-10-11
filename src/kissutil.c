@@ -512,9 +512,12 @@ static void process_input (char *stuff)
 	      while (*p != '\0' && isspace(*p)) { p++; }
 	      send_to_kiss_tnc (chan, KISS_CMD_SET_HARDWARE, p, strlen(p));
 	      break;
+	    case 'x':			// eXit KISS mode
+	      send_to_kiss_tnc (15, KISS_CMD_END_KISS, "", 0);	// Command is 0xFF
+	      break;
 	    default:
 	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Invalid command. Must be one of d p s t f h.\n");
+	      dw_printf ("Invalid command. Must be one of d p s t f h x.\n");
 	      usage2 ();
 	      break;
 	  }
@@ -946,6 +949,7 @@ static void usage2 (void)
 	dw_printf ("	t	txTail, 10ms units	t 5\n");
 	dw_printf ("	f	Full duplex		f 0\n");
 	dw_printf ("	h	set Hardware 		h TNC:\n");
+	dw_printf ("	x	eXit KISS mode 		x\n");
 	dw_printf ("\n");
 	dw_printf ("	Lines may be preceded by the form \"[9]\" to indicate a\n");
 	dw_printf ("	channel other than the default 0.\n");
