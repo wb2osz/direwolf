@@ -367,6 +367,9 @@ struct audio_s {
 
 		int in_gpio_num;	/* GPIO number */
 
+		char in_gpio_chip[MAX_GPIO_NAME_LEN];
+					/* GPIOD chip device path e.g. /dev/gpiochip0 */
+
 		char in_gpio_name[MAX_GPIO_NAME_LEN];
 					/* originally, gpio number NN was assumed to simply */
 					/* have the name gpioNN but this turned out not to be */
@@ -376,7 +379,6 @@ struct audio_s {
 
 		int invert;		/* 1 = active low */
 	    } ictrl[NUM_ICTYPES];
-
 	/* Transmit timing. */
 
 	    int dwait;			/* First wait extra time for receiver squelch. */
