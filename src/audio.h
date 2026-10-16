@@ -61,7 +61,8 @@ enum medium_e { MEDIUM_NONE = 0,	// Channel is not valid for use.
 		MEDIUM_RADIO,		// Internal modem for radio.
 		MEDIUM_IGATE,		// Access IGate as ordinary channel.
 		MEDIUM_NETTNC, 		// Remote network TNC.  (new in 1.8)
-		MEDIUM_SERTNC };	// Local serial TNC.  (new in 1.8)
+		MEDIUM_SERTNC,		// Local serial TNC.  (new in 1.8)
+		MEDIUM_LORA };		// Native SPI LoRa hat (SX1276/SX1262).
 
 
 typedef enum sanity_e { SANITY_APRS, SANITY_AX25, SANITY_NONE } sanity_t;
@@ -154,6 +155,7 @@ struct audio_s {
 					// MEDIUM_IGATE allows application access to IGate.
 					// MEDIUM_NETTNC for external TNC via TCP.
 					// MEDIUM_SERTNC for external TNC via serial port.
+					// MEDIUM_LORA   for native SPI LoRa hat (SX1276/SX1262).
 
 	int igate_vchannel;		/* Virtual channel mapped to APRS-IS. */
 					/* -1 for none. */
@@ -172,6 +174,28 @@ struct audio_s {
 
 	int sertnc_baud[MAX_TOTAL_CHANS];		// Serial TNC baud rate.
 
+	// Applies only to native SPI LoRa channels (MEDIUM_LORA).
+
+	int  lora_chip[MAX_TOTAL_CHANS];		// LORA_CHIP_SX1276 or LORA_CHIP_SX1262 (from loraspi.h)
+	float lora_freq_mhz[MAX_TOTAL_CHANS];		// Centre frequency, e.g. 915.0
+	int  lora_sf[MAX_TOTAL_CHANS];			// Spreading factor 6-12
+	float lora_bw_khz[MAX_TOTAL_CHANS];		// Bandwidth: 125, 250, 500 kHz
+	int  lora_cr[MAX_TOTAL_CHANS];			// Coding rate 5-8 (denominator of 4/x)
+	int  lora_sw[MAX_TOTAL_CHANS];			// Sync word (0x12 = LoRa-APRS standard)
+	int  lora_txpower[MAX_TOTAL_CHANS];		// TX power dBm
+	int  lora_max_txpower[MAX_TOTAL_CHANS];		// Hardware PA limit dBm (0 = unconstrained)
+	int  lora_pin_cs[MAX_TOTAL_CHANS];		// GPIO chip-select (BCM)
+	int  lora_pin_reset[MAX_TOTAL_CHANS];		// GPIO reset (-1 = not wired)
+	int  lora_pin_irq[MAX_TOTAL_CHANS];		// GPIO DIO0/IRQ (-1 = not wired)
+	int  lora_pin_busy[MAX_TOTAL_CHANS];		// GPIO BUSY for SX1262 (-1 = not used)
+	int  lora_pin_tx_en[MAX_TOTAL_CHANS];		// GPIO TX-enable for E22 (-1 = not used)
+	int  lora_pin_rx_en[MAX_TOTAL_CHANS];		// GPIO RX-enable for E22 (-1 = not used)
+	int  lora_pa_boost[MAX_TOTAL_CHANS];		// 1 = use PA_BOOST pin (SX1276)
+	int  lora_tcxo[MAX_TOTAL_CHANS];		// 1 = TCXO fitted (SX1262)
+	float lora_tcxo_voltage[MAX_TOTAL_CHANS];	// TCXO supply voltage, e.g. 1.8
+	int  lora_spi_bus[MAX_TOTAL_CHANS];		// spidev bus number (default 0)
+	int  lora_spi_dev[MAX_TOTAL_CHANS];		// spidev device number (default 0)
+	int  lora_spi_speed[MAX_TOTAL_CHANS];		// SPI clock Hz (default 8000000)
 
 
 	/* Properties for each radio channel, common to receive and transmit. */
