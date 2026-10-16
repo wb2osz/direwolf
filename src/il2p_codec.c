@@ -84,7 +84,7 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
 //	WB2OSZ-15>TEST:,The u7ick brown╬<0x16>ox ju)Pwbover the lazy dMw!  0076 of ╕q00
 //	WB2OSZ-15>TEST:,The qwHck brown fox jumps o0dr the lazy dog!  0077 +F 0100
 
-	unsigned char ham_crc[4];
+	unsigned char ham_crc[IL2P_CRC_SIZE];
 	il2p_create_crc (pp, ham_crc);
 
 	// text_color_set(DW_COLOR_DEBUG);
@@ -176,11 +176,12 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
  * Name:	il2p_decode_frame
  *
  * Purpose:	Convert IL2P encoding to AX.25 frame.
- *		This is only used during testing, with a whole encoded frame.
+ *		This is only used from il2p_test.c, with a whole encoded frame.
  *		During reception, the header would have FEC and descrambling
  *		applied first so we would know how much to collect for the payload.
  *
  * Inputs:	irec	- Received IL2P frame excluding the 3 byte sync word.
+ *		rec_len	- Length for above.
  *
  * Future Out:	Number of symbols corrected.
  *
@@ -188,16 +189,18 @@ int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout)
  *
  *--------------------------------------------------------------*/
 
-packet_t il2p_decode_frame (unsigned char *irec)
+packet_t il2p_decode_frame (unsigned char *irec, int rec_len)
 {
 	unsigned char uhdr[IL2P_HEADER_SIZE];		// After FEC and descrambling.
 	int e = il2p_clarify_header (irec, uhdr);
-// FIXME: What to do???
-	unsigned char crc[4];
 
-	// TODO?: for symmetry we might want to clarify the payload before combining.
+	unsigned char crc[IL2P_CRC_SIZE];
+	memcpy (crc, irec + rec_len - IL2P_CRC_SIZE, IL2P_CRC_SIZE);
 
-	return (il2p_decode_header_payload(uhdr, irec + IL2P_HEADER_SIZE + IL2P_HEADER_PARITY, crc, &e));
+	// This function is used only from il2p_test.c for automated unit tests.
+	// The CRC should always be checked in this situation.
+	int check_crc = 1;
+	return (il2p_decode_header_payload(uhdr, irec + IL2P_HEADER_SIZE + IL2P_HEADER_PARITY, crc, check_crc, &e));
 }
 
 
@@ -210,6 +213,7 @@ packet_t il2p_decode_frame (unsigned char *irec)
  * Inputs:	uhdr 		- Received header after FEC and descrambling.
  *		epayload	- Encoded payload.
  *		crc		- 4 byte Hamming encoded CRC.
+ *		check_crc	- Should CRC be checked (1) or ignored (0)?
  *
  * In/Out:	symbols_corrected - Symbols (bytes) corrected in the header.
  *				  Should be 0 or 1 because it has 2 parity symbols.
@@ -219,7 +223,7 @@ packet_t il2p_decode_frame (unsigned char *irec)
  *
  *--------------------------------------------------------------*/
 
-packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, unsigned char *crc, int *symbols_corrected)
+packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, unsigned char *crc, int check_crc, int *symbols_corrected)
 {
 	int e;
 	int hdr_type;
@@ -289,8 +293,17 @@ packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayloa
 	    }
 	}
 
-// FIXME: Check for correct CRC
-	e = il2p_check_crc (pp, crc);
+// Should we require a correct Hamming CRC?  (Config file IL2PRXCRC option, default 1)
+// "atest" does not have an option to ignore.
+// Always check when run from il2p_test.c.
+
+	if (check_crc) {
+	    e = il2p_check_crc (pp, crc);
+	    if (e < 0) {
+	        ax25_delete (pp);
+	        return (NULL);
+	    }
+	}
 	return (pp);
 
 } // end il2p_decode_header_payload
@@ -380,7 +393,7 @@ int il2p_check_crc (packet_t pp, unsigned char *crc)
 
 	int recv_fcs = 0;
 	int bad_bits = 0;
-	for (int j = 0; j < 4; j++) {
+	for (int j = 0; j < IL2P_CRC_SIZE; j++) {
 	  if (crc[j] & 0x80) bad_bits++;
 	  int nybble = sliced_ham[crc[j] & 0x7f];
 	  if (ham_it_up[nybble] != (crc[j] & 0x7f)) bad_bits++;

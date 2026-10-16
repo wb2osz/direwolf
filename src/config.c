@@ -791,6 +791,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	  p_audio_config->achan[channel].layer2_xmit = LAYER2_AX25;
 	  p_audio_config->achan[channel].il2p_max_fec = 1;
+	  p_audio_config->achan[channel].il2p_check_crc = 1;
 	  p_audio_config->achan[channel].il2p_invert_polarity = 0;
 
 	  p_audio_config->achan[channel].fix_bits = DEFAULT_FIX_BITS;
@@ -1249,9 +1250,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  * CHANNEL n		- Set channel for channel-specific commands.  Only for modem/radio channels.
  */
 
-// TODO: allow full range so mycall can be set for network channels.
-// Watch out for achan[] out of bounds.
-
 	  else if (strcasecmp(t, "CHANNEL") == 0) {
 	    int n;
 	    t = split(NULL,0);
@@ -1311,6 +1309,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        // This is redundant but saves the time of searching through all
 	        // the channels for each packet.
 	        p_audio_config->igate_vchannel = ichan;
+	        channel = ichan;
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
@@ -1336,8 +1335,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  *	Future: Might allow selection of channel on the network TNC.
  *	For now, ignore incoming and set to 0 for outgoing.
- *
- * FIXME: Can't set mycall for nchannel.
  */
 
 	  else if (strcasecmp(t, "NCHANNEL") == 0) {
@@ -1379,6 +1376,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 	    p_audio_config->nettnc_port[nchan] = atoi(t);
+	    channel = nchan;
 	  }
 
 /*
@@ -1394,8 +1392,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  *	Future: Might allow selection of channel on the serial TNC.
  *	For now, ignore incoming and set to 0 for outgoing.
- *
- * FIXME: Can't set mycall for schannel.
  */
 
 	  else if (strcasecmp(t, "SCHANNEL") == 0) {
@@ -1443,6 +1439,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    else {
 	      p_audio_config->sertnc_baud[nchan] = 9600;
 	    }
+	    channel = nchan;
 	  }
 
 /*
@@ -2730,6 +2727,11 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *				0 to disable feature.
  *				Current a global setting.  Could be per channel someday.
  */
+// Other Ideas:
+// Auto enable after a couple SABMe go unanswered.
+// Enable for connected session if any FX.25 from other system.
+// Maybe keep track of stations that send FX.25 and enable
+// when sending to any of them.
 
 	  else if (strcasecmp(t, "FX25AUTO") == 0) {
 	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
@@ -2803,6 +2805,39 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	        }
 	      }
 	    }
+	  }
+
+
+/*
+ * IL2PRXCRC  n		- IL2P Receive Check CRC.
+ *				The IL2P specification 0.6 added a new Hamming
+ *				encoded CRC to the end of the transmission.
+ *			1 = Verify the CRC and discard frame if incorrect.
+ *			0 = Ignore the CRC for receiving from older implementations.
+ */
+
+	  else if (strcasecmp(t, "IL2PRXCRC") == 0) {
+
+	    if (channel < 0 || channel >= MAX_RADIO_CHANS) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: IL2PRXCRC can only be used with radio channel 0 - %d.\n", line, MAX_RADIO_CHANS-1);
+	      continue;
+	    }
+
+	    t = split(NULL,0);
+	    if (t == NULL) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: Missing number for IL2PRXCRC command.\n", line);
+	      continue;
+	    }
+	    int n = atoi(t);
+            if (n == 0 || n == 1) {
+	      p_audio_config->achan[channel].il2p_check_crc = n;
+	    }
+	    else {
+	      text_color_set(DW_COLOR_ERROR);
+              dw_printf ("Line %d: IL2PRXCRC value must be 0 or 1.\n", line);
+   	    }
 	  }
 
 

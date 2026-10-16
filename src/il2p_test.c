@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2021  John Langner, WB2OSZ
+//    Copyright (C) 2021, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -435,7 +435,15 @@ static void test_example_headers()
 //	IL2P Data After Scrambling and RS Encoding:
 //	6a ea 9c c2 01 11 fc 14 1f da 6e f2 53 91 bd
 
-
+#if 0
+// Can't use this anymore after adding Hamming CRC at end.
+// Reason is that both of the source/destination SSID "C" bits are 0.
+// They should be different.
+// We can't get the original frame back again because there is only a
+// single bit to encode this in the IL2P type 1 frame.
+// We would need to fall back to type 0 frame with encapsulation.
+// The result looks totally different.  
+ 
 	//dw_printf ("---------- example 2A ------------\n");
 	static unsigned char example2a[] = { 0x86, 0xa2, 0x40, 0x40, 0x40, 0x40, 0x60, 0x96, 0x96, 0x68, 0x90, 0x8a, 0x94, 0x7f, 0x03, 0xf0 };
 	static unsigned char header2a[]  = { 0x63, 0xf1, 0x40, 0x40, 0x40, 0x00, 0x6b, 0x2b, 0x54, 0x28, 0x25, 0x2a, 0x0f };
@@ -494,7 +502,7 @@ static void test_example_headers()
 // TODO: more examples
 
 	dw_printf ("Example 2A header OK\n");
-
+#endif
 
 // -------------- Example 2B (0.6 spec) - UI frame, no info part  ------------------
 
@@ -568,7 +576,7 @@ static void test_example_headers()
 //							A5 DA D8 F6 EA 57 37 3D B1 2A B0 DE 44 A8 20 D0
 //							1D 5A 2B 38 <-- 0.6
 //		Why is it so much longer?
-//		FEC changes from 2 to 16.  New FCS at the end.
+//		FEC changes from 2 to 16.  New CRC at the end.
 
 // FIXME: Update for new 0.6 example.
 
@@ -628,7 +636,7 @@ static void test_example_headers()
 #if 1
 	dw_printf ("%s(): %s>%s: %s\n", __func__, src_addr, dst_addr, description);
 #endif
-// TODO: compare binary.
+	// TODO: compare binary.
 
 	ax25_delete (pp);
 	dw_printf ("Example 3 header OK\n");
@@ -638,7 +646,8 @@ static void test_example_headers()
 	pp = ax25_from_frame (example3, sizeof(example3), alevel);
 	assert (pp != NULL);
 
-// FIXME: Change to 1 because 0 was removed from IL2P spec 0.6.
+	// TODO: Change to 1 because 0 was removed from IL2P spec 0.6.
+	// Requires additional work.
 
 	int max_fec = 0;
 	unsigned char iout[IL2P_MAX_PACKET_SIZE];
@@ -679,8 +688,18 @@ static void enc_dec_compare (packet_t pp1)
 	assert (enc_len >= 0);
 
 	packet_t pp2;
-	pp2 = il2p_decode_frame (encoded);
-	assert (pp2 != NULL);
+	pp2 = il2p_decode_frame (encoded, enc_len);
+
+	if (pp2 == NULL) {
+
+	    dw_printf ("\nFailed to decode.  Original:\n");
+	    ax25_hex_dump (pp1);
+
+	    dw_printf ("IL2P encoded as:\n");
+	    fx_hex_dump(encoded, enc_len);
+
+	    exit (EXIT_FAILURE);
+	}
 
 // Is it the same after encoding to IL2P and then decoding?
 
@@ -918,7 +937,8 @@ static void decode_bitstream(void)
 	while ( (ch = fgetc(fp)) != EOF) {
 
 	  if (ch == '0' || ch == '1') {
-	    il2p_rec_bit (0, 0, 0, ch - '0');
+	    int check_crc = 1;
+	    il2p_rec_bit (0, 0, 0, ch - '0', check_crc);
 	  }
 	}
 	fclose(fp);
@@ -989,7 +1009,8 @@ static void test_serdes (void)
 	            dw_printf ("%d bits sent.\n", num_bits_sent);
 
 	            // Need extra bit at end to flush out state machine.
-	            il2p_rec_bit (0, 0, 0, 0);
+	            int check_crc = 1;
+	            il2p_rec_bit (0, 0, 0, 0, check_crc);
 	        }
 	    }
 	    ax25_delete(pp);
@@ -1005,7 +1026,8 @@ static void test_serdes (void)
 
 void tone_gen_put_bit (int chan, int data)
 {
-	il2p_rec_bit (chan, 0, 0, data);
+	int check_crc = 1;
+	il2p_rec_bit (chan, 0, 0, data, check_crc);
 }
 
 // This is called when a complete frame has been deserialized.

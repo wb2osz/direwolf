@@ -4,6 +4,8 @@
 
 ### New Features:
 
+- Add CRC at end of IL2P frames for transmission and check for correctness on receive.  Checking on receive can be disabled by adding "IL2PRXCRC 0" to configuration file.
+
 - Compatibility with hamlib version 5.
 
 - New `TIMESTAMP` config file directive.  Equivalent to the `-T` command line option, for use when Direwolf is launched by a supervisor (e.g. Winlink Express) that can't pass command-line arguments.  See issue #625.

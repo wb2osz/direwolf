@@ -250,8 +250,10 @@ int main (int argc, char *argv[])
 	  //my_audio_config.achan[channel].sanity_test = SANITY_AX25;	
 	  //my_audio_config.achan[channel].sanity_test = SANITY_NONE;	
 
-	  my_audio_config.achan[channel].passall = 0;				
-	  //my_audio_config.achan[channel].passall = 1;				
+	  my_audio_config.achan[channel].passall = 0;
+	  //my_audio_config.achan[channel].passall = 1;
+
+	  my_audio_config.achan[channel].il2p_check_crc = 1;
 	}
 
 

@@ -247,6 +247,10 @@ int main(int argc, char **argv)
 	  modem.achan[chan].mark_freq = DEFAULT_MARK_FREQ;              /* -m option */
           modem.achan[chan].space_freq = DEFAULT_SPACE_FREQ;            /* -s option */
           modem.achan[chan].baud = DEFAULT_BAUD;                        /* -b option */
+
+	  modem.achan[chan].layer2_xmit = LAYER2_AX25;
+	  modem.achan[chan].il2p_max_fec = 1;
+	  modem.achan[chan].il2p_invert_polarity = 0;
 	}
 
 	modem.chan_medium[0] = MEDIUM_RADIO;

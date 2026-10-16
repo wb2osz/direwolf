@@ -16,9 +16,10 @@
 #define IL2P_MAX_PAYLOAD_BLOCKS 5
 #define IL2P_MAX_PARITY_SYMBOLS 16		// For payload only.
 #define IL2P_MAX_ENCODED_PAYLOAD_SIZE (IL2P_MAX_PAYLOAD_SIZE + IL2P_MAX_PAYLOAD_BLOCKS * IL2P_MAX_PARITY_SYMBOLS)
+#define IL2P_CRC_SIZE 4
 
 // direwolf 1.9: Add 4 for new Hamming Encoded CRC at end.
-#define IL2P_MAX_PACKET_SIZE (IL2P_SYNC_WORD_SIZE + IL2P_HEADER_SIZE + IL2P_HEADER_PARITY + IL2P_MAX_ENCODED_PAYLOAD_SIZE + 4)
+#define IL2P_MAX_PACKET_SIZE (IL2P_SYNC_WORD_SIZE + IL2P_HEADER_SIZE + IL2P_HEADER_PARITY + IL2P_MAX_ENCODED_PAYLOAD_SIZE + IL2P_CRC_SIZE)
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -53,7 +54,7 @@ extern void il2p_set_debug(int debug);
 
 // Receives a bit stream from demodulator.
 
-extern void il2p_rec_bit (int chan, int subchan, int slice, int dbit);
+extern void il2p_rec_bit (int chan, int subchan, int slice, int dbit, int check_crc);
 
 
 
@@ -82,9 +83,9 @@ int il2p_send_frame (int chan, packet_t pp, int max_fec, int polarity);
 
 extern int il2p_encode_frame (packet_t pp, int max_fec, unsigned char *iout);
 
-packet_t il2p_decode_frame (unsigned char *irec);
+packet_t il2p_decode_frame (unsigned char *irec, int rec_len);
 
-packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, unsigned char *crc, int *symbols_corrected);
+packet_t il2p_decode_header_payload (unsigned char* uhdr, unsigned char *epayload, unsigned char *crc, int check_crc, int *symbols_corrected);
 
 void il2p_create_crc (packet_t pp, unsigned char *crc);
 

@@ -504,7 +504,8 @@ void hdlc_rec_bit_new (int chan, int subchan, int slice, int raw, int is_scrambl
 
 	if (g_audio_p->achan[chan].modem_type != MODEM_AIS) {
 	  fx25_rec_bit (chan, subchan, slice, dbit);
-	  il2p_rec_bit (chan, subchan, slice, raw);	// Note: skip NRZI.
+	  il2p_rec_bit (chan, subchan, slice, raw,	// Note: skip NRZI.
+			g_audio_p->achan[chan].il2p_check_crc);
 	}
 
 /*

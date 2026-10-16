@@ -215,8 +215,15 @@ struct audio_s {
 					// 1 for automatic selection based on frame size.
 
 	    int il2p_max_fec;		// 1 for max FEC length, 0 for automatic based on size.
+					// The minimum FEC option was removed in IL2P version 0.6.
+					// This might be entirely removed in a future release.
+					// In direwolf 1.9 user is warned if not set to 1.
 
 	    int il2p_invert_polarity;	// 1 means invert on transmit.  Receive handles either automatically.
+
+	    int il2p_check_crc;		// 1 = On receive, check new CRC added in IL2P version 0.6.  (default)
+					// 0 = Ignore it and allow incorrected reconstructed frames.
+					// New in direwolf 1.9.
 
 	    enum v26_e { V26_UNSPECIFIED=0, V26_A, V26_B } v26_alternative;
 

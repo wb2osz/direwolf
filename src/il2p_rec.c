@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2021  John Langner, WB2OSZ
+//    Copyright (C) 2021, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -68,7 +68,7 @@ struct il2p_context_s {
 
 	int corrected;		// Number of symbols corrected by RS FEC.
 
-	unsigned char crc[4];	// Collect 4 bytes of CRC at the end.
+	unsigned char crc[IL2P_CRC_SIZE];	// Collect 4 bytes of CRC at the end.
 
 	int crc_bc;		// Number of CRC bytes collected.
 };
@@ -91,6 +91,8 @@ static struct il2p_context_s *il2p_context[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SL
  *
  *              dbit	- One bit from the received data stream.
  *
+ *		check_crc - 1 to check new Hamming CRC, 0 to ignore.
+ *
  * Description: This is called once for each received bit.
  *              For each valid packet, process_rec_frame() is called for further processing.
  *		It can gather multiple candidates from different parallel demodulators
@@ -98,7 +100,7 @@ static struct il2p_context_s *il2p_context[MAX_RADIO_CHANS][MAX_SUBCHANS][MAX_SL
  *
  ***********************************************************************************/
 
-void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
+void il2p_rec_bit (int chan, int subchan, int slice, int dbit, int check_crc)
 {
 
 // Allocate context blocks only as needed.
@@ -135,7 +137,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	    else if (__builtin_popcount ((~F->acc & 0x00ffffff) ^ IL2P_SYNC_WORD) <= 1) {
 	      text_color_set (DW_COLOR_INFO);
 	      // FIXME - this pops up occasionally with random noise.  Find better way to convey information.
-	      // This also happens for each slicer - to noisy.
+	      // This also happens for each slicer - too noisy.
 	      //dw_printf ("IL2P header has reverse polarity\n");
 	      F->polarity = 1;
 	      F->state = IL2P_HEADER;
@@ -244,7 +246,7 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 	      else {
 	        F->crc[F->crc_bc++] = (~ F->acc) & 0xff;
 	      }
-	      if (F->crc_bc == 4) {
+	      if (F->crc_bc == IL2P_CRC_SIZE) {
 	         F->state = IL2P_DECODE;
 	      }
 	    }
@@ -258,17 +260,15 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 
 	    // in uhdr[IL2P_HEADER_SIZE];  // Header after FEC and descrambling.
 
-	    // TODO?:  for symmetry, we might decode the payload here and later build the frame.
-
 	    {
-	      packet_t pp = il2p_decode_header_payload (F->uhdr, F->spayload, F->crc, &(F->corrected));
+	      packet_t pp = il2p_decode_header_payload (F->uhdr, F->spayload, F->crc, check_crc, &(F->corrected));
 
 	      if (il2p_get_debug() >= 1) {
 	          if (pp != NULL) {
 	              ax25_hex_dump (pp);
 	          }
 	          else {
-	              // Most likely too many FEC errors.
+	              // Most likely too many FEC errors.  Or CRC error.
 	              text_color_set(DW_COLOR_ERROR);
 	              dw_printf ("FAILED to construct frame in %s.\n", __func__);
 	          }
@@ -276,17 +276,6 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit)
 
 	      // New in IL2P 0.6 and direwolf 1.9:
 	      // Verify the new hamming encoded CRC at the end.
-
-// FIXME: Need a option to bypass
-	      if (pp != NULL) {
-		  // dw_printf ("%s:%d: received CRC %02x %02x %02x %02x\n", __FILE__, __LINE__, F->crc[0], F->crc[1], F->crc[2], F->crc[3]);
-	          int e = il2p_check_crc (pp, F->crc);
-		  // dw_printf ("%s:%d: e = %d\n", __FILE__, __LINE__, e);
-		  if (e < 0) {
-		      ax25_delete (pp);
-		      pp = NULL;
-	          }
-	      }
 
 	      if (pp != NULL) {
 	          alevel_t alevel = demod_get_audio_level (chan, subchan);

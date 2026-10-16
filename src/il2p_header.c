@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2021  John Langner, WB2OSZ
+//    Copyright (C) 2021, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -334,28 +334,31 @@ int il2p_type_1_header (packet_t pp, int max_fec, unsigned char *hdr)
 		//	dst	src	il2p	meaning
 		//	---	---	----	-------
 		//	0	0	0	Not valid (earlier protocol version)
-		//	1	0	1	Command (v2)
+		//	1	0	1	Command (v2) - Correct for APRS
 		//	0	1	0	Response (v2)
 		//	1	1	1	Not valid (earlier protocol version)
 		//
-		// APRS does not mention how to set these bits and all 4 combinations
-		// are seen in the wild.  Apparently these are ignored on receive and no
-		// one cares.  Here we copy from the C bit in the destination address.
+		// Earlier APRS spec did not mention how to set these bits and all 4 combinations
+		// have been seen in the wild.  As long as these are ignored on receive, no
+		// one cares.
+
+		// Previously: Here we copy from the C bit in the destination address.
 		// It should be noted that the case of both C bits being the same can't
-		// be represented so the il2p encode/decode bit not produce exactly the
+		// be represented so the il2p encode/decode can't produce exactly the
 		// same bits.  We see this in the second example in the 0.4 protocol spec.
 		// The original UI frame has both C bits of 0 so it is received as a response.
 		// Should probably complain because the application creating the
 		// frames seems to be defective.
 
-// FIXME: Remove UI exception from test.  If both C bits are same we should encapsulate.
-// Example 2A needs to reflect this.
+		// direwolf release 1.9:  IL2P spec 0.6 adds a CRC to the end.
+		// Earlier approach would not recreate bit-identical frames, when C bits
+		// are the same, so the CRC check would fail.  We now fall back to encapsulation.
 
-	        if (cr != cr_cmd && cr != cr_res && frame_type != frame_type_U_UI) {
+	        if (cr != cr_cmd && cr != cr_res) {
 	          return (-1);
 	        }
 
-	        SET_CONTROL(hdr, (pf<<6) | (((cr == cr_cmd) | (cr == cr_11))<<2));
+	        SET_CONTROL(hdr, (pf<<6) | ((cr == cr_cmd)<<2));
 
 	        // This gets OR'ed into the above.
 	        switch (frame_type) {

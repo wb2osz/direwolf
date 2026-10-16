@@ -316,7 +316,7 @@ int main (int argc, char *argv[])
 	}
 
 	// TODO: control development/beta/release by version.h instead of changing here.
-	// Print platform.  This will provide more information when people send a copy the information displayed.
+	// Print platform.  This will provide more information when people send a copy of the information displayed.
 
 	// Might want to print OS version here.   For Windows, see:
 	// https://msdn.microsoft.com/en-us/library/ms724451(v=VS.85).aspx
@@ -329,11 +329,12 @@ int main (int argc, char *argv[])
 
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 1\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "E", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "F", __DATE__);
 // B = new -dq & tcp_wmem
 // C = AX.25 v2.2 improvements
 // D = KISSPTY config.
 // E = hamlib 5
+// F = check IL2P CRC
 // TBD? = AX.25 v2.2 negotiating status
 	//dw_printf ("Dire Wolf Release %d.%d.%d, October 2025\n", MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION);
 
@@ -520,7 +521,7 @@ int main (int argc, char *argv[])
             break;
 #endif
 
-          case 'B':				/* -B baud rate and modem properties. */
+          case 'B':				/* -B bit rate and modem properties. */
 						/* Also implies modem type based on speed. */
 						/* Special case "AIS" rather than number. */
 	    if (strcasecmp(optarg, "AIS") == 0) {
@@ -929,11 +930,17 @@ int main (int argc, char *argv[])
           audio_config.achan[0].modem_type = MODEM_QPSK;
           audio_config.achan[0].mark_freq = 0;
           audio_config.achan[0].space_freq = 0;
-	  audio_config.achan[0].baud = 2400;
+	  audio_config.achan[0].baud = 2400;	// FIXME: Change variable name to bps.
+						// Didn't matter with only AFSK but now it does.
 	}
 	if (J_opt) {
 
-	  // V.26 compatible with MFJ and maybe others.
+	  // V.26 compatible with MFJ-2400.
+	  // AEA PK232-2400 and Kantronics KPC-2400 used the same EXAR XR-2123
+	  // PSK modem chip which implements the V.26 / Bell 201 standard.
+	  // I don't know if they were compatible without access to the devices
+	  // or an audio recording from them.
+	  // 
 	  //   Example:   -B 2400 -J     or simply   -J
 
 	  audio_config.achan[0].v26_alternative = V26_B;
@@ -1018,7 +1025,8 @@ int main (int argc, char *argv[])
 	    if (audio_config.achan[0].il2p_max_fec == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("It is highly recommended that 1, rather than 0, is used with -I for best results.\n");
-	    }
+	      dw_printf ("Minimum FEC option has been removed from IL2P 0.6 specification.\n");
+    	    }
 	    audio_config.achan[0].il2p_invert_polarity = 0;	// normal
 	}
 
@@ -1028,6 +1036,7 @@ int main (int argc, char *argv[])
 	    if (audio_config.achan[0].il2p_max_fec == 0) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("It is highly recommended that 1, rather than 0, is used with -i for best results.\n");
+	      dw_printf ("Minimum FEC option has been removed from IL2P 0.6 specification.\n");
 	    }
 	    audio_config.achan[0].il2p_invert_polarity = 1;	// invert for transmit
 	    if (audio_config.achan[0].baud == 1200) {
