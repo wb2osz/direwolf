@@ -1249,7 +1249,7 @@ static void *rx_thread (void *arg) {
             packet_t pp = ax25_from_text(tnc2, 1);
             if (pp == NULL) {
                 text_color_set(DW_COLOR_ERROR);
-                dw_printf ("loraspi: failed to parse: %s\n", tnc2);
+                dw_printf ("loraspi: failed to parse: %s  RSSI=%d dBm  SNR=%.1f dB\n", tnc2, rssi, snr);
                 goto next;
             }
 
