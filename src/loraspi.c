@@ -731,7 +731,7 @@ static bool sx1276_init (lora_chan_t *lc) {
         } else {
             sx1276_write_reg(lc, SX1276_REG_PA_DAC, 0x84);
             sx1276_write_reg(lc, SX1276_REG_PA_CONFIG,
-                0x80 | (uint8_t)(lc->txpower - 2));
+                0x80 | (uint8_t)(lc->txpower < 2 ? 0 : lc->txpower - 2));	/* output = setting + 2 dBm; 2 dBm is the minimum */
         }
     } else {
         /* RFO path: max 14 dBm */
@@ -795,6 +795,7 @@ static int sx1276_receive (lora_chan_t *lc, uint8_t *buf, int maxlen,
 }
 
 static bool sx1276_transmit (lora_chan_t *lc, const uint8_t *data, int len) {
+    if (len <= 0 || len > 255) return false;	/* the payload length register is one byte */
     sx1276_write_reg(lc, SX1276_REG_OP_MODE, SX1276_MODE_STDBY);
     usleep(1000);
 
@@ -1521,7 +1522,7 @@ void loraspi_send_packet (int chan, packet_t pp) {
     uint8_t payload[256];
     int tnc2_len = (int)strlen(tnc2);
     int total = LORA_PREAMBLE_LEN + tnc2_len;
-    if (total > (int)sizeof(payload)) {
+    if (total > 255) {		/* LoRa payload length is one byte */
         text_color_set(DW_COLOR_ERROR);
         dw_printf ("loraspi: TX packet too long (%d bytes) — dropped\n", total);
         return;

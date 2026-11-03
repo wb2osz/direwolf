@@ -1624,7 +1624,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    }
 	    t = split(NULL,0);
 	    if (t != NULL) {
-	      long sw = strtol(t, NULL, 0);
+	      long sw = strtol(t, NULL, 16);	/* hex, with or without 0x: LORASW 34 means 0x34 */
 	      if (sw >= 0 && sw <= 0xFF) p_audio_config->lora_sw[channel] = (int)sw;
 	      else { text_color_set(DW_COLOR_ERROR); dw_printf ("Line %d: LORASW must be 0x00 to 0xFF.\n", line); }
 	    }
@@ -3333,7 +3333,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *			  to include IGate client side.  Maybe it should be
  *			  renamed AFILTER to make it clearer after adding CFILTER.
  *
- *			  Both internal modem and NET TNC channels allowed here.
+ *			  Internal modem, NET TNC, serial TNC and LoRa channels allowed here.
  *			  "IG" should be used for the IGate, NOT a virtual channel
  *			  assigned to it.
  *
@@ -3383,7 +3383,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	      if (p_audio_config->chan_medium[from_chan] != MEDIUM_RADIO &&
 		  p_audio_config->chan_medium[from_chan] != MEDIUM_NETTNC &&
-		  p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC) {
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_SERTNC &&
+		  p_audio_config->chan_medium[from_chan] != MEDIUM_LORA) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: FROM-channel %d is not valid.\n", 
 							line, from_chan);
@@ -3422,7 +3423,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	      if (p_audio_config->chan_medium[to_chan] != MEDIUM_RADIO &&
 		  p_audio_config->chan_medium[to_chan] != MEDIUM_NETTNC &&
-		  p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC) {
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_SERTNC &&
+		  p_audio_config->chan_medium[to_chan] != MEDIUM_LORA) {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: TO-channel %d is not valid.\n", 
 							line, to_chan);

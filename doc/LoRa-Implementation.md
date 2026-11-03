@@ -41,12 +41,12 @@ support. There is no behaviour change for existing channel types.
 
 ### `src/audio.h`
 - Added `MEDIUM_LORA` to `enum medium_e` (alongside `MEDIUM_RADIO`, `MEDIUM_NETTNC`, `MEDIUM_SERTNC`).
-- Added 21 `lora_*[]` fields to `struct audio_s` to hold per-channel LoRa configuration:
+- Added 22 `lora_*[]` fields to `struct audio_s` to hold per-channel LoRa configuration:
   `lora_chip`, `lora_freq_mhz`, `lora_sf`, `lora_bw_khz`, `lora_cr`, `lora_sw`, `lora_txpower`,
   `lora_txpower_set`, `lora_max_txpower`,
   `lora_pin_cs`, `lora_pin_reset`, `lora_pin_irq`, `lora_pin_busy`, `lora_pin_tx_en`,
   `lora_pin_rx_en`, `lora_pa_boost`, `lora_tcxo`, `lora_tcxo_voltage`, `lora_spi_bus`,
-  `lora_spi_dev`, `lora_spi_speed`.
+  `lora_spi_dev`, `lora_spi_speed`, `lora_hw` (profile name).
 
 ### `src/config.c`
 - Added `#include "loraspi.h"`.
@@ -58,11 +58,12 @@ support. There is no behaviour change for existing channel types.
   `LORAHW` calls `loraspi_apply_profile()` to copy pin/chip settings from a named
   hardware profile.
 - Extended the `chan_medium` validity checks for `DIGIPEAT`, `TTOBJ` and the IGate transmit
-  channels to accept `MEDIUM_LORA`. `CDIGIPEAT` still accepts radio channels only.
+  channels to accept `MEDIUM_LORA`. `CDIGIPEAT` still accepts radio channels only. `SCHANNEL` now sets the current channel for a following `MYCALL`, and `FILTER` accepts LoRa channels.
 
 ### `src/direwolf.c`
 - Added `#include "loraspi.h"`.
 - Added `loraspi_init(&audio_config)` call during startup, after `sertnc_init()`.
+- Added the `-d L` debug option, which calls `loraspi_set_debug()`.
 
 ### `src/tq.c`
 - Added `#include "loraspi.h"`.

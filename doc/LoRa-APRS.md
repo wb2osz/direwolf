@@ -86,7 +86,7 @@ The `--upgrade` flag skips the config prompts and does not overwrite `~/direwolf
 All LoRa settings are in `direwolf.conf`. There is no separate LoRa config file.
 
 - **`LCHANNEL n` sets the context.** Every line from `LCHANNEL` down to the next
-  `CHANNEL` or `LCHANNEL` line applies to that LoRa channel. `n` must be from
+  `CHANNEL`, `LCHANNEL`, `NCHANNEL`, `SCHANNEL` or `ICHANNEL` line applies to that LoRa channel. `n` must be from
   `MAX_RADIO_CHANS` up to `MAX_TOTAL_CHANS`-1 (6 to 15 in the default build), and at most 4 LoRa channels
   are allowed. Put the block after the VHF channel settings and before any `PBEACON`
   that uses `sendto=n`; a `PBEACON` that comes first fails with "Send to channel N is not valid".
@@ -259,7 +259,7 @@ Start Dire Wolf with `-d L` for extra driver diagnostics, such as the chip statu
 
 ## What works over a LoRa channel
 
-- **Works:** beacons (`PBEACON sendto=n`), digipeating (`DIGIPEAT`), the APRS-IS iGate in both directions, KISS and AGW clients, and `IGTXVIA`. AGW clients see the channel as `PortN LoRa`.
+- **Works:** beacons (`PBEACON sendto=n`), digipeating (`DIGIPEAT`), the APRS-IS iGate (received LoRa packets go to APRS-IS; add `IGTXVIA 10` to send packets from APRS-IS out over LoRa), KISS and AGW clients, and `IGTXVIA`. AGW clients see the channel as `PortN LoRa`.
 - **Not supported:** connected-mode AX.25 (`CDIGIPEAT`, `ax25_link`) is limited to radio channels with a modem.
 - **No channel-access control:** the LoRa driver transmits when a packet reaches the queue. It does not listen first, and `TXDELAY`, `PERSIST` and `SLOTTIME` do not apply. Keep beacon intervals long, especially at SF12, where one packet takes over two seconds. Observe your local duty-cycle and band rules.
 - **Packet size:** a LoRa frame carries at most 255 bytes including the 3-byte header. Longer packets are dropped with an error.
