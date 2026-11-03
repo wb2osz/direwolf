@@ -279,7 +279,9 @@ LORASF   12
 LORABW   125
 LORACR   5
 LORASW   0x12
-LORATXPOWER 17
+# LORATXPOWER is the chip output, before the module's PA.  Leave it out to get the profile's
+# maximum (default 20, capped to the profile limit).  Setting a value above the limit prints an error.
+#LORATXPOWER 17
 
 # Position beacon over LoRa RF
 PBEACON delay=1 every=30 sendto=10 overlay=L symbol="igate" lat=$LAT long=$LON comment="$CALLSIGN LoRa APRS"
