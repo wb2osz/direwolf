@@ -197,8 +197,6 @@ static const hw_profile_t s_profiles[] = {
     { "meshadv_400m30s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  2.2f,  18,
       s_ant_e22_400m30s, (int)(sizeof s_ant_e22_400m30s / sizeof s_ant_e22_400m30s[0]) },
     { "meshadv_400m33s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  2.2f,   8 },
-    { "meshadv_900m30s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  1.8f,  22 },
-    { "meshadv_900m33s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  1.8f,   8 },
     { "lorapi_rfm95w",    LORA_CHIP_SX1276, 0, 1,  7,  22,  -1,  -1,  -1,  -1,  true,  false, 0.0f,  17 },
     { "lorapi_rfm98w",    LORA_CHIP_SX1276, 0, 1,  7,  22,  -1,  -1,  -1,  -1,  true,  false, 0.0f,  17 },
     { "generic_sx1276",   LORA_CHIP_SX1276, 0, 0,  8,  25,  24,  -1,  -1,  -1,  true,  false, 0.0f,  17 },

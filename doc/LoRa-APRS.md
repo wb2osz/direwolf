@@ -207,8 +207,6 @@ Profiles are selected with LORAHW in direwolf.conf. They are defined in the s_pr
 |---|---|---|---|---|---|---|
 | meshadv_400m30s | MeshAdv-Pi Hat (E22-400M30S, 1W) | SX1262 | 433/470 MHz | 18 dBm | yes | yes |
 | meshadv_400m33s | MeshAdv-Pi Hat (E22-400M33S, 2W) | SX1262 | 433/470 MHz | 8 dBm | yes | yes |
-| meshadv_900m30s | MeshAdv-Pi Hat (E22-900M30S, 1W) | SX1262 | 868/915 MHz | 22 dBm | | |
-| meshadv_900m33s | MeshAdv-Pi Hat (E22-900M33S, 2W) | SX1262 | 868/915 MHz | 8 dBm | | |
 | lorapi_rfm95w | Digital Concepts LoRa-Pi (RFM95W) | SX1276 | 868/915 MHz | 17 dBm | | |
 | lorapi_rfm98w | Digital Concepts LoRa-Pi (RFM98W) | SX1278 | 433 MHz | 17 dBm | yes | yes |
 | generic_sx1276 | Generic SX1276/SX1278 breakout | SX1276 | varies | 17 dBm | | |

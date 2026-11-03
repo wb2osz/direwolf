@@ -113,8 +113,6 @@ prompt_config() {
 
     echo "" > /dev/tty
     echo "Hardware profiles:" > /dev/tty
-    echo "  meshadv_900m30s  MeshAdv-Pi Hat with E22-900M30S (SX1262, 868/915 MHz, 1W)" > /dev/tty
-    echo "  meshadv_900m33s  MeshAdv-Pi Hat with E22-900M33S (SX1262, 868/915 MHz, 2W)" > /dev/tty
     echo "  meshadv_400m30s  MeshAdv-Pi Hat with E22-400M30S (SX1262, 433/470 MHz, 1W)" > /dev/tty
     echo "  meshadv_400m33s  MeshAdv-Pi Hat with E22-400M33S (SX1262, 433/470 MHz, 2W)" > /dev/tty
     echo "  lorapi_rfm95w    LoRa-Pi RFM95W (SX1276, 868/915 MHz)" > /dev/tty
