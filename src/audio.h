@@ -184,6 +184,7 @@ struct audio_s {
 	int  lora_sw[MAX_TOTAL_CHANS];			// Sync word (0x12 = LoRa-APRS standard)
 	int  lora_txpower[MAX_TOTAL_CHANS];		// TX power dBm
 	int  lora_txpower_set[MAX_TOTAL_CHANS];		// 1 if LORATXPOWER was given (else default, quietly capped to hardware limit)
+	char lora_hw[MAX_TOTAL_CHANS][32];		// Hardware profile name (LORAHW)
 	int  lora_max_txpower[MAX_TOTAL_CHANS];		// Hardware PA limit dBm (0 = unconstrained)
 	int  lora_pin_cs[MAX_TOTAL_CHANS];		// GPIO chip-select (BCM)
 	int  lora_pin_reset[MAX_TOTAL_CHANS];		// GPIO reset (-1 = not wired)

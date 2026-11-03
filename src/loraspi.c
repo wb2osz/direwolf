@@ -164,6 +164,15 @@ static int         s_lora_count = 0;
 /* =========================================================================
  * Hardware profile table
  * ========================================================================= */
+/* One point of "LORATXPOWER setting -> power at the antenna connector". */
+typedef struct { int chip_dbm; float ant_dbm; } pwr_pt_t;
+
+/* E22-400M30S manual: SX1268 setting vs. measured module output. */
+static const pwr_pt_t s_ant_e22_400m30s[] = {
+    { -5,  9.77f }, { -2, 12.29f }, { 1, 15.02f }, {  4, 18.08f },
+    {  7, 21.11f }, { 10, 24.02f }, { 14, 27.25f }, { 18, 29.96f },
+};
+
 typedef struct {
     const char *name;
     int  chip;          /* LORA_CHIP_* */
@@ -179,18 +188,21 @@ typedef struct {
     bool tcxo;
     float tcxo_voltage;
     int  max_tx_power_dbm;  /* hardware PA limit — user config is clamped to this */
+    const pwr_pt_t *ant_pts;   /* optional: antenna power vs. LORATXPOWER, ascending; NULL = unknown */
+    int  n_ant_pts;
 } hw_profile_t;
 
 static const hw_profile_t s_profiles[] = {
     /* name               chip            bus dev  cs  rst  irq busy txen rxen  pa_boost tcxo  tcxo_v  max_pwr */
-    { "meshadv_400m30s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  2.2f,  22 },
+    { "meshadv_400m30s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  2.2f,  18,
+      s_ant_e22_400m30s, (int)(sizeof s_ant_e22_400m30s / sizeof s_ant_e22_400m30s[0]) },
     { "meshadv_400m33s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  2.2f,   8 },
     { "meshadv_900m30s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  1.8f,  22 },
     { "meshadv_900m33s",  LORA_CHIP_SX1262, 0, 0, 21,  18,  16,  20,  13,  12,  false, true,  1.8f,   8 },
     { "lorapi_rfm95w",    LORA_CHIP_SX1276, 0, 1,  7,  22,  -1,  -1,  -1,  -1,  true,  false, 0.0f,  17 },
     { "lorapi_rfm98w",    LORA_CHIP_SX1276, 0, 1,  7,  22,  -1,  -1,  -1,  -1,  true,  false, 0.0f,  17 },
     { "generic_sx1276",   LORA_CHIP_SX1276, 0, 0,  8,  25,  24,  -1,  -1,  -1,  true,  false, 0.0f,  17 },
-    { NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, 0.0f, 0 }
+    { NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, 0.0f, 0, NULL, 0 }
 };
 
 static const hw_profile_t *find_profile (const char *name) {
@@ -198,6 +210,23 @@ static const hw_profile_t *find_profile (const char *name) {
         if (strcasecmp(p->name, name) == 0)
             return p;
     return NULL;
+}
+
+/* Interpolated antenna power for a LORATXPOWER setting, or false if the profile
+ * has no data or the setting is outside the table. */
+static bool antenna_power_dbm (const hw_profile_t *p, int chip_dbm, float *ant) {
+    if (!p || !p->ant_pts || p->n_ant_pts < 2) return false;
+    const pwr_pt_t *t = p->ant_pts;
+    int n = p->n_ant_pts;
+    if (chip_dbm < t[0].chip_dbm || chip_dbm > t[n-1].chip_dbm) return false;
+    for (int i = 1; i < n; i++) {
+        if (chip_dbm <= t[i].chip_dbm) {
+            float f = (float)(chip_dbm - t[i-1].chip_dbm) / (float)(t[i].chip_dbm - t[i-1].chip_dbm);
+            *ant = t[i-1].ant_dbm + f * (t[i].ant_dbm - t[i-1].ant_dbm);
+            return true;
+        }
+    }
+    return false;
 }
 
 /* =========================================================================
@@ -1402,6 +1431,21 @@ void loraspi_init (struct audio_s *pa) {
             lc->txpower = max_pwr;
         }
 
+        /* Tell the user what comes out of the antenna connector, if we know. */
+        {
+            const hw_profile_t *hp = find_profile(pa->lora_hw[chan]);
+            float ant;
+            text_color_set(DW_COLOR_INFO);
+            if (antenna_power_dbm(hp, lc->txpower, &ant)) {
+                dw_printf ("LoRa channel %d: LORATXPOWER %d dBm at the chip, about %.1f dBm (%.2f W) at the antenna connector (module manual).\n",
+                           chan, lc->txpower, ant, powf(10.0f, ant / 10.0f) / 1000.0f);
+            }
+            else if (hp && hp->ant_pts) {
+                dw_printf ("LoRa channel %d: LORATXPOWER %d dBm at the chip; the module manual gives antenna power only for %d to %d dBm.\n",
+                           chan, lc->txpower, hp->ant_pts[0].chip_dbm, hp->ant_pts[hp->n_ant_pts-1].chip_dbm);
+            }
+        }
+
         /* Hardware pins */
         lc->pin_cs    = pa->lora_pin_cs[chan];
         lc->pin_reset = pa->lora_pin_reset[chan];
@@ -1513,6 +1557,7 @@ int loraspi_apply_profile (int chan, const char *name, struct audio_s *pa) {
     pa->lora_tcxo[chan]         = p->tcxo     ? 1 : 0;
     pa->lora_tcxo_voltage[chan] = p->tcxo_voltage;
     pa->lora_max_txpower[chan]  = p->max_tx_power_dbm;
+    strlcpy (pa->lora_hw[chan], p->name, sizeof(pa->lora_hw[chan]));
     return 0;
 }
 

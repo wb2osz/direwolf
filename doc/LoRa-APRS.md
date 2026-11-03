@@ -99,6 +99,11 @@ All LoRa settings are in `direwolf.conf`. There is no separate LoRa config file.
 - **`LORATXPOWER` is capped by the profile.** If you set it above the profile's maximum
   (for example 8 dBm on `meshadv_400m33s`), Dire Wolf prints an error and clamps it to
   the hardware limit. If you leave it out, the default is 20 dBm, quietly capped to the profile's maximum.
+- **What `LORATXPOWER` measures.** It is the power the SX126x/SX127x chip is told to
+  produce (the `SetTxParams` value), *before* the module's external power amplifier.
+  On E22 M30S and M33S modules the power at the antenna connector is higher than the
+  setting. That is why the profile caps are so low: 18 dBm for the 400 MHz 30S (29.96 dBm, about 1 W, at the antenna) and only 8 dBm
+  for the 33S. Do not read the number as antenna power.
 - **Defaults and valid values.**
 
   | Directive | Default | Accepted values |
@@ -109,7 +114,7 @@ All LoRa settings are in `direwolf.conf`. There is no separate LoRa config file.
   | `LORABW` | 125 | 125, 250 or 500 (kHz) |
   | `LORACR` | 5 | 5 to 8 (coding rate 4/5 to 4/8) |
   | `LORASW` | 0x12 | 0x00 to 0xFF |
-  | `LORATXPOWER` | 20, capped to the profile maximum | 0 to 22 (dBm) |
+  | `LORATXPOWER` | 20, capped to the profile maximum | 0 to 22 (dBm), measured at the chip output, before the module's external PA |
 
   Set `LORAHW` and `LORAFREQ` explicitly if you use a 868/915 MHz module or a different hat.
   A value outside its range is rejected with an error and the default stays in effect.
@@ -123,7 +128,7 @@ MYCALL W1ABC-10
 MODEM 1200
 
 # ---- LoRa channel (native SPI HAT) ----
-# Every line from LCHANNEL down to the next CHANNEL/LCHANNEL line applies to the LoRa channel.
+# Every line from LCHANNEL down to the next CHANNEL/LCHANNEL/SCHANNEL line applies to the LoRa channel.
 # LORAHW picks the module wiring/TCXO and its maximum power; the other LORA* lines are radio settings.
 LCHANNEL 10
 MYCALL W1ABC-10
@@ -133,7 +138,7 @@ LORASF 12                   # spreading factor
 LORABW 125                  # kHz bandwidth
 LORACR 5                    # coding rate 4/5
 LORASW 0x12                 # LoRa APRS sync word
-LORATXPOWER 17              # dBm (optional; default is the profile maximum, up to 20)
+LORATXPOWER 17              # dBm at the chip, before the module's PA (optional; default 20, capped to the profile maximum)
 
 # Position beacon over LoRa RF
 PBEACON delay=1 every=30 sendto=10 overlay=L symbol="igate" lat=0.0000 long=0.0000 comment="LoRa APRS iGate"
@@ -200,7 +205,7 @@ Profiles are selected with LORAHW in direwolf.conf. They are defined in the s_pr
 
 | Profile name | Module | Chip | Frequency | Max LORATXPOWER | TX tested | RX tested |
 |---|---|---|---|---|---|---|
-| meshadv_400m30s | MeshAdv-Pi Hat (E22-400M30S, 1W) | SX1262 | 433/470 MHz | 22 dBm | yes | yes |
+| meshadv_400m30s | MeshAdv-Pi Hat (E22-400M30S, 1W) | SX1262 | 433/470 MHz | 18 dBm | yes | yes |
 | meshadv_400m33s | MeshAdv-Pi Hat (E22-400M33S, 2W) | SX1262 | 433/470 MHz | 8 dBm | yes | yes |
 | meshadv_900m30s | MeshAdv-Pi Hat (E22-900M30S, 1W) | SX1262 | 868/915 MHz | 22 dBm | | |
 | meshadv_900m33s | MeshAdv-Pi Hat (E22-900M33S, 2W) | SX1262 | 868/915 MHz | 8 dBm | | |
@@ -208,7 +213,22 @@ Profiles are selected with LORAHW in direwolf.conf. They are defined in the s_pr
 | lorapi_rfm98w | Digital Concepts LoRa-Pi (RFM98W) | SX1278 | 433 MHz | 17 dBm | yes | yes |
 | generic_sx1276 | Generic SX1276/SX1278 breakout | SX1276 | varies | 17 dBm | | |
 
-> **33S modules:** setting `LORATXPOWER` above 8 on a 33S module can damage its external PA. Dire Wolf clamps the value to the profile limit and prints an error. See [LoRa-Implementation.md](LoRa-Implementation.md#tx-power-clamping) for why.
+> **33S modules:** we could not find official documentation for the E22-400M33S power table (chip setting versus power at the antenna). Until official information or documented testing is available, the 33S profiles are capped at 8 dBm, like the other 33S entries, and Dire Wolf prints no antenna-power estimate for them. Setting `LORATXPOWER` above 8 on a 33S module can damage its external PA. Dire Wolf clamps the value to the profile limit and prints an error. See [LoRa-Implementation.md](LoRa-Implementation.md#tx-power-clamping) for why.
+
+> **Antenna power on the E22-400M30S.** The module manual lists the power at the antenna connector for each chip setting. Dire Wolf interpolates this table and prints the result at startup, for example `LORATXPOWER 14 dBm at the chip, about 27.3 dBm (0.53 W) at the antenna connector`.
+>
+> | `LORATXPOWER` (chip, dBm) | At the antenna (dBm) |
+> |---|---|
+> | -5 | 9.77 |
+> | -2 | 12.29 |
+> | 1 | 15.02 |
+> | 4 | 18.08 |
+> | 7 | 21.11 |
+> | 10 | 24.02 |
+> | 14 | 27.25 |
+> | 18 | 29.96 (about 1 W, the manual's maximum) |
+>
+> 18 dBm is the manual's maximum, so the profile caps `LORATXPOWER` there; a higher setting is clamped (the 20 dBm default is capped quietly). These are the vendor's figures, not our measurements; real units vary with frequency, supply voltage and temperature.
 
 To add support for a hat that is not listed, see the last section.
 
