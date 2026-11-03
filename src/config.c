@@ -1291,7 +1291,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *	This allows a client application to talk to to APRS-IS
  *	by using a channel number outside the normal range for modems.
  *	In the future there might be other typs of virtual channels.
- *	This does not change the current channel number used by MODEM, PTT, etc.
+ *	This makes it the current channel for a following MYCALL.  MODEM, PTT, etc.
+ *	are rejected for it because it is not a radio channel.
  */
 
 	  else if (strcasecmp(t, "ICHANNEL") == 0) {
@@ -1394,8 +1395,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  *	Future: Might allow selection of channel on the serial TNC.
  *	For now, ignore incoming and set to 0 for outgoing.
- *
- * FIXME: Can't set mycall for schannel.
  */
 
 	  else if (strcasecmp(t, "SCHANNEL") == 0) {
@@ -1403,6 +1402,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing virtual channel number for SCHANNEL command.\n", line);
+	      channel = -1;	/* so a following MYCALL is not applied to the previous channel */
 	      continue;
 	    }
 	    int nchan = atoi(t);
@@ -1411,21 +1411,27 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      if (p_audio_config->chan_medium[nchan] == MEDIUM_NONE) {
 
 	        p_audio_config->chan_medium[nchan] = MEDIUM_SERTNC;
+	        channel = nchan;	/* set context for a following MYCALL */
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
                 dw_printf ("Line %d: SCHANNEL can't use channel %d because it is already in use.\n", line, nchan);
+	        channel = -1;
+	        continue;
 	      }
 	    }
 	    else {
 	      text_color_set(DW_COLOR_ERROR);
               dw_printf ("Line %d: SCHANNEL number must in range of %d to %d.\n", line, MAX_RADIO_CHANS, MAX_TOTAL_CHANS-1);
+	      channel = -1;
+	      continue;
 	    }
 
 	    t = split(NULL,0);
 	    if (t == NULL) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Line %d: Missing serial TNC device for SCHANNEL command.\n", line);
+	      channel = -1;
 	      continue;
 	    }
 	    strlcpy (p_audio_config->sertnc_device[nchan], t, sizeof(p_audio_config->sertnc_device[nchan]));
