@@ -231,7 +231,9 @@ Some regions use other frequencies or faster settings, so match what the LoRa AP
 
 Dire Wolf does not detect whether output is a terminal. Use `-t 0` when logging to a file or the journal to turn the colors off.
 
-Each received packet line ends with the signal strength, for example `RSSI=-97 dBm SNR=7.5 dB`. Packets that fail to parse are logged with their RSSI and SNR too. While the channel is idle, Dire Wolf logs the noise floor (average, minimum and maximum RSSI) every 60 seconds, which helps with antenna and placement tests.
+Each received packet is shown once, by Dire Wolf's normal decode line, which ends with the signal strength, for example `LoRa RSSI=-97dBm SNR=7.5dB`. Packets that fail to parse are logged with their RSSI and SNR too. While the channel is idle, Dire Wolf logs the noise floor (average, minimum and maximum RSSI) every 60 seconds, which helps with antenna and placement tests.
+
+Start Dire Wolf with `-d L` for extra driver diagnostics, such as the chip status while transmitting.
 
 ---
 

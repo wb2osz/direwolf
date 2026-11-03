@@ -42,6 +42,9 @@ void loraspi_init (struct audio_s *pa);
  */
 void loraspi_send_packet (int chan, packet_t pp);
 
+/* Debug output for the LoRa driver; set from "-d L" (repeat for more). */
+void loraspi_set_debug (int level);
+
 /*
  * loraspi_apply_profile  —  Populate hardware fields in audio_s from a
  * named built-in profile (e.g. "meshadv_400m30s").

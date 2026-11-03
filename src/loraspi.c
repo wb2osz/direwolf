@@ -60,6 +60,7 @@ void loraspi_init (struct audio_s *pa) {
     }
 }
 void loraspi_send_packet (int chan, packet_t pp) { (void)chan; (void)pp; }
+void loraspi_set_debug (int level) { (void)level; }
 int  loraspi_apply_profile (int chan, const char *name, struct audio_s *pa) { (void)chan; (void)name; (void)pa; return -1; }
 #else
 
@@ -1052,6 +1053,12 @@ static int sx1262_receive (lora_chan_t *lc, uint8_t *buf, int maxlen,
     return nb;
 }
 
+static int s_debug_level = 0;	/* set by "-d L" */
+
+void loraspi_set_debug (int level) {
+    s_debug_level = level;
+}
+
 static bool sx1262_transmit (lora_chan_t *lc, const uint8_t *data, int len) {
     if (len > 255) return false;                 /* the payload length register is one byte */
 
@@ -1121,9 +1128,9 @@ static bool sx1262_transmit (lora_chan_t *lc, const uint8_t *data, int len) {
              * Bits [6:4] = chipMode: 0x06=TX  0x05=RX  0x02=STDBY_RC */
             last_mode = (gsr[0] >> 4) & 0x07;
 
-            /* One-time diagnostic on first GetStatus read */
-            if (i == 101) {
-                text_color_set(DW_COLOR_INFO);
+            /* One-time diagnostic on first GetStatus read, only with "-d L" */
+            if (i == 101 && s_debug_level >= 1) {
+                text_color_set(DW_COLOR_DEBUG);
                 dw_printf ("loraspi: TX poll: chipMode=0x%02X irq=0x%04X\n",
                            last_mode, last_irq);
             }
@@ -1320,15 +1327,13 @@ static void *rx_thread (void *arg) {
             memset(&alevel, 0, sizeof(alevel));
             alevel.rec = rssi;
 
-            /* Build spectrum string: "LoRa SNR=X.XdB" */
-            char spectrum[32];
-            snprintf(spectrum, sizeof(spectrum), "LoRa SNR=%.1fdB", snr);
+            /* Build spectrum string: "LoRa RSSI=-NNNdBm SNR=X.XdB".  Dire Wolf's
+             * normal decode line prints it, so the packet text appears only once. */
+            char spectrum[48];
+            snprintf(spectrum, sizeof(spectrum), "LoRa RSSI=%ddBm SNR=%.1fdB", rssi, snr);
 
             /* Inject into Dire Wolf frame queue */
             dlq_rec_frame(lc->chan, -3, 0, pp, alevel, fec_type_none, RETRY_NONE, spectrum);
-
-            text_color_set(DW_COLOR_REC);
-            dw_printf ("%s  RSSI=%d dBm  SNR=%.1f dB\n", tnc2, rssi, snr);
         }
 
     next:

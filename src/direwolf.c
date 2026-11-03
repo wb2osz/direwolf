@@ -236,6 +236,7 @@ int main (int argc, char *argv[])
 #if USE_HAMLIB
 	int d_h_opt = 0;	/* "-d h" option for hamlib debugging.  Repeat for more detail */
 #endif
+	int d_L_opt = 0;	/* "-d L" option for the LoRa SPI driver. */
 	int d_x_opt = 1;	/* "-d x" option for FX.25.  Default minimal. Repeat for more detail.  -qx to silence. */
 	int d_2_opt = 0;	/* "-d 2" option for IL2P.  Default minimal. Repeat for more detail. */
 	int d_c_opt = 0;	/* "-d c" option for connected mode data link state machine. */
@@ -667,6 +668,8 @@ int main (int argc, char *argv[])
 	      case 'n':  d_n_opt++; kiss_net_set_debug (d_n_opt); break;
 
 	      case 'u':  d_u_opt = 1; break;
+
+	      case 'L':  d_L_opt++; loraspi_set_debug (d_L_opt); break;	// LoRa SPI driver
 
 		// separate out gps & waypoints.
 
