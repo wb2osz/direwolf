@@ -1972,7 +1972,8 @@ static THREAD_F cmd_listen_thread (void *arg)
 	          if (save_audio_config_p->chan_medium[j] == MEDIUM_RADIO ||
 	              save_audio_config_p->chan_medium[j] == MEDIUM_IGATE ||
 	              save_audio_config_p->chan_medium[j] == MEDIUM_NETTNC ||
-	              save_audio_config_p->chan_medium[j] == MEDIUM_SERTNC) {
+	              save_audio_config_p->chan_medium[j] == MEDIUM_SERTNC ||
+	              save_audio_config_p->chan_medium[j] == MEDIUM_LORA) {
 		    count++;
 		  }
 		}
@@ -2023,6 +2024,14 @@ static THREAD_F cmd_listen_thread (void *arg)
 	                // could elaborate with device, etc.
 		        char stemp[100];
 		        snprintf (stemp, sizeof(stemp), "Port%d Serial TNC;", j+1);
+		        strlcat (reply.info, stemp, sizeof(reply.info));
+	              }
+	              break;
+
+	            case MEDIUM_LORA:
+	              {
+		        char stemp[100];
+		        snprintf (stemp, sizeof(stemp), "Port%d LoRa;", j+1);
 		        strlcat (reply.info, stemp, sizeof(reply.info));
 	              }
 	              break;

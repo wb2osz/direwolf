@@ -54,6 +54,7 @@
 #include "dtime_now.h"
 #include "nettnc.h"
 #include "sertnc.h"
+#include "loraspi.h"
 
 
 static packet_t queue_head[MAX_RADIO_CHANS][TQ_NUM_PRIO];	/* Head of linked list for each queue. */
@@ -263,7 +264,8 @@ void tq_append (int chan, int prio, packet_t pp)
 
 	if (save_audio_config_p->chan_medium[chan] == MEDIUM_IGATE ||
 		save_audio_config_p->chan_medium[chan] == MEDIUM_NETTNC ||
-		save_audio_config_p->chan_medium[chan] == MEDIUM_SERTNC) {
+		save_audio_config_p->chan_medium[chan] == MEDIUM_SERTNC ||
+		save_audio_config_p->chan_medium[chan] == MEDIUM_LORA) {
 
 	  char ts[100];		// optional time stamp.
 
@@ -308,6 +310,15 @@ void tq_append (int chan, int prio, packet_t pp)
 	    dw_printf ("\n");
 
 	    sertnc_send_packet (chan, pp);
+
+	  }
+	  else if (save_audio_config_p->chan_medium[chan] == MEDIUM_LORA) {	// native SPI LoRa
+	    dw_printf ("[%d>lr%s] ", chan, ts);
+	    dw_printf ("%s", stemp);			/* stations followed by : */
+	    ax25_safe_print ((char *)pinfo, info_len, ! ax25_is_aprs(pp));
+	    dw_printf ("\n");
+
+	    loraspi_send_packet (chan, pp);
 
 	  }
 
