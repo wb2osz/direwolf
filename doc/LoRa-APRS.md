@@ -18,7 +18,7 @@ Dire Wolf talks directly to the LoRa chip over SPI. No Python packages or separa
 
 ## Requirements
 
-- Raspberry Pi (any model with SPI)
+- A Raspberry Pi 3 or 4 with SPI. The Pi 5 is not yet tested: the installer warns about it, and the GPIO chip selection has not been checked there.
 - A user in the `gpio` and `spi` groups (see step 4 of the installation)
 - Supported LoRa hat (see Hardware Profiles below)
 - `libgpiod-dev` installed (included automatically by `install-lora.sh`)
@@ -51,7 +51,7 @@ sudo bash install-lora.sh
 
 The script installs dependencies (including `libgpiod-dev`), builds Dire Wolf, enables SPI, and creates a starter config at `~/direwolf.conf`. It will prompt you for your callsign, passcode, location, hardware profile, and frequency (press Enter for 433.775 MHz). It also installs a `direwolf` systemd service that runs as your user and starts Dire Wolf at boot.
 
-The installer assumes an RTL-SDR dongle for VHF APRS on every Pi model: it installs the RTL-SDR tools, blacklists the DVB driver, and the service pipes `rtl_fm` into Dire Wolf. For a LoRa-only station without a dongle, edit `ADEVICE` in `~/direwolf.conf` to `ADEVICE null null`, delete the VHF `CHANNEL 0` block, and change the `ExecStart` line of `/etc/systemd/system/direwolf.service` to `/usr/local/bin/direwolf -c /home/<you>/direwolf.conf`, then run `sudo systemctl daemon-reload`.
+The installer asks whether you have an RTL-SDR dongle. With one, the service pipes `rtl_fm` into Dire Wolf for VHF APRS. Without one (the default), the config uses `ADEVICE null null` with no VHF channel, and the service runs Dire Wolf alone. It always installs the RTL-SDR tools and blacklists the DVB driver. It also asks for a hardware profile and accepts only the names in the table below. It saves a timestamped `.bak` copy of any existing `direwolf.conf` or `direwolf.service` before overwriting, and sets `direwolf.conf` to mode 600 because it holds your APRS-IS passcode.
 
 SPI is enabled automatically. If a reboot is required the script will say so — reboot before using the LoRa hat.
 
@@ -186,7 +186,7 @@ If the GPIO lines are claimed through the legacy sysfs interface instead (libgpi
 
 `install-lora.sh` already created, enabled and started the `direwolf` service, which runs as your user and reads `~/direwolf.conf`. Do not copy the generic `systemd/direwolf.service` from the source tree over it: that unit runs as a separate `direwolf` user and cannot read your home directory or reach the GPIO lines.
 
-Monitor: `journalctl -u direwolf -f`. Add `-t 0` to the `direwolf` command line to turn off the color codes in the journal.
+Monitor: `journalctl -u direwolf -f`. The installer's service already runs `direwolf` with `-t 0`, so the journal has no color codes.
 
 ---
 
@@ -268,7 +268,7 @@ Start Dire Wolf with `-d L` for extra driver diagnostics, such as the chip statu
 
 **No init message at startup**
 - Check SPI is enabled: `ls /dev/spidev*`
-- Verify LORAHW in direwolf.conf matches a known profile name
+- Verify LORAHW in direwolf.conf matches a known profile name. An unknown name prints a config error at startup but is not fatal: the channel keeps the default MeshAdv wiring, which will not work on a different hat (expect a BUSY timeout or "SX1276 not found").
 - Check SPI device permissions: `ls -l /dev/spidev*` (your user needs the `spi` group)
 - Make sure the LoRa hat is fully and correctly seated on the GPIO header
 
