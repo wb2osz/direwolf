@@ -42,7 +42,7 @@
  *		other applications might not interpret it properly.
  *		
  * References:	APRS Protocol, chapter 13.
- *		http://www.aprs.org/doc/APRS101.PDF
+ *		https://github.com/wb2osz/aprsspec
  *
  *		Base 91 compressed format
  *		http://he.fi/doc/aprs-base91-comment-telemetry.txt

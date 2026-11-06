@@ -30,21 +30,7 @@
  *		be digipeated and make necessary modifications.
  *
  *
- * References:	APRS Protocol Reference, document version 1.0.1
- *
- *			http://www.aprs.org/doc/APRS101.PDF
- *
- *		APRS SPEC Addendum 1.1
- *
- *			http://www.aprs.org/aprs11.html
- *
- *		APRS SPEC Addendum 1.2
- *
- *			http://www.aprs.org/aprs12.html
- *
- *		"The New n-N Paradigm"
- *
- *			http://www.aprs.org/fix14439.html
+ * References:	https://github.com/wb2osz/aprsspec
  *
  *		Preemptive Digipeating  (new in version 0.8)
  *

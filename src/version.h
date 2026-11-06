@@ -13,7 +13,7 @@
 
 
 // For user-defined data format.
-// APRS protocol spec Chapter 18 and http://www.aprs.org/aprs11/expfmts.txt
+// APRS protocol spec, https://github.com/wb2osz/aprsspec, Chapter 18.
 
 #define USER_DEF_USER_ID 'D'		// user id D for direwolf
 

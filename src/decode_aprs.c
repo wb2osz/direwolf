@@ -1786,8 +1786,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  *		:xxxxxxxxx: ... {mm}aa		Message with new style message number and ack.
  *
  *
- * Reference:	http://www.aprs.org/txt/messages101.txt
- *		http://www.aprs.org/aprs11/replyacks.txt	<-- New (1999) adding ack to outgoing message.
+ * Reference:	https://github.com/wb2osz/aprsspec
  *
  *------------------------------------------------------------------*/
 
@@ -1798,9 +1797,20 @@ static void aprs_message (decode_aprs_t *A, unsigned char *info, int ilen, int q
 	  char dti;			/* : */
 	  char addressee[9];
 	  char colon;			/* : */
-	  char message[256-1-9-1];	/* Officially up to 67 characters for message text. */
-					/* Relaxing seemingly arbitrary restriction here; it doesn't need to fit on a punched card. */
-					/* Wouldn't surprise me if others did not pay attention to the limit. */
+	  char message[256-1-9-1];	/* Officially, the message text may be up to 67 characters long, and */
+					/* may contain any printable ASCII or UTF-8 characters except { which */
+					/* indicates start of Message Identifier. */
+					/* What is the reason for that length restriction?  Chapter 3 stated */
+					/* that the Information part can be up to 256 characters.  The early */
+					/* SMS maximum length was 160 characters. Where did 67 come from? */
+
+					/* In Bob's own words: */
+					/* "What's left on an 80 character line (PC AT) after displaying date/time and callsign." */
+					/*	https://lists.tapr.org/pipermail/aprssig_lists.tapr.org/2016-November/046315.html */
+
+					/* In reality, we sometimes see Message Text longer than 67 so receiving */
+					/* applications should be able to handle that. */
+
 					/* Optional '{' followed by 1-5 alphanumeric characters for message number */
 
 					/* If the first character is '?' it is a Directed Station Query. */
@@ -4372,10 +4382,10 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *
  * What can appear in a comment?
  *
- *		Chapter 5 of the APRS spec ( http://www.aprs.org/doc/APRS101.PDF ) says:
+ *		Chapter 5 of the APRS spec ( https://github.com/wb2osz/aprsspec ) says:
  *
- *			"The comment may contain any printable ASCII characters (except | and ~,
- *			which are reserved for TNC channel switching)."
+ *			"The freeform text part of the comment may contain any
+ *			 printable ASCII and UTF-8 character."
  *
  *		"Printable" would exclude character values less than space (00100000), e.g.
  *		tab, carriage return, line feed, nul.  Sometimes we see carriage return
@@ -4386,8 +4396,7 @@ static void substr_se (char *dest, const char *src, int start, int endp1)
  *		which is not part of the APRS spec, uses the | character in the comment to delimit encoded
  *		telemetry data.   This would be in violation of the original spec.
  *
- *		The APRS Spec Addendum 1.2 Proposals ( http://www.aprs.org/aprs12/datum.txt)
- *		adds use of UTF-8 (https://en.wikipedia.org/wiki/UTF-8 )for the free form text in
+ *		UTF-8 (https://en.wikipedia.org/wiki/UTF-8 ) is allowed for the free form text in
  *		messages and comments. It can't be used in the fixed width fields.
  *
  *		Non-ASCII characters are represented by multi-byte sequences.  All bytes in these
