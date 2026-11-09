@@ -515,6 +515,44 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 
 
 /*
+ * Check for latitude or longitude out of range.
+ * This is also a diagnostic tool, so tell people what is wrong.
+ *
+ * Test cases:
+ *
+ *	N0CALL>YPP0V0:`kWD(:I>/		Lat = -90.010000
+ *	N0CALL>YPPPV0:`kWD(:I>/		Lat = 90.010000
+ *	N0CALL>APZ:!/!!!!!!!!>
+ *	N0CALL>APZ:!/{{{{{{{{>		Lat = -90.021737, Lon = 180.043473
+ */
+
+	if (A->g_lat != G_UNKNOWN) {
+	  if (A->g_lat < -90) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Latitude %.6f is out of range.  Changed to -90.\n", A->g_lat);
+	    A->g_lat = -90;
+	  }
+	  if (A->g_lat > 90) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Latitude %.6f is out of range.  Changed to 90.\n", A->g_lat);
+	    A->g_lat = 90;
+	  }
+	}
+
+	if (A->g_lon != G_UNKNOWN) {
+	  if (A->g_lon < -180) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Longitude %.6f is out of range.  Changed to -180.\n", A->g_lon);
+	    A->g_lon = -180;
+	  }
+	  if (A->g_lon > 180) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Longitude %.6f is out of range.  Changed to 180.\n", A->g_lon);
+	    A->g_lon = 180;
+	  }
+	}
+
+/*
  * Priority order for determining the symbol is:
  *	- Information part, where appropriate.  Already done above.
  *	- Destination field starting with GPS, SPC, or SYM.
@@ -1301,8 +1339,7 @@ static void aprs_raw_nmea (decode_aprs_t *A, unsigned char *info, int ilen)
  *
  *
  *
- * TODO:	Destination SSID can contain generic digipeater path.  (?)
- *
+ * FIXME:	Inform user about ambiguity.
  * Bugs:	Doesn't handle ambiguous position.  "space" treated as zero.
  *		Invalid data results in a message but latitude is not set to unknown.
  *
@@ -1543,7 +1580,7 @@ static void aprs_mic_e (decode_aprs_t *A, packet_t pp, unsigned char *info, int 
  * S 42 37.1200, Invalid Longitude, 0 MPH, course 252
  *
  * This was direct over the air with no opportunity for a digipeater
- * or anything else to corrupt the message.
+ * or anything else to corrupt the packet.
  */
 
 	if (A->g_lon != G_UNKNOWN) 
