@@ -58,6 +58,7 @@
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include <regex.h>
 
 #include "ax25_pad.h"			// for packet_t, AX25_MAX_ADDR_LEN
 #include "decode_aprs.h"		// for decode_aprs_t, G_UNKNOWN  
@@ -197,6 +198,7 @@ static struct t_metadata_s * t_get_metadata (char *station)
  * Name:        t_ndp
  *
  * Purpose:     Count number of digits after any decimal point.
+ *		Stop at any 'e' or 'E'.
  *
  * Inputs:	str	- Number in text format.
  *
@@ -206,6 +208,7 @@ static struct t_metadata_s * t_get_metadata (char *station)
  *			1.	--> 0
  *			1.2	--> 1
  *			1.23	--> 2
+ *			1.23e3	--> 2
  *			etc.
  *
  *--------------------------------------------------------------------*/
@@ -218,9 +221,13 @@ static int t_ndp (char *str)
 	if (p == NULL) {
 	  return (0);
 	}
-	else {
-	  return (strlen(p+1));
+	p++;	// Could be digit, E, or nul.
+	int n = 0;
+	while (*p != '\0' && isdigit(*p)) {
+	  n++;
+	  p++;
 	}
+	return (n);
 }
 
 
@@ -239,12 +246,12 @@ static int t_ndp (char *str)
  *		comment	- Any comment after the data.
  *
  * Description:	The first character, after the "T" data type indicator, must be "#" 
- *		followed by a sequence number.  Up to 5 analog and 8 digital channel 
+ *		followed by a sequence number.  5 analog and 8 digital channel
  *		values are specified as in this example from the protocol spec.
  *
  *			T#005,199,000,255,073,123,01101001
  *
- *		The analog values are supposed to be 3 digit integers in the 
+ *		Originally, the analog values were supposed to be 3 digit integers in the
  *		range of 000 to 255 in fixed columns.  After reading the discussion 
  *		groups it seems that few adhere to those restrictions.  When I 
  *		started to look for some local signals, this was the first one
@@ -253,11 +260,18 @@ static int t_ndp (char *str)
  *			KB1GKN-10>APRX27,UNCAN,WIDE1*:T#491,4.9,0.3,25.0,0.0,1.0,00000000
  *
  *		Not integers.  Not fixed width fields.
+ *		After some research, I found that most modern applications can process this.
+ *		It was a good idea and others copied it.
  *
- *		Originally I printed a warning if values were not in range of 000 to 255
- *		but later took it out because no one pays attention to that original
- *		restriction anymore.
- *		
+ *		This is not very flexible:
+ *		 * There must be exactly five numeric analog values, no more, no less.
+ *		 * There must be exactly one 8-bit digital value, no more, no less.
+ *		 * There is no provision for specifying an undefined/missing value.
+ *
+ *		I was thinking there could be fewer but after checking the spec,
+ *		exactly those numbers are required.  I must have been thinking of
+ *		the base-91 telemetry embedded in comments, where fewer values can be used.
+ *
  *--------------------------------------------------------------------*/
 
 void telemetry_data_original (char *station, char *info, int quiet, char *output, size_t outputsize, char *comment, size_t commentsize) 
@@ -268,7 +282,7 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	char *next;
 	char *p;
 
-	float araw[T_NUM_ANALOG];
+	float araw[T_NUM_ANALOG];	// Why not double?
 	int ndp[T_NUM_ANALOG];
 	int draw[T_NUM_DIGITAL];
 
@@ -334,20 +348,48 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	n = 0;
 	while ((p = strsep(&next,",")) != NULL) {
 	  if (n < T_NUM_ANALOG) {
+	    // I allow empty values, which is not in the spec.
+	    // Perhaps a complaint is in order if this is to be used as verification tool.
 	    if (strlen(p) > 0) {
+
+	      // See if it looks like a valid numeric value.
+
+	      static regex_t is_number_re;	/* Does it look like a number? */
+	      static int first_time = 1;
+
+	      if (first_time) {
+	        char emsg[100];
+	        int e = regcomp (&is_number_re, "^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$", REG_EXTENDED);
+	        if (e) {
+	          regerror (e, &is_number_re, emsg, sizeof(emsg));
+	          text_color_set(DW_COLOR_ERROR);
+	          dw_printf("Internal Error: %s:%d: %s\n", __FILE__, __LINE__, emsg);
+	        }
+	        first_time = 0;
+	      }
+
+#define MAXMATCH_NUM 4
+	      regmatch_t match[MAXMATCH_NUM];
+
+	      if (regexec (&is_number_re, p, MAXMATCH_NUM, match, 0) != 0) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf("Telemetry data error: \"%s\" doesn't look like a number.\n", p);
+	      }
+
+	      //for (int k = 0; k < MAXMATCH_NUM; k++) {
+	      //   dw_printf ("\"%s\" %d %d %d\n", p, k, match[k].rm_so, match[k].rm_eo);
+	      //}
+
 	      araw[n] = atof(p);
-	      ndp[n] = t_ndp(p);
+	      ndp[n] = 0;
+	      // Adjust number of display decimal places by any exponent.
+	      if (match[3].rm_so >= 0) {
+	        int exp = atoi(p + match[3].rm_so + 1);
+	        ndp[n] =  -exp ;
+	      }
+	      ndp[n] += t_ndp(p);
+	      if (ndp[n] < 0) ndp[n] = 0;
 	    }
-	    // Version 1.3: Suppress this message.
-	    // No one pays attention to the original 000 to 255 range.
-	    // BTW, this doesn't trap values like 0.0 or 1.0
-	    //if (strlen(p) != 3 || araw[n] < 0 || araw[n] > 255 || araw[n] != (int)(araw[n])) {
-	    //  if ( ! quiet) {
-	    //    text_color_set(DW_COLOR_ERROR);
-	    //    dw_printf("Telemetry analog values should be 3 digit integer values in range of 000 to 255.\n");	      
-	    //    dw_printf("Some applications might not interpret \"%s\" properly.\n", p);
-	    //  }	      
-	    //}
 	    n++;
 	  }
 
@@ -390,6 +432,8 @@ void telemetry_data_original (char *station, char *info, int quiet, char *output
 	  if ( ! quiet) {
 	    text_color_set(DW_COLOR_ERROR);
 	    dw_printf("Found fewer than expected number of telemetry data values.\n");	
+	    dw_printf("The specification calls for EXACTLY FIVE numeric analog\n");
+	    dw_printf("values and ONE 8-bit digital value.\n");
 	  }
 	}      
 
