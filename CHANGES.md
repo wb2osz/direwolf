@@ -1,5 +1,11 @@
 # Revision History
 
+## Unreleased (do2bbc/direwolf axudp)
+
+### New Features:
+
+- New AXUDP configuration command to send received frames as AXUDP v2 datagrams for the dxlAPRS tools (udpbox, udpgate4), including signal level and decoder margin.  See [doc/AXUDP.md](doc/AXUDP.md).
+
 ## Version 1.8.2 -- May 2026
 
 ### Bugs Fixed:
