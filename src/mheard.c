@@ -257,7 +257,7 @@ static int compar(const void *a, const void *b)
 	mheard_t *mb = *((mheard_t **)b);
 
 	time_t ta = MAXX(ma->last_heard_rf[ma->chan], ma->last_heard_is);
-	time_t tb = MAXX(mb->last_heard_rf[ma->chan], mb->last_heard_is);
+	time_t tb = MAXX(mb->last_heard_rf[mb->chan], mb->last_heard_is);
 
 	return (tb - ta);
 }
