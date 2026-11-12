@@ -56,6 +56,7 @@
 #include "digipeater.h"
 #include "cdigipeater.h"
 #include "config.h"
+#include "axudp.h"
 #include "aprs_tt.h"
 #include "igate.h"
 #include "latlong.h"
@@ -4933,6 +4934,22 @@ void config_init (char *fname, struct audio_s *p_audio_config,
               dw_printf ("Line %d: Invalid port number for AGW TCPIP Socket Interface. Using %d.\n", 
 			line, p_misc_config->agwpe_port);
    	    }
+	  }
+
+/*
+ * AXUDP chan host:port	- Send frames received on channel as AXUDP v2 datagrams (dxlAPRS).
+ */
+
+	  else if (strcasecmp(t, "AXUDP") == 0) {
+	    int achan = -1;
+	    char *tc = split(NULL,0);
+	    if (tc != NULL) achan = atoi(tc);	// split() reuses its buffer.
+	    char *th = split(NULL,0);
+	    if (tc == NULL || th == NULL || axudp_config (achan, th) != 0) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Line %d: AXUDP needs channel and host:port, e.g. AXUDP 0 127.0.0.1:9201\n", line);
+	    }
+	    continue;
 	  }
 
 /*

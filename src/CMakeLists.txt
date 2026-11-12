@@ -30,6 +30,7 @@ endif()
 # direwolf
 list(APPEND direwolf_SOURCES
   direwolf.c
+  axudp.c
   ais.c
   aprs_tt.c
   audio_stats.c
