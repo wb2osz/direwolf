@@ -265,12 +265,14 @@ void il2p_rec_bit (int chan, int subchan, int slice, int dbit, int check_crc)
 
 	      if (il2p_get_debug() >= 1) {
 	          if (pp != NULL) {
+	              text_color_set(DW_COLOR_DEBUG);
+	              dw_printf ("IL2P [%d.%d] ", chan, slice);
 	              ax25_hex_dump (pp);
 	          }
 	          else {
 	              // Most likely too many FEC errors.  Or CRC error.
 	              text_color_set(DW_COLOR_ERROR);
-	              dw_printf ("FAILED to construct frame in %s.\n", __func__);
+	              dw_printf ("IL2P [%d.%d] FAILED to construct frame in %s.\n", chan, slice, __func__);
 	          }
 	      }
 
