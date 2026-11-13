@@ -902,7 +902,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 
 	memset (p_igate_config, 0, sizeof(struct igate_config_s));
 	p_igate_config->t2_server_port = DEFAULT_IGATE_PORT;
-	p_igate_config->tx_chan = -1;			/* IS->RF not enabled */
 	p_igate_config->tx_limit_1 = IGATE_TX_LIMIT_1_DEFAULT;
 	p_igate_config->tx_limit_5 = IGATE_TX_LIMIT_5_DEFAULT;
 	p_igate_config->igmsp = 1;
@@ -1048,6 +1047,8 @@ void config_init (char *fname, struct audio_s *p_audio_config,
  *
  *			ADEVICEn   = n				-- Copy from different already defined channel.
  */
+
+// FIXME: intercept /dev/zero or "null" audio input device so it doesn't eat 100% CPU processing unlimited zeros.
 
 	  /* Note that ALSA name can contain comma such as hw:1,0 */
 
@@ -4858,7 +4859,7 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 // because they might want different paths.
 
 	  else if (strcasecmp(t, "IGTXVIA") == 0) {
-	    int n;
+	    int ch;
 
 	    t = split(NULL,0);
 	    if (t == NULL) {
@@ -4867,42 +4868,28 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      continue;
 	    }
 
-	    n = atoi(t);
-	    if (n < 0 || n > MAX_TOTAL_CHANS-1) {
+	    ch = atoi(t);
+	    if (ch < 0 || ch > MAX_TOTAL_CHANS-1) {
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file: Transmit channel must be in range of 0 to %d on line %d.\n", 
 							MAX_TOTAL_CHANS-1, line);
 	      continue;
 	    }
-	    p_igate_config->tx_chan = n;
+	    p_igate_config->igtx_enable[ch] = 1;
 
 	    t = split(NULL,0);
 	    if (t != NULL) {
 
-#if 1	// proper checking
-
-	      n = check_via_path(t);
+	      int n = check_via_path(t);
 	      if (n >= 0) {
-	        p_igate_config->max_digi_hops = n;
-	        p_igate_config->tx_via[0] = ',';
-	        strlcpy (p_igate_config->tx_via + 1, t, sizeof(p_igate_config->tx_via)-1);
+	        p_igate_config->igtx_max_digi_hops[ch] = n;
+	        p_igate_config->igtx_via[ch][0] = ',';
+	        strlcpy (p_igate_config->igtx_via[ch] + 1, t, sizeof(p_igate_config->igtx_via[ch])-1);
 	      }
 	      else {
 	        text_color_set(DW_COLOR_ERROR);
 	        dw_printf ("Config file, line %d: invalid via path.\n", line);
 	      }
-
-#else	// previously
-
-	      char *p;
-	      p_igate_config->tx_via[0] = ',';
-	      strlcpy (p_igate_config->tx_via + 1, t, sizeof(p_igate_config->tx_via)-1);
-	      for (p = p_igate_config->tx_via; *p != '\0'; p++) {
-	        if (islower(*p)) {
-		  *p = toupper(*p);	/* silently force upper case. */
-	        }
-	      }
-#endif
 	    }
 	  }
 
@@ -6038,16 +6025,18 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      dw_printf ("Config file: MYCALL must be set for receive channel %d before Rx IGate is allowed.\n", i);
 	      strlcpy (p_igate_config->t2_login, "", sizeof(p_igate_config->t2_login));
 	    }
-	    // Currently we can have only one transmit channel.
-	    // This might be generalized someday to allow more.
-	    if (p_igate_config->tx_chan >= 0 && 
-			( strcmp(p_audio_config->mycall[p_igate_config->tx_chan], "") == 0 ||
-		          strcmp(p_audio_config->mycall[p_igate_config->tx_chan], "NOCALL") == 0 ||
-			  strcmp(p_audio_config->mycall[p_igate_config->tx_chan], "N0CALL") == 0)) {
 
-	      text_color_set(DW_COLOR_ERROR);
-	      dw_printf ("Config file: MYCALL must be set for transmit channel %d before Tx IGate is allowed.\n", i);
-	      p_igate_config->tx_chan = -1;
+	    // In release 1.9 we can have multiple IGate IS>RF channels.
+
+	    for (int tx_chan = 0; tx_chan < MAX_TOTAL_CHANS; tx_chan++) {
+	      if ((p_igate_config->igtx_enable[tx_chan]) &&
+			( strcmp(p_audio_config->mycall[tx_chan], "") == 0 ||
+		          strcmp(p_audio_config->mycall[tx_chan], "NOCALL") == 0 ||
+			  strcmp(p_audio_config->mycall[tx_chan], "N0CALL") == 0)) {
+	        text_color_set(DW_COLOR_ERROR);
+	        dw_printf ("Config file: MYCALL must be set for transmit channel %d before Tx IGate is allowed.\n", tx_chan);
+	        p_igate_config->igtx_enable[tx_chan] = 0;	// Disable channel for IS>RF.
+	      }
 	    }
 	  }
 	}
@@ -6055,7 +6044,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 // Apply default IS>RF IGate filter if none specified.  New in 1.4.
 // This will handle eventual case of multiple transmit channels.
 
-	if (strlen(p_igate_config->t2_login) > 0) {
 	  for (j=0; j<MAX_TOTAL_CHANS; j++) {
 	    if (p_audio_config->chan_medium[j] == MEDIUM_RADIO ||
 	        p_audio_config->chan_medium[j] == MEDIUM_NETTNC ||
@@ -6065,7 +6053,6 @@ void config_init (char *fname, struct audio_s *p_audio_config,
 	      }
 	    }
 	  }
-	}
 
 // Terrible hack.  But what can we do?
 
@@ -6192,7 +6179,8 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	       b->sendto_type = SENDTO_IGATE;
 	       b->sendto_chan = 0;
 	    }
-	    else if (value[0] == 'r' || value[0] == 'R') {
+	    else if ((value[0] == 'r' || value[0] == 'R') && isdigit(value[1])) {
+	       // Simulate reception from a channel.
 	       int n = atoi(value+1);
 	       if (( n < 0 || n >= MAX_TOTAL_CHANS || p_audio_config->chan_medium[n] == MEDIUM_NONE)
 			&& p_audio_config->chan_medium[n] != MEDIUM_IGATE) {
@@ -6202,6 +6190,11 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	       }
 	       b->sendto_type = SENDTO_RECV;
 	       b->sendto_chan = n;
+	    }
+	    else if (toupper(value[0]) == 'R' && toupper(value[1]) == 'I') {
+	       // Simulate reception from IGate.
+	       b->sendto_type = SENDTO_RECV_IGATE;
+	       b->sendto_chan = 0;	// not used.
 	    }
 	    else if (value[0] == 't' || value[0] == 'T' || value[0] == 'x' || value[0] == 'X') {
 	      int n = atoi(value+1);
@@ -6250,9 +6243,6 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	    }
 	  }
 	  else if (strcasecmp(keyword, "VIA") == 0) {
-
-#if 1	// proper checking
-
 	    if (check_via_path(value) >= 0) {
 	      b->via = strdup(value);
 	    }
@@ -6260,17 +6250,6 @@ static int beacon_options(char *cmd, struct beacon_s *b, int line, struct audio_
 	      text_color_set(DW_COLOR_ERROR);
 	      dw_printf ("Config file, line %d: invalid via path.\n", line);
 	    }
-
-
-#else	// previously
-
-	    b->via = strdup(value);
-	    for (p = b->via; *p != '\0'; p++) {
-	      if (islower(*p)) {
-	        *p = toupper(*p);	/* silently force upper case. */
-	      }
-	    }
-#endif
 	  }
 	  else if (strcasecmp(keyword, "INFO") == 0) {
 	    b->custom_info = strdup(value);

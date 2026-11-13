@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2015, 2016, 2023, 2025  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2015, 2016, 2023, 2025, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -28,7 +28,9 @@
  *		and relay packets between RF and Internet.
  *		In version 1.8 we add capability to gather from multiple CWOP servers.
  *
- * References:	APRS-IS (Automatic Packet Reporting System-Internet Service)
+ * References:	https://github.com/wb2osz/aprsspec
+ *
+ *		APRS-IS (Automatic Packet Reporting System-Internet Service)
  *		http://www.aprs-is.net/Default.aspx
  *
  *		APRS iGate properties
@@ -38,9 +40,6 @@
  *
  *		Notes to iGate developers
  *		https://github.com/hessu/aprsc/blob/master/doc/IGATE-HINTS.md#igates-dropping-duplicate-packets-unnecessarily
- *
- *		SATgate mode.
- *		http://www.tapr.org/pipermail/aprssig/2016-January/045283.html
  *
  *---------------------------------------------------------------*/
 
@@ -115,27 +114,14 @@
 static unsigned __stdcall connnect_thread_aprs (void *arg);
 static unsigned __stdcall connnect_thread_cwop (void *arg);
 static unsigned __stdcall igate_recv_thread (void *arg);
-static unsigned __stdcall satgate_delay_thread (void *arg);
 #else
 static void * connnect_thread_aprs (void *arg);
 static void * connnect_thread_cwop (void *arg);
 static void * igate_recv_thread (void *arg);
-static void * satgate_delay_thread (void *arg);
 #endif
 
 
-// SATgate was done on a whim, after seeing something
-// in a discussion group.  Turns out to be not such
-// a good idea.  This should be deprecated.
-// The correct approach is to use filtering on whether
-// packet was digipeated by RS0ISS.  Maybe filtering
-// was not available back then.
-
-static dw_mutex_t dp_mutex;				/* Critical section for delayed packet queue. */
-static packet_t dp_queue_head;
-
 static void setup_cwop_connect_threads(void);
-static void satgate_delay_packet (packet_t pp, int chan);
 static void send_packet_to_server (packet_t pp, int chan);
 static void send_msg_to_server (int my_server_index, const char *msg, int msg_len);
 static void maybe_xmit_packet_from_igate (char *message, int chan);
@@ -204,8 +190,8 @@ int main (int argc, char *argv[])
 	strlcpy (igate_config.t2_passcode, "-1", sizeof(igate_config.t2_passcode));
 	igate_config.t2_filter = strdup ("r/1/2/3");
 	
-	igate_config.tx_chan = 0;
-	strlcpy (igate_config.tx_via, ",WIDE2-1", sizeof(igate_config.tx_via));
+	igate_config.igtx_chan[0] = 1;
+	strlcpy (igate_config.igtx_via[0], ",WIDE2-1", sizeof(igate_config.tx_via[0]));
 	igate_config.tx_limit_1 = 3;
 	igate_config.tx_limit_5 = 5;
 
@@ -388,15 +374,12 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 {
 #if __WIN32__
 	HANDLE cmd_recv_th;
-	HANDLE satgate_delay_th;	// TODO: Remove this in release 1.9
 #else
 	pthread_t connect_listen_tid;
 	pthread_t cmd_listen_tid;
-	pthread_t satgate_delay_tid;
 	int e;
 #endif
 	s_debug = debug_level;
-	dp_queue_head = NULL;
 
 #if DEBUGx
 	text_color_set(DW_COLOR_DEBUG);
@@ -497,29 +480,6 @@ void igate_init (struct audio_s *p_audio_config, struct igate_config_s *p_igate_
 	  }
 #endif
 	}  // for each is_server
-
-/*
- * This lets delayed packets continue after specified amount of time.
- */
-
-	if (p_igate_config->satgate_delay > 0) {
-#if __WIN32__
-	  satgate_delay_th = (HANDLE)_beginthreadex (NULL, 0, satgate_delay_thread, NULL, 0, NULL);
-	  if (satgate_delay_th == NULL) {
-	    text_color_set(DW_COLOR_ERROR);
-	    dw_printf ("Internal error: Could not create SATgate delay thread\n");
-	    return;
-	  }
-#else
-	  e = pthread_create (&satgate_delay_tid, NULL, satgate_delay_thread, NULL);
-	  if (e != 0) {
-	    text_color_set(DW_COLOR_ERROR);
-	    perror("Internal error: Could not create SATgate delay thread");
-	    return;
-	  }
-#endif
-	  dw_mutex_init(&dp_mutex);
-	}
 
 } /* end igate_init */
 
@@ -1360,22 +1320,7 @@ void igate_send_rec_packet (int chan, packet_t recv_pp)
 
 // TODO: Should we drop raw touch tone data object type generated here?
 
-
-/*
- * If the SATgate mode is enabled, see if it should be delayed.
- * The rule is if we hear it directly and it has at least one
- * digipeater so there is potential of being re-transmitted.
- * (Digis are all unused if we are hearing it directly from source.)
- */
-	if (save_igate_config_p->satgate_delay > 0 &&
-	    ax25_get_heard(pp) == AX25_SOURCE &&
-	    ax25_get_num_repeaters(pp) > 0) {
-
-	  satgate_delay_packet (pp, chan);
-	}
-	else {
-	  send_packet_to_server (pp, chan);
-	}
+	send_packet_to_server (pp, chan);
 
 } /* end igate_send_rec_packet */
 
@@ -1468,7 +1413,15 @@ static void send_packet_to_server (packet_t pp, int chan)
 	ax25_format_addrs (pp, msg);
 	msg[strlen(msg)-1] = '\0';    /* Remove trailing ":" */
 
-	if (save_igate_config_p->tx_chan >= 0) {
+	int rx_only = 1;
+	for (int ch = 0; ch < MAX_TOTAL_CHANS; ch++) {
+	  if (save_igate_config_p->igtx_enable[ch]) {
+	    rx_only = 0;
+	    break;
+	  }
+	}
+
+	if ( ! rx_only) {
 	  strlcat (msg, ",qAR,", sizeof(msg));
 	}
 	else {
@@ -1488,10 +1441,9 @@ static void send_packet_to_server (packet_t pp, int chan)
 // that we should simply pass along whatever we receive even if we don't like it.
 // We really shouldn't modify it and make the situation even worse.
 //
-// Chapter 5 of the APRS spec ( http://www.aprs.org/doc/APRS101.PDF ) says:
+// Chapter 5 of the APRS spec ( https://github.com/wb2osz/aprsspec ) says:
 //
-// 	"The comment may contain any printable ASCII characters (except | and ~,
-// 	which are reserved for TNC channel switching)."
+// 	"The freeform text part of the comment may contain any printable ASCII and UTF-8 character."
 //
 // "Printable" would exclude character values less than space (00100000), e.g.
 // tab, carriage return, line feed, nul.  Sometimes we see carriage return
@@ -1502,12 +1454,11 @@ static void send_packet_to_server (packet_t pp, int chan)
 // in the information part.  An unfortunate decision, but it is not in the comment part.
 //
 // The base 91 telemetry format (http://he.fi/doc/aprs-base91-comment-telemetry.txt ),
-// which is not part of the APRS spec, uses the | character in the comment to delimit encoded
+// which was not part of the original APRS spec, uses the | character in the comment to delimit encoded
 // telemetry data.   This would be in violation of the original spec.  No one cares.
 //
-// The APRS Spec Addendum 1.2 Proposals ( http://www.aprs.org/aprs12/datum.txt)
-// adds use of UTF-8 (https://en.wikipedia.org/wiki/UTF-8 )for the free form text in
-// messages and comments. It can't be used in the fixed width fields.
+// UTF-8 may be used for the free form text in messages and comments.
+// It can't be used in the fixed width fields.
 //
 // Non-ASCII characters are represented by multi-byte sequences.  All bytes in these
 // multi-byte sequences have the most significant bit set to 1.  Using UTF-8 would not
@@ -1860,13 +1811,14 @@ static void * igate_recv_thread (void *arg)
 
 /*
  * Possibly transmit if so configured.
+ *
+ * New in 1.9: Can have multiple IS>RF channels.
  */
-	    int to_chan = save_igate_config_p->tx_chan;
-
-	    if (to_chan >= 0) {
-	      maybe_xmit_packet_from_igate ((char*)message, to_chan);
+	    for (int to_chan = 0; to_chan < MAX_TOTAL_CHANS; to_chan++) {
+	      if (save_igate_config_p->igtx_enable[to_chan]) {
+	        maybe_xmit_packet_from_igate ((char*)message, to_chan);
+	      }
 	    }
-
 
 /*
  * New in 1.7:  If ICHANNEL was specified, send packet to client app as specified channel.
@@ -1932,133 +1884,51 @@ static void * igate_recv_thread (void *arg)
 } /* end igate_recv_thread */
 
 
-
 /*-------------------------------------------------------------------
  *
- * Name:        satgate_delay_packet
+ * Name:        igate_simulate_recv
  *
- * Purpose:     Put packet into holding area for a while rather than
- *		sending it immediately to the IS server.
+ * Purpose:     Data entry point for simulating reception from APRS-IS for testing.
  *
- * Inputs:	pp	- Packet object.
+ * Inputs:	pp	- Packet object.  We will deallocate when done with it.
  *
- *		chan	- Radio channel where received.
+ * Discussion:	IGate IS>RF filtering and other functions can be tested
+ *		without a radio or APRS-IS connection, using beacons like this:
  *
- * Outputs:	Appended to queue.
- *
- * Description:	If we hear a packet directly and the same one digipeated,
- *		we only send the first to the APRS IS due to duplicate removal.
- *		It may be desirable to favor the digipeated packet over the
- *		original.  For this situation, we have an option which delays
- *		a packet if we hear it directly and the via path is not empty.
- *		We know we heard it directly if none of the digipeater
- *		addresses have been used.
- *		This way the digipeated packet will go first.
- *		The original is sent about 10 seconds later.
- *		Duplicate removal will drop the original if there is no
- *		corresponding digipeated version.
- *
- *
- *		This was an idea that came up in one of the discussion forums.
- *		I rushed in without thinking about it very much.
- *
- * 		In retrospect, I don't think this was such a good idea.
- *		It would be of value only if there is no other IGate nearby
- *		that would report on the original transmission.
- *		I wonder if anyone would notice if this silently disappeared.
+ *		cbeacon delay=0:10 sendto=RIg source="A" dest="APZ" info=":X        :Hello to X"
  *
  *--------------------------------------------------------------------*/
 
-static void satgate_delay_packet (packet_t pp, int chan)
+void igate_simulate_recv (packet_t pp)
 {
-	packet_t pnext, plast;
+	// Convert packet to TNC-2 monitoring text format.
+	// This does not turn unprintable characters into <xFF> representation
+	// because it is for hand crafted tests without weird situations.
+	// We should probably have a common to-text function, with optional safe print,
+	// rather than duplicating this many places.
 
+	char ptext[512];
+	unsigned char *pinfo;
 
-	//if (s_debug >= 1) {
-	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("Rx IGate: SATgate mode, delay packet heard directly.\n");
-	//}
+	ax25_format_addrs (pp, ptext);		// Like source>dest,digi,...,digi:
+	(void)ax25_get_info (pp, &pinfo);
+	strlcat (ptext, (char*)pinfo, sizeof(ptext));
+	mheard_save_is (ptext);
+	ax25_delete (pp);
 
-	ax25_set_release_time (pp, dtime_now() + save_igate_config_p->satgate_delay);
-//TODO: save channel too.
+	text_color_set(DW_COLOR_REC);
+	dw_printf ("[ig] %s\n", ptext);
 
-	dw_mutex_lock (&dp_mutex);
+	// Beginning with 1.9 we can transmit to more than one channel.
 
-	if (dp_queue_head == NULL) {
-	  dp_queue_head = pp;
-	}
-	else {
-	  plast = dp_queue_head;
-	  while ((pnext = ax25_get_nextp(plast)) != NULL) {
-	    plast = pnext;
+	for (int to_chan = 0; to_chan < MAX_TOTAL_CHANS; to_chan++) {
+	  if (save_igate_config_p->igtx_enable[to_chan]) {
+	    maybe_xmit_packet_from_igate ((char*)ptext, to_chan);
 	  }
-	  ax25_set_nextp (plast, pp);
 	}
 
-	dw_mutex_unlock (&dp_mutex);
+} // end igate_simulate_recv
 
-} /* end satgate_delay_packet */
-
-
-
-/*-------------------------------------------------------------------
- *
- * Name:        satgate_delay_thread
- *
- * Purpose:     Release packet when specified release time has arrived.
- *
- * Inputs:	dp_queue_head	- Queue of packets.
- *
- * Outputs:	Sent to APRS IS.
- *
- * Description:	For simplicity we'll just poll each second.
- *		Release the packet when its time has arrived.
- *
- *--------------------------------------------------------------------*/
-
-#if __WIN32__
-static unsigned __stdcall satgate_delay_thread (void *arg)
-#else
-static void * satgate_delay_thread (void *arg)
-#endif
-{
-	double release_time;
-	int chan = 0;				// TODO:  get receive channel somehow.
-						// only matters if multi channel with different names.
-		
-	while (1) {
-	  SLEEP_SEC (1);
-
-/* Don't need critical region just to peek */
-
-	  if (dp_queue_head != NULL) {
-
-	    double now = dtime_now();
-
-	    release_time = ax25_get_release_time (dp_queue_head);
-
-#if 0
-	    text_color_set(DW_COLOR_DEBUG);
-	    dw_printf ("SATgate:  %.1f sec remaining\n", release_time - now);
-#endif
-	    if (now > release_time) {
-	      packet_t pp;
-
-	      dw_mutex_lock (&dp_mutex);
-
-	      pp = dp_queue_head;
-	      dp_queue_head = ax25_get_nextp(pp);
-
-	      dw_mutex_unlock (&dp_mutex);
-	      ax25_set_nextp (pp, NULL);
-
-	      send_packet_to_server (pp, chan);
-	    }
-	  }  /* if something in queue */
-	}  /* while (1) */
-	return (0);
-
-} /* end satgate_delay_thread */
 
 
 /*-------------------------------------------------------------------
@@ -2376,7 +2246,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	  snprintf (radio, sizeof(radio), "%s>%s%d%d%s:}%s",
 				save_audio_config_p->mycall[to_chan],
 				APP_TOCALL, MAJOR_VERSION, MINOR_VERSION,
-				save_igate_config_p->tx_via,
+				save_igate_config_p->igtx_via[to_chan],
 				payload);
 
 	  packet_t pradio = ax25_from_text (radio, 1);
@@ -2402,7 +2272,7 @@ static void maybe_xmit_packet_from_igate (char *message, int to_chan)
 	      mheard_set_msp (src, save_igate_config_p->igmsp);
 	    }
 
-	    ig_to_tx_remember (pp3, save_igate_config_p->tx_chan, 0);	// correct. version before encapsulating it.
+	    ig_to_tx_remember (pp3, to_chan, 0);	// correct. version before encapsulating it.
 	  }
 	  else {
 	    text_color_set(DW_COLOR_ERROR);

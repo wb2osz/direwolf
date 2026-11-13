@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2016  John Langner, WB2OSZ
+//    Copyright (C) 2016, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -887,6 +887,8 @@ int mheard_count (int max_hops, int time_limit)
  *
  *		callsign	- Callsign for station.
  *
+ *		chan		- Heard on this radio channel.
+ *
  *		time_limit	- Include only stations heard within this many minutes.
  *				  Typically 180.
  *
@@ -900,7 +902,7 @@ int mheard_count (int max_hops, int time_limit)
  *
  *------------------------------------------------------------------*/
 
-int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int max_hops, double dlat, double dlon, double km)
+int mheard_was_recently_nearby (char *role, char *callsign, int chan, int time_limit, int max_hops, double dlat, double dlon, double km)
 {
 	mheard_t *mptr;
 	time_t now;
@@ -914,12 +916,11 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 	    dw_printf ("Was message %s %s heard in the past %d minutes, with %d or fewer digipeater hops, and within %.1f km of %.2f %.2f?\n", role, callsign, time_limit, max_hops, km, dlat, dlon);
 	  }
 	  else {
-	    dw_printf ("Was message %s %s heard in the past %d minutes, with %d or fewer digipeater hops?\n", role, callsign, time_limit, max_hops);
+	    dw_printf ("Was message %s %s heard on channel %d, in the past %d minutes, with %d or fewer digipeater hops?\n", role, callsign, chan, time_limit, max_hops);
 	  }
 	}
 
 	mptr = mheard_ptr(callsign);
-
 	if (mptr == NULL || mptr->last_heard_rf[mptr->chan] == 0) {
 
 	  if (role != NULL && strlen(role) > 0) {
@@ -932,11 +933,13 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 	now = time(NULL);
 	heard_ago = (int)(now - mptr->last_heard_rf[mptr->chan]) / 60;
 
-	if (heard_ago > time_limit) {
+// Was it on desired channel within time limit?
+
+	if (chan != mptr->chan || heard_ago > time_limit) {
 
 	  if (role != NULL && strlen(role) > 0) {
 	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("No, %s was last heard over the radio %d minutes ago with %d digipeater hops.\n", callsign, heard_ago, mptr->num_digi_hops);
+	    dw_printf ("No, %s was last heard, on radio channel %d, %d minutes ago, with %d digipeater hops.\n", callsign, mptr->chan, heard_ago, mptr->num_digi_hops);
 	  }
 	  return (0);
 	}
@@ -945,7 +948,7 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 
 	  if (role != NULL && strlen(role) > 0) {
 	    text_color_set(DW_COLOR_INFO);
-	    dw_printf ("No, %s was last heard over the radio with %d digipeater hops %d minutes ago.\n", callsign, mptr->num_digi_hops, heard_ago);
+	    dw_printf ("No, %s was last heard, on radio channel %d, with %d digipeater hops, %d minutes ago.\n", callsign, mptr->chan, mptr->num_digi_hops, heard_ago);
 	  }
 	  return (0);
 	}
@@ -960,14 +963,14 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 
 	    if (role != NULL && strlen(role) > 0) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("No, %s was %.1f km away although it was %d digipeater hops %d minutes ago.\n", callsign, dist, mptr->num_digi_hops, heard_ago);
+	      dw_printf ("No, %s was %.1f km away, on channel %d, although it was %d digipeater hops %d minutes ago.\n", callsign, dist, mptr->chan, mptr->num_digi_hops, heard_ago);
 	    }
 	    return (0);
 	  }
 	  else {
 	    if (role != NULL && strlen(role) > 0) {
 	      text_color_set(DW_COLOR_INFO);
-	      dw_printf ("Yes, %s last heard over radio %d minutes ago, %d digipeater hops.  Last location %.1f km away.\n", callsign, heard_ago, mptr->num_digi_hops, dist);
+	      dw_printf ("Yes, %s last heard on radio channel %d, %d minutes ago, %d digipeater hops.  Last location %.1f km away.\n", callsign, chan, heard_ago, mptr->num_digi_hops, dist);
 	    }
 	    return (1);
 	  }
@@ -977,7 +980,7 @@ int mheard_was_recently_nearby (char *role, char *callsign, int time_limit, int 
 
 	if (role != NULL && strlen(role) > 0) {
 	  text_color_set(DW_COLOR_INFO);
-	  dw_printf ("Yes, %s last heard over radio %d minutes ago, %d digipeater hops.\n", callsign, heard_ago, mptr->num_digi_hops);
+	  dw_printf ("Yes, %s last heard, on radio channel %d, %d minutes ago, %d digipeater hops.\n", callsign, mptr->chan, heard_ago, mptr->num_digi_hops);
 	}
 
 	return (1);

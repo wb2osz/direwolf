@@ -4,6 +4,8 @@
 
 ### New Features:
 
+- Multiple IGTXVIA configurations now allowed for IGate stations with multiple radios.
+
 - Add CRC at end of IL2P frames for transmission and check for correctness on receive.  Checking on receive can be disabled by adding "IL2PRXCRC 0" to configuration file.
 
 - Compatibility with hamlib version 5.

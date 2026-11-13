@@ -329,12 +329,13 @@ int main (int argc, char *argv[])
 
 	text_color_set(DW_COLOR_INFO);
 	//dw_printf ("Dire Wolf version %d.%d (%s) BETA TEST 1\n", MAJOR_VERSION, MINOR_VERSION, __DATE__);
-	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "F", __DATE__);
+	dw_printf ("Dire Wolf DEVELOPMENT version %d.%d %s (%s)\n", MAJOR_VERSION, MINOR_VERSION, "G", __DATE__);
 // B = new -dq & tcp_wmem
 // C = AX.25 v2.2 improvements
 // D = KISSPTY config.
 // E = hamlib 5
 // F = check IL2P CRC
+// G = multiple IGTXVIA
 // TBD? = AX.25 v2.2 negotiating status
 	//dw_printf ("Dire Wolf Release %d.%d.%d, October 2025\n", MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION);
 

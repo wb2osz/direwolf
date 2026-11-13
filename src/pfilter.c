@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2015, 2016, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2015, 2016, 2023, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -1231,6 +1231,9 @@ static int filt_s (pfstate_t *pf)
  *
  *				i/time/hops/lat/lon/km
  *
+ *		pf->to_chan - Need to check whether addressee was
+ *				heard on this channel, not just anywhere.
+ *
  * Returns:	 1 = yes
  *		 0 = no
  *		-1 = error detected
@@ -1260,6 +1263,9 @@ static int filt_s (pfstate_t *pf)
  *
  *
  *		It only makes sense to use this for the IS>RF direction.
+ *		( Later thought, could also be applicable for cross band digipeating.
+ *		  Maybe we want to forward "messages" but not other packet types. )
+ *
  *		The basic idea is that we want to transmit a "message" only if the
  *		addressee has been heard recently and is not too far away.
  *
@@ -1328,7 +1334,7 @@ static int filt_i (pfstate_t *pf)
 #if PFTEST
 	int maxhops = 2;
 #else
-	int maxhops = save_igate_config_p->max_digi_hops;	// from IGTXVIA config.
+	int maxhops = save_igate_config_p->igtx_max_digi_hops[pf->to_chan];	// from IGTXVIA config.
 #endif
 	double dlat = G_UNKNOWN;
 	double dlon = G_UNKNOWN;
@@ -1428,9 +1434,12 @@ static int filt_i (pfstate_t *pf)
  * Condition 1:
  *	"the receiving station has been heard within range within a predefined time
  *	 period (range defined as digi hops, distance, or both)."
+ *
+ *	version 1.9 - also add requirement that it was heard on the IS>RF IGate
+ *	transmit channel, to_chan.
  */
 
-	int was_heard = mheard_was_recently_nearby ("addressee", pf->decoded.g_addressee, heardtime, maxhops, dlat, dlon, km);
+	int was_heard = mheard_was_recently_nearby ("addressee", pf->decoded.g_addressee, pf->to_chan, heardtime, maxhops, dlat, dlon, km);
 
 	if ( ! was_heard) return (0);
 
@@ -1441,7 +1450,7 @@ static int filt_i (pfstate_t *pf)
  *
  * This is the part I'm not so sure about.
  * I guess the intention is that if the sender can be heard over RF, then the addressee
- * might hear the sender without the help of Igate stations.
+ * might hear the sender without the help of IGate stations.
  * Suppose the sender was 1 digipeater hop to the west and the addressee was 1 digipeater hop to the east.
  * I can communicate with each of them with 1 digipeater hop but for them to reach each other, they
  * might need 3 hops and using that many is generally frowned upon and rare.
@@ -1451,7 +1460,7 @@ static int filt_i (pfstate_t *pf)
  * the past minute, rather than the usual 180 minutes for the addressee.
  */
 
-	was_heard = mheard_was_recently_nearby ("source", pf->decoded.g_src, 1, 0, G_UNKNOWN, G_UNKNOWN, G_UNKNOWN);
+	was_heard = mheard_was_recently_nearby ("source", pf->decoded.g_src, pf->to_chan, 1, 0, G_UNKNOWN, G_UNKNOWN, G_UNKNOWN);
 
 	if (was_heard) return (0);
 

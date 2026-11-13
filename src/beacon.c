@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2013, 2014, 2015, 2016, 2017, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -1017,7 +1017,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 						igate_get_msg_cnt(),
 						igate_get_pkt_cnt(),
 						mheard_count(0,last_minutes),
-						mheard_count(g_igate_config_p->max_digi_hops,last_minutes),
+						mheard_count(g_igate_config_p->igtx_max_digi_hops[bp->sendto_chan],last_minutes),
 						mheard_count(8,last_minutes),
 						igate_get_upl_cnt(),
 						igate_get_dnl_cnt());
@@ -1050,7 +1050,7 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 
 	        switch (bp->sendto_type) {
 
-	          case SENDTO_IGATE:
+	          case SENDTO_IGATE:		// Send beacon to APRS-IS
 
 	  	    text_color_set(DW_COLOR_XMIT);
 	  	    dw_printf ("[ig] %s\n", beacon_text);
@@ -1059,19 +1059,22 @@ static void beacon_send (int j, dwgps_info_t *gpsinfo)
 		    ax25_delete (pp);
 	            break;
 
-		  case SENDTO_XMIT:
+		  case SENDTO_XMIT:		// Send beacon to a radio
 		  default:
 
 	            tq_append (bp->sendto_chan, TQ_PRIO_1_LO, pp);
 		    break;
 
-		  case SENDTO_RECV:
-
-	            /* Simulated reception from radio. */
+		  case SENDTO_RECV:		// Simulate reception from a radio
 
 		    memset (&alevel, 0xff, sizeof(alevel));
 	            dlq_rec_frame (bp->sendto_chan, 0, 0, pp, alevel, 0, 0, "");
 	            break; 
+
+		  case SENDTO_RECV_IGATE:	// Simulate reception from APRS-IS
+
+	            igate_simulate_recv (pp);
+	            break;
 		}
 	      }
 	      else {

@@ -47,23 +47,25 @@ struct igate_config_s {
 
 /*
  * For transmitting.
+ *
+ * Originally, this allowed only a single channel.
+ * In release 1.9, allow multiple IGate transmit channels from a single APRS-IS connection.
+ * Use with SCHANNEL and NCHANNEL is allowed.
  */
-	int tx_chan;			/* Radio channel for transmitting. */
-					/* 0=first, etc.  -1 for none. */
-					/* Presently IGate can transmit on only a single channel. */
-					/* A future version might generalize this.  */
-					/* Each transmit channel would have its own client side filtering. */
+	int igtx_enable[MAX_TOTAL_CHANS]; /* Radio channel enabled for IS>RF gateway? */
 
-	char tx_via[80];		/* VIA path for transmitting third party packets. */
+	char igtx_via[MAX_TOTAL_CHANS][80]; /* VIA path for transmitting third party packets. */
 					/* Usual text representation.  */
 					/* Must start with "," if not empty so it can */
 					/* simply be inserted after the destination address. */
 
-	int max_digi_hops;		/* Maximum number of digipeater hops possible for via path. */
+	int igtx_max_digi_hops[MAX_TOTAL_CHANS]; /* Maximum number of digipeater hops possible for via path. */
 					/* Derived from the SSID when last character of address is a digit. */
 					/* e.g.  "WIDE1-1,WIDE5-2" would be 3. */
 					/* This is useful to know so we can determine how many */
 					/* stations we might be able to reach. */
+
+// TODO: Should these also be per channel, or leave as global settings?
 
 	int tx_limit_1;			/* Max. packets to transmit in 1 minute. */
 
@@ -79,10 +81,6 @@ struct igate_config_s {
  */
 	int rx2ig_dedupe_time;		/* seconds.  0 to disable. */
 
-/*
- * Special SATgate mode to delay packets heard directly.
- */
-	int satgate_delay;		/* seconds.  0 to disable. */
 };
 
 
@@ -95,10 +93,6 @@ struct igate_config_s {
 #define IGATE_RX2IG_DEDUPE_TIME 0		/* Issue 85.  0 means disable dupe checking in RF>IS direction. */
 						/* See comments in rx_to_ig_remember & rx_to_ig_allow. */
 						/* Currently there is no configuration setting to change this. */
-
-#define DEFAULT_SATGATE_DELAY 10
-#define MIN_SATGATE_DELAY 5
-#define MAX_SATGATE_DELAY 30
 
 
 /* Call this once at startup */
@@ -113,6 +107,9 @@ void igate_send_rec_packet (int chan, packet_t recv_pp);
 
 void ig_to_tx_remember (packet_t pp, int chan, int bydigi);
 
+/* Simulate packet from APRS-IS for testing. */
+
+void igate_simulate_recv (packet_t pp);
 
 
 /* Get statistics for IGATE status beacon. */
