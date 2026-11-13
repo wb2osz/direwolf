@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022, 2023, 2024  John Langner, WB2OSZ
+//    Copyright (C) 2011, 2012, 2013, 2014, 2015, 2017, 2022, 2023, 2024, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -192,8 +192,10 @@ void decode_aprs (decode_aprs_t *A, packet_t pp, int quiet, char *third_party_sr
 	A->g_course = G_UNKNOWN;
 
 	A->g_power = G_UNKNOWN;
-	A->g_height = G_UNKNOWN;
+	A->g_height_ft = G_UNKNOWN;
 	A->g_gain = G_UNKNOWN;
+	A->g_beacons_per_hour = G_UNKNOWN;
+	A->g_df_strength = G_UNKNOWN;
 
 	A->g_range = G_UNKNOWN;
 	A->g_altitude_ft = G_UNKNOWN;
@@ -661,8 +663,20 @@ void decode_aprs_print (decode_aprs_t *A) {
 	  /* http://eng.usna.navy.mil/~bruninga/aprs/aprs11.html */
 	  /* "The Antenna Gain in the PHG format on page 28 is in dBi." */
 
-	  snprintf (phg, sizeof(phg), ", %d W height(HAAT)=%dft=%.0fm %ddBi %s", A->g_power, A->g_height, DW_FEET_TO_METERS(A->g_height), A->g_gain, A->g_directivity);
+	  snprintf (phg, sizeof(phg), ", %d W height(HAAT)=%dft=%.0fm %ddBi %s", A->g_power, A->g_height_ft, DW_FEET_TO_METERS(A->g_height_ft), A->g_gain, A->g_directivity);
 	  strlcat (stemp, phg, sizeof(stemp));
+
+	  if (A->g_beacons_per_hour != G_UNKNOWN) {
+	    snprintf (phg, sizeof(phg), " %d beacons/hour", A->g_beacons_per_hour);
+	    strlcat (stemp, phg, sizeof(stemp));
+	  }
+	}
+
+	if (A->g_df_strength != G_UNKNOWN) {
+	  char dfs[100];
+
+	  snprintf (dfs, sizeof(dfs), ", DF: %d S-points height(HAAT)=%dft=%.0fm %ddBi %s", A->g_df_strength, A->g_height_ft, DW_FEET_TO_METERS(A->g_height_ft), A->g_gain, A->g_directivity);
+	  strlcat (stemp, dfs, sizeof(stemp));
 	}
 
 	if (A->g_range > 0) {
@@ -4221,26 +4235,39 @@ int get_maidenhead (decode_aprs_t *A, char *p)
  *			A->g_course
  *			A->g_speed_mph
  *			A->g_power 
- *			A->g_height 
+ *			A->g_height_ft
  *			A->g_gain 
- *			A->g_directivity 
+ *			A->g_directivity
+ *			A->g_beacons_per_hour
  *			A->g_range
  *
- *		Anything left over will be put in 
- *
- *			A->g_comment			
+ *		Anything left over is the comment.
  *
  * Description:	
  *
- *
+ *	This follows the standard in that "data extensions" must
+ *	immediately follow the symbol.
+ *	TODO? Issue error if PHG is found later in comment.
  *
  *------------------------------------------------------------------*/
 
-const char *dir[9] = { "omni", "NE", "E", "SE", "S", "SW", "W", "NW", "N" };
+const static char *dir[10] = { "Omni", "NE", "East", "SE", "South", "SW", "West", "NW", "North", "?" };
 
 static int data_extension_comment (decode_aprs_t *A, char *pdext)
 {
 	int n;
+
+	// I've seen only 3 numbers after PHG.
+	// 3 letters sort of suggests 3 values to follow.
+
+	if (strlen(pdext) == 6 && strncmp(pdext, "PHG", 3) == 0) {
+	  text_color_set(DW_COLOR_ERROR);
+	  dw_printf("At least 4 characters must follow PHG.\n");
+	  strlcpy (A->g_comment, pdext, sizeof(A->g_comment));
+	  return 0;
+	}
+
+	// Data extensions are all 7 characters.  Can't match if less available.
 
 	if (strlen(pdext) < 7) {
 	  strlcpy (A->g_comment, pdext, sizeof(A->g_comment));
@@ -4285,21 +4312,63 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	  return 1;
 	}
 
-/* check for Station power, height, gain. */
+/* Check for Station power, height, gain, directivity. */
 
 	if (strncmp(pdext, "PHG", 3) == 0)
 	{
-	  A->g_power = (pdext[3] - '0') * (pdext[3] - '0');
-	  A->g_height = (1 << (pdext[4] - '0')) * 10;
-	  A->g_gain = pdext[5] - '0';
-	  if (pdext[6] >= '0' && pdext[6] <= '8') {
-	    strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
+	  // Power.
+	  if ( ! isdigit (pdext[3])) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("First character (%c) after PHG must be a digit.  Treating as '0'.\n", pdext[3]);
+	    pdext[3] = '0';
 	  }
+	  A->g_power = (pdext[3] - '0') * (pdext[3] - '0');
 
-// TODO: look for another 0-9 A-Z followed by a /
-// http://www.aprs.org/aprs12/probes.txt
+	  // Height.
+	  // Some unspecified number of ASCII values beyond 9 are allowed.  Yuck.
+	  // Put in a reasonable limit.
+	  if (pdext[4] < '0' || pdext[4] > '@') {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Second character (%c) after PHG must be in range of '0' - '@'.  Treating as '0'.\n", pdext[4]);
+	    pdext[4] = '0';
+	  }
+	  A->g_height_ft = (1 << (pdext[4] - '0')) * 10;
 
-	  process_comment (A, pdext+7, -1);
+	  // Gain.
+	  if ( ! isdigit (pdext[5])) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Third character (%c) after PHG must be a digit.  Treating as '0'.\n", pdext[5]);
+	    pdext[5] = '0';
+	  }
+	  A->g_gain = pdext[5] - '0';
+
+	  // Directivity.
+	  if (pdext[6] < '0' || pdext[6] > '8') {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Fourth character (%c) after PHG must be in range of '0' - '8'.  Treating as '0'.\n", pdext[6]);
+	    pdext[6] = '0';
+	  }
+	  strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
+
+	  // Version 1.2 adds a new variation with an extra character followed by a mandatory '/' character.
+	  // This extra character signifies the number of beacons per hour.  For numbers above 9, 'A' represents
+	  // 10, and so on.  This is inconsistent with height where ':' is the next value after 9.  No one ever
+	  // said that APRS was consistent.  This allows a listening station to measure reliability, of hearing
+	  // a given station, by counting the number of beacons heard directly, i.e. not through digipeaters.
+	  // This new form violates the rule that Data Extensions are always 7 characters.
+
+	  if (strlen(pdext) >= 9 && (isdigit(pdext[7]) || isupper(pdext[7])) && pdext[8] == '/') {
+	    if (isdigit(pdext[7])) {
+	      A->g_beacons_per_hour = pdext[7] - '0';
+	    }
+	    else {
+	      A->g_beacons_per_hour = pdext[7] - 'A' + 10;
+	    }
+	    process_comment (A, pdext+9, -1);
+	  }
+	  else {
+	    process_comment (A, pdext+7, -1);
+	  }
 	  return 1;
 	}
 
@@ -4315,17 +4384,43 @@ static int data_extension_comment (decode_aprs_t *A, char *pdext)
 	  return 1;
 	}
 
-/* DF signal strength,  */
+/* DF signal strength.  */
+/* Much like PHG but power is replaced by S-points. */
+/* Only digits are allowed. */
 
 	if (strncmp(pdext, "DFS", 3) == 0)
 	{
-	  //A->g_strength = pdext[3] - '0';
-	  A->g_height = (1 << (pdext[4] - '0')) * 10;
-	  A->g_gain = pdext[5] - '0';
-	  if (pdext[6] >= '0' && pdext[6] <= '8') {
-	    strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
+	  // Strength.
+	  if ( ! isdigit (pdext[3])) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("First character (%c) after DFS must be a digit.  Treating as '0'.\n", pdext[3]);
+	    pdext[3] = '0';
 	  }
+	  A->g_df_strength = pdext[3] - '0';
 
+	  // Height.
+	  if ( ! isdigit (pdext[4])) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Second character (%c) after DFS must be a digit.  Treating as '0'.\n", pdext[4]);
+	    pdext[4] = '0';
+	  }
+	  A->g_height_ft = (1 << (pdext[4] - '0')) * 10;
+
+	  // Gain.
+	  if ( ! isdigit (pdext[5])) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Third character (%c) after DFS must be a digit.  Treating as '0'.\n", pdext[5]);
+	    pdext[5] = '0';
+	  }
+	  A->g_gain = pdext[5] - '0';
+
+	  // Directivity.
+	  if (pdext[6] < '0' || pdext[6] > '8') {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf("Fourth character (%c) after DFS must be in range of '0' - '8'.  Treating as '0'.\n", pdext[6]);
+	    pdext[6] = '0';
+	  }
+	  strlcpy (A->g_directivity, dir[pdext[6]-'0'], sizeof(A->g_directivity));
 	  process_comment (A, pdext+7, -1);
 	  return 1;
 	}

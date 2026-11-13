@@ -110,12 +110,15 @@ typedef struct decode_aprs_s {
 	
         int g_power;			/* Transmitter power in watts. */
 
-        int g_height;			/* Antenna height above average terrain, feet. */
-					// TODO:  rename to g_height_ft
+        int g_height_ft;		/* Antenna height above average terrain, feet. */
 
         int g_gain;			/* Antenna gain in dBi. */
 
         char g_directivity[12];		/* Direction of max signal strength */
+
+	int g_beacons_per_hour;		/* Beacons per hour from PHGR "Probe". */
+
+	int g_df_strength;		/* DFS - direction finding signal strength. */
 
         float g_range;			/* Precomputed radio range in miles. */
 
