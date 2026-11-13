@@ -1406,7 +1406,7 @@ int app_process_rec_packet (int chan, int subchan, int slice, packet_t pp, aleve
 	  dw_printf ("Setting audio input level so most stations are around 50 will provide good dynamic range.\n");
 	}
 // FIXME: rather than checking for ichannel, how about checking medium==radio
-	else if (alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != SUBCHAN_NETTNC && subchan != SUBCHAN_SERTNC) {
+	else if (alevel.rec != -1 && alevel.rec < 5 && chan != audio_config.igate_vchannel && subchan != SUBCHAN_NETTNC && subchan != SUBCHAN_SERTNC) {
 
 	  text_color_set(DW_COLOR_ERROR);
 	  dw_printf ("Audio input level is too low.  Increase so most stations are around 50.\n");
