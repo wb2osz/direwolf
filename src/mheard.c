@@ -608,6 +608,9 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
  * The only tricky part here is that we might hear the same transmission
  * several times.  First direct, then thru various digipeater paths.
  * We are interested in the shortest path if heard very recently.
+ *
+ * Note that existing entry may still not have a "first" timestamp for every
+ * single channel.
  */
 
 	  if (hops > mptr->num_digi_hops && (int)(now - mptr->last_heard_rf[mptr->chan]) < 15) {
@@ -628,6 +631,9 @@ void mheard_save_rf (int chan, decode_aprs_t *A, packet_t pp, alevel_t alevel, r
 	    mptr->chan = chan;
 	    mptr->num_digi_hops = hops;
 	    mptr->last_heard_rf[chan] = now;
+	    if (mptr->first_heard_rf[chan] == 0) {
+	      mptr->first_heard_rf[chan] = now;
+	    }
 	  }
 	}
 
