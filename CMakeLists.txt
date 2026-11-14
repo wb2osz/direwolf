@@ -34,15 +34,6 @@ set(COPYRIGHT "Copyright (c) 2011-2025 John Langner, WB2OSZ. All rights reserved
 add_definitions("-DCOPYRIGHT=\"${COPYRIGHT}\"")
 set(IDENTIFIER "com.${COMPANY}.${APPLICATION_NAME}")
 add_definitions("-DIDENTIFIER=\"${IDENTIFIER}\"")
-# raspberry as only lxterminal not xterm
-if(NOT (WIN32 OR CYGWIN))
-  find_program(BINARY_TERMINAL_BIN lxterminal)
-  if(BINARY_TERMINAL_BIN)
-    set(APPLICATION_DESKTOP_EXEC "${BINARY_TERMINAL_BIN} -e ${CMAKE_PROJECT_NAME}")
-  else()
-    set(APPLICATION_DESKTOP_EXEC "xterm -e ${CMAKE_PROJECT_NAME}")
-  endif()
-endif()
 
 find_package(Git)
 if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git/")
