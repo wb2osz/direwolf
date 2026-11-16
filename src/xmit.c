@@ -1222,6 +1222,45 @@ int xmit_speak_it (char *script, int c, char *orig_msg)
 	  if (*p == '"') *p = ' ';
 	}
 
+// There is a potential for Command Injection here.
+
+// On latest dev (and I'm pretty sure on the latest release too),
+// if direwolf is set to digipeat, there's a shell injection vulnerability with
+// SPEECH-addressed packets src/xmit.c's checks if the frame type is FLAVOR_SPEECH,
+// even for packets it's digipeating. Then, src/xmit.c:1228 sets the script to be
+// run snprintf (cmd, sizeof(cmd), "%s %d \"%s\"", script, c, msg), which lets
+// through command substitution using $(...). So, the RCE is triggered just by
+// receiving and trying to digipeat a packet like:
+//
+// KD3APL>SPEECH,WIDE2-1:$(echo PWNED | tee ~/.flag)
+//
+// This also applies to if a packet like this is received and attempted to be
+// transmitted from e.g. a KISS socket, which gives this a networked attack vector too.
+
+// Quick solution: Remove bash metacharacters & | ; $ > < ` \ ! ' " ( ) ~ [ ] { } *
+// ? was not included because that can be useful in text.
+// I don't think it can cause trouble because it should always be inside quotes.
+// Windows BAT files use % for parameter substitution.
+
+	for (p=msg; *p!='\0'; p++) {
+	  if (strchr ("&|;$><`\\!'\"()~[]{}%", *p) != NULL) {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Character '%c', in \"%s\" could be dangerous.\n", *p, msg);
+	    *p = ' ';
+	  }
+	}
+
+// Use of "system" is discouraged for this very reason.  The preferred method is to use some
+// form of "exec" which invokes the application directly without a chance of a shell
+// acting on special characters in the command line.
+// https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/environment-env/env33-c
+// I don't think it would help in this situation because we are invoking a script
+// where a shell (command interpreter) would run anyhow.
+
+// Future idea?  Rather than invoking a script,
+// Built in text to speech can be accessed by the Windows Speech API (SAPI).
+// Does Linux have something similar?
+
 #if __WIN32__
 	snprintf (cmd, sizeof(cmd), "%s %d \"%s\" >nul", script, c, msg);
 #else
