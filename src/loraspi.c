@@ -1329,24 +1329,35 @@ static void *rx_thread (void *arg) {
             }
             if (plen <= 0) goto next;
 
-            /* Null-terminate and convert to TNC2 string */
-            char tnc2[256];
-            if (plen >= (int)sizeof(tnc2)) plen = (int)sizeof(tnc2) - 1;
-            memcpy(tnc2, payload, plen);
-            tnc2[plen] = '\0';
-
-            /* Strip trailing whitespace */
-            for (int i = plen - 1; i >= 0 && (tnc2[i] == '\r' || tnc2[i] == '\n' || tnc2[i] == ' '); i--)
-                tnc2[i] = '\0';
+            /* Strip a trailing CR/LF some senders add.  Nothing else is removed:
+             * spaces, NULs and any other byte are part of the packet. */
+            while (plen > 0 && (payload[plen - 1] == '\r' || payload[plen - 1] == '\n'))
+                plen--;
 
             /* Drop silently if nothing remains after stripping */
-            if (tnc2[0] == '\0') goto next;
+            if (plen <= 0) goto next;
 
-            /* Parse TNC2 into AX.25 packet object */
-            packet_t pp = ax25_from_text(tnc2, 1);
+            /* Split TNC2 at the first ':' into addresses and information.  Only the
+             * address part goes through ax25_from_text (it is text); the information
+             * field is set by length, so a NUL does not cut it short and text such
+             * as "<0x0d>" is not turned into a byte. */
+            uint8_t *colon = memchr(payload, ':', plen);
+            int addrs_len = colon ? (int)(colon - payload) : -1;
+            char addrs[256];
+            packet_t pp = NULL;
+            if (addrs_len > 0 && memchr(payload, '\0', addrs_len) == NULL) {
+                memcpy(addrs, payload, addrs_len);
+                addrs[addrs_len] = ':';
+                addrs[addrs_len + 1] = '\0';
+                pp = ax25_from_text(addrs, 1);
+                if (pp != NULL)
+                    ax25_set_info(pp, colon + 1, plen - addrs_len - 1);
+            }
             if (pp == NULL) {
                 text_color_set(DW_COLOR_ERROR);
-                dw_printf ("loraspi: failed to parse: %s  RSSI=%d dBm  SNR=%.1f dB\n", tnc2, rssi, snr);
+                dw_printf ("loraspi: failed to parse: ");
+                ax25_safe_print ((char *)payload, plen, 1);
+                dw_printf ("  RSSI=%d dBm  SNR=%.1f dB\n", rssi, snr);
                 goto next;
             }
 
@@ -1502,31 +1513,36 @@ void loraspi_send_packet (int chan, packet_t pp) {
     }
     if (!lc) return;
 
-    /* Convert AX.25 packet to TNC2 text */
-    char tnc2[300];
-    ax25_format_addrs(pp, tnc2);
+    /* LoRa APRS carries only APRS: a UI frame with PID F0 (no layer 3).  The TNC2
+     * text has no room for the control field or PID, so any other frame (a
+     * connected-mode SABM, I frame, RR, ...) would go out looking like an APRS
+     * packet.  Refuse it instead. */
+    if (!ax25_is_aprs(pp)) {
+        text_color_set(DW_COLOR_ERROR);
+        dw_printf ("loraspi: not an APRS frame (needs UI with PID F0) — not sent on LoRa\n");
+        return;
+    }
+
+    /* Convert AX.25 packet to TNC2 text: the address part, then the information
+     * field copied by length so that a NUL or any other byte goes out as it is. */
+    char addrs[AX25_MAX_ADDRS * AX25_MAX_ADDR_LEN + 8];
+    ax25_format_addrs(pp, addrs);
+    int addrs_len = (int)strlen(addrs);
     unsigned char *pinfo;
     int info_len = ax25_get_info(pp, &pinfo);
-    if (info_len > 0) {
-        if (info_len >= (int)(sizeof(tnc2) - strlen(tnc2))) {
-            text_color_set(DW_COLOR_ERROR);
-            dw_printf ("loraspi: TX packet too long (info %d bytes) — dropped\n", info_len);
-            return;
-        }
-        strncat(tnc2, (char *)pinfo, info_len);
-    }
+    if (info_len < 0) info_len = 0;
 
     /* Build wire payload: header + TNC2 */
     uint8_t payload[256];
-    int tnc2_len = (int)strlen(tnc2);
-    int total = LORA_PREAMBLE_LEN + tnc2_len;
+    int total = LORA_PREAMBLE_LEN + addrs_len + info_len;
     if (total > 255) {		/* LoRa payload length is one byte */
         text_color_set(DW_COLOR_ERROR);
         dw_printf ("loraspi: TX packet too long (%d bytes) — dropped\n", total);
         return;
     }
     memcpy(payload, LORA_PREAMBLE, LORA_PREAMBLE_LEN);
-    memcpy(payload + LORA_PREAMBLE_LEN, tnc2, tnc2_len);
+    memcpy(payload + LORA_PREAMBLE_LEN, addrs, addrs_len);
+    memcpy(payload + LORA_PREAMBLE_LEN + addrs_len, pinfo, info_len);
 
     if (!txq_push(&lc->txq, payload, total)) {
         text_color_set(DW_COLOR_ERROR);

@@ -259,6 +259,7 @@ Start Dire Wolf with `-d L` for extra driver diagnostics, such as the chip statu
 
 - **Works:** beacons (`PBEACON sendto=n`), digipeating (`DIGIPEAT`), the APRS-IS iGate (received LoRa packets go to APRS-IS; add `IGTXVIA 10` to send packets from APRS-IS out over LoRa), KISS and AGW clients, and `IGTXVIA`. AGW clients see the channel as `PortN LoRa`.
 - **Not supported:** connected-mode AX.25 (`CDIGIPEAT`, `ax25_link`) is limited to radio channels with a modem.
+- **Only APRS frames go out:** LoRa APRS sends packets as TNC2 text, which has no place for the AX.25 control field or PID. A frame that is not a UI frame with PID F0 (for example a connected-mode frame from a KISS client) is not sent on the LoRa channel, and an error is printed.
 - **No channel-access control:** the LoRa driver transmits when a packet reaches the queue. It does not listen first, and `TXDELAY`, `PERSIST` and `SLOTTIME` do not apply. Keep beacon intervals long, especially at SF12, where one packet takes over two seconds. Observe your local duty-cycle and band rules.
 - **Packet size:** a LoRa frame carries at most 255 bytes including the 3-byte header. Longer packets are dropped with an error.
 
