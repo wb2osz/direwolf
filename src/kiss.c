@@ -194,7 +194,6 @@ static struct kissport_status_s kps[MAX_KISS_PTY]; /* Needed for selecting/adjus
 static void kisspty_term (void);
 static void * kisspt_listen_thread (void *arg);
 
-
 static int kisspt_debug = 0;		/* Print information flowing from and to client. */
 
 void kisspt_set_debug (int n)
@@ -274,6 +273,7 @@ void kisspt_init (struct misc_config_s *mc, int enable_pseudo_terminal)
 	for (int j = 0; j < MAX_KISS_PTY; j++) {
 	   pt_master_fd[j] = -1;
 	   kps[j].chan = mc->kiss_pty_chan[j];
+	   kps[j].kps_magic = KPS_MAGIC_PTY;
 	}
 
 	//if (mc->enable_kiss_pt) {
@@ -501,6 +501,11 @@ void kisspt_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf,  int f
 	    continue;
 	  }
 
+	  // For kiss hardware command or ackmode, we want to send
+	  // response only to the client that asked for it.
+	  if (client >= 0 && client != j) {
+	    continue;
+	  }
 
 	if (flen < 0) {
 	  flen = strlen((char*)fbuf);

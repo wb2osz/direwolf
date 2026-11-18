@@ -9,7 +9,6 @@
 #ifndef AX25_PAD_H
 #define AX25_PAD_H 1
 
-
 #define AX25_MAX_REPEATERS 8
 #define AX25_MIN_ADDRS 2	/* Destination & Source. */
 #define AX25_MAX_ADDRS 10	/* Destination, Source, 8 digipeaters. */	
@@ -78,10 +77,28 @@ struct packet_s {
 
 	int magic1;		/* for error checking. */
 
-	int seq;		/* unique sequence number for debugging. */
+	int seq;		/* unique alloction sequence number for debugging. */
 
-	double release_time;	/* Time stamp in format returned by dtime_now(). */
-				/* When to release from the SATgate mode delay queue. */
+	struct {		/* Used when transmitting with ackmode. */
+
+	    int is_set;		/* True if following data has been set. */
+
+	    int ack_seq;	/* Ack Sequence in range 0x0000 thru 0xffff. */
+
+	    void *kps;		/* KISS TCP port status block. */
+				/* NULL for pseudo terminal and serial port. */
+				/* Type is actually "struct kissport_status_s *kps" */
+				/* but I don't want to put kiss dependencies in here. */
+
+	    int client;		/* Client app number for TCP KISS. */
+				/* Ignored for pseudo termal and serial port. */
+
+	    void *sendfun;	/* Function to send something to the client application. */
+				/* I don't want to put actual type here because it */
+				/* would depend on kiss data types which depend on other types. */
+
+	    int magic3;		/* Error checking. */
+	} ackmode;
 
 #define MAGIC 0x41583235
 
@@ -104,8 +121,10 @@ struct packet_s {
 				 *		Changed to 1 when position has been used.
  				 *
 				 *		for source & destination it is called
-				 *		command/response.  Normally both 1 for APRS.
-				 *		They should be opposites for connected mode.
+				 *		command/response.
+				 *		They must be opposites for connected mode.
+				 *		APRS UI frames should be command but this is
+				 *		not universally observed so everyone should ignore.
 				 *
 				 *   R	R	Reserved.  Normally set to 1 1.
 				 *
@@ -408,9 +427,6 @@ extern int ax25_get_dti (packet_t this_p);
 
 extern packet_t ax25_get_nextp (packet_t this_p);
 
-extern void ax25_set_release_time (packet_t this_p, double release_time);
-extern double ax25_get_release_time (packet_t this_p);
-
 extern void ax25_set_modulo (packet_t this_p, int modulo);
 extern int ax25_get_modulo (packet_t this_p);
 
@@ -431,6 +447,9 @@ extern int ax25_get_c2 (packet_t this_p);
 
 extern void ax25_set_pid (packet_t this_p, int pid);
 extern int ax25_get_pid (packet_t this_p);
+
+extern void ax25_set_ackmode (packet_t this_p, int ack_seq, void *kps, int client, void *sendfun);
+extern int ax25_get_ackmode (packet_t this_p, void **kps, int *client, void **sendfun);
 
 extern int ax25_get_frame_len (packet_t this_p);
 extern unsigned char *ax25_get_frame_data_ptr (packet_t this_p);

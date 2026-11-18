@@ -21,8 +21,8 @@
 #define KISS_CMD_TXTAIL		4
 #define KISS_CMD_FULLDUPLEX	5
 #define KISS_CMD_SET_HARDWARE	6
-#define XKISS_CMD_DATA		12	// Not supported. http://he.fi/pub/oh7lzb/bpq/multi-kiss.pdf
-#define XKISS_CMD_POLL		14	// Not supported.
+#define XKISS_CMD_ACKMODE	12	// http://he.fi/pub/oh7lzb/bpq/multi-kiss.pdf
+#define XKISS_CMD_POLL		14	// Non-standard. Not supported.
 #define KISS_CMD_END_KISS	15
 
 
@@ -65,7 +65,7 @@ typedef struct kiss_frame_s {
 } kiss_frame_t;
 
 
-// This is used only for TCPKISS but it put in kissnet.h,
+// This is used only for TCPKISS but if put in kissnet.h,
 // there would be a circular dependency between the two header files.
 // Each KISS TCP port has its own status block.
 
@@ -97,6 +97,10 @@ struct kissport_status_s {
 
 	kiss_frame_t kf[MAX_NET_CLIENTS];
 				/* Accumulated KISS frame and state of decoder. */
+
+#define KPS_MAGIC_NET 0x1234abcd
+#define KPS_MAGIC_PTY 0x2345bcde
+	int kps_magic;		/* Extra check on valid storage. */
 };
 
 
@@ -118,6 +122,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 			void (*sendfun)(int chan, int kiss_cmd, unsigned char *fbuf, int flen, struct kissport_status_s *onlykps, int onlyclient));
 
 void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int msg_len);
+
+void kiss_ackmode_reply (int chan, int ack_seq, void *kps, int client, void *sendfun);
 
 
 #endif  // KISS_FRAME_H

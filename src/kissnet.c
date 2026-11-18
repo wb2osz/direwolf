@@ -272,6 +272,7 @@ void kissnet_init (struct misc_config_s *mc)
 	    kps->tcp_port = mc->kiss_port[i];
 	    kps->chan = mc->kiss_chan[i];
 	    kissnet_init_one (kps);
+	    kps->kps_magic = KPS_MAGIC_NET;
 
 	    // Add to list.
 	    kps->pnext = all_ports;

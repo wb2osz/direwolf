@@ -4,6 +4,8 @@
 
 ### New Features:
 
+- Support added for XKISS ACKMODE.  This allows an application to receive notification after a packet has been transmitted.
+
 - Multiple IGTXVIA configurations now allowed for IGate stations with multiple radios.
 
 - Add CRC at end of IL2P frames for transmission and check for correctness on receive.  Checking on receive can be disabled by adding "IL2PRXCRC 0" to configuration file.

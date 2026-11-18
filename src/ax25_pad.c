@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2011 , 2013, 2014, 2015, 2019, 2024  John Langner, WB2OSZ
+//    Copyright (C) 2011 , 2013, 2014, 2015, 2019, 2024, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -1880,45 +1880,6 @@ packet_t ax25_get_nextp (packet_t this_p)
 
 /*------------------------------------------------------------------------------
  *
- * Name:	ax25_set_release_time
- *
- * Purpose:	Set release time
- *
- * Inputs:	this_p		- Current packet object.
- *
- *		release_time	- Time as returned by dtime_monotonic().
- *
- *------------------------------------------------------------------------------*/
-
-void ax25_set_release_time (packet_t this_p, double release_time)
-{
-	assert (this_p->magic1 == MAGIC);
-	assert (this_p->magic2 == MAGIC);
-	
-	this_p->release_time = release_time;
-}
-
-
-
-/*------------------------------------------------------------------------------
- *
- * Name:	ax25_get_release_time
- *
- * Purpose:	Get release time.
- *
- *------------------------------------------------------------------------------*/
-
-double ax25_get_release_time (packet_t this_p)
-{
-	assert (this_p->magic1 == MAGIC);
-	assert (this_p->magic2 == MAGIC);
-
-	return (this_p->release_time);
-}
-
-
-/*------------------------------------------------------------------------------
- *
  * Name:	ax25_set_modulo
  *
  * Purpose:	Set modulo value for I and S frame sequence numbers.
@@ -2692,6 +2653,106 @@ int ax25_get_pid (packet_t this_p)
 	}
 	return (-1);
 }
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_set_ackmode
+ *
+ * Purpose:	Set ackmode parameters in packet.
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *
+ *		ack_seq	- 16 bit sequence number provided by kiss client app.
+ *
+ *		kps	- KISS TCP port status block.
+ *			  NULL for pseudo terminal and serial port.
+ *
+ *		client	- Client app number for TCP KISS.
+ *			  Needed so we can send any response to the right client app.
+ *			  Ignored for pseudo terminal and serial port.
+ *
+ *		sendfun	- Function to send something to the client application.
+ *
+ *			  This is the tricky part.  We can have any combination of
+ *			  serial port, pseudo terminal, and multiple TCP clients.
+ *			  We need to send the response to same place where transmit request came
+ *			  from.  The function is different for each class of device
+ *			  and we need a client number for the TCP case because we
+ *			  can have multiple TCP KISS clients at the same time.
+ *
+ * Description:	When a KISS client app sends a frame with ackmode,
+ *		it provides a two byte sequence number.
+ *		This sequence number is sent back to the application
+ *		after the frame has been transmitted.
+ *		This gets tricky because we want to send it only
+ *		to the app which requested the transmission.
+ *
+ *------------------------------------------------------------------*/
+
+void ax25_set_ackmode (packet_t this_p, int ack_seq, void *kps, int client, void *sendfun)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	this_p->ackmode.is_set = 1;
+	this_p->ackmode.ack_seq = ack_seq & 0xffff;
+	this_p->ackmode.kps = kps;
+	this_p->ackmode.client = client;
+	this_p->ackmode.sendfun = sendfun;
+	this_p->ackmode.magic3 = MAGIC;
+
+} // end ax25_set_ackmode
+
+
+/*------------------------------------------------------------------
+ *
+ * Function:	ax25_get_ackmode
+ *
+ * Purpose:	Get ackmode parameters from packet.
+ *		This is called from xmit.c after transmitting a frame.
+ *		If there is a sequence number, send it to the client app
+ *		which made the transmit request.
+ *
+ * Inputs:	this_p	- pointer to packet object.
+ *
+ * Outputs:	kps	- KISS TCP port status block.
+ *			  NULL for pseudo terminal and serial port.
+ *
+ *		client	- Client app number for TCP KISS.
+ *			  Needed so we can send any response to the right client app.
+ *			  Ignored for pseudo terminal and serial port.
+ *
+ *		sendfun	- Function to send something to the client application.
+ *
+ * Returns:	Sequence number in range of 0x0000 to 0xffff.
+ *		-1 if not set or some error detected.
+ *
+ *------------------------------------------------------------------*/
+
+int ax25_get_ackmode (packet_t this_p, void **kps, int *client, void **sendfun)
+{
+	assert (this_p->magic1 == MAGIC);
+	assert (this_p->magic2 == MAGIC);
+
+	if (this_p->ackmode.is_set) {
+	  if (this_p->ackmode.magic3 != MAGIC) {
+	    // We have pointer to something not expected.
+	    // It's more of a disappointer.
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Internal error: %s: The ackmode magic is gone.\n", __func__);
+	    return (-1);
+	  }
+	  *kps = this_p->ackmode.kps;
+	  *client = this_p->ackmode.client;
+	  *sendfun = this_p->ackmode.sendfun;
+	  return (this_p->ackmode.ack_seq);
+	}
+	else {
+	  return (-1);
+	}
+
+} // end ax25_get_ackmode
 
 
 

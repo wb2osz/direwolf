@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2017  John Langner, WB2OSZ
+//    Copyright (C) 2017, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -426,6 +426,8 @@ static void process_input (char *stuff)
 {
 	char *p;
 	int chan = 0;
+	int ackmode = -1;	// valid range 0x0000 to 0xffff.
+				// -1 for none.
 
 /*
  * Remove any end of line character(s).
@@ -436,7 +438,7 @@ static void process_input (char *stuff)
  * Optional prefix, like "[9]" or "[99]" to specify channel.
  */
 	p = stuff;
-	while (isspace(*p)) p++;
+	while (*p != '\0' && isspace(*p)) p++;
 	if (*p == '[') {
 	  p++;
 	  if (p[1] == ']') {
@@ -459,7 +461,35 @@ static void process_input (char *stuff)
 	    usage2();
 	    return;
 	  }
-	  while (isspace(*p)) p++;
+	  while (*p != '\0' && isspace(*p)) p++;
+	}
+
+/*
+ * New in 1.9:
+ * Optional prefix like "{12ab}" with up to 4 hexadecimal digits
+ * for ackmode from xkiss.  Applies only to data frames.
+ */
+	if (*p == '{') {
+	  ackmode = 0;
+	  p++;
+	  while (*p != '\0' && isxdigit(*p)) {
+	    ackmode = (ackmode << 4) + (isdigit(*p) ? (*p - '0') : (tolower(*p) - 'a' + 10));
+	    p++;
+	  }
+	  if (*p == '}') {
+	    p++;
+	    while (*p != '\0' && isspace(*p)) p++;
+	    if (ackmode & 0xffff0000) {
+	      text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("ERROR! Sequence number outside range of 0000 to ffff.\n");
+	      ackmode &= 0xffff;
+	    }
+	  }
+	  else {
+	    text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("ERROR! Did not find ending } after sequence number.\n");
+	  }
+	  while (*p != '\0' && isspace(*p)) p++;
 	}
 
 /*
@@ -467,15 +497,22 @@ static void process_input (char *stuff)
  * Lower case is a command (e.g.  Persistence or set Hardware).
  * Anything else, print explanation of what is expected.
  */
-	if (isupper(*p) || isdigit(*p)) {
+	if (*p != '\0' && (isupper(*p) || isdigit(*p))) {
 
 	  // Parse the "TNC2 monitor format" and convert to AX.25 frame.
 
-	  unsigned char frame_data[AX25_MAX_PACKET_LEN];
+	  unsigned char frame_data[2+AX25_MAX_PACKET_LEN];
 	  packet_t pp = ax25_from_text (p, 1);
 	  if (pp != NULL) {
-	    int frame_len = ax25_pack (pp, frame_data);
-	    send_to_kiss_tnc (chan, KISS_CMD_DATA_FRAME, (char*)frame_data, frame_len);
+	    int frame_len = ax25_pack (pp, frame_data+2);
+	    if (ackmode >= 0) {
+	      frame_data[0] = (ackmode >> 8) & 0xff;
+	      frame_data[1] = ackmode & 0xff;
+	      send_to_kiss_tnc (chan, XKISS_CMD_ACKMODE, (char*)frame_data, 2+frame_len);
+	    }
+	    else {
+	      send_to_kiss_tnc (chan, KISS_CMD_DATA_FRAME, (char*)frame_data+2, frame_len);
+	    }
 	    ax25_delete (pp);
 	  }
 	  else {
@@ -483,7 +520,7 @@ static void process_input (char *stuff)
 	    dw_printf ("ERROR! Could not convert to AX.25 frame: %s\n", p);
 	  }
 	}
-	else if (islower(*p)) {
+	else if (*p != '\0' && islower(*p)) {
 	  char value;
 
 	  switch (*p) {
@@ -861,6 +898,12 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	    dw_printf ("[%d] h %s\n", chan, (char*)(kiss_msg+1));
 	    break;
 
+	  case XKISS_CMD_ACKMODE:			/* 12 = ack for frame sent */
+
+	    text_color_set(DW_COLOR_REC);
+	    dw_printf ("[%d] ack sent {%02x%02x}\n", chan, kiss_msg[1], kiss_msg[2]);
+	    break;
+
 /*
  * The rest should only go TO the TNC and not come FROM it.
  */
@@ -953,6 +996,9 @@ static void usage2 (void)
 	dw_printf ("\n");
 	dw_printf ("	Lines may be preceded by the form \"[9]\" to indicate a\n");
 	dw_printf ("	channel other than the default 0.\n");
+	dw_printf ("\n");
+	dw_printf ("	Data may be sent with ackmode by preceding the the TNC2\n");
+	dw_printf ("	mointoring format with a sequence number like this: \"{12ab}\".\n");
 	dw_printf ("\n");
 }
 

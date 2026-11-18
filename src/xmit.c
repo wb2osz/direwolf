@@ -77,6 +77,7 @@
 #include "xid.h"
 #include "dlq.h"
 #include "server.h"
+#include "kiss_frame.h"		// for kiss_ackmode_reply()
 
 
 /*
@@ -1120,6 +1121,16 @@ static int send_one_frame (int c, int p, packet_t pp)
 // Own transmitted frame — no received signal, so pass a sentinel (rec < 0).
 
 	server_send_monitored (c, pp, 1, (alevel_t){.rec = -1, .mark = -1, .space = -1}, 0);
+
+// Notify client app if frame was sent with ackmode.
+
+	void *kps;
+	int client;
+	void *sendfun;
+	int ackseq = ax25_get_ackmode (pp, &kps, &client, &sendfun);
+	if (ackseq >= 0) {
+	  kiss_ackmode_reply (c, ackseq, kps, client, sendfun);
+	}
 
 	return (nb);
 

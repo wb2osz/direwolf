@@ -1,7 +1,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2013, 2014, 2017, 2023  John Langner, WB2OSZ
+//    Copyright (C) 2013, 2014, 2017, 2023, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -64,8 +64,12 @@
  *		
  *			_6	SetHardware	TNC specific.
  *
- *			_C	XKISS extension - not supported.
- *			_E	XKISS extension - not supported.
+ *			_C	XKISS extension - Acknowledgment Mode - New in 1.9.
+ *							https://packet-radio.net/wp-content/uploads/2017/04/multi-kiss.pdf
+ *							App to TNC:	_C ss ss <data frame>
+ *								"ss ss" is a two byte sequence number.
+ *
+ *			_E	XKISS extension - Polled Mode - Not supported.
  *			
  *			FF	Return		Exit KISS mode.  Ignored.
  *
@@ -76,6 +80,10 @@
  *
  *			_6	SetHardware	TNC specific.
  *						Usually a response to a query.
+ *
+ *			_C	Frame transmitted Acknowledgment.
+ *						After the ACKMODE frame has been transmitted, the TNC sends back,
+ *						_C ss ss
  *
  *---------------------------------------------------------------*/
 
@@ -94,6 +102,7 @@
 #include "tq.h"
 #include "xmit.h"
 #include "version.h"
+#include "kiss.h"
 #include "kissnet.h"
 
 
@@ -531,6 +540,7 @@ void kiss_rec_byte (kiss_frame_t *kf, unsigned char ch, int debug,
  *
  *		sendfun		- Function to send something to the client application.
  *				  "Set Hardware" can send a response.
+ *				  A frame transmitted with ACKMODE sends a response.
  *
  *-----------------------------------------------------------------*/
 
@@ -565,11 +575,24 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	switch (cmd) 
 	{
 	  case KISS_CMD_DATA_FRAME:				/* 0 = Data Frame */
+	  case XKISS_CMD_ACKMODE:				/* 12 = ACKMODE Data Frame */
+
+	    int ackmodeseq = 0;
 
 	    // kissnet_copy clobbers first byte but we don't care
 	    // because we have already determined channel and command.
 
-	    kissnet_copy (kiss_msg, kiss_len, chan, cmd, kps, client);
+	    if (cmd == KISS_CMD_DATA_FRAME) {
+	      kissnet_copy (kiss_msg, kiss_len, chan, cmd, kps, client);
+	    }
+	    else {
+	      // Remove sequence when sharing with other client apps.
+	      // Treat as normal frame.
+	      // A client app receiving an ackmode frame would look at
+	      // only the sequence, as an ack, and not any frame data.
+	      ackmodeseq = (0x1 << 16) | (kiss_msg[1] << 8) | kiss_msg[2];
+	      kissnet_copy (kiss_msg + 2, kiss_len - 2, chan, KISS_CMD_DATA_FRAME, kps, client);
+	    }
 
 	    /* Note July 2017: There is a variant of of KISS, called SMACK, that assumes */
 	    /* a TNC can never have more than 8 channels.  http://symek.de/g/smack.html */
@@ -579,6 +602,10 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	    /* and if so, turn it off in the application configuration? */
 	    /* Our current default is a maximum of 6 channels but it is easily */
 	    /* increased by changing one number and recompiling. */
+
+	    /* Later, we added virtual channels that can connect to APRS-IS or */
+	    /* an external network or serial TNC.  Decreasing the number of channels */
+	    /* in the protocol seems misguided. */
 
 // Additional information, from Mike Playle, December 2018, for Issue #42
 //
@@ -641,7 +668,20 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	    }
 
 	    memset (&alevel, 0xff, sizeof(alevel));
-	    packet_t pp = ax25_from_frame (kiss_msg+1, kiss_len-1, alevel);
+	    packet_t pp;;
+	    if (cmd == KISS_CMD_DATA_FRAME) {
+	      pp = ax25_from_frame (kiss_msg+1, kiss_len-1, alevel);
+	    }
+	    else {
+	      pp = ax25_from_frame (kiss_msg+1+2, kiss_len-1-2, alevel);
+	      // Provide information so the client app can be notified after
+	      // the frame has been transmitted.  This gets tricky because we
+	      // want to send the ack only to the client spp that asked for it.
+	      // This is modeled after set-hardware which needs same behavior.
+
+	      ax25_set_ackmode (pp, ackmodeseq, kps, client, (void*)sendfun);
+	    }
+
 	    if (pp == NULL) {
 	       text_color_set(DW_COLOR_ERROR);
 	       dw_printf ("ERROR - Invalid KISS data frame from client app.\n");
@@ -777,13 +817,13 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	  dw_printf ("Use \"-d kn\" option on direwolf command line to observe\n");
 	  dw_printf ("all communication with the client application.\n");
 
-	  if (cmd == XKISS_CMD_DATA || cmd == XKISS_CMD_POLL) {
+	  if (cmd == XKISS_CMD_POLL) {
 	    dw_printf ("\n");
 	    dw_printf ("It looks like you are trying to use the \"XKISS\" protocol which is not supported.\n");
 	    dw_printf ("Change your application settings to use standard \"KISS\" rather than some other variant.\n");
-	    dw_printf ("If you are using Winlink Express, configure like this:\n");
+	    dw_printf ("ACKMODE is now supported.  If you are using Winlink Express, configure like this:\n");
 	    dw_printf ("    Packet TNC Type:  KISS\n");
-	    dw_printf ("    Packet TNC Model:  NORMAL      -- Using ACKMODE will cause this error.\n");
+	    dw_printf ("    Packet TNC Model:  NORMAL or ACKMODE.\n");
 	    dw_printf ("\n");
 	  }
 	  break;
@@ -931,6 +971,111 @@ static void kiss_set_hardware (int chan, char *command, int debug, struct kisspo
 #endif 	// ifndef KISSUTIL
 
 
+
+/*-------------------------------------------------------------------
+ *
+ * Name:        kiss_ackmode_reply
+ *
+ * Purpose:     Send sequence number to kiss client after frame has been transmitted.
+ *		This would be called from xmit.c with ackmode properties in the packet object.
+ *
+ * Inputs:	chan		- channel, 0 thru MAX_TOTAL_CHANS-1.
+ *				  It would only work correctly for radio channels with
+ *				  internal modem.
+ *
+ *		ack_seq		- Frame sequence number supplied by kiss client app.
+ *
+ *		kps		- KISS port status block for net or pty.
+ *				  Not used for serial port kiss.
+ *
+ *		client		- Client app number, for net or pty.
+ *				  Not used for serial port.
+ *
+ *		sendfun		- Function to send something to the client application.
+ *
+ *				  This is the tricky part.  We can have any combination of
+ *				  serial port, pseudo terminals, and multiple TCP clients.
+ *				  We need to send the response to same place where query came
+ *				  from.  The function is different for each class of device
+ *				  and we need a client number for the TCP case because we
+ *				  can have multiple TCP KISS clients at the same time.
+ *
+ *
+ * Description:	T.B.D.
+ *
+ *--------------------------------------------------------------------*/
+
+#ifndef KISSUTIL
+
+void kiss_ackmode_reply (int chan, int ack_seq, void *kps_v, int client, void *sendfun_v)
+{
+	// Lots of error checking here in case ackmode data was not passed correctly.
+
+	if (chan < 0 || chan >= MAX_TOTAL_CHANS) {
+          text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: %s, chan = %d\n", __func__, chan);
+	  return;
+	}
+
+	if (ack_seq & 0xffff0000) {
+          text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: %s, ack_seq = %08x\n", __func__, ack_seq);
+	  return;
+	}
+
+	if (sendfun_v == NULL) {
+          text_color_set(DW_COLOR_ERROR);
+	  dw_printf ("Internal error: %s, sendfun is NULL\n", __func__);
+	  return;
+	}
+
+	struct kissport_status_s *kps = kps_v;
+
+	if (kps != NULL) {	// Network KISS or PTY
+          if (kps->kps_magic == KPS_MAGIC_NET) {
+            if (client < 0 || client >= MAX_NET_CLIENTS) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Internal error: %s, NET KISS case, client = %d\n", __func__, client);
+	      return;
+	    }
+	  }
+          else if (kps->kps_magic == KPS_MAGIC_PTY) {
+            if (client < 0 || client >= MAX_KISS_PTY) {
+              text_color_set(DW_COLOR_ERROR);
+	      dw_printf ("Internal error: %s, PTY KISS case, client = %d\n", __func__, client);
+	      return;
+	    }
+	  }
+	  else {
+            text_color_set(DW_COLOR_ERROR);
+	    dw_printf ("Internal error: %s, The kps magic is gone\n", __func__);
+	    return;
+	  }
+	}
+	else {
+	  // Not used for serial port KISS.
+	}
+
+        //text_color_set(DW_COLOR_DEBUG);
+	//dw_printf ("%s: Get ready for it ...\n", __func__);
+	//fflush(stdout);
+
+	void (*sendfun)(int chan, int kiss_cmd, unsigned char *fbuf, int flen, struct kissport_status_s *kps, int client);
+	sendfun = sendfun_v;
+
+// Send ack with seq number to only the appropriate client app.
+
+	unsigned char response[2];
+	response[0] = (ack_seq >> 8) & 0xff;
+	response[1] = ack_seq & 0xff;
+
+	(*sendfun) (chan, XKISS_CMD_ACKMODE, response, 2, kps, client);
+
+} /* end kiss_ackmode_reply */
+
+#endif 	// ifndef KISSUTIL
+
+
 /*-------------------------------------------------------------------
  *
  * Name:        kiss_debug_print 
@@ -954,7 +1099,7 @@ void kiss_debug_print (fromto_t fromto, char *special, unsigned char *pmsg, int 
 		"Data frame",	"TXDELAY",	"P",		"SlotTime",
 		"TXtail",	"FullDuplex",	"SetHardware",	"Invalid 7",
 		"Invalid 8", 	"Invalid 9",	"Invalid 10",	"Invalid 11",
-		"Invalid 12", 	"Invalid 13",	"Invalid 14",	"Return" };
+		"AckMode 12", 	"Invalid 13",	"Invalid 14",	"Return" };
 #endif
 
 	text_color_set(DW_COLOR_DEBUG);
