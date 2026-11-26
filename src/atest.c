@@ -134,7 +134,7 @@ static struct {
 
 static struct {
 	char data[4];		/* "data" */
-	int datasize;
+	uint32_t datasize;
 } wav_data;
 
 
