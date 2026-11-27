@@ -1,6 +1,6 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
-//    Copyright (C) 2011-2014, 2015, 2017, 2021, 2025  John Langner, WB2OSZ
+//    Copyright (C) 2011-2014, 2015, 2017, 2021, 2025, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -704,7 +704,9 @@ static THREAD_F connect_listen_thread (void *arg)
 void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int flen,
 			struct kissport_status_s *onlykps, int onlyclient)
 {
-	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
+	// Worst case, kiss_encapsulate can double number of bytes.
+	// Two more for FEND at beginning and end.
+	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int kiss_len;
 	int err;
 
@@ -848,7 +850,7 @@ void kissnet_send_rec_packet (int chan, int kiss_cmd, unsigned char *fbuf, int f
 
 void kissnet_copy (unsigned char *in_msg, int in_len, int chan, int cmd, struct kissport_status_s *from_kps, int from_client)
 {
-	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN];
+	unsigned char kiss_buff[2 * AX25_MAX_PACKET_LEN + 2];
 	int err;
 
 
