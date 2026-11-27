@@ -2,7 +2,7 @@
 //
 //    This file is part of Dire Wolf, an amateur radio packet TNC.
 //
-//    Copyright (C) 2014, 2016, 2017  John Langner, WB2OSZ
+//    Copyright (C) 2014, 2016, 2017, 2026  John Langner, WB2OSZ
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -80,15 +80,12 @@
 // It doesn't matter at all here.  We are dealing with bytes.
 // A different encoding could send the bits in the opposite order.
 
-// The bit numbers are confusing because this one table (Fig. 4.5) starts
-// with 1 for the LSB when everywhere else refers to the LSB as bit 0.
-
 // The first byte must be of the form	0xx0 0001
 // The second byte must be of the form	0000 0000
 // If we process the two byte "Classes of Procedures" like
 // the other multibyte numeric fields, with the more significant
 // byte first, we end up with the bit masks below.
-// The bit order would be  8 7 6 5 4 3 2 1   16 15 14 13 12 11 10 9
+// The bit order would be  7 6 5 4 3 2 1 0   15 14 13 12 11 10 9 8
 
 // (This has nothing to do with the HDLC serializing order.
 // I'm talking about the way we would normally write binary numbers.)
@@ -104,21 +101,21 @@
 // If we process the three byte "HDLC Optional Parameters" like
 // the other multibyte numeric fields, with the most significant
 // byte first, we end up with bit masks like this.
-// The bit order would be  8 7 6 5 4 3 2 1   16 15 14 13 12 11 10 9   24 23 22 21 20 19 18 17
+// The bit order would be  7 6 5 4 3 2 1 0   15 14 13 12 11 10 9 8   23 22 21 20 19 18 17 16
 
-#define PV_HDLC_Optional_Functions_REJ_cmd_resp		0x020000
-#define PV_HDLC_Optional_Functions_SREJ_cmd_resp	0x040000
-#define PV_HDLC_Optional_Functions_Extended_Address 	0x800000
+#define PV_HDLC_Optional_Functions_REJ_cmd_resp		0x020000	// bit 1
+#define PV_HDLC_Optional_Functions_SREJ_cmd_resp	0x040000	// bit 2
+#define PV_HDLC_Optional_Functions_Extended_Address 	0x800000	// bit 7
 
-#define PV_HDLC_Optional_Functions_Modulo_8		0x000400
-#define PV_HDLC_Optional_Functions_Modulo_128		0x000800
-#define PV_HDLC_Optional_Functions_TEST_cmd_resp	0x002000
-#define PV_HDLC_Optional_Functions_16_bit_FCS		0x008000
+#define PV_HDLC_Optional_Functions_Modulo_8		0x000400	// bit 10
+#define PV_HDLC_Optional_Functions_Modulo_128		0x000800	// bit 11
+#define PV_HDLC_Optional_Functions_TEST_cmd_resp	0x002000	// bit 13
+#define PV_HDLC_Optional_Functions_16_bit_FCS		0x008000	// bit 15
 
-#define PV_HDLC_Optional_Functions_Multi_SREJ_cmd_resp 	0x000020
-#define PV_HDLC_Optional_Functions_Segmenter	 	0x000040
+#define PV_HDLC_Optional_Functions_Multi_SREJ_cmd_resp 	0x000020	// bit 21
+#define PV_HDLC_Optional_Functions_Segmenter	 	0x000040	// bit 22
 
-#define PV_HDLC_Optional_Functions_Synchronous_Tx	0x000002
+#define PV_HDLC_Optional_Functions_Synchronous_Tx	0x000002	// bit 17
 
 
 /*-------------------------------------------------------------------
@@ -150,11 +147,6 @@
 
 int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, char *desc, int desc_size)
 {
-	unsigned char *p;
-	int group_len;
-	char stemp[64];
-
-
 	strlcpy (desc, "", desc_size);
 
 // What should we do when some fields are missing?
@@ -178,43 +170,82 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 
 /* Information field is optional but that seems pretty lame. */
 
-	if (info_len == 0) {
+	if (info_len <= 0) {
 	  return (1);
 	}
 
-	p = info;
+	unsigned char *p = info;	// Points within info at next thing to be processed.
+
+	// How much of info_len is still remaining, based on value of p.
+	// Used to verify that we don't try to go beyond end of info part in frame.
+	int remaining = info_len - (int)(p - info);
+
+// Mandatory:
+// 1 byte, Format Indicator.
+// 1 byte, Group Indicator.
+// 2 bytes, Length of group.
+ 
+	if (remaining < 4) {
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("XID error: Info length too short for Format and Group Indicators.\n");
+	  dw_printf ("XID info part: %02x %02x %02x %02x %02x ... length=%d\n", info[0], info[1], info[2], info[3], info[4], info_len);
+	  return 0;
+	}
 
 	if (*p != FI_Format_Indicator) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("XID error: First byte of info field should be Format Indicator, %02x.\n", FI_Format_Indicator);
-	  dw_printf ("XID info part: %02x %02x %02x %02x %02x ... length=%d\n", info[0], info[1], info[2], info[3], info[4], info_len);
+	  dw_printf ("XID error: First byte of info field must be Format Indicator, %02x.\n", FI_Format_Indicator);
+	  dw_printf ("XID info part: %02x %02x %02x %02x ... length=%d\n", info[0], info[1], info[2], info[3], info_len);
 	  return 0;
 	}
 	p++;
 
 	if (*p != GI_Group_Identifier) {
 	  text_color_set (DW_COLOR_ERROR);
-	  dw_printf ("XID error: Second byte of info field should be Group Indicator, %d.\n", GI_Group_Identifier);
+	  dw_printf ("XID error: Second byte of info field must be Group Indicator, %d.\n", GI_Group_Identifier);
+	  dw_printf ("XID info part: %02x %02x %02x %02x ... length=%d\n", info[0], info[1], info[2], info[3], info_len);
 	  return 0;
 	}
 	p++;
 
-	group_len = *p++;
+	int group_len = *p++;
 	group_len = (group_len << 8) + *p++;
-	
+
+	remaining = info_len - (int)(p - info);	
+	if (group_len <= 0 || group_len > remaining) {
+	  text_color_set (DW_COLOR_ERROR);
+	  dw_printf ("XID error: Group Length %d is zero or extends beyond end of frame.\n", group_len);
+	  dw_printf ("XID info part: %02x %02x %02x %02x ... length=%d\n", info[0], info[1], info[2], info[3], info_len);
+	  return 0;
+	}
+
+// Process Parameter Field Elements.
+// Each one has:
+//	- Identifier, enumerated value.
+//	- Length, number of bytes following.
+//	- Value, Most Significant byte first.
+
 	while (p < info + 4 + group_len) {
 
-	  int pind, plen, pval, j;
+	  char stemp[64];
 
-	  pind = *p++;
-	  plen = *p++;		// should have sanity checking
+	  int pind = *p++;		// Parameter Identifier
+	  int plen = *p++;		// Parameter Length, i.e. number of bytes following.
 	  if (plen < 1 || plen > 4) {
 	    text_color_set (DW_COLOR_ERROR);
-	    dw_printf ("XID error: Length ?????   TODO   ????  %d.\n", plen);
-	    return (1);		// got this far.
+	    dw_printf ("XID error: Parameter Identifier 0x%02x, invalid Parameter Length %d.\n", pind, plen);
+	    return (0);
 	  }
-	  pval = 0;
-	  for (j=0; j<plen; j++) {
+
+	  remaining = info_len - (int)(p - info);	
+	  if (plen > remaining) {
+	    text_color_set (DW_COLOR_ERROR);
+	    dw_printf ("XID error: Parameter Identifier 0x%02x, Parameter Length %d extends beyond end of frame.\n", pind, plen);
+	    return 0;
+	  }
+
+	  int pval = 0;		// Parameter Value, 1, 2, 3, or 4 bytes.
+	  for (int j=0; j<plen; j++) {
 	    pval = (pval << 8) + *p++;
 	  }
 
@@ -368,11 +399,17 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 	        result->window_size_rx = AX25_K_MAXFRAME_EXTENDED_DEFAULT;
 	      }
 
-//continue here with more error checking.
-
 	      break;
 
-	    case PI_Ack_Timer:	
+	    case PI_Ack_Timer:		// T1, in milliseconds
+
+	      if (pval < AX25_T1V_FRACK_MIN*1000 || pval > AX25_T1V_FRACK_MAX*1000) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("XID error: T1 FRACK, %d mSec, is not in range of %d thru %d.\n", pval,
+				AX25_T1V_FRACK_MIN*1000, AX25_T1V_FRACK_MAX*1000);
+	        pval = AX25_T1V_FRACK_DEFAULT*1000;
+	      }
+
 	      result->ack_timer = pval;
 
 	      snprintf (stemp, sizeof(stemp), "Ack-Timer=%d ", result->ack_timer);
@@ -380,7 +417,15 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 
 	      break;
 
-	    case PI_Retries:			// Is it retrys or retries?
+	    case PI_Retries:			// N2.
+
+	      if (pval < AX25_N2_RETRY_MIN || pval > AX25_N2_RETRY_MAX) {
+	        text_color_set (DW_COLOR_ERROR);
+	        dw_printf ("XID error: N2 RETRY, %d, is not in range of %d thru %d.\n", pval,
+				AX25_N2_RETRY_MIN, AX25_N2_RETRY_MAX);
+	        pval = AX25_N2_RETRY_DEFAULT;
+	      }
+
 	      result->retries = pval;
 
 	      snprintf (stemp, sizeof(stemp), "Retries=%d ", result->retries);
@@ -388,6 +433,7 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 
 	      break;
 
+		// Maybe later...
 		// PI_Compression_Algorithm_Mask
 		// PI_TX_Window_Bits
 		// PI_RX_Window_Bits
@@ -397,6 +443,7 @@ int xid_parse (unsigned char *info, int info_len, struct xid_param_s *result, ch
 	  }
 	}
 
+	// p should now point one past last byte in info part.
 	if (p != info + info_len) {
 	  text_color_set (DW_COLOR_ERROR);
 	  dw_printf ("XID error: Frame / Group Length mismatch.\n");	
@@ -589,6 +636,16 @@ int xid_encode (struct xid_param_s *param, unsigned char *info, cmdres_t cr)
 	      x |= PV_HDLC_Optional_Functions_SREJ_cmd_resp;
 	      break;
 	    case srej_multi:
+	      // Why not include single SREJ bit here too?
+	      // What is reasoning for set only a single bit?
+	      // This was explained earlier:
+	      // After reading the X.25 standards documents, it seems that the XID command should offer
+	      // up a menu of all the acceptable choices.  e.g.  REJ, SREJ, Multi-SREJ.  One or more bits
+	      // can be set.  The XID response, would set a single bit which is the desired choice from
+	      // among those offered.
+	      // We would not be sending XID response with Multi-SREJ unless the other station sent
+	      // an XID command indicating that this was an acceptable choice.
+	      // Of course, Multi-SREJ bit implies an SREJ with only a single sequence number is also OK.
 	      x |= PV_HDLC_Optional_Functions_Multi_SREJ_cmd_resp;
 	      break;
 	  }
@@ -785,7 +842,7 @@ int main (int argc, char *argv[]) {
 	param.modulo = modulo_8;
 	param.i_field_length_rx = 2048;
 	param.window_size_rx = 3;
-	param.ack_timer = 1234;
+	param.ack_timer = 2345;
 	param.retries = 12;
 
 	n = xid_encode (&param, info, cr_cmd);
@@ -803,7 +860,7 @@ int main (int argc, char *argv[]) {
 	assert (param2.modulo == modulo_8);
 	assert (param2.i_field_length_rx == 2048);
 	assert (param2.window_size_rx == 3);
-	assert (param2.ack_timer == 1234);
+	assert (param2.ack_timer == 2345);
 	assert (param2.retries == 12);
 
 /* Other values, single srej. */
@@ -871,7 +928,7 @@ int main (int argc, char *argv[]) {
 	param.modulo = modulo_8;
 	param.i_field_length_rx = G_UNKNOWN;
 	param.window_size_rx = G_UNKNOWN;
-	param.ack_timer = 999;
+	param.ack_timer = 9999;
 	param.retries = G_UNKNOWN;
 
 	n = xid_encode (&param, info, cr_cmd);
@@ -889,7 +946,7 @@ int main (int argc, char *argv[]) {
 	assert (param2.modulo == modulo_8);
 	assert (param2.i_field_length_rx == G_UNKNOWN);
 	assert (param2.window_size_rx == G_UNKNOWN);
-	assert (param2.ack_timer == 999);
+	assert (param2.ack_timer == 9999);
 	assert (param2.retries == G_UNKNOWN);
 
 /* Default values for empty info field. */
